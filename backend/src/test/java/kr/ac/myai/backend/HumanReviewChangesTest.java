@@ -90,6 +90,9 @@ class HumanReviewChangesTest {
         var change = record(after, "title", "가짜 이전값", "가짜 수정값");
         assertThatThrownBy(() -> HumanReviewChanges.validate(before, after)).isInstanceOf(ImportException.class);
         change.put("before", "AI 초안").put("after", "AI 초안");
+        assertThatThrownBy(() -> HumanReviewChanges.validate(before, after)).isInstanceOf(ImportException.class);
+        after.withObject("revision").put("title", "사람 수정");
+        change.put("after", "사람 수정");
         assertThatCode(() -> HumanReviewChanges.validate(before, after)).doesNotThrowAnyException();
     }
 

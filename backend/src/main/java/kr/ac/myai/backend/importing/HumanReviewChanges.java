@@ -50,7 +50,7 @@ public final class HumanReviewChanges {
     }
 
     private static boolean matches(JsonNode change, JsonNode before, JsonNode after, String reviewer, Instant at) {
-        return reviewer != null && at != null && Objects.equals(reviewer, change.path("reviewer").textValue())
+        return !before.equals(after) && reviewer != null && at != null && Objects.equals(reviewer, change.path("reviewer").textValue())
                 && at.equals(Instant.parse(change.path("time").asText()))
                 && before.equals(change.path("before")) && after.equals(change.path("after"));
     }
