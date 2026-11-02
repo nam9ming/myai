@@ -1,6 +1,6 @@
 # 백엔드·DB 작업
 
-구현한 기능과 실행 명령, 미완료 범위는 [README](README.md)에 기록합니다. 합성 API·초기 스키마·비공개 검토본 import와 로컬 승인·미리보기·공개·복구를 구현했습니다. 공개 API는 DB snapshot을 조회하며 matches를 실제 Python 계산에 연결했습니다. [import 규격](docs/reviewed-import.md)·[승인·공개 안내](docs/review-publication.md)·[공개 조회 안내](docs/public-snapshot-api.md)와 README의 Python 설정을 따릅니다.
+구현한 기능과 실행 명령, 미완료 범위는 [README](README.md)에 기록합니다. 합성 API·초기 스키마·비공개 검토본 import와 로컬 승인·미리보기·공개·복구·snapshot JSON 내보내기를 구현했습니다. 공개 API는 DB snapshot을 조회하며 matches를 실제 Python 계산에 연결했습니다. [import 규격](docs/reviewed-import.md)·[승인·공개·내보내기 안내](docs/review-publication.md)·[공개 조회 안내](docs/public-snapshot-api.md)와 README의 Python 설정을 따릅니다.
 
 담당: 강명묵 · 기술 결정: Spring Boot·MySQL · 첫 결과: **11/3(화) 오후6시(KST)** · 연구실 시연: **11/4(수), 시각미정**
 

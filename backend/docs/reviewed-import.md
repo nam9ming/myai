@@ -17,6 +17,8 @@ java -jar backend/build/libs/myai-backend-0.1.0.jar \
 
 명령을 한 번 실행한 뒤 종료하며 HTTP 서버·관리 라우터는 등록하지 않는다. 로그는 stderr에, 결과 JSON 한 건은 stdout에 출력한다. 성공 결과의 `result`에는 `import_id`, `revision_ids`, `document_version_ids`, `already_imported`를 담는다. 같은 입력 바이트를 재입력하면 같은 ID 목록과 `already_imported=true`를 반환한다. 이때 감사 기록도 늘리지 않는다.
 
+`local-import`, `local-publication`, `local-export`는 하나씩 실행한다. 혼합 프로필은 검증 실패로 거부하며 import를 수행하지 않는다.
+
 종료 코드는 `0` 성공/기존 결과, `2` 입력·설정 검증 실패, `3` ID·버전·동시 수정 충돌, `4` 저장 중 DB 접근 실패다. 예상하지 못한 오류나 Spring/DB 초기 기동 실패는 `1`을 반환한다. 기동 실패는 결과 JSON 없이 stderr에 나타날 수 있다. 오류 결과는 공개 API와 같은 `error`·`request_id` 구조를 사용하며 원문·SQL·비밀번호·절대 경로는 넣지 않는다.
 
 실제 작업본은 Git 제외 `data/private/`에 보관하고 해당 원문 디렉터리를 `source-root`로 지정한다. `raw_asset_path`에는 이 디렉터리를 기준으로 한 상대 경로를 쓴다. 절대 경로·`..` 경로·밖으로 나가는 symlink·일반 파일이 아닌 입력은 거부한다. 입력 JSON과 각 원문은 각각 최대8MiB다. 이 명령은 원문을 복사/이동하지 않으므로 **원문 디렉터리와 검토 JSON은 별도로 보존**해야 한다. DB의 원문 참조는 해당 root를 기준으로 해석하므로 이후 root를 임의로 변경하지 않는다.
