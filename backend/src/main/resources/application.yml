@@ -6,6 +6,7 @@ spring:
   jackson:
     property-naming-strategy: SNAKE_CASE
     deserialization:
+      accept-float-as-int: false
       fail-on-unknown-properties: true
       fail-on-trailing-tokens: true
     mapper:

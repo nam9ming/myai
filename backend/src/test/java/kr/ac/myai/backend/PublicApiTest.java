@@ -155,4 +155,16 @@ class PublicApiTest {
         mvc.perform(post("/api/v1/matches").contentType(MediaType.APPLICATION_JSON).content(query.toString()))
                 .andExpect(status().isServiceUnavailable());
     }
+
+    @Test
+    void shouldRejectFloatingPointDayOffsets() throws Exception {
+        for (double offset : new double[]{-0.5, 0.0, 0.5, 1.0, 1.5}) {
+            ObjectNode query = (ObjectNode) fixture("matches-request");
+            ObjectNode interval = (ObjectNode) query.path("weekly_hours").path("monday").path("intervals").get(0);
+            interval.put("end_day_offset", offset);
+            if (offset >= 1) interval.put("start", "22:00").put("end", "02:00");
+            mvc.perform(post("/api/v1/matches").contentType(MediaType.APPLICATION_JSON).content(query.toString()))
+                    .andExpect(status().isUnprocessableEntity());
+        }
+    }
 }
