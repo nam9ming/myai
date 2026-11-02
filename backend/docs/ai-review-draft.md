@@ -51,6 +51,8 @@ ARCHIVE_ROOT는 run_id 폴더의 상위 경로다. 처음 생성할 때 freeze�
 5. review_status=draft 또는 needs_review, publication_intent=hidden으로 local-import한다. 원본 실행·문서 참조를 잃거나 검토자/시각이 없는 승격은 거부한다.
 6. 교차 검토 후 [별도 approve·preview·publish](review-publication.md)를 사용한다. AI 초안은 직접 approve할 수 없고 일반 승인에는 근거1개 이상이 필요하다.
 
+ai_reviewed로 넘긴 뒤의 후속 수정도 기존 originating_run_ids와 source_version_ids를 유지해야 한다. origin을 human으로 바꿔 AI 추적을 지우는 입력은 거부한다. 새 원문·실행을 추가할 수 있지만 기존 참조를 버리지 않으며, 이후 검증에 필요한 예전 실행 보관본도 함께 보존한다.
+
 사람이 검토를 완료했다고 파일에 기입하는 로컬 작업이며 계정 인증을 대신하지 않는다. 사람이 실제로 원문을 확인했는지는 기계가 판정하지 않는다.
 
 반려는 새 rejected/hidden revision을 남긴다. ai_draft의 반려만 evidence_ids=[]를 허용하여 존재하지 않는 인용을 만들지 않게 한다. 일반 검토본의 반려와 모든 승인에는 근거가 필요하다. 반려에는 원본 디렉터리가 필요하지 않으며 기존 초안·AI 원본을 삭제하지 않는다.

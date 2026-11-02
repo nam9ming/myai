@@ -115,6 +115,18 @@ class ExtractionRunMySqlTest {
         assertThat(publication.execute(approved, root, "synthetic-approver").action()).isEqualTo("approve");
         assertThat(counts().subList(2, 4)).isEqualTo(before.subList(2, 4));
         assertThat(jdbc.queryForObject("SELECT review_status FROM event_revisions WHERE revision_id=?", String.class, event.revisionId())).isEqualTo("draft");
+        updated.put("expected_revision_no", 3);
+        revision.put("revision_no", 4).put("revision_id", UUID.randomUUID().toString()).put("origin", "human");
+        revision.putArray("originating_run_ids");
+        Files.writeString(review, reviewed.toString());
+        var beforeRemoval = counts();
+        assertThatThrownBy(() -> importer.importBatch(reader.read(review, root), "synthetic-reviewer"))
+                .isInstanceOf(kr.ac.myai.backend.importing.ImportException.class);
+        assertThat(counts()).isEqualTo(beforeRemoval);
+        revision.put("origin", "ai_reviewed").put("reviewer_id", "synthetic-next-reviewer");
+        revision.putArray("originating_run_ids").add(run);
+        Files.writeString(review, reviewed.toString());
+        assertThat(importer.importBatch(reader.read(review, root), "synthetic-next-reviewer").revisionIds()).hasSize(1);
     }
 
     @Test

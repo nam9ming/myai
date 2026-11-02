@@ -118,6 +118,8 @@ public class ReviewedImportRepository {
                 var revision = json(event.payloadJson()).path("revision");
                 require(revision.path("origin").asText().equals("ai_reviewed") && event.reviewerId() != null
                         && event.reviewedAt() != null, "events.revision.reviewer_id");
+            }
+            if (action.equals("import") && !previous.path("revision").path("originating_run_ids").isEmpty()) {
                 require(event.originatingRunIds().containsAll(strings(previous.path("revision").path("originating_run_ids")))
                         && event.sourceVersionIds().containsAll(strings(previous.path("revision").path("source_version_ids"))),
                         "events.revision.originating_run_ids");
