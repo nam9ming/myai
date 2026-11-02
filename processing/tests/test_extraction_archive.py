@@ -186,6 +186,31 @@ class ArchiveTest(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertNotIn(b'PRIVATE_VALUE', result.stderr)
 
+    def test_extreme_decimal_exponents_leave_failed_receipt_and_safe_input_errors(self):
+        original_input, original_metadata = self.source.read_bytes(), self.meta.read_bytes()
+        for i, content in enumerate([b'{"x":1e9999999999999999999}', b'{"x":1e-9999999999999999999}']):
+            with self.subTest(content=content):
+                self.source.write_bytes(original_input); self.meta.write_bytes(original_metadata)
+                self.output.write_bytes(content)
+                archive = self.work / f'extreme-{i}'
+                args = ['import', '--input', self.source, '--metadata', self.meta,
+                        '--attempt', self.prompt, self.output, '--root', archive]
+                result = self.cli(*args)
+                self.assertEqual(result.returncode, 4, result.stderr)
+                receipt = json.loads(result.stdout)
+                self.assertEqual(receipt['attempts'][0]['error_code'], 'JSON_INVALID')
+                self.assertEqual((archive / self.run_id / 'attempt-1.output').read_bytes(), content)
+                self.assertEqual(self.cli('verify', self.run_id, '--root', archive).returncode, 4)
+                self.assertEqual(self.cli(*args).returncode, 4)
+                self.source.write_bytes(content)
+                result = self.cli('prepare', '--input', self.source, '--root', archive)
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(result.stderr, b'JSON_INVALID\n')
+                self.source.write_bytes(original_input); self.meta.write_bytes(content)
+                result = self.cli(*args)
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(result.stderr, b'JSON_INVALID\n')
+
 
 if __name__ == '__main__':
     unittest.main()

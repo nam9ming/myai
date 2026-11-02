@@ -1,7 +1,7 @@
 """원본을 수정하지 않는 계약 전용 검증. 오류에는 원문 값을 넣지 않는다."""
 
 from datetime import date, time
-from decimal import Decimal
+from decimal import Decimal, DecimalException
 import hashlib
 import json
 import re
@@ -87,7 +87,7 @@ def decode(content, kind):
         return value
     except ExtractionError:
         raise
-    except (ValueError, TypeError, OverflowError, RecursionError):
+    except (ValueError, TypeError, OverflowError, RecursionError, DecimalException):
         raise ExtractionError('JSON_INVALID', kind=kind) from None
 
 
@@ -162,6 +162,7 @@ def parse_output(content, document):
     for i, warning in enumerate(array(value['warnings'], '$.warnings')):
         text(warning, f'$.warnings[{i}]')
     blocks = {b['block_id']: b['text'] for b in document['blocks']}
+    block_hashes = {key: hashlib.sha256(block.encode('utf-8')).hexdigest() for key, block in blocks.items()}
     evidence = set()
     for i, entry in enumerate(array(value['evidence'], '$.evidence')):
         path = f'$.evidence[{i}]'
@@ -177,7 +178,7 @@ def parse_output(content, document):
         require(block is not None, path + '.block_id', 'review')
         start, end = entry['start_char'], entry['end_char']
         require(0 <= start < end <= len(block) and block[start:end] == entry['quote'], path, 'review', 'EVIDENCE_MISMATCH')
-        require(hashlib.sha256(block.encode('utf-8')).hexdigest() == entry['text_sha256'], path + '.text_sha256', 'review', 'EVIDENCE_MISMATCH')
+        require(block_hashes[entry['block_id']] == entry['text_sha256'], path + '.text_sha256', 'review', 'EVIDENCE_MISMATCH')
     seen_items, seen_occurrences, seen_locations = set(), set(), set()
     items = array(value['items'], '$.items')
     require(items or 'NO_EVENT_FOUND' in value['warnings'], '$.warnings')

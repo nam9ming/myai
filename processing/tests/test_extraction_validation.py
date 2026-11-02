@@ -3,6 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from processing.extraction.schema import input_schema, output_schema
 from processing.extraction.validation import ExtractionError, parse_input, parse_output
@@ -155,6 +156,16 @@ class ExtractionValidationTest(unittest.TestCase):
         occurrence['end_day_offset'].update(value=None, knowledge='not_stated', reason='익일 표기 없음', evidence_ids=[])
         occurrence['date_end']['value'] = occurrence['date_start']['value']
         self.assertIsNone(parse_output(raw(self.output), self.document)['items'][0]['occurrences'][0]['end_day_offset']['value'])
+
+    def test_multiple_evidence_reuses_block_hash(self):
+        for i in range(1, 100):
+            entry = copy.deepcopy(self.output['evidence'][0])
+            entry['evidence_id'] = f'copy-{i}'
+            self.output['evidence'].append(entry)
+        with patch('processing.extraction.validation.hashlib.sha256', wraps=hashlib.sha256) as digest:
+            result = parse_output(raw(self.output), self.document)
+        self.assertEqual(len(result['evidence']), 100)
+        self.assertEqual(digest.call_count, 1)
 
 
 if __name__ == '__main__':
