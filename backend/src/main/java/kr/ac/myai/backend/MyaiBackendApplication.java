@@ -6,6 +6,9 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 @SpringBootApplication
 public class MyaiBackendApplication {
     public static void main(String[] args) {
-        SpringApplication.run(MyaiBackendApplication.class, args);
+        var context = SpringApplication.run(MyaiBackendApplication.class, args);
+        if (context.getEnvironment().matchesProfiles("local-import")) {
+            System.exit(SpringApplication.exit(context));
+        }
     }
 }
