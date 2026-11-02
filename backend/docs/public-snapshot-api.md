@@ -13,7 +13,7 @@ curl 'http://localhost:8080/api/v1/events/EVENT_UUID?snapshot_id=SNAPSHOT_UUID'
 curl 'http://localhost:8080/api/v1/config?mode=replay&case_id=CASE_UUID'
 ```
 
-config는 구역·고정 5지점·자료 수·수집/확인 범위·버전·현재 서버 시각을 반환한다. cases에는 같은 구역·자료 종류의 활성 replay 사례만 담는다. replay 응답에는 case_id·anchor_date·reference_instant·knowledge_cutoff·history_fidelity를 보존한다. 현재와 재현을 혼합하지 않는다.
+config는 구역·고정 5지점·자료 수·수집/확인 범위·버전·현재 서버 시각을 반환한다. cases에는 같은 구역·자료 종류의 활성 replay 사례만 담는다. DB에서 해당 범위를 먼저 선별한 뒤 각 공개본의 무결성을 검증하므로 다른 구역·자료 종류의 손상된 사례는 현재 config를 막지 않는다. replay 응답에는 case_id·anchor_date·reference_instant·knowledge_cutoff·history_fidelity를 보존한다. 현재와 재현을 혼합하지 않는다.
 
 각 요청은 읽기 전용 REPEATABLE READ에서 공개 포인터와 canonical JSON을 읽는다. SHA-256·스키마·저장 문맥을 확인하며 최신 작업 revision·지점·비공개 문서 행으로 사실을 보충하지 않는다. publish와 동시에 조회해도 한 응답의 지점·사건·snapshot_id는 같은 버전이다.
 

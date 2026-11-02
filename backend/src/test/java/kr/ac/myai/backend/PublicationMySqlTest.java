@@ -503,6 +503,30 @@ class PublicationMySqlTest {
     }
 
     @Test
+    void corruptReplayOutsideCurrentAreaOrDataKindDoesNotBreakConfig() throws Exception {
+        var input = fresh(); importBatch(input);
+        var approved = publication.execute(decision(input, "approve", 1), root, "synthetic-approver");
+        var current = publication.execute(command(publishInput(input, approved.revisionId(), null)), root, "synthetic-publisher");
+        String brokenCase = null;
+        for (boolean otherArea : List.of(true, false)) {
+            var replay = publishInput(otherArea ? fresh() : input, approved.revisionId(), null);
+            replay.putArray("revision_ids");
+            brokenCase = UUID.randomUUID().toString();
+            replay.put("mode", "replay").put("case_id", brokenCase).put("anchor_date", "2026-11-02")
+                    .put("reference_instant", "2026-11-02T03:00:00Z").put("knowledge_cutoff", "2026-11-02T03:00:00Z")
+                    .put("history_fidelity", "reconstructed");
+            if (!otherArea) replay.put("data_kind", "real");
+            var published = publication.execute(command(replay), root, "synthetic-publisher");
+            jdbc.update("UPDATE snapshots SET checksum = REPEAT('0', 64) WHERE snapshot_id = ?", published.snapshotId());
+        }
+        var response = body("/api/v1/config");
+        assertThat(response.path("snapshot_id").asText()).isEqualTo(current.snapshotId());
+        assertThat(response.path("data").path("cases")).isEmpty();
+        mvc.perform(get("/api/v1/config").param("mode", "replay").param("case_id", brokenCase))
+                .andExpect(status().isInternalServerError()).andExpect(jsonPath("$.error.code").value("SNAPSHOT_INVALID"));
+    }
+
+    @Test
     void concurrentHeadChangesNeverMixSnapshotCountsAndPointLabels() throws Exception {
         var input = fresh(); importBatch(input);
         var approved = publication.execute(decision(input, "approve", 1), root, "synthetic-approver");

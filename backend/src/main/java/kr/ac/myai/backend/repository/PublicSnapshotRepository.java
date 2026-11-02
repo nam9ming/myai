@@ -36,8 +36,12 @@ public class PublicSnapshotRepository {
                         row.getString(9), row.getTimestamp(10).toInstant(), row.getString(11)), id).stream().findFirst();
     }
 
-    public List<String> replayHeads() {
-        return jdbc.query("SELECT snapshot_id FROM publication_heads WHERE channel_key LIKE 'replay:%' ORDER BY channel_key", (row, i) -> row.getString(1));
+    public List<String> replayHeads(String areaId, String dataKind) {
+        return jdbc.query("""
+                SELECT h.snapshot_id FROM publication_heads h JOIN snapshots s ON s.snapshot_id = h.snapshot_id
+                WHERE h.channel_key LIKE 'replay:%' AND s.mode = 'replay' AND s.data_kind = ?
+                  AND JSON_UNQUOTE(JSON_EXTRACT(s.canonical_json, '$.area_id')) = ? ORDER BY h.channel_key
+                """, (row, i) -> row.getString(1), dataKind, areaId);
     }
 
     public List<Historic> history(String eventId, String channel, String selectedSnapshot) {

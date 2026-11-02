@@ -49,11 +49,9 @@ public class SnapshotNoticeService implements PublicNoticeService {
         }
         var cases = data.putArray("cases");
         // shortcut: 소수의 시연 사례를 순차 검증한다. 사례가 늘면 checksum을 검증하는 목록 projection으로 전환한다.
-        for (String id : repository.replayHeads()) {
+        for (String id : repository.replayHeads(snapshot.path("area_id").asText(), snapshot.path("data_kind").asText())) {
             JsonNode replay = load(id, true);
-            if (replay.path("area_id").equals(snapshot.path("area_id")) && replay.path("data_kind").equals(snapshot.path("data_kind"))) {
-                cases.add(content.select(replay, "case_id snapshot_id anchor_date reference_instant knowledge_cutoff history_fidelity"));
-            }
+            cases.add(content.select(replay, "case_id snapshot_id anchor_date reference_instant knowledge_cutoff history_fidelity"));
         }
         return envelope(snapshot, data);
     }
