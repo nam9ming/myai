@@ -35,3 +35,7 @@ server:
     include-stacktrace: never
 app:
   cors-origin: ${CORS_ALLOWED_ORIGIN:http://localhost:5173}
+  calculation:
+    python-executable: ${MYAI_PYTHON_EXECUTABLE:python3.13}
+    workdir: ${MYAI_PYTHON_WORKDIR:}
+    timeout-ms: ${MYAI_CALC_TIMEOUT_MS:5000}

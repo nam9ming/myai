@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import kr.ac.myai.backend.dto.MatchRequest;
+import kr.ac.myai.backend.calculation.PythonCalculator;
+import kr.ac.myai.backend.calculation.CalculationResponse;
 import kr.ac.myai.backend.exception.ApiException;
 import kr.ac.myai.backend.importing.ImportException;
 import kr.ac.myai.backend.publication.PublicationContent;
@@ -17,6 +19,8 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.Clock;
+import java.time.ZoneId;
 import java.util.*;
 
 @Service
@@ -28,9 +32,12 @@ public class SnapshotNoticeService implements PublicNoticeService {
     private final PublicSnapshotRepository repository;
     private final PublicationContent content;
     private final ObjectMapper mapper;
+    private final PythonCalculator calculator;
+    private final Clock clock;
 
-    public SnapshotNoticeService(PublicSnapshotRepository repository, PublicationContent content, ObjectMapper mapper) {
+    public SnapshotNoticeService(PublicSnapshotRepository repository, PublicationContent content, ObjectMapper mapper, PythonCalculator calculator, Clock clock) {
         this.repository = repository; this.content = content; this.mapper = mapper;
+        this.calculator = calculator; this.clock = clock;
     }
 
     @Override
@@ -62,10 +69,27 @@ public class SnapshotNoticeService implements PublicNoticeService {
         if (!snapshot.path("mode").asText().equals(query.mode()) || !Objects.equals(snapshot.path("case_id").textValue(), query.caseId() == null ? null : query.caseId().toString())) {
             throw ApiException.invalid("snapshot_id", "선택한 모드·사례와 같은 snapshot을 사용해 주세요.");
         }
-        boolean known = false;
-        for (JsonNode point : snapshot.path("points")) if (point.path("point_id").asText().equals(query.pointId().toString())) known = true;
-        if (!known) throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_POINT", "활성 시험 지점을 선택해 주세요.", "point_id");
-        throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "CALCULATOR_NOT_READY", "Python 계산기가 아직 연결되지 않았습니다.", null);
+        JsonNode selected = null;
+        for (JsonNode point : snapshot.path("points")) if (point.path("point_id").asText().equals(query.pointId().toString())) selected = point;
+        if (selected == null) throw new ApiException(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_POINT", "활성 시험 지점을 선택해 주세요.", "point_id");
+        Instant now = clock.instant();
+        var input = mapper.createObjectNode().put("protocol_version", "calc-v1").put("request_id", UUID.randomUUID().toString())
+                .put("snapshot_id", snapshot.path("snapshot_id").asText());
+        String checksum = repository.published(snapshot.path("snapshot_id").asText()).orElseThrow(this::invalidSnapshot).snapshot().checksum();
+        input.put("snapshot_checksum", checksum);
+        var context = content.select(snapshot, "mode case_id anchor_date reference_instant knowledge_cutoff history_fidelity data_kind window_days radius_m rules_version dictionary_version");
+        context.put("server_now", now.toString());
+        if (query.mode().equals("current")) context.put("anchor_date", now.atZone(ZoneId.of("Asia/Seoul")).toLocalDate().toString());
+        input.set("context", context);
+        input.set("point", content.select(selected, "point_id longitude latitude"));
+        ObjectNode normalized = mapper.valueToTree(query);
+        normalized.put("snapshot_id", snapshot.path("snapshot_id").asText());
+        var types = normalized.putArray("types"); query.types().stream().distinct().sorted().forEach(types::add);
+        input.set("query", normalized);
+        input.set("events", snapshot.path("event_public_payloads")); input.set("source_versions", snapshot.path("sources"));
+        ObjectNode data = calculator.calculate(input);
+        CalculationResponse.validate(input, data, id -> publicEvent(snapshot, findEvent(snapshot, id)));
+        return envelope(snapshot, data);
     }
 
     @Override

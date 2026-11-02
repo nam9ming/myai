@@ -37,9 +37,11 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ErrorResponse> domain(ApiException error) {
+        String requestId = UUID.randomUUID().toString();
+        if (error.code().equals("CALCULATION_PROTOCOL_ERROR")) log.error("계산 응답 검증 실패 request_id={} code={}", requestId, error.code());
         var fields = error.field() == null ? List.<FieldError>of() : List.of(new FieldError(error.field(), error.getMessage()));
         return ResponseEntity.status(error.status()).body(new ErrorResponse(
-                new ErrorDetail(error.code(), error.getMessage(), fields, error.status() == HttpStatus.SERVICE_UNAVAILABLE), UUID.randomUUID().toString(), error.currentSnapshotId()));
+                new ErrorDetail(error.code(), error.getMessage(), fields, error.retryable()), requestId, error.currentSnapshotId()));
     }
 
     @ExceptionHandler({DataAccessResourceFailureException.class, TransientDataAccessException.class,

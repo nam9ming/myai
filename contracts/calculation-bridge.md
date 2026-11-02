@@ -1,6 +1,6 @@
 # Spring → Python 계산 CLI 계약 v1
 
-담당: 김윤기(계산 함수·CLI), 강명묵(Java adapter), 남규민(통합 확인). 공개 API I01~I03의 필드·응답은 변경하지 않습니다. Python `rules-v1` 계산 CLI를 구현했으며 Java adapter는 후속 작업입니다. 실제 실행·시험은 [processing 안내](../processing/README.md)를 따릅니다.
+담당: 김윤기(계산 함수·CLI), 강명묵(Java adapter), 남규민(통합 확인). 공개 API I01~I03의 필드·응답은 변경하지 않습니다. Python `rules-v1` 계산 CLI와 Java adapter를 구현했습니다. 실제 실행·시험은 [processing 안내](../processing/README.md), 서버 설정은 [백엔드 안내](../backend/README.md#python-계산-연결)를 따릅니다.
 
 ## 경계
 
@@ -13,6 +13,8 @@ Spring은 요청을 검증하고 DB의 승인된 불변 snapshot·지점·원문
 설정된 Python3.13 실행 파일로 저장소 루트에서 `-m processing.matching`을 실행합니다. Java ProcessBuilder의 인자 배열을 사용하고 shell·사용자 입력으로 실행 명령/경로를 구성하지 않습니다. Python 실행 경로·workdir은 서버 설정으로 고정합니다.
 
 stdin은 UTF-8 JSON 객체 한 건 후 EOF, stdout은 UTF-8 JSON 객체 한 건입니다. Java는 stdout/stderr를 함께 배출해 파이프 대기를 방지하고 크기 제한·timeout·종료 코드·응답 스키마를 확인합니다. timeout 기본5초(설정값), 입력/출력 각각8MiB이며 변경하면 시험을 갱신합니다. 초과·시간초과 시 자식 프로세스를 종료하고 현재 공개 데이터는 변경하지 않습니다. CLI 종료 코드는 성공0, 입력 오류2, 출력 초과3, 런타임 실패1입니다. 실패 시 stdout은 비어 있고 stderr에는 각각 `CALCULATION_INPUT_INVALID`, `CALCULATION_OUTPUT_TOO_LARGE`, `CALCULATION_FAILED`만 남깁니다.
+
+Java는 stdin 쓰기도 별도로 처리해 자식이 입력을 읽지 않아도 공통 deadline을 적용합니다. stderr는64KiB, 동시 실행은4개로 제한합니다. timeout·interrupt·I/O/종료 실패 시 요청별 프로세스·스트림·I/O 작업을 정리합니다. 정리에는 제한된 추가 대기가 있을 수 있습니다. 설정/기동/비정상 종료/출력 초과는 retryable=false, timeout/interrupt/동시 실행 한도는 true입니다.
 
 ## 입력 객체
 
@@ -49,17 +51,21 @@ snapshot 내부에 필요한 좌표·시간·관계가 미상인 경우 원래 u
 
 data는 계산 결과이며 DB 사실로 영구 덮어쓰지 않습니다. Spring이 ID·hash·규칙 버전·필수 필드를 검증하고 기존 `{schema_version,snapshot_id,generated_at,data}` 응답으로 한 번만 감쌉니다. 이중 envelope를 만들지 않습니다. data의 전체 필드명은 현재 공개 예제를 따르고 임의 새 alias를 만들지 않습니다.
 
+Java는 선택 snapshot에서 기존 I03 사실 projection을 재사용해 item의 사실 필드 전체를 대조합니다. 필터/선택·counts·matched occurrence·후보 묶음의 참조와 형식도 검증하며 시간·거리·후보를 재계산하지 않습니다. diagnostics는 외부 응답에 넣지 않습니다.
+
 ## 실패 매핑
 
 | 상황 | 외부 응답 |
 |---|---|
-| 공개 사용자 요청이 잘못됨 | Python 실행 전422 VALIDATION_ERROR |
-| DB/snapshot 또는 계산 런타임이 미준비 | 503 DATA_NOT_READY / CALCULATION_UNAVAILABLE |
+| 공개 사용자 요청이 잘못됨 | Python 실행 전422 INVALID_REQUEST / INVALID_POINT |
+| DB/snapshot 또는 계산 런타임이 미준비 | 503 DATABASE_UNAVAILABLE / PUBLIC_DATA_NOT_READY / CALCULATION_UNAVAILABLE |
 | 계산 timeout·기동 불가·비정상 종료 | 503 CALCULATION_UNAVAILABLE, retryable 여부를 원인에 맞게 지정 |
 | 응답 JSON·hash·snapshot·규칙 버전 불일치 | 500 CALCULATION_PROTOCOL_ERROR, 내부 진단만 남김 |
 | 공개 snapshot 미등록/폐기 | 기존404/409 계약 적용 |
 
 오류는 contracts/error-response의 envelope를 사용합니다. traceback·명령 전체·로컬 경로·DB 정보·키는 공개하지 않습니다. 계산 실패를 결과0건으로 바꾸거나 고정 fixture를 실제 계산처럼 반환하지 않습니다. fixture 시연은 별도 명시 모드입니다.
+
+응답 검증 실패 로그에는 공개 오류 응답과 같은 request_id와 오류 코드만 남깁니다. 계산 입력·응답 원문·stderr·diagnostics는 기록하지 않습니다.
 
 ## 반드시 확인할 연결 시험
 
