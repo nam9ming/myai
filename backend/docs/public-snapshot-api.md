@@ -6,6 +6,8 @@
 
 DB 환경변수를 설정하고 `./backend/gradlew -p backend bootRun`으로 실행한다. `local-import` → `local-publication`의 approve → publish를 마친 뒤 다음 요청을 사용한다.
 
+matches에는 [백엔드 Python 설정](../README.md#python-계산-연결)이 필요하다. 같은 서버의 Python3.13과 같은 버전의 `processing/` 소스를 사용한다.
+
 ```bash
 curl http://localhost:8080/api/v1/config
 # config의 snapshot_id와 공개 사건 ID를 사용한다.
@@ -31,6 +33,14 @@ config는 구역·고정 5지점·자료 수·수집/확인 범위·버전·현�
 
 I03은 조건 없는 사실 응답이다. 분류·거리·시간 겹침·matched occurrence는 I02 결과에서 결합하며 Java가 추정하지 않는다. fixture에만 있는 계산 표시값을 실제 결과로 사용하지 않는다.
 
+## 조건 계산 응답
+
+`POST /api/v1/matches`는 유효한 snapshot·문맥·지점을 먼저 검사한다. current는 서버 시각을 한 번 정하고 KST 기준일을 계산하며, replay는 공개본의 고정 reference/cutoff를 전달한다. 사용자 조건은 한 요청의 stdin으로만 전달한다.
+
+응답에는 `query_context`, 유형 필터 후·상태 선택 전 `counts`, 선택 상태의 `items`, 후보만의 `overlap_groups`, `rules_version`이 담긴다. 실제 Python이 시간·거리·3값 결합·취소·최신성·재현을 판정한다. Java는 기존 공개 사실 projection과 반환 사실 전체를 대조하고 ID·버전·hash·필수 구조·참조·집계의 일관성을 검사한다. 내부 diagnostics나 이중 envelope는 반환하지 않는다.
+
+알려진 빈 결과는200·0건이며, 계산 실패는 오류 응답이다. 실패를 고정 fixture나0건으로 바꾸지 않는다. 공개본과 DB는 조건 조회로 변경되지 않는다.
+
 ## 공개 변경이력
 
 history는 선택 snapshot의 최초 공개 감사 순번까지 같은 채널에서 실제 공개된 revision을 순서대로 비교한다. 최초 공개는 변경 항목이 없고, 다음 revision부터 `revision_id/snapshot_id/published_at/action/changes`를 담는다. action은 publish 또는 rollback이다. 각 changes 항목은 `field/before/after`다. 이전 근거와 출처는 `before_revision_id/before_evidence/before_source_refs`, 새 근거와 출처는 `evidence/source_refs`에 담는다. 비공개 draft나 human_overrides의 임의 before/after는 읽지 않는다.
@@ -46,10 +56,11 @@ head_version으로 공개 순서와 조회 경계를 정한다. snapshot 생성 
 | 422 | INVALID_REQUEST / INVALID_POINT | 잘못된 모드·사례·snapshot 조합 또는 해당 공개본에 없는 지점 |
 | 503 | PUBLIC_DATA_NOT_READY | current 공개본 없음 |
 | 503 | DATABASE_UNAVAILABLE | 접속·자원 장애 또는 일시적 DB 오류. 내부 SQL·접속 정보는 반환하지 않음 |
-| 503 | CALCULATOR_NOT_READY | snapshot·문맥·지점은 유효하지만 Python 계산기 미연결 |
+| 503 | CALCULATION_UNAVAILABLE | 계산 설정·기동·종료·출력 한도 문제. timeout/interrupt/동시 한도 초과만 retryable=true |
+| 500 | CALCULATION_PROTOCOL_ERROR | 응답 JSON·hash·ID·버전·사실/집계/참조 불일치. 재시도 불가 |
 | 500 | SNAPSHOT_INVALID | checksum·저장 문맥 등 공개본 무결성 실패 |
 | 500 | INTERNAL_ERROR | SQL 문법·스키마·제약/사용 오류 등 예상치 못한 실패. 재시도 불가, 서버 로그의 request_id로 추적 |
 
-공개 포인터에서 제외된 이전본은 복구·평가용으로 DB에 보존하지만 직접 공개 조회는 허용하지 않는다. rollback으로 다시 선택하면 조회할 수 있다. 사용자 조건은 저장하지 않는다. Python 연결·프런트 구현·실제 자료 검수·운영 배포는 후속 작업이다.
+공개 포인터에서 제외된 이전본은 복구·평가용으로 DB에 보존하지만 직접 공개 조회는 허용하지 않는다. rollback으로 다시 선택하면 같은 고정 사실로 계산할 수 있다. 사용자 조건은 저장하지 않는다. 프런트 구현·실제 자료 검수·운영 배포는 후속 작업이다. fixture 프로필은 기존 고정 예제와 CALCULATOR_NOT_READY 오류를 유지한다.
 
 area_membership=outside 사건은 비공개 검토 단계에서 보존할 수 있지만 snapshot 생성·기존 공개본 검증·복구에서 차단한다. 이미 저장된 잘못된 공개본은 집계나 사건을 임의로 빼지 않고500 SNAPSHOT_INVALID로 차단한다.

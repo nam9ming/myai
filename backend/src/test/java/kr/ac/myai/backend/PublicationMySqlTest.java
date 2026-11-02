@@ -43,7 +43,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+@SpringBootTest(properties = "app.calculation.workdir=")
 @AutoConfigureMockMvc
 @ActiveProfiles("public")
 @EnabledIfEnvironmentVariable(named = "MYAI_MYSQL_TESTS", matches = "true")
@@ -365,8 +365,12 @@ class PublicationMySqlTest {
         var published = publication.execute(command(request), root, "synthetic-publisher");
         ObjectNode query = (ObjectNode) mapper.readTree(Path.of("../contracts/examples/matches-request.json").toFile());
         query.put("point_id", request.path("points").get(0).path("point_id").asText()).put("snapshot_id", published.snapshotId());
+        String original = canonical(published.snapshotId()); long audits = count("publication_audits");
         mvc.perform(post("/api/v1/matches").contentType("application/json").content(query.toString()))
-                .andExpect(status().isServiceUnavailable()).andExpect(jsonPath("$.error.code").value("CALCULATOR_NOT_READY"));
+                .andExpect(status().isServiceUnavailable()).andExpect(jsonPath("$.error.code").value("CALCULATION_UNAVAILABLE"))
+                .andExpect(jsonPath("$.error.retryable").value(false));
+        assertThat(canonical(published.snapshotId())).isEqualTo(original);
+        assertThat(count("publication_audits")).isEqualTo(audits);
         query.put("point_id", UUID.randomUUID().toString());
         mvc.perform(post("/api/v1/matches").contentType("application/json").content(query.toString()))
                 .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.error.code").value("INVALID_POINT"));

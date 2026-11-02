@@ -2,7 +2,7 @@
 
 안성맞춘팀의 모바일 우선 웹앱 프로젝트입니다. **전체 개발 명세 v1.1: Flutter Web·Dart / Spring Boot·Java / MySQL / Python AI·계산**으로 확정했습니다. 공사·행사·교통 변경 공지를 가게 위치·영업시간과 비교하고 적용 조건·근거·원문을 확인합니다.
 
-**현재 저장소 상태: 문서·인터페이스 예제·참고 시제품과 백엔드 기초입니다. 백엔드 합성 API·MySQL 스키마·검토본 import·로컬 승인/미리보기/공개/복구·공개 snapshot 조회와 Python C01~C10 계산 CLI·시험을 추가했습니다. 실제 프런트·AI 추출·Spring에서 Python을 호출하는 adapter는 아직 미구현입니다.**
+**현재 저장소 상태: 백엔드 공개 API·MySQL·검토본 import·승인/미리보기/공개/복구와 Python C01~C10 계산 CLI를 구현했습니다. 공개 matches는 실제 Python 계산에 연결하며 실행 파일·작업 경로 설정이 필요합니다. 실제 프런트·AI 추출·실자료 평가·운영 배포는 미완료입니다. 참고 HTML과 예제는 합성 자료입니다.**
 
 ## 이번 목표
 
@@ -76,7 +76,7 @@ docs/wednesday-plan.md    # 수요일까지 작업 순서·완료 기준
 
 공통 로컬 확인은 `npm run lint`, `npm test`, `npm run build`입니다. 계약 JSON과 인프라를 검증하고
 기존 합성 HTML 시제품을 패키징합니다. 백엔드는 `cd backend && ./gradlew test bootJar`로 별도 검증합니다.
-Python은 `python3.13 -m unittest discover -s processing/tests -v`로 별도 검증합니다. CI는 Python 계산·CLI와 전용 MySQL을 포함한 백엔드 검증도 실행합니다. 전체 앱·Spring 계산 연결 완료를 뜻하지 않습니다.
+Python은 `python3.13 -m unittest discover -s processing/tests -v`로 별도 검증합니다. CI는 Python 계산·CLI와 전용 MySQL·실제 Python을 포함한 백엔드 검증도 실행합니다. 전체 앱·실자료 평가 완료를 뜻하지 않습니다. Spring 실행 전 Python 설정은 [백엔드 안내](backend/README.md#python-계산-연결)를 따릅니다.
 기존 디스코드·보드를 공유하되 시크릿은 myai에도 등록해야 합니다. 공개 프리뷰는 기본 비활성화입니다.
 설정·권한·연결 확인은 [개발 인프라 적용 안내](docs/development-infra.md)를 따릅니다.
 AI 코드 리뷰는 `OPENAI_API_KEY` 시크릿으로 OpenAI API를 사용합니다. 기본 모델은 `gpt-6.1-sol`이며
