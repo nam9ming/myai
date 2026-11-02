@@ -41,8 +41,15 @@ test("린트는 Git 제외 자료를 읽지 않고 공개 파일의 토큰 패�
   const clean = lint();
   assert.equal(clean.status, 0, clean.stderr);
 
-  writeFileSync(join(root, "public.md"), token);
-  const leaked = lint();
-  assert.equal(leaked.status, 1);
-  assert.match(leaked.stderr, /public\.md: GitHub/);
+  for (const [value, label] of [
+    [token, /public\.md: GitHub/],
+    ["sk-" + "proj-" + "x".repeat(80), /public\.md: OpenAI/],
+    ["sk-" + "svcacct-" + "x".repeat(80), /public\.md: OpenAI/],
+    ["sk-" + "x".repeat(48), /public\.md: OpenAI/],
+  ]) {
+    writeFileSync(join(root, "public.md"), value);
+    const leaked = lint();
+    assert.equal(leaked.status, 1);
+    assert.match(leaked.stderr, label);
+  }
 });
