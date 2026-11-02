@@ -83,6 +83,7 @@ public class SnapshotExportService {
         try {
             content.check(row.id().equals(id), "snapshot_id");
             content.verifySnapshot(row, row.mode().equals("current") ? "current" : "replay:" + row.caseId());
+            // 공통 parser의8MiB 상한을 먼저 적용해 최초 쓰기와 재사용 범위를 맞춘다.
             JsonNode snapshot = content.parse(row.canonical());
             content.check(published.schemaVersion().equals("snapshot-v1") && Instant.parse(snapshot.path("created_at").asText()).equals(published.createdAt()), "snapshot");
             publicFields(snapshot, "");

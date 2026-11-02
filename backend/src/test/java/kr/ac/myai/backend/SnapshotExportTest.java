@@ -125,6 +125,28 @@ class SnapshotExportTest {
         failure("EXPORT_INVALID_SNAPSHOT", () -> service.export(id, root)); assertFiles();
     }
 
+    @Test
+    void exactEightMiBCanonicalCanBeCreatedAndReused() throws Exception {
+        canonicalBytes(8 * 1024 * 1024);
+        var result = service.export(id, root);
+        assertThat(result.alreadyExported()).isFalse(); assertThat(Files.size(root.resolve(result.fileName()))).isEqualTo(8 * 1024 * 1024);
+        assertThat(service.export(id, root).alreadyExported()).isTrue(); assertFiles(result.fileName());
+    }
+
+    @Test
+    void oversizeCanonicalIsRejectedBeforeFirstWriteEvenWithMatchingChecksum() throws Exception {
+        canonicalBytes(8 * 1024 * 1024 + 1);
+        failure("EXPORT_INVALID_SNAPSHOT", () -> service.export(id, root)); assertFiles();
+    }
+
+    private void canonicalBytes(int size) {
+        var row = published.snapshot(); String original = row.canonical();
+        String canonical = original + " ".repeat(size - original.getBytes(StandardCharsets.UTF_8).length);
+        var updated = new PublicationRepository.Snapshot(row.id(), row.mode(), row.caseId(), canonical,
+                ReviewedImportReader.sha256(canonical.getBytes(StandardCharsets.UTF_8)), row.kind(), row.rulesVersion(), row.dictionaryVersion());
+        when(repository.published(id.toString())).thenReturn(Optional.of(new PublicSnapshotRepository.Published(updated, published.schemaVersion(), published.createdAt(), row.id())));
+    }
+
     private Path target() { return root.resolve(id + "-" + published.snapshot().checksum() + ".json"); }
     private void assertFiles(String... names) throws Exception {
         try (var files = Files.list(root)) { assertThat(files.map(p -> p.getFileName().toString()).toList()).containsExactlyInAnyOrder(names); }

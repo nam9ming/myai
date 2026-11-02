@@ -90,6 +90,8 @@ java -jar backend/build/libs/myai-backend-0.1.0.jar \
 
 정상 실행은 HTTP 서버 없이 종료하고 stdout에 JSON 한 건을 반환한다. `result`의 `snapshot_id`, `checksum`, `file_name`, `already_exported`를 확인한다. 파일명은 `<snapshot_id>-<checksum>.json`이며 DB의 canonical UTF-8 바이트를 재직렬화·줄바꿈 추가 없이 보존한다. `shasum -a 256 <파일>` 값은 결과 checksum·파일명의 hash와 같아야 한다. 파일 내용은 내부 `snapshot-v1` 형식이며 공개 API 응답이나 계산 결과 fixture를 대신하지 않는다.
 
+최초 쓰기 전에도 공통 strict parser가 원본 UTF-8 기준8MiB 상한을 검사한다. 정확히8MiB는 생성·재사용할 수 있고, 초과한 canonical은 `EXPORT_INVALID_SNAPSHOT`으로 거부하며 파일을 만들지 않는다.
+
 이미 공개했던 이전 snapshot·replay도 명시 ID로 내보낼 수 있다. preview·미공개 ID는 거부하며 export가 현재 head나 공개 이력을 바꾸지 않는다. 짧은 읽기 전용 RR에서 ID·checksum·저장 문맥·공개 필드 범위를 확인하고 연결을 반환한 뒤 파일을 쓴다. 이후 head 교체나 원문 파일 삭제로 선택한 고정 내용이 바뀌지 않는다.
 
 `local-export`에서는 Flyway를 실행하지 않는다. 기동 초기화 단계에서 읽기 전용 설정을 우선하므로 실행 인자·환경변수로 Flyway를 켜도 대기 migration을 적용하지 않는다. DB 스키마는 기존 import·공개·서버 준비 절차에서 먼저 적용해야 하며, DB 접속 계정도 조회 권한으로 분리할 수 있다.
