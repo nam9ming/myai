@@ -57,5 +57,11 @@
 - [x] Step1: 등록/재실행·다른 원본 충돌·문서/블록/전처리/tag 불일치·실패run 보존/D06참조거부·동시 등록·DB rollback·Python 진입 트랜잭션 없음·공개 미노출·강제web/혼합profile·CLI exit0/2/3/4/5/1 RED.
 - [x] Step2: V3에 입력/출력 hash·nullable표시값·원본 metadata/receipt·archive 참조·최초 actor를 불변 저장한다. duplicate 경합 복구 조회는 실패 트랜잭션 종료 후 새 트랜잭션에서 대조한다. legacy 행을 검증 없이 성공으로 승격하지 않는다.
 - [x] Step3: 실제 MySQL 전체 Java·Python97+·npm lint/test/build·실제 JAR 원문→D05→AI-origin D06 import/공개 미반영·실패/재실행·출력 안전성 검증. Expected: 모든 시험 GREEN·생략0, 기존 공개 head 불변.
-- [ ] Step4: 한국어 실행/미완료·hash 대상·원본 보관/복구 책임을 갱신한다. 자체 전체 리뷰 후 한 번의 fresh 전체 reviewer, 유효 지적 RED→GREEN·전체 회귀로0까지 수정한다.
+- [x] Step4: 한국어 실행/미완료·hash 대상·원본 보관/복구 책임을 갱신한다. 자체 전체 리뷰 후 한 번의 fresh 전체 reviewer, 유효 지적 RED→GREEN·전체 회귀로0까지 수정한다.
 - [ ] Step5: backend/api-foundation PR 제출·최신 CI/AI/사람 지적 검토. CI 성공·유효 미해결0이면 expected-head 병합, main PR4는 사람 대기. 이번 작업의 전용 임시 DB/자료만 정리하며 전체 Goal은 유지한다.
+
+## 검증 기록
+
+- 실제 MySQL8.4.13·Python3.13 포함 Java147개·생략0, Python97개·Node29개·JSON9개·lint190개·build/JAR 통과. 원문 선등록→D05 성공/실패/재실행→숨김 ai_reviewed D06, 실패 참조 거부·정밀 원본·강제 웹/혼합 프로필 차단·공개4테이블 dump 불변을 실제 JAR로 확인했다.
+- 자체 검토의 cold DB 기동 오류·receipt 태그 결합은 추적 RED→GREEN과 전체 회귀로 수정했다. 9246773 별도 전체 리뷰 지적0건이며 실제 Python archive→JAR Java reader의 원본/고정밀 비용/변조 거부를 독립 재현했다. 검토자는 DB 전체 재실행을 생략했고 작성자의 실제 DB 검증 기록과 코드를 검토했다.
+- source-only 별도 schema는 D03→D05→D06 선후 관계를 위한 선택이다. D05 전체 측정값은 LONGTEXT 원본으로 읽는다. archive 경로·권한·백업은 운영자가 유지한다. 실제 API·D06 자동 초안·실자료 평가·배포·legacy 이관·chunk는 전체 Goal의 후속 범위다.

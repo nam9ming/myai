@@ -21,7 +21,6 @@ import org.springframework.web.context.support.GenericWebApplicationContext;
 
 import java.nio.file.Path;
 import java.util.List;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -31,7 +30,7 @@ class ExtractionCommandTest {
     @TempDir Path root;
     final ObjectMapper mapper = new ObjectMapper().setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
     final ExtractionImportService importer = mock(ExtractionImportService.class);
-    final String id = UUID.randomUUID().toString();
+    final String id = "10000000-0000-4000-8000-00000000000a";
 
     @Test
     void returnsOneSafeSnakeCaseResultEvenForRegisteredFailedRun(CapturedOutput output) throws Exception {
