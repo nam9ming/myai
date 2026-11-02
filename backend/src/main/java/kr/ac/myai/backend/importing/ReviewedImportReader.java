@@ -34,10 +34,23 @@ public class ReviewedImportReader {
     public ReviewedBatch read(Path file, Path sourceRoot) {
         try {
             byte[] bytes = readBounded(file, "file");
-            String json = StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
-                    .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString();
-            JsonNode input = mapper.readTree(json);
+            JsonNode input = parseJson(bytes);
+            return batch(input, sourceRoot, sha256(bytes), false);
+        } catch (IOException | IllegalArgumentException ex) {
+            throw invalid("file", "UTF-8 JSON 또는 원문 파일을 읽고 검증할 수 없습니다.");
+        }
+    }
+
+    public ReviewedBatch validateStored(JsonNode input, Path sourceRoot) {
+        try {
             unicode(input);
+            return batch(input, sourceRoot, sha256(input.toString().getBytes(StandardCharsets.UTF_8)), true);
+        } catch (IOException | IllegalArgumentException ex) {
+            throw invalid("file", "저장된 검토본 또는 원문 파일을 검증할 수 없습니다.");
+        }
+    }
+
+    private ReviewedBatch batch(JsonNode input, Path sourceRoot, String inputHash, boolean stored) throws IOException {
             shape(input, "$", "schema_version data_kind documents evidence events");
             check(text(input, "schema_version", 100).equals("reviewed-import-v1"), "schema_version");
             String kind = choice(input, "data_kind", "synthetic", "real");
@@ -58,15 +71,28 @@ public class ReviewedImportReader {
             Set<String> eventIds = new HashSet<>();
             Set<String> revisionIds = new HashSet<>();
             for (JsonNode event : array(input, "events", true)) {
-                var reviewed = event(event, sources, evidence, kind);
+                var reviewed = event(event, sources, evidence, kind, stored);
                 check(eventIds.add(reviewed.id()), "events.event_id");
                 check(revisionIds.add(reviewed.revisionId()), "events.revision.revision_id");
                 events.add(reviewed);
             }
-            return new ReviewedBatch("reviewed-import-v1", sha256(bytes), kind, documents, events);
-        } catch (IOException | IllegalArgumentException ex) {
-            throw invalid("file", "UTF-8 JSON 또는 원문 파일을 읽고 검증할 수 없습니다.");
-        }
+            return new ReviewedBatch("reviewed-import-v1", inputHash, kind, documents, events);
+    }
+
+    public JsonNode readJson(Path file) {
+        try { return parseJson(readBounded(file, "file")); }
+        catch (IOException | IllegalArgumentException ex) { throw invalid("file", "UTF-8 JSON 파일을 읽을 수 없습니다."); }
+    }
+
+    public JsonNode parseJson(byte[] bytes) {
+        try {
+            check(bytes.length > 0 && bytes.length <= LIMIT, "file");
+            String json = StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString();
+            JsonNode input = mapper.readTree(json);
+            unicode(input);
+            return input;
+        } catch (IOException | IllegalArgumentException ex) { throw invalid("file", "UTF-8 JSON 형식이 유효하지 않습니다."); }
     }
 
     private ReviewedBatch.Document document(JsonNode doc, Path root, String kind, Set<String> checkIds) throws IOException {
@@ -163,7 +189,7 @@ public class ReviewedImportReader {
         return result;
     }
 
-    private ReviewedBatch.Event event(JsonNode event, Map<String, JsonNode> sources, Map<String, JsonNode> evidence, String kind) {
+    private ReviewedBatch.Event event(JsonNode event, Map<String, JsonNode> sources, Map<String, JsonNode> evidence, String kind, boolean stored) {
         shape(event, "events", "event_id area_id area_membership document_links relations suspected_duplicate_ids split_group_id expected_revision_no revision");
         String id = uuid(event, "event_id");
         uuid(event, "area_id");
@@ -222,11 +248,13 @@ public class ReviewedImportReader {
             instant(change, "time", false);
             evidenceIds(change, "evidence_ids", allowedEvidence, true);
         }
-        String status = choice(revision, "review_status", "draft", "needs_review");
-        choice(revision, "publication_intent", "hidden");
+        String status = stored ? choice(revision, "review_status", "draft", "needs_review", "approved", "rejected") : choice(revision, "review_status", "draft", "needs_review");
+        String intent = stored ? choice(revision, "publication_intent", "hidden", "public") : choice(revision, "publication_intent", "hidden");
+        check(!intent.equals("public") || status.equals("approved"), "events.revision.publication_intent");
         String reviewer = nullableText(revision, "reviewer_id", 128);
         Instant reviewedAt = instant(revision, "reviewed_at", true);
         check((reviewer == null) == (reviewedAt == null), "events.revision.reviewed_at");
+        check(!status.equals("approved") || reviewer != null, "events.revision.reviewer_id");
         List<String> runs = ids(revision, "originating_run_ids", false, true);
         String origin = choice(revision, "origin", "human", "ai_reviewed");
         check(origin.equals("human") == runs.isEmpty(), "events.revision.originating_run_ids");
@@ -240,7 +268,7 @@ public class ReviewedImportReader {
         var citations = payload.putArray("evidence");
         evidence.forEach((key, value) -> { if (allowedEvidence.contains(key)) citations.add(value); });
         String json = payload.toString();
-        return new ReviewedBatch.Event(id, revisionId, number, expected, json, sha256(json.getBytes(StandardCharsets.UTF_8)), status, reviewer, reviewedAt, runs, sourceIds, duplicates);
+        return new ReviewedBatch.Event(id, revisionId, number, expected, json, sha256(json.getBytes(StandardCharsets.UTF_8)), status, intent, reviewer, reviewedAt, runs, sourceIds, duplicates);
     }
 
     private void relations(JsonNode event, Set<String> documents) {

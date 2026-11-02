@@ -18,7 +18,7 @@ public record ReviewedBatch(String schemaVersion, String inputSha256, String dat
     public record SourceCheck(String id, Instant checkedAt, String result, String lastSuccessRef, String note) { }
 
     public record Event(String id, String revisionId, long revisionNo, long expectedRevisionNo,
-                        String payloadJson, String payloadSha256, String reviewStatus,
+                        String payloadJson, String payloadSha256, String reviewStatus, String publicationIntent,
                         String reviewerId, Instant reviewedAt, List<String> originatingRunIds,
                         List<String> sourceVersionIds, List<String> suspectedDuplicateIds) {
         public Event {

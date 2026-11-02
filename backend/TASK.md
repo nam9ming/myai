@@ -1,6 +1,6 @@
 # 백엔드·DB 작업
 
-구현한 기능과 실행 명령, 미완료 범위는 [README](README.md)에 기록합니다. 합성 API·초기 스키마와 비공개 검토본 로컬 import를 구현했으며 승인·공개·Python 연결은 아직 완료하지 않았습니다. import의 상태 제한과 입력 규격은 [상세 안내](docs/reviewed-import.md)를 따릅니다.
+구현한 기능과 실행 명령, 미완료 범위는 [README](README.md)에 기록합니다. 합성 API·초기 스키마·비공개 검토본 import와 로컬 승인·미리보기·공개·복구를 구현했습니다. 공개 API의 실제 조회와 Python 연결은 아직 완료하지 않았습니다. [import 규격](docs/reviewed-import.md)과 [승인·공개 안내](docs/review-publication.md)를 따릅니다.
 
 담당: 강명묵 · 기술 결정: Spring Boot·MySQL · 첫 결과: **11/3(화) 오후6시(KST)** · 연구실 시연: **11/4(수), 시각미정**
 
