@@ -88,6 +88,15 @@ public class ReviewedImportRepository {
     }
 
     public void appendEvent(ReviewedBatch.Event event, String kind, String actor) {
+        require((event.reviewStatus().equals("draft") || event.reviewStatus().equals("needs_review")) && event.publicationIntent().equals("hidden"), "review_status");
+        append(event, kind, actor, "import", "검토 JSON 로컬 import", json(event.payloadJson()).path("evidence").toString());
+    }
+
+    public void appendDecision(ReviewedBatch.Event event, String kind, String actor, String reason, String evidenceJson) {
+        append(event, kind, actor, event.reviewStatus().equals("approved") ? "approve" : "reject", reason, evidenceJson);
+    }
+
+    private void append(ReviewedBatch.Event event, String kind, String actor, String action, String reason, String evidenceJson) {
         var states = jdbc.queryForList("SELECT e.current_review_revision_id, e.lock_version, r.revision_no, r.payload_json FROM events e LEFT JOIN event_revisions r ON r.revision_id = e.current_review_revision_id WHERE e.event_id = ?", event.id());
         String before = null;
         long lockVersion = 0;
@@ -102,14 +111,13 @@ public class ReviewedImportRepository {
             lockVersion = ((Number) state.get("lock_version")).longValue();
         }
         require(lockVersion < Long.MAX_VALUE, "events.lock_version");
-        jdbc.update("INSERT INTO event_revisions(revision_id, event_id, revision_no, review_status, publication_intent, payload_json, payload_sha256, reviewed_at, reviewed_by) VALUES (?, ?, ?, ?, 'hidden', ?, ?, ?, ?)",
-                event.revisionId(), event.id(), event.revisionNo(), event.reviewStatus(), event.payloadJson(), event.payloadSha256(),
+        jdbc.update("INSERT INTO event_revisions(revision_id, event_id, revision_no, review_status, publication_intent, payload_json, payload_sha256, reviewed_at, reviewed_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                event.revisionId(), event.id(), event.revisionNo(), event.reviewStatus(), event.publicationIntent(), event.payloadJson(), event.payloadSha256(),
                 event.reviewedAt() == null ? null : Timestamp.from(event.reviewedAt()), event.reviewerId());
         require(jdbc.update("UPDATE events SET current_review_revision_id = ?, lock_version = lock_version + 1 WHERE event_id = ? AND lock_version = ?",
                 event.revisionId(), event.id(), lockVersion) == 1, "events.lock_version");
-        jdbc.update("INSERT INTO review_audits(audit_id, event_id, revision_id, action, before_ref, after_ref, reason, evidence_json, actor, happened_at) VALUES (?, ?, ?, 'import', ?, ?, ?, ?, ?, ?)",
-                UUID.randomUUID().toString(), event.id(), event.revisionId(), before, event.revisionId(), "검토 JSON 로컬 import",
-                json(event.payloadJson()).path("evidence").toString(), actor, Timestamp.from(Instant.now()));
+        jdbc.update("INSERT INTO review_audits(audit_id, event_id, revision_id, action, before_ref, after_ref, reason, evidence_json, actor, happened_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                UUID.randomUUID().toString(), event.id(), event.revisionId(), action, before, event.revisionId(), reason, evidenceJson, actor, Timestamp.from(Instant.now()));
     }
 
     private JsonNode json(String value) {

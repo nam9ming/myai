@@ -1,0 +1,9 @@
+{
+  "schema_version": "publication-command-v1",
+  "action": "rollback",
+  "reason": "합성 이전 공개본 복구 시험",
+  "mode": "current",
+  "case_id": null,
+  "snapshot_id": "30000000-0000-4000-8000-000000000001",
+  "expected_head_version": 1
+}

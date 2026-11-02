@@ -37,6 +37,9 @@ public class LocalImportCommand implements ApplicationRunner, ExitCodeGenerator 
     @Override
     public void run(ApplicationArguments args) {
         try {
+            if (environment.matchesProfiles("local-publication")) {
+                throw new ImportException("IMPORT_VALIDATION_ERROR", "local-import와 local-publication은 함께 실행할 수 없습니다.", "spring.profiles.active");
+            }
             if (context instanceof WebApplicationContext) {
                 throw new ImportException("IMPORT_VALIDATION_ERROR", "local-import는 웹 서버 없이 실행해야 합니다.", "spring.main.web-application-type");
             }
