@@ -123,6 +123,41 @@ class ProtocolTest(unittest.TestCase):
         self.assertEqual(0, sum(result['data']['counts'].values()))
         self.assertEqual('WINDOW_OUTSIDE', result['diagnostics'][0]['reason_codes'][0])
 
+    def test_replay_freshness_matches_current_at_the_fixed_reference(self):
+        p = payload()
+        p['context']['server_now'] = '2026-11-03T03:00:00Z'
+        p['query']['selection'] = 'needs_check'
+        current = run(raw(p))['data']
+        self.assertEqual(1, current['counts']['needs_check'])
+        case = '40000000-0000-4000-8000-000000000001'
+        p['context'].update(mode='replay', case_id=case, server_now='2026-12-03T02:00:00Z',
+                            reference_instant='2026-11-03T03:00:00Z', knowledge_cutoff='2026-11-03T02:00:00Z',
+                            history_fidelity='verified_snapshot')
+        p['query'].update(mode='replay', case_id=case)
+        replay = run(raw(p))['data']
+        self.assertEqual(current['counts'], replay['counts'])
+        self.assertIn('SOURCE_STALE', replay['items'][0]['reason_codes'])
+
+    def test_replay_freshness_24hour_nanosecond_boundary_is_frozen(self):
+        p = payload()
+        case = '40000000-0000-4000-8000-000000000001'
+        p['context'].update(mode='replay', case_id=case, server_now='2026-12-03T02:00:00Z',
+                            reference_instant='2026-11-03T02:00:00Z', knowledge_cutoff='2026-11-03T02:00:00Z',
+                            history_fidelity='verified_snapshot')
+        p['query'].update(mode='replay', case_id=case)
+        self.assertEqual(1, run(raw(p))['data']['counts']['candidate'])
+        p['context']['reference_instant'] = '2026-11-03T02:00:00.000000001Z'
+        p['query']['selection'] = 'needs_check'
+        first = run(raw(p))['data']
+        self.assertEqual(1, first['counts']['needs_check'])
+        p['context']['server_now'] = '2027-12-03T02:00:00Z'
+        self.assertEqual(first, run(raw(p))['data'])
+        p['events'][0].update(lifecycle='cancelled', lifecycle_evidence_ids=['body-quote'])
+        p['query']['selection'] = 'cancelled'
+        item = run(raw(p))['data']['items'][0]
+        self.assertEqual('cancelled', item['classification'])
+        self.assertIn('SOURCE_STALE', item['reason_codes'])
+
     def test_projection_agrees_with_actual_java_fact_response(self):
         p = payload()
         expected = json.loads((ROOT / 'contracts/examples/event-facts-response.json').read_text())['data']['event']

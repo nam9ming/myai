@@ -78,13 +78,13 @@ def _public_event(event, sources, synthetic):
 
 def _source_reasons(event, sources, context):
     reasons = set()
-    now = instant_ns(context['server_now'])
+    reference = instant_ns(context['server_now'] if context['mode'] == 'current' else context['reference_instant'])
     for version in event['source_version_ids']:
         source = sources[version]
         verified = source['last_verified_at']
         bad = source['check_result'] != 'verified'
-        if context['mode'] == 'current' and verified:
-            bad |= now - instant_ns(verified) > 86_400_000_000_000
+        if verified:
+            bad |= reference - instant_ns(verified) > 86_400_000_000_000
         if verified is None or bad:
             reasons.add('SOURCE_STALE')
         if source['check_result'] == 'unreachable':

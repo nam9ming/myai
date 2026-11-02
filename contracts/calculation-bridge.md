@@ -31,6 +31,8 @@ current 기준일은 server_now의 Asia/Seoul 날짜이며 Java가 계산해 con
 
 events/source_versions는 `PublicationContent`가 생성한 snapshot-v1의 event_public_payloads/sources 구조 그대로입니다. 모든 키는 필수이며 nullable 값도 null 키로 전달합니다. 모르는 키·중복 ID·참조 누락·구역 밖·미지원 규칙 버전은 거부합니다. current는 성공 확인 없는 출처를 거부하고, reconstructed replay에서만 당시 확인 null을 보존합니다. source_version_ids에 선택된 모든 출처의 최신성을 검사하며 다른 사건의 출처는 분류에 사용하지 않습니다. Java가 승인·사용권·원문 hash·snapshot checksum을 검증합니다. Python에는 전체 원문이나 canonical snapshot 바이트가 없으므로 그 검증을 대체하지 않습니다.
 
+24시간 경과는 current의 server_now, replay의 고정 reference_instant를 기준으로 비교합니다. replay의 당시 확인 기록은 cutoff까지이며, 실제 요청일이나 과거 사건 발생일을 확인 경과 기준으로 사용하지 않습니다. 정확히24시간은 유효하고1나노초라도 초과하면 SOURCE_STALE입니다. 취소 상태는 유지합니다.
+
 exact_time의 다른 종료 날짜는 명시된 datetime 끝이며 같은 날 시각 쌍의24시간 제한을 적용하지 않습니다. 같은 날짜 표기와 recurrence의 날짜에는 end_day_offset을 적용하고 시각+offset의 길이를 검사합니다. 종료 날짜가 이미 익일이면 offset을 이중 적용하지 않습니다. 부분 시간도 명시된 종료 날짜·시각을 넘겨 늘리지 않습니다. 시작 날짜가 미상이어도 알려진 종료 일시는 상한이며, 같은 날짜 표기의 미상 offset은 가능한 익일 종료를 남깁니다. recurrence_dates=null은 연속 구간, []는 발생 없음입니다. unknown 영업일은 그날 시작할 수 있는 최대24시간 구간의 합집합인 그날00시~다음다음날00시를 가능 범위로만 사용합니다. 알려진 영업이 덮은 부분은 다시 미상으로 계산하지 않습니다.
 
 snapshot 내부에 필요한 좌표·시간·관계가 미상인 경우 원래 unknown을 보존합니다. 정상 값으로 채워넣지 않습니다. 공개 응답 예제 `public-events.json`은 특정 조회 결과를 설명하는 자료이므로 이 입력으로 그대로 사용하지 않습니다. D06 원본 입력은 03 데이터 계약에 맞춰 별도로 조립합니다.
