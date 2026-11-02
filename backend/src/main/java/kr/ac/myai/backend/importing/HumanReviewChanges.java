@@ -33,6 +33,7 @@ public final class HumanReviewChanges {
             covered(previous.path("revision").path(field), revision.path(field), field, records, reviewer, at);
         }
         covered(previous.path("event"), next.path("event"), "event", records, reviewer, at);
+        covered(previous.path("evidence"), next.path("evidence"), "evidence", records, reviewer, at);
     }
 
     private static void covered(JsonNode before, JsonNode after, String path, Map<String, List<JsonNode>> records,
@@ -56,7 +57,7 @@ public final class HumanReviewChanges {
     }
 
     private static JsonNode value(JsonNode payload, String path) {
-        if (path.equals("event")) return payload.path("event");
+        if (path.equals("event") || path.equals("evidence")) return payload.path(path);
         JsonNode value = payload.path(path.startsWith("event.") ? "event" : "revision");
         String local = path.startsWith("event.") ? path.substring(6) : path;
         for (String name : local.split("\\.", -1)) {

@@ -61,7 +61,7 @@ AI 출처가 있는 기존 사건을 수정할 때는 이전 revision과 바뀐 
 
 - 제목·유형·시간·장소·대상/예외·노선/정류장/방향·lifecycle·근거·문서/실행 참조·규칙/사전 버전을 대조한다. 지역·문서 연결·관계·중복·분할 그룹 변경은 event.area_membership 등 event. 접두사를 쓴다.
 - FieldValue 전체는 applicability처럼, 하위 값만 바꾸면 directions.value처럼 점으로 경로를 쓴다. knowledge·reason·evidence_ids도 달라졌으면 각 변경을 기록하거나 FieldValue 전체를 before/after에 넣는다.
-- 배열은 위치 이동에 따른 잘못된 대응을 피하려고 전체 배열로 대조한다. 장소 내부를 바꿔도 field_path=locations, before/after=변경 전후 전체 locations다. occurrences·types·참조 배열도 같다.
+- 배열은 위치 이동에 따른 잘못된 대응을 피하려고 전체 배열로 대조한다. 장소 내부를 바꿔도 field_path=locations, before/after=변경 전후 전체 locations다. 근거 인용문·위치·hash·ID를 바꾸면 field_path=evidence로 최상위 evidence 배열 전체를 기록한다. 근거 ID를 유지해도 내용 변경은 기록해야 한다. occurrences·types·참조 배열도 같다.
 - revision ID/번호·검토 상태·검토자/시각·origin 등 작업 상태만 바뀌면 의미값 수정 기록은 요구하지 않는다. 이전 수정 기록을 그대로 남겨 둘 수 있다. 새로 넣는 기록은 실제 전후 값이 달라야 하고 그 값과 일치해야 하며, 바뀌지 않은 필드에 허위 수정 기록을 덧붙이는 입력은 거부한다.
 
 다음은 중복 방향 목록을 사람이 정리한 기록의 형식이다. 실제 값·검토자·시각·현재 파일의 근거 ID로 바꾼다.

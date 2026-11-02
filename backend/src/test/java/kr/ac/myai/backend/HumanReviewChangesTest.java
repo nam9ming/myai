@@ -77,6 +77,17 @@ class HumanReviewChangesTest {
     }
 
     @Test
+    void evidenceTextChangesNeedTheirOwnArrayRecordEvenWhenIdsStayTheSame() {
+        var before = payload();
+        before.putArray("evidence").addObject().put("evidence_id", "e1").put("quote", "이전 인용");
+        var after = before.deepCopy();
+        ((ObjectNode) after.path("evidence").get(0)).put("quote", "수정 인용");
+        assertThatThrownBy(() -> HumanReviewChanges.validate(before, after)).isInstanceOf(ImportException.class);
+        record(after, "evidence", before.path("evidence"), after.path("evidence"));
+        assertThatCode(() -> HumanReviewChanges.validate(before, after)).doesNotThrowAnyException();
+    }
+
+    @Test
     void regionChangesNeedAnEventFieldRecord() {
         var before = payload(); var after = payload(); after.withObject("event").put("area_membership", "verified");
         assertThatThrownBy(() -> HumanReviewChanges.validate(before, after)).isInstanceOf(ImportException.class);

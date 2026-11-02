@@ -54,6 +54,36 @@ class ExtractionRunMySqlTest {
     }
 
     @Test
+    void changedEvidenceSpanWithTheSameIdNeedsAnAccurateHumanRecord() throws Exception {
+        var source = source(); registerSource(source); String run = UUID.randomUUID().toString();
+        Path archive = archive(source, run, false); extraction.importRun(run, archive, "synthetic-registrant");
+        var old = review(source, run); importer.importBatch(old, "synthetic-reviewer");
+        var payload = (ObjectNode) mapper.readTree(old.events().getFirst().payloadJson());
+        var beforeEvidence = payload.path("evidence").deepCopy();
+        var evidence = (ObjectNode) payload.path("evidence").get(0);
+        String quote = evidence.path("quote").asText();
+        evidence.put("quote", quote.substring(quote.offsetByCodePoints(0, 1)))
+                .put("start_char", evidence.path("start_char").asInt() + 1);
+        var event = (ObjectNode) payload.path("event"); var revision = (ObjectNode) payload.path("revision");
+        event.put("expected_revision_no", 1); event.set("revision", revision);
+        revision.put("revision_id", UUID.randomUUID().toString()).put("revision_no", 2);
+        var input = source.deepCopy(); input.put("schema_version", "reviewed-import-v1");
+        input.set("evidence", payload.path("evidence")); input.putArray("events").add(event);
+        Path file = Files.writeString(root.resolve("evidence-review.json"), input.toString());
+        assertThatThrownBy(() -> importer.importBatch(reader.read(file, root), "synthetic-reviewer"))
+                .isInstanceOf(kr.ac.myai.backend.importing.ImportException.class);
+        var change = revision.withArray("human_overrides").addObject().put("field_path", "evidence")
+                .put("reason", "합성 인용 위치 대조").put("reviewer", revision.path("reviewer_id").asText())
+                .put("time", revision.path("reviewed_at").asText());
+        change.set("before", beforeEvidence); change.set("after", input.path("evidence").deepCopy());
+        change.putArray("evidence_ids").add(evidence.path("evidence_id").asText());
+        Files.writeString(file, input.toString());
+        assertThat(importer.importBatch(reader.read(file, root), "synthetic-reviewer").revisionIds()).hasSize(1);
+        assertThat(jdbc.queryForObject("SELECT payload_json FROM event_revisions WHERE revision_id=?", String.class,
+                old.events().getFirst().revisionId())).isEqualTo(old.events().getFirst().payloadJson());
+    }
+
+    @Test
     void highPrecisionCoordinateEditsCannotDisappearFromHumanChangeHistory() throws Exception {
         var source = source(); registerSource(source); String run = UUID.randomUUID().toString();
         Path archive = archive(source, run, false); extraction.importRun(run, archive, "synthetic-registrant");
