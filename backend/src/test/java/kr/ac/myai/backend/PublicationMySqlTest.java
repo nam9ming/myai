@@ -23,6 +23,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.boot.web.context.WebServerInitializedEvent;
+import org.springframework.context.ApplicationListener;
 import org.springframework.web.context.WebApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -43,6 +45,7 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -341,6 +344,7 @@ class PublicationMySqlTest {
         Files.writeString(migrations.resolve("V999999__export_must_not_run.sql"), "SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'EXPORT_MIGRATION_WAS_EXECUTED';");
         try (var context = new SpringApplicationBuilder(MyaiBackendApplication.class).profiles("local-export").run(
                 "--myai.export.snapshot-id=" + published.snapshotId(), "--myai.export.directory=" + directory,
+                "--spring.flyway.enabled=true",
                 "--spring.flyway.locations=classpath:db/migration,filesystem:" + migrations)) {
             assertThat(context).isNotInstanceOf(WebApplicationContext.class);
             assertThat(context.getBean(LocalSnapshotExportCommand.class).getExitCode()).isZero();
@@ -349,6 +353,20 @@ class PublicationMySqlTest {
                 .isEqualTo(canonical(published.snapshotId()).getBytes(StandardCharsets.UTF_8));
         assertThat(exportDatabaseState()).isEqualTo(before);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE version = '999999'", Long.class)).isZero();
+    }
+
+    @Test
+    void exportRejectsWebModeBeforeAnyServerStarts() {
+        var started = new AtomicInteger();
+        var failure = catchThrowable(() -> {
+            try (var ignored = new SpringApplicationBuilder(MyaiBackendApplication.class).profiles("local-export")
+                    .listeners(new ApplicationListener<WebServerInitializedEvent>() {
+                        @Override public void onApplicationEvent(WebServerInitializedEvent event) { started.incrementAndGet(); }
+                    }).run("--spring.main.web-application-type=servlet", "--server.port=0",
+                            "--myai.export.snapshot-id=" + UUID.randomUUID(), "--myai.export.directory=" + root)) { }
+        });
+        assertThat(started.get()).isZero();
+        assertThat(failure).isInstanceOf(IllegalStateException.class).hasMessage("local-export는 웹 서버 없이 실행해야 합니다.");
     }
 
     @ParameterizedTest
