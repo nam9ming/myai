@@ -35,6 +35,8 @@ java -jar backend/build/libs/myai-backend-0.1.0.jar \
 
 ## 명령 파일 규격
 
+origin=ai_draft인 미검토 초안은 직접 승인할 수 없다. 먼저 [사람 검토 다음 revision](ai-review-draft.md)을 import한다. 근거 없는 AI 초안의 reject만 evidence_ids=[]를 허용한다. 그 외 승인·반려는 근거1개 이상을 유지한다.
+
 최상위 `schema_version`은 `publication-command-v1`이다. 모든 키를 포함하고 nullable 값도 생략하지 않는다. 추가/중복 키·문자열 숫자·정수 자리에 실수·잘못된 UTF-8/Unicode를 거부한다. 파일은 최대8MiB다.
 
 | action | 필드 |

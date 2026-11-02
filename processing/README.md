@@ -28,6 +28,7 @@ python3.13 -m venv .venv
 | `extraction/schema.py`, `validation.py` | AI 입력/출력 구조·knowledge·근거·참조·시간 순서 검증 |
 | `extraction/prompt.py`, `metadata.py` | 고정 프롬프트·문서/블록/hash 제약·D05 제공값 검증 |
 | `extraction/archive.py`, `__main__.py` | 비공개 준비/수동 가져오기/무결성 검증·실패 원출력 보존 |
+| `extraction/draft.py` | 검증된 원출력→숨김 검토 초안·안정 ID·근거 hash 변환·미상 보존 |
 
 [계산 연결 계약](../contracts/calculation-bridge.md)을 따릅니다. 지원 규칙은 `rules-v1`이며 미지원 버전을 정상 결과로 바꾸지 않습니다. `dictionary_version`은 선택한 snapshot의 고정 식별자이며 계산 중 새 사전을 읽지 않습니다. 입력 원본 바이트 SHA-256을 반환하며 개인 조건은 로그에 남기지 않습니다.
 
@@ -54,6 +55,8 @@ python3.13 -m processing.extraction verify 71fb66f0-e610-4f9c-8f26-4bb77655ee8c
 첫 명령은 합성 입력의 프롬프트만 생성합니다. 가져오기에는 실제 제공한 프롬프트·원출력과 새 run_id의 메타데이터를 준비합니다. 기본 저장 위치는 Git 제외 `data/private/extraction-runs`입니다. 같은 ID의 원본을 덮어쓰지 않으며 실패·과다 출력도 전부 보존합니다. 마지막 출력이 기계 검증을 통과해도 `review_required=true`이며 사람 승인과 다릅니다. 종료 코드·1~3시도·복구·hash 대상·미상 제공값 처리 등은 [실행 기록 계약](../contracts/extraction-run.md)을 따릅니다.
 
 ## 검증·남은 작업
+
+등록한 D05에서 `python3.13 -m processing.extraction draft`로 ai-draft-import-v1을 생성하고 Java local-import로 저장할 수 있다. 실행 인자·사람 검토본 작성·승인 경계는 [초안 연결 안내](../backend/docs/ai-review-draft.md)를 따른다. 실제 모델 호출과 분리된 로컬 변환이며 AI 원본과 초안을 사람이 확인해야 한다.
 
 자동 시험으로 시간·거리·결합·취소·최신성·재현·정렬·중첩·실제 CLI 오류를 확인합니다. 실제 Java 공개 상세 예제와 사실 필드 전체도 대조합니다. AI 검증은 한글/emoji·미상·형식/근거 오류·실패 원본·충돌·동시 실행·중단 재개·손상·실제 subprocess를 확인합니다. CI에서 Python3.13 시험과 기존 계약·백엔드 시험을 함께 실행합니다. 시험 목록은 `tests/`, 설계 결정은 [계산 계획](../docs/superpowers/plans/2026-11-03-calculation-cli.md)과 [추출 기록 계획](../docs/superpowers/plans/2026-11-03-extraction-validation.md)에 있습니다.
 

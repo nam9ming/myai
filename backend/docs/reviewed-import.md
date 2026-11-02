@@ -47,6 +47,8 @@ java -jar backend/build/libs/myai-backend-0.1.0.jar \
 
 ## 사건·revision
 
+AI 원출력으로 만든 미검토 파일은 별도 ai-draft-import-v1을 사용한다. 숨김 초안의 부분 미상·승인 차단·사람 검토본으로의 승격은 [초안 연결 안내](ai-review-draft.md)를 따른다. 아래 일반 검토본 규칙을 완화하지 않는다.
+
 사건 객체는 `event_id`, `area_id`, `area_membership`, `document_links`, `relations`, `suspected_duplicate_ids`, `split_group_id`, `expected_revision_no`, `revision`으로 구성한다.
 
 - `document_links`: `{document_id,role,evidence_ids}`. role은 original/correction/cancellation/repost, 해당 문서의 근거가 필요하다.

@@ -1,10 +1,10 @@
 # AI 검토 초안 연결 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 검증된 D05의 마지막 AI 출력을 원본·미상·근거를 보존한 숨김 검토 초안으로 생성하고 Java가 별도로 저장한다.
 
-**Architecture:** 기존 freeze/hash/비공개 파일 설치와 import 트랜잭션을 재사용한다. `ai-draft-import-v1`은 기존 5키 envelope와 D04/D06 구조를 사용하되 `origin=ai_draft`, `draft/hidden`, 검토자 null만 허용한다. 제목 null·유형 빈 배열은 이 미검토 단계에서만 허용하며 직접 승인할 수 없다. 사람은 원문을 대조하고 필요한 값·좌표·수정 이력을 작성한 `reviewed-import-v1`, `origin=ai_reviewed`의 다음 revision을 전달한다.
+**Architecture:** 기존 freeze/hash/비공개 파일 설치와 import 트랜잭션을 재사용한다. `ai-draft-import-v1`은 기존 D04/D06 구조와 envelope에 originating_run_id를 추가해 사용하되 `origin=ai_draft`, `draft/hidden`, 검토자 null만 허용한다. 제목 null·유형 빈 배열은 이 미검토 단계에서만 허용하며 직접 승인할 수 없다. 사람은 원문을 대조하고 필요한 값·좌표·수정 이력을 작성한 `reviewed-import-v1`, `origin=ai_reviewed`의 다음 revision을 전달한다.
 
 **Tech Stack:** Python3.13 표준 라이브러리, Java21·Spring Boot3.5.16·MySQL8.4.13. 새 의존성 없음.
 
@@ -36,23 +36,23 @@ AI 근거는 블록 hash를 먼저 검증한 뒤 D06의 문서 전체 hash로 �
 
 **Files:** `processing/extraction/draft.py`, `__main__.py`, `processing/tests/test_extraction_draft.py`.
 
-**Interfaces:** `draft_run(run_id, source_path, output_path, area_id, split_group_id, dictionary_version, root=DEFAULT_ROOT) -> dict`. source는 문서1개인 source-import-v1, output은 ai-draft-import-v1. freeze의 최종 validated 출력과 전체 D03 projection/전처리/data_kind가 같아야 한다.
+**Interfaces:** `draft_run(run_id, source_path, output_path, area_id, split_group_id, dictionary_version, root=DEFAULT_ROOT) -> dict`. source는 문서1개인 source-import-v1, output은 originating_run_id를 포함한 ai-draft-import-v1. freeze의 최종 validated 출력과 전체 D03 projection/전처리/data_kind가 같아야 한다.
 
-- [ ] RED: 합성 실행의 생성·재실행·원본 보존·UUID/근거 변환 시험을 작성하고 미구현 실패 확인.
-- [ ] 구현: UUID5·FieldValue 근거 ID 변환·nullable 제목/유형·uncertain lifecycle/지역·미검증 geometry·보수적 occurrence 정규화·배타 파일 생성. 실제 출력을 읽을 때도 hash 재검증.
-- [ ] 회귀: 미상/반복/HH:mm:ss/빈 사건·장소 대응 미상·실패/변조/입력 불일치·파일 충돌/동시 실행·공개 경로 거부·안전한 CLI 실패.
-- [ ] `python3.13 -m unittest processing.tests.test_extraction_draft -v` → 전부 통과. 관련 Python 전체도 통과 후 commit.
+- [x] RED: 합성 실행의 생성·재실행·원본 보존·UUID/근거 변환 시험을 작성하고 미구현 실패 확인.
+- [x] 구현: UUID5·FieldValue 근거 ID 변환·nullable 제목/유형·uncertain lifecycle/지역·미검증 geometry·보수적 occurrence 정규화·배타 파일 생성. 실제 출력을 읽을 때도 hash 재검증.
+- [x] 회귀: 미상/반복/HH:mm:ss/빈 사건·장소 대응 미상·실패/변조/입력 불일치·파일 충돌/동시 실행·공개 경로 거부·안전한 CLI 실패.
+- [x] `python3.13 -m unittest processing.tests.test_extraction_draft -v` → 전부 통과. 관련 Python 전체도 통과 후 commit.
 
 ## Task 2: Java 숨김 저장·승인 경계
 
 **Files:** `ReviewedImportReader.java`, `ReviewedImportRepository.java`, `PublicationService.java`, reader/MySQL 시험.
 
-**Interfaces:** 기존 `read(Path, Path) -> ReviewedBatch`, `importBatch`, 승인 API를 유지. 새 schema는 source_kind=ai_draft. draft origin에는 실행1개·원문1개·최초 revision·검토자 null·빈 overrides·비확정 장소/지역만 허용한다.
+**Interfaces:** 기존 `read(Path, Path) -> ReviewedBatch`, `importBatch`, 승인 API를 유지. 새 schema는 source_kind=ai_draft이며 결과 참조 JSON에도 originating_run_id를 보존한다. 사건0개도 D05/원문을 검증하고 쓰기 전 등록 행을 재확인한다. draft origin에는 실행1개·원문1개·최초 revision·검토자 null·빈 overrides·비확정 장소/지역만 허용한다.
 
-- [ ] RED: 새 schema·부분 미상·빈 사건 수락과 raw 직접 승인 거부 시험. 기존 reviewed의 불완전 값 거부는 유지.
-- [ ] reader에서 새 schema 예외를 raw draft에만 제한하고 source_kind 분리. approve는 raw origin을 원문 검증/쓰기 전에 거부. stored 검증도 raw의 상태 승격을 거부.
-- [ ] 실제 Python→Java→MySQL: D03→D05→초안→재실행, source_kind·원본/출처·공개 테이블 불변 확인. 직접 승인 거부 후 사람이 작성한 다음 ai_reviewed revision은 기존 승인 가능. failed/삭제 원본은 새 import 거부.
-- [ ] 실제 MySQL을 켠 전체 Java 시험·JAR 빌드 통과 후 commit.
+- [x] RED: 새 schema·부분 미상·빈 사건 수락과 raw 직접 승인 거부 시험. 기존 reviewed의 불완전 값 거부는 유지.
+- [x] reader에서 새 schema 예외를 raw draft에만 제한하고 source_kind 분리. approve는 raw origin을 원문 검증/쓰기 전에 거부. stored 검증도 raw의 상태 승격을 거부.
+- [x] 실제 Python→Java→MySQL: D03→D05→초안→재실행, source_kind·원본/출처·공개 테이블 불변 확인. 직접 승인 거부 후 사람이 작성한 다음 ai_reviewed revision은 기존 승인 가능. failed/삭제 원본은 새 import 거부.
+- [x] 실제 MySQL을 켠 전체 Java 시험·JAR 빌드 통과 후 commit.
 
 ## Task 3: 문서·전체 검토·PR
 
