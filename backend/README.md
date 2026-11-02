@@ -7,7 +7,7 @@ Java 21 / Spring Boot **3.5.16** / Gradle Wrapper **8.14.3** / MySQL **8.4.13**.
 ## 구현 범위
 
 - `/health`: 프로세스 기동을 확인하는 liveness다. DB·Python 준비 완료 여부는 확인하지 않는다.
-- `GET /api/v1/config`, `POST /api/v1/matches`, `GET /api/v1/events/{id}?snapshot_id=…`.
+- `GET /api/v1/config`, `POST /api/v1/matches`, `GET /api/v1/events/{id}?snapshot_id=…`. 기본 `public` 프로필은 실제 공개 snapshot으로 config·상세를 제공한다. [공개 조회 안내](docs/public-snapshot-api.md)를 따른다.
 - `fixture` 프로필에서 `contracts/examples/`의 합성 응답을 제공한다. Gradle이 필요한 JSON만 JAR에 포함하므로 별도 복사본을 수정하지 않는다.
 - matches는 **matches-request.json의 고정 조건만 지원**한다. 동일 snapshot을 지정하거나 selection/sort 기본값을 쓰는 요청도 허용한다. 다른 지점·영업시간·필터·정렬 조건으로 요청하면 실제 계산 대신 `503 CALCULATOR_NOT_READY`를 반환한다.
 - fixture의 기준일·generated_at은 예제에 고정된 합성 값이다. 실제 현재 시각 기반 계산·AI 처리 결과가 아니다.
@@ -16,7 +16,7 @@ Java 21 / Spring Boot **3.5.16** / Gradle Wrapper **8.14.3** / MySQL **8.4.13**.
 - `local-import` 일회성 명령은 D03/D04/D06 검토 JSON, 원문/본문 hash, Unicode 근거와 참조를 검증한다. Spring JDBC로 원자적으로 저장하며 동일 파일 재입력, append-only revision, 조건부 작업 포인터 갱신과 감사 기록을 지원한다. `draft/needs_review`·`hidden`만 저장한다.
 - `local-publication` 일회성 명령은 승인·반려 revision, 읽기 전용 공개 JSON 미리보기, 불변 snapshot 공개·복구를 처리한다. V2 `publication_audits`에 공개 포인터 변경 이력을 남기며 충돌·실패 시 이전 공개본을 보존한다.
 
-**미구현:** 공개 API의 실제 snapshot 조회, Python CLI adapter, 관리 UI, JSON 파일 export, 운영 배포. 저장 계층에는 이미 포함된 Spring JDBC를 사용했다. JPA entity/일반 CRUD와 Java 후보 판정 엔진은 추가하지 않았다. 승인·공개·복구는 합성 자료와 전용 DB로 시험하며 실제 자료의 사실성·이용권한 검토를 완료한 상태는 아니다.
+**미구현:** Python CLI adapter, 관리 UI, JSON 파일 export, 운영 배포. 저장 계층에는 이미 포함된 Spring JDBC를 사용했다. JPA entity/일반 CRUD와 Java 후보 판정 엔진은 추가하지 않았다. 승인·공개·복구는 합성 자료와 전용 DB로 시험하며 실제 자료의 사실성·이용권한 검토를 완료한 상태는 아니다.
 
 ## DB 없이 합성 API 실행
 
@@ -60,9 +60,9 @@ read -rs DB_PASSWORD; export DB_PASSWORD; echo
 ./gradlew bootRun
 ```
 
-기본 `public` 프로필은 DB 연결·Flyway 적용 후 기동한다. DB에 공개본을 저장해도 실제 조회·계산 서비스 연결 전에는 API가 `503 PUBLIC_DATA_NOT_READY`를 반환하며 fixture로 자동 전환하지 않는다. JSON seed는 넣지 않는다.
+기본 `public` 프로필은 DB 연결·Flyway 적용 후 기동한다. 공개 전 config는 `503 PUBLIC_DATA_NOT_READY`, 공개 후 config·상세는 고정 snapshot을 조회한다. matches는 snapshot·지점을 검증한 뒤 `503 CALCULATOR_NOT_READY`를 반환한다. fixture로 자동 전환하거나 JSON seed를 넣지 않는다.
 
-스키마 생성은 Flyway만 담당하고 JPA는 `ddl-auto=validate`를 사용한다. canonical JSON은 LONGTEXT 원문과 별도 checksum으로 보존한다. ID/hash는 ASCII 대소문자를 구분한다. JDBC session·Hibernate는 UTC를 사용하고 격리 수준은 REPEATABLE READ로 설정한다. 적용된 V1을 수정하지 말고 후속 V2 migration을 추가한다. 개발 DB는 `docker compose stop`으로 종료하며 볼륨을 삭제하지 않는다.
+스키마 생성은 Flyway만 담당하고 JPA는 `ddl-auto=validate`를 사용한다. canonical JSON은 LONGTEXT 원문과 별도 checksum으로 보존한다. ID/hash는 ASCII 대소문자를 구분한다. JDBC session·Hibernate는 UTC를 사용하고 격리 수준은 REPEATABLE READ로 설정한다. 적용된 V1·V2를 수정하지 말고 변경 사항은 후속 migration으로 추가한다. 개발 DB는 `docker compose stop`으로 종료하며 볼륨을 삭제하지 않는다.
 
 ## 검토 JSON 로컬 import
 
@@ -81,7 +81,7 @@ java -jar backend/build/libs/myai-backend-0.1.0.jar \
 
 ## 검증·빌드
 
-승인·미리보기·공개·복구 명령은 [검토 승인·공개 안내](docs/review-publication.md)를 따른다. 공개 조회를 연결할 때는 snapshot에 고정된 지점·사건을 사용해야 하며 최신 지점 행을 섞지 않는다.
+승인·미리보기·공개·복구 명령은 [검토 승인·공개 안내](docs/review-publication.md)를 따른다. 공개 조회는 snapshot에 고정된 지점·사건을 사용하며 최신 작업 행을 섞지 않는다. 교체된 공개본은409와 현행 ID를 반환하고, 복구하면 이전본을 다시 조회할 수 있다.
 
 ```bash
 cd backend
@@ -89,7 +89,9 @@ cd backend
 java -jar build/libs/myai-backend-0.1.0.jar --spring.profiles.active=fixture
 ```
 
-일반 `test`는 DB 없는 API·import·공개 명령 검증 시험을 수행한다. `MySqlFoundationTest`·`ReviewedImportMySqlTest`·`PublicationMySqlTest`는 전용 MySQL 테스트 DB를 지정하고 `MYAI_MYSQL_TESTS=true`일 때 실행한다. 운영·공유 DB에서는 실행하지 않는다. CI는 매 실행 분리된 `myai_test` DB를 준비해 migration·UTF-8/UTC·중복 import·승인/공개 차단·동시 수정·전체 rollback·미리보기·복구·로컬 명령을 검증한다.
+일반 `test`는 DB 없는 API·import·공개 명령 검증 시험을 수행한다. `MySqlFoundationTest`·`ReviewedImportMySqlTest`·`PublicationMySqlTest`는 전용 MySQL 테스트 DB를 지정하고 `MYAI_MYSQL_TESTS=true`일 때 실행한다. 운영·공유 DB에서는 실행하지 않는다. CI는 매 실행 분리된 `myai_test` DB를 준비해 migration·UTF-8/UTC·중복 import·승인/공개 차단·동시 수정·전체 rollback·미리보기·복구·로컬 명령·실제 공개 조회·공개 이력·replay 문맥·동시 포인터 변경 중 응답 일관성을 검증한다.
+
+`MYAI_MYSQL_TESTS=true`일 때는 외부 DB 상태를 캐시하지 않고 매번 시험을 실행한다. 검토 입력 예제와 사실 전용 응답 예제도 Gradle 시험 입력에 포함한다.
 
 CI의 기존 필수 검사 `check`에서 백엔드 시험과 JAR 빌드도 실행한다. 백엔드 시험이나 빌드가 실패하면 필수 검사도 실패한다. 실행 JAR는 별도 artifact로 보관한다. `CORS_ALLOWED_ORIGIN` 기본값은 `http://localhost:5173`이며 credential·임의 origin을 허용하지 않는다.
 

@@ -1,6 +1,7 @@
 package kr.ac.myai.backend.controller;
 
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import kr.ac.myai.backend.exception.ApiException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +16,10 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.RecoverableDataAccessException;
+import org.springframework.dao.TransientDataAccessException;
+import org.springframework.transaction.CannotCreateTransactionException;
 
 import java.util.List;
 import java.util.UUID;
@@ -26,12 +31,21 @@ public class ApiExceptionHandler {
 
     public record FieldError(String field, String message) {}
     public record ErrorDetail(String code, String message, List<FieldError> fieldErrors, boolean retryable) {}
-    public record ErrorResponse(ErrorDetail error, String requestId) {}
+    public record ErrorResponse(ErrorDetail error, String requestId, @JsonInclude(JsonInclude.Include.NON_NULL) String currentSnapshotId) {
+        public ErrorResponse(ErrorDetail error, String requestId) { this(error, requestId, null); }
+    }
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ErrorResponse> domain(ApiException error) {
         var fields = error.field() == null ? List.<FieldError>of() : List.of(new FieldError(error.field(), error.getMessage()));
-        return response(error.status(), error.code(), error.getMessage(), fields);
+        return ResponseEntity.status(error.status()).body(new ErrorResponse(
+                new ErrorDetail(error.code(), error.getMessage(), fields, error.status() == HttpStatus.SERVICE_UNAVAILABLE), UUID.randomUUID().toString(), error.currentSnapshotId()));
+    }
+
+    @ExceptionHandler({DataAccessResourceFailureException.class, TransientDataAccessException.class,
+            RecoverableDataAccessException.class, CannotCreateTransactionException.class})
+    public ResponseEntity<ErrorResponse> databaseUnavailable() {
+        return response(HttpStatus.SERVICE_UNAVAILABLE, "DATABASE_UNAVAILABLE", "공개 자료 저장소에 연결할 수 없습니다.", List.of());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

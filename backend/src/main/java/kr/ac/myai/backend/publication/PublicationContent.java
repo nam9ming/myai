@@ -94,6 +94,7 @@ public class PublicationContent {
         var revisionIds = result.putArray("revision_ids"); var events = result.putArray("event_public_payloads");
         for (var revision : revisions) {
             JsonNode payload = payload(revision); JsonNode facts = payload.path("event"); JsonNode reviewed = payload.path("revision");
+            publicArea(facts);
             check(payload.path("data_kind").asText().equals(command.dataKind()) && facts.path("area_id").asText().equals(command.area().areaId().toString()), "data_kind/area_id");
             check(reviewed.path("rules_version").asText().equals(command.rulesVersion()) && reviewed.path("dictionary_version").asText().equals(command.dictionaryVersion()), "rules_version/dictionary_version");
             revisionIds.add(revision.id());
@@ -154,6 +155,12 @@ public class PublicationContent {
                 && content.path("mode").asText().equals(snapshot.mode()) && Objects.equals(content.path("case_id").textValue(), snapshot.caseId())
                 && content.path("data_kind").asText().equals(snapshot.kind()) && content.path("rules_version").asText().equals(snapshot.rulesVersion())
                 && content.path("dictionary_version").asText().equals(snapshot.dictionaryVersion()), "snapshot");
+        check(content.path("event_public_payloads").isArray(), "snapshot.events");
+        content.path("event_public_payloads").forEach(this::publicArea);
+    }
+
+    private void publicArea(JsonNode event) {
+        check(Set.of("verified", "uncertain").contains(event.path("area_membership").asText()), "area_membership");
     }
 
     public void check(boolean condition, String field) {
