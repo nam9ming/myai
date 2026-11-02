@@ -67,3 +67,13 @@ docs/wednesday-plan.md    # 수요일까지 작업 순서·완료 기준
 - 샘플 JSON과 HTML은 모두 가상 자료입니다. 실제 확보 공지나 실증 결과로 집계하지 않습니다.
 - 개인정보가 포함된 원래 신청서, 실제 평가 기록, 비밀키·서버 인증정보는 올리지 않습니다.
 - 협업 방식은 [CONTRIBUTING.md](CONTRIBUTING.md)를 따릅니다.
+
+## 개발 인프라
+
+`ai-lounge-infra`의 CI·PR/이슈 템플릿·AI 리뷰·디스코드 알림·보드 동기화를 적용합니다.
+**Flutter Web·Spring Boot·MySQL·Python 설계는 그대로 유지하며**, Node.js20+는 자동화 도구에만 사용합니다.
+
+현재 로컬 확인은 `npm run lint`, `npm test`, `npm run build`입니다. 계약 JSON과 인프라를 검증하고
+기존 합성 HTML 시제품을 패키징합니다. 앱 자체의 빌드·API·DB 연결 검증을 대신하지 않습니다.
+기존 디스코드·보드를 공유하되 시크릿은 myai에도 등록해야 합니다. 공개 프리뷰는 기본 비활성화입니다.
+설정·권한·연결 확인은 [개발 인프라 적용 안내](docs/development-infra.md)를 따릅니다.

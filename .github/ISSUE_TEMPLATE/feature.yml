@@ -1,0 +1,47 @@
+name: 기능
+description: 만들 것을 등록한다. 완료 조건이 없으면 등록되지 않는다.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: background
+    attributes:
+      label: 배경
+      description: 왜 필요한가. 누가 무엇을 못 하고 있는가.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 구분
+      options:
+        - 핵심 기능
+        - 비핵심 기능
+    validations:
+      required: true
+
+  - type: textarea
+    id: dod
+    attributes:
+      label: 완료 조건
+      description: 무엇이 되면 이 이슈가 닫히는가. 확인 가능한 문장으로 쓴다.
+      placeholder: |
+        - [ ] 로그인 화면에서 이메일·비밀번호로 로그인된다
+        - [ ] 비밀번호가 틀리면 화면에 사유가 표시된다
+        - [ ] 위 두 경우에 대한 테스트가 있다
+    validations:
+      required: true
+
+  - type: textarea
+    id: verify
+    attributes:
+      label: 검수 방법
+      description: 완료를 어떻게 확인하는가. 프리뷰 링크에서 밟을 순서를 쓴다.
+    validations:
+      required: true
+
+  - type: input
+    id: design
+    attributes:
+      label: 디자인 링크
+      description: 해당하는 Figma 프레임 URL. 없으면 비워둔다.

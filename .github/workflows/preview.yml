@@ -1,0 +1,94 @@
+name: Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: preview-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  deploy:
+    name: deploy-preview
+    if: vars.ENABLE_PREVIEW == 'true' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+
+      - name: 빌드
+        run: npm run build
+
+      - name: gh-pages 브랜치에 프리뷰 발행
+        run: |
+          set -euo pipefail
+          PR="${{ github.event.number }}"
+          WT="$(mktemp -d)/wt"
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git fetch origin gh-pages:gh-pages --depth=1
+            git worktree add "$WT" gh-pages
+          else
+            git worktree add --detach "$WT"
+            git -C "$WT" checkout --orphan gh-pages
+            git -C "$WT" rm -rf . >/dev/null 2>&1 || true
+            echo "프리뷰 배포 대상 브랜치" > "$WT/README.md"
+            : > "$WT/.nojekyll"
+          fi
+
+          rm -rf "$WT/pr-$PR"
+          mkdir -p "$WT/pr-$PR"
+          cp -R dist/. "$WT/pr-$PR/"
+
+          git -C "$WT" add -A
+          if ! git -C "$WT" diff --cached --quiet; then
+            git -C "$WT" commit -m "preview: PR #$PR (${GITHUB_SHA:0:7})"
+            git -C "$WT" push origin gh-pages
+          fi
+
+      - name: PR에 프리뷰 링크 코멘트
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.number }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+        run: |
+          set -euo pipefail
+          MARKER='<!-- preview-url -->'
+          URL="https://${OWNER,,}.github.io/${REPO}/pr-${PR}/"
+          BODY="${MARKER}
+          ### HTML 시제품 프리뷰 배포 완료
+
+          | 항목 | 값 |
+          |---|---|
+          | 프리뷰 | ${URL} |
+          | 커밋 | \`${GITHUB_SHA:0:7}\` |
+          | 갱신 | $(date -u '+%Y-%m-%d %H:%M UTC') |
+
+          가상 자료 HTML 시제품이며 Flutter·API·DB 연동 앱이 아니다.
+          Pages 설정 완료 후 접속할 수 있다. 커밋을 추가하면 같은 경로가 갱신된다."
+
+          ID=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" \
+                 --jq "[.[] | select(.body | contains(\"${MARKER}\"))][0].id // empty")
+
+          if [ -n "$ID" ]; then
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${ID}" -f body="$BODY" >/dev/null
+            echo "코멘트 갱신: $ID"
+          else
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" -f body="$BODY" >/dev/null
+            echo "코멘트 생성"
+          fi
+          echo "프리뷰: $URL"

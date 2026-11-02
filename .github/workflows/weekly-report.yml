@@ -1,0 +1,85 @@
+name: Weekly Report
+
+# 매주 금요일 18:00 KST (= 09:00 UTC)
+on:
+  schedule:
+    - cron: '0 9 * * 5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  report:
+    name: weekly-report
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+
+      - name: 지난 7일 활동 수집
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SINCE=$(date -u -d '7 days ago' '+%Y-%m-%d')
+          echo "since=$SINCE"
+
+          gh api -X GET "search/issues" \
+            -f q="repo:${GITHUB_REPOSITORY} is:pr is:merged merged:>=${SINCE}" \
+            -f per_page=100 --jq '[.items[] | {number, title, user: .user.login}]' > /tmp/prs.json
+
+          gh api -X GET "search/issues" \
+            -f q="repo:${GITHUB_REPOSITORY} is:issue is:closed closed:>=${SINCE}" \
+            -f per_page=100 --jq '[.items[] | {number, title}]' > /tmp/issues.json
+
+          gh api -X GET "search/issues" \
+            -f q="repo:${GITHUB_REPOSITORY} is:issue is:open" \
+            -f per_page=100 --jq '[.items[] | {number, title}]' > /tmp/open.json
+
+          echo "SINCE=$SINCE" >> "$GITHUB_ENV"
+
+      - name: 요약 생성
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_SUMMARY_MODEL || 'claude-opus-5' }}
+        run: node scripts/weekly-summary.mjs > /tmp/report.md
+
+      - name: 내부 채널로 전송 (#weekly)
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_WEEKLY }}
+          FALLBACK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          set -euo pipefail
+          WEBHOOK="${WEBHOOK:-${FALLBACK:-}}"
+          if [ -z "${WEBHOOK:-}" ]; then
+            echo "::notice::#weekly 웹훅이 없어 전송을 건너뜀"
+            cat /tmp/report.md
+            exit 0
+          fi
+          jq -Rs '{content: .}' < /tmp/report.md > /tmp/payload.json
+          curl -sS --fail-with-body -X POST -H "Content-Type: application/json" \
+            -d @/tmp/payload.json "$WEBHOOK" > /dev/null
+          echo "#weekly 전송 완료"
+
+      - name: 발주처 채널로 전송 (#갑-공유)
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_CLIENT }}
+        run: |
+          set -euo pipefail
+          if [ -z "${WEBHOOK:-}" ]; then
+            echo "::notice::#갑-공유 웹훅이 없어 전송을 건너뜀"
+            exit 0
+          fi
+          jq -Rs '{content: .}' < /tmp/report.md > /tmp/payload.json
+          curl -sS --fail-with-body -X POST -H "Content-Type: application/json" \
+            -d @/tmp/payload.json "$WEBHOOK" > /dev/null
+          echo "#갑-공유 전송 완료"

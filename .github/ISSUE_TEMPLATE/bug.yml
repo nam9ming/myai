@@ -1,0 +1,34 @@
+name: 버그
+description: 동작이 기대와 다른 경우를 등록한다.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: expected
+    attributes:
+      label: 기대한 동작
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 실제 동작
+      description: 오류 메시지가 있으면 그대로 붙인다.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 재현 절차
+      placeholder: |
+        1. 프리뷰 링크 접속
+        2. ...
+    validations:
+      required: true
+
+  - type: input
+    id: where
+    attributes:
+      label: 확인한 환경
+      description: 프리뷰 URL · 브라우저 · 기기

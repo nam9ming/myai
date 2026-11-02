@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: 린트
+        run: npm run lint
+
+      - name: 인프라 테스트·계약 예제 검증
+        run: npm test
+
+      - name: 합성 HTML 시제품 패키징
+        run: npm run build
+
+      - name: 빌드 산출물 보관
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist-${{ github.sha }}
+          path: dist
+          retention-days: 14
+          if-no-files-found: error
