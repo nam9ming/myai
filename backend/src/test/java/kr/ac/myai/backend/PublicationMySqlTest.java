@@ -296,13 +296,16 @@ class PublicationMySqlTest {
         draft.put("revision_id", UUID.randomUUID().toString()).put("revision_no", 3).put("title", "PRIVATE_DRAFT");
         ((ObjectNode) input.path("events").get(0)).put("expected_revision_no", 2);
         importBatch(input);
+        var requestStarted = java.time.Instant.now();
         var config = body("/api/v1/config");
         assertThat(config.path("snapshot_id").asText()).isEqualTo(published.snapshotId());
+        assertThat(config.path("data").path("created_at").asText()).isEqualTo(mapper.readTree(canonical(published.snapshotId())).path("created_at").asText());
+        assertThat(body("/api/v1/config").path("data").path("created_at")).isEqualTo(config.path("data").path("created_at"));
         assertThat(config.path("data").path("points")).hasSize(5);
         assertThat(config.path("data").path("document_count").asInt()).isEqualTo(1);
         assertThat(config.path("data").path("event_count").asInt()).isEqualTo(1);
         assertThat(config.path("data").path("data_kind").asText()).isEqualTo("synthetic");
-        assertThat(java.time.Instant.parse(config.path("data").path("server_now").asText())).isAfter(java.time.Instant.parse("2026-11-02T00:00:00Z"));
+        assertThat(java.time.Instant.parse(config.path("data").path("server_now").asText())).isBetween(requestStarted, java.time.Instant.now());
         var detail = body("/api/v1/events/" + eventId + "?snapshot_id=" + published.snapshotId());
         var event = detail.path("data").path("event");
         assertThat(event.path("title").asText()).isEqualTo("합성 공지 😀");
@@ -441,7 +444,7 @@ class PublicationMySqlTest {
         request.put("mode", "replay").put("case_id", caseId).put("anchor_date", "2026-11-02")
                 .put("reference_instant", "2026-11-02T03:00:00Z").put("knowledge_cutoff", "2026-11-02T03:00:00Z")
                 .put("history_fidelity", "reconstructed");
-        publication.execute(command(request), root, "synthetic-publisher");
+        var otherContext = publication.execute(command(request), root, "synthetic-publisher");
         var draft = (ObjectNode) input.path("events").get(0).path("revision");
         draft.put("revision_id", UUID.randomUUID().toString()).put("revision_no", 3).put("title", "합성 변경 제목");
         ((ObjectNode) input.path("events").get(0)).put("expected_revision_no", 2);
@@ -449,6 +452,7 @@ class PublicationMySqlTest {
         var changed = publication.execute(decision(input, "approve", 3), root, "synthetic-approver");
         request.put("expected_head_version", 0).put("knowledge_cutoff", "2026-11-02T01:30:00Z").putArray("revision_ids").add(changed.revisionId());
         var replay = publication.execute(command(request), root, "synthetic-publisher");
+        jdbc.update("UPDATE snapshots SET checksum = REPEAT('0', 64) WHERE snapshot_id = ?", otherContext.snapshotId());
         var detail = body("/api/v1/events/" + input.path("events").get(0).path("event_id").asText() + "?snapshot_id=" + replay.snapshotId());
         assertThat(detail.path("data").path("event").path("history")).isEmpty();
     }
@@ -524,6 +528,61 @@ class PublicationMySqlTest {
         assertThat(response.path("data").path("cases")).isEmpty();
         mvc.perform(get("/api/v1/config").param("mode", "replay").param("case_id", brokenCase))
                 .andExpect(status().isInternalServerError()).andExpect(jsonPath("$.error.code").value("SNAPSHOT_INVALID"));
+    }
+
+    @Test
+    void outsideEventCannotBecomePublicSnapshot() throws Exception {
+        var input = fresh();
+        ((ObjectNode) input.path("events").get(0)).put("area_membership", "outside");
+        importBatch(input);
+        var approved = publication.execute(decision(input, "approve", 1), root, "synthetic-approver");
+        assertThatThrownBy(() -> publication.execute(command(publishInput(input, approved.revisionId(), null)), root, "synthetic-publisher"))
+                .isInstanceOfSatisfying(PublicationException.class, error -> assertThat(error.code()).isEqualTo("PUBLICATION_VALIDATION_ERROR"));
+        assertThat(count("snapshots")).isZero();
+        assertThat(count("publication_heads")).isZero();
+    }
+
+    @Test
+    void legacyOutsideSnapshotCannotBeReadOrRestored() throws Exception {
+        var input = fresh(); importBatch(input);
+        var approved = publication.execute(decision(input, "approve", 1), root, "synthetic-approver");
+        var request = publishInput(input, approved.revisionId(), null);
+        var legacy = publication.execute(command(request), root, "synthetic-publisher");
+        var legacyContent = (ObjectNode) mapper.readTree(canonical(legacy.snapshotId()));
+        ((ObjectNode) legacyContent.path("event_public_payloads").get(0)).put("area_membership", "outside");
+        String json = legacyContent.toString();
+        jdbc.update("UPDATE snapshots SET canonical_json = ?, checksum = ? WHERE snapshot_id = ?", json, ReviewedImportReader.sha256(json.getBytes(StandardCharsets.UTF_8)), legacy.snapshotId());
+        mvc.perform(get("/api/v1/config")).andExpect(status().isInternalServerError()).andExpect(jsonPath("$.error.code").value("SNAPSHOT_INVALID"));
+        mvc.perform(get("/api/v1/events/" + input.path("events").get(0).path("event_id").asText()).param("snapshot_id", legacy.snapshotId()))
+                .andExpect(status().isInternalServerError()).andExpect(jsonPath("$.error.code").value("SNAPSHOT_INVALID"));
+        request.put("expected_head_version", 0).putArray("revision_ids");
+        var current = publication.execute(command(request), root, "synthetic-publisher");
+        assertThatThrownBy(() -> publication.execute(rollback(legacy.snapshotId(), 1), null, "synthetic-publisher")).isInstanceOf(PublicationException.class);
+        assertThat(body("/api/v1/config").path("snapshot_id").asText()).isEqualTo(current.snapshotId());
+    }
+
+    @Test
+    void databaseDetailMatchesPublishedFactOnlyExample() throws Exception {
+        var ids = new HashMap<String, String>();
+        String original = Files.readString(Path.of("examples/reviewed-import.json"));
+        ObjectNode input = (ObjectNode) mapper.readTree(Pattern.compile("10000000-0000-4000-8000-[0-9]{12}").matcher(original)
+                .replaceAll(match -> ids.computeIfAbsent(match.group(), ignored -> UUID.randomUUID().toString())));
+        importBatch(input);
+        var approved = publication.execute(decision(input, "approve", 1), root, "synthetic-approver");
+        var published = publication.execute(command(publishInput(input, approved.revisionId(), null)), root, "synthetic-publisher");
+        var started = java.time.Instant.now();
+        ObjectNode actual = (ObjectNode) body("/api/v1/events/" + input.path("events").get(0).path("event_id").asText() + "?snapshot_id=" + published.snapshotId());
+        assertThat(actual.path("snapshot_id").asText()).isEqualTo(published.snapshotId());
+        assertThat(actual.path("data").path("event").path("revision_id").asText()).isEqualTo(approved.revisionId());
+        assertThat(java.time.Instant.parse(actual.path("generated_at").asText())).isBetween(started, java.time.Instant.now());
+        String normalized = actual.toString();
+        for (var entry : ids.entrySet()) normalized = normalized.replace(entry.getValue(), entry.getKey());
+        actual = (ObjectNode) mapper.readTree(normalized);
+        var expected = mapper.readTree(Path.of("../contracts/examples/event-facts-response.json").toFile());
+        actual.set("snapshot_id", expected.path("snapshot_id"));
+        actual.set("generated_at", expected.path("generated_at"));
+        ((ObjectNode) actual.path("data").path("event")).set("revision_id", expected.path("data").path("event").path("revision_id"));
+        assertThat(actual).isEqualTo(expected);
     }
 
     @Test

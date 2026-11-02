@@ -36,7 +36,7 @@ public class SnapshotNoticeService implements PublicNoticeService {
     @Override
     public JsonNode config(String mode, UUID caseId) {
         JsonNode snapshot = active(mode, caseId);
-        var data = content.select(snapshot, "data_kind timezone window_days radius_m document_count event_count mode case_id anchor_date reference_instant knowledge_cutoff history_fidelity collection_range last_check_min last_check_max rules_version dictionary_version");
+        var data = content.select(snapshot, "created_at data_kind timezone window_days radius_m document_count event_count mode case_id anchor_date reference_instant knowledge_cutoff history_fidelity collection_range last_check_min last_check_max rules_version dictionary_version");
         data.put("server_now", Instant.now().toString());
         data.set("area", content.select(snapshot.path("area"), "area_id name description"));
         var points = data.putArray("points");

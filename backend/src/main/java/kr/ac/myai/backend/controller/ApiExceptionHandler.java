@@ -16,7 +16,9 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
-import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.RecoverableDataAccessException;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.transaction.CannotCreateTransactionException;
 
 import java.util.List;
@@ -40,7 +42,8 @@ public class ApiExceptionHandler {
                 new ErrorDetail(error.code(), error.getMessage(), fields, error.status() == HttpStatus.SERVICE_UNAVAILABLE), UUID.randomUUID().toString(), error.currentSnapshotId()));
     }
 
-    @ExceptionHandler({DataAccessException.class, CannotCreateTransactionException.class})
+    @ExceptionHandler({DataAccessResourceFailureException.class, TransientDataAccessException.class,
+            RecoverableDataAccessException.class, CannotCreateTransactionException.class})
     public ResponseEntity<ErrorResponse> databaseUnavailable() {
         return response(HttpStatus.SERVICE_UNAVAILABLE, "DATABASE_UNAVAILABLE", "공개 자료 저장소에 연결할 수 없습니다.", List.of());
     }

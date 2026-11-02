@@ -1,6 +1,6 @@
 # 검토 승인·공개·복구
 
-검토본 import 이후의 작업을 `local-publication` 일회성 명령으로 실행한다. 기존 Java21·Spring Boot·MySQL 구성을 사용하며 HTTP 관리 API는 추가하지 않는다. 공개 API의 실제 DB 조회·Python 계산 연결은 다음 단계다.
+검토본 import 이후의 작업을 `local-publication` 일회성 명령으로 실행한다. 기존 Java21·Spring Boot·MySQL 구성을 사용하며 HTTP 관리 API는 추가하지 않는다. 공개 API의 config·상세는 DB snapshot을 조회하며 Python 계산 연결은 후속 작업이다.
 
 ## 작업 흐름
 

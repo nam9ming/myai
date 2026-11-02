@@ -47,12 +47,21 @@ public class PublicSnapshotRepository {
     public List<Historic> history(String eventId, String channel, String selectedSnapshot) {
         return jdbc.query("""
                 SELECT r.snapshot_id, r.revision_id, a.happened_at, a.action
-                FROM snapshot_revisions r JOIN publication_audits a ON a.after_snapshot_id = r.snapshot_id
-                WHERE r.event_id = ? AND a.channel_key = ? AND a.head_version <= (
+                FROM snapshot_revisions r JOIN snapshots s ON s.snapshot_id = r.snapshot_id
+                JOIN publication_audits a ON a.after_snapshot_id = r.snapshot_id
+                JOIN snapshots chosen ON chosen.snapshot_id = ?
+                WHERE r.event_id = ? AND a.channel_key = ?
+                  AND s.mode = chosen.mode AND s.case_id <=> chosen.case_id AND s.data_kind = chosen.data_kind
+                  AND JSON_EXTRACT(s.canonical_json, '$.area_id') = JSON_EXTRACT(chosen.canonical_json, '$.area_id')
+                  AND (chosen.mode = 'current' OR (
+                    JSON_EXTRACT(s.canonical_json, '$.anchor_date') = JSON_EXTRACT(chosen.canonical_json, '$.anchor_date')
+                    AND JSON_EXTRACT(s.canonical_json, '$.reference_instant') = JSON_EXTRACT(chosen.canonical_json, '$.reference_instant')
+                    AND JSON_EXTRACT(s.canonical_json, '$.knowledge_cutoff') = JSON_EXTRACT(chosen.canonical_json, '$.knowledge_cutoff')))
+                  AND a.head_version <= (
                     SELECT MIN(p.head_version) FROM publication_audits p
-                    WHERE p.channel_key = ? AND p.after_snapshot_id = ? AND p.action = 'publish')
+                    WHERE p.channel_key = a.channel_key AND p.after_snapshot_id = chosen.snapshot_id AND p.action = 'publish')
                 ORDER BY a.head_version, a.audit_id
                 """, (row, i) -> new Historic(row.getString(1), row.getString(2), row.getTimestamp(3).toInstant(), row.getString(4)),
-                eventId, channel, channel, selectedSnapshot);
+                selectedSnapshot, eventId, channel);
     }
 }

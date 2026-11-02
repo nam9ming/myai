@@ -91,6 +91,8 @@ java -jar build/libs/myai-backend-0.1.0.jar --spring.profiles.active=fixture
 
 일반 `test`는 DB 없는 API·import·공개 명령 검증 시험을 수행한다. `MySqlFoundationTest`·`ReviewedImportMySqlTest`·`PublicationMySqlTest`는 전용 MySQL 테스트 DB를 지정하고 `MYAI_MYSQL_TESTS=true`일 때 실행한다. 운영·공유 DB에서는 실행하지 않는다. CI는 매 실행 분리된 `myai_test` DB를 준비해 migration·UTF-8/UTC·중복 import·승인/공개 차단·동시 수정·전체 rollback·미리보기·복구·로컬 명령·실제 공개 조회·공개 이력·replay 문맥·동시 포인터 변경 중 응답 일관성을 검증한다.
 
+`MYAI_MYSQL_TESTS=true`일 때는 외부 DB 상태를 캐시하지 않고 매번 시험을 실행한다. 검토 입력 예제와 사실 전용 응답 예제도 Gradle 시험 입력에 포함한다.
+
 CI의 기존 필수 검사 `check`에서 백엔드 시험과 JAR 빌드도 실행한다. 백엔드 시험이나 빌드가 실패하면 필수 검사도 실패한다. 실행 JAR는 별도 artifact로 보관한다. `CORS_ALLOWED_ORIGIN` 기본값은 `http://localhost:5173`이며 credential·임의 origin을 허용하지 않는다.
 
 기준 문서: [기술 구성](../docs/spec/08_기술구성과연결.md), [DB](../docs/spec/09_DB설계와트랜잭션.md), [공개 계약](../contracts/README.md), [Python CLI](../contracts/calculation-bridge.md).

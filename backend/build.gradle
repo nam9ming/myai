@@ -38,6 +38,9 @@ tasks.named('processResources') {
 
 tasks.named('test') {
     useJUnitPlatform()
+    inputs.files(fileTree('examples'), file('../contracts/examples/event-facts-response.json'))
+    inputs.property('mysqlTestsEnabled', System.getenv('MYAI_MYSQL_TESTS') == 'true')
+    outputs.upToDateWhen { System.getenv('MYAI_MYSQL_TESTS') != 'true' }
     testLogging {
         events 'passed', 'skipped', 'failed'
     }
