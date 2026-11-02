@@ -1,8 +1,9 @@
 import test from "node:test";
+import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { devNull, tmpdir } from "node:os";
 import { join } from "node:path";
 
 test("프리뷰 빌드는 기존 산출물을 지우고 공개 시제품 HTML만 내보낸다", (t) => {
@@ -87,5 +88,32 @@ test("사실 전용 상세 예제의 계산값·근거·출처 불일치를 거�
       writeFileSync(file, JSON.stringify(broken));
       assert.equal(validate().status, 1);
     });
+  }
+});
+
+test("autocrlf 설정이 달라도 합성 원문·import 입력 바이트를 보존한다", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "myai-eol-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, "backend/examples"), { recursive: true });
+  copyFileSync(new URL("../backend/.gitattributes", import.meta.url), join(root, "backend/.gitattributes"));
+  const paths = ["backend/examples/synthetic-source.txt", "backend/examples/reviewed-import.json"];
+  const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
+  const expected = new Map();
+  for (const path of paths) {
+    const source = new URL("../" + path, import.meta.url);
+    expected.set(path, hash(readFileSync(source)));
+    copyFileSync(source, join(root, path));
+  }
+  const env = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: devNull, GIT_ATTR_NOSYSTEM: "1" };
+  for (const key of ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"]) delete env[key];
+  const git = (...args) => execFileSync("git", ["-c", "core.attributesFile=" + devNull, ...args], { cwd: root, env });
+  git("init", "--quiet");
+  git("-c", "core.autocrlf=false", "add", ".");
+  for (const autocrlf of ["false", "true"]) {
+    for (const path of paths) rmSync(join(root, path));
+    git("-c", "core.autocrlf=" + autocrlf, "checkout", "--", ...paths);
+    for (const path of paths) assert.equal(hash(readFileSync(join(root, path))), expected.get(path), `${path}: autocrlf=${autocrlf}`);
+    const input = JSON.parse(readFileSync(join(root, paths[1]), "utf8"));
+    assert.equal(hash(readFileSync(join(root, paths[0]))), input.documents[0].raw_sha256);
   }
 });

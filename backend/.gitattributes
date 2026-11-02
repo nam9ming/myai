@@ -1,2 +1,4 @@
 gradlew text eol=lf
 gradlew.bat text eol=crlf
+examples/synthetic-source.txt text eol=lf
+examples/reviewed-import.json text eol=lf
