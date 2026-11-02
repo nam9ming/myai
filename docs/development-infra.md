@@ -59,7 +59,7 @@ bash scripts/set-secret.sh PROJECT_TOKEN nam9ming/myai
 
 코드 리뷰는 `OPENAI_API_KEY`와 OpenAI Responses API를 사용한다. 기본 모델은 `gpt-6.1-sol`이며 저장소 변수 `OPENAI_REVIEW_MODEL`로 변경한다. SDK 의존성은 추가하지 않는다. 요청에는 기본 브랜치의 팀 규칙과 최대 60000자의 PR diff를 보내고 `store=false`를 사용한다. 부분 검토·API 오류·빈 응답·미완료 응답은 명시하며 최종 승인은 사람이 한다. 모델 응답 예산은 추론 토큰을 포함해 최대 8192토큰이며 요청 제한 시간은 120초다. API 비용은 등록한 OpenAI 키에 청구된다. [OpenAI 텍스트 생성 문서](https://developers.openai.com/api/docs/guides/text), [모델 문서](https://developers.openai.com/api/docs/models/gpt-6.1-sol).
 
-리뷰 스크립트는 비밀값 보호를 위해 기본 브랜치에서 읽는다. 이 전환 PR을 머지하기 전에는 이전 리뷰 스크립트가 실행될 수 있으며, OpenAI 리뷰 자동화는 main 반영 후 새 PR 또는 추가 커밋에서 확인한다.
+리뷰 스크립트는 비밀값 보호를 위해 기본 브랜치에서 읽는다. 기본 브랜치가 이전 Anthropic 버전이면 실행을 생략하며, OpenAI 리뷰 자동화는 main 반영 후 새 PR 또는 추가 커밋에서 확인한다.
 
 주간 리포트는 기존 Anthropic 구성을 유지한다. `ANTHROPIC_API_KEY`가 없으면 원본 활동 목록을 사용하며, 요약 모델은 `ANTHROPIC_SUMMARY_MODEL`로 변경한다. `OPENAI_API_KEY`만 등록해도 주간 리포트의 AI 요약이 켜지는 것은 아니다.
 
