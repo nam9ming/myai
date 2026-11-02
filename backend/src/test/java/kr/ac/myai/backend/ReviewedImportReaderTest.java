@@ -26,6 +26,78 @@ class ReviewedImportReaderTest {
     }
 
     @Test
+    void acceptsHiddenAiDraftWithUnknownTitleAndTypesOnlyInItsSchema() throws Exception {
+        rawDraft();
+        var batch = reader.read(write(), root);
+        var revision = mapper.readTree(batch.events().getFirst().payloadJson()).path("revision");
+        assertThat(revision.path("title").isNull()).isTrue();
+        assertThat(revision.path("types").isEmpty()).isTrue();
+        assertThat(batch.events().getFirst().reviewStatus()).isEqualTo("draft");
+        assertThat(batch.events().getFirst().reviewerId()).isNull();
+        input.put("schema_version", "reviewed-import-v1"); rejected();
+    }
+
+    @Test
+    void rawDraftRejectsHumanClaimsGeometryAndStatePromotion() throws Exception {
+        for (String change : java.util.List.of("status", "intent", "reviewer", "geometry", "area", "origin")) {
+            fixtureReset(); rawDraft();
+            var event = (ObjectNode) input.path("events").get(0);
+            var revision = (ObjectNode) event.path("revision");
+            switch (change) {
+                case "status" -> revision.put("review_status", "needs_review");
+                case "intent" -> revision.put("publication_intent", "public");
+                case "reviewer" -> revision.put("reviewer_id", "forged").put("reviewed_at", "2026-11-02T02:00:00Z");
+                case "geometry" -> ((ObjectNode) revision.path("locations").get(0)).set("geometry",
+                        mapper.readTree("{\"type\":\"Point\",\"coordinates\":[127,37]}"));
+                case "area" -> event.put("area_membership", "verified");
+                case "origin" -> revision.put("origin", "ai_reviewed");
+            }
+            rejected();
+        }
+    }
+
+    @Test
+    void rawNoEventFoundKeepsDocumentOnlyAndCannotBecomeReviewedBatch() throws Exception {
+        input.put("schema_version", "ai-draft-import-v1");
+        input.putArray("events"); input.putArray("evidence");
+        assertThat(reader.read(write(), root).events()).isEmpty();
+        input.put("schema_version", "reviewed-import-v1"); rejected();
+    }
+
+    @Test
+    void storedRawAiDraftCannotClaimApproval() throws Exception {
+        rawDraft();
+        var revision = (ObjectNode) input.path("events").get(0).path("revision");
+        revision.put("title", "합성 제목"); revision.putArray("types").add("construction");
+        revision.put("review_status", "approved").put("publication_intent", "public")
+                .put("reviewer_id", "forged").put("reviewed_at", "2026-11-02T02:00:00Z");
+        assertThatThrownBy(() -> reader.validateStored(input, root)).isInstanceOf(ImportException.class);
+    }
+
+    @Test
+    void rawUnknownPreservesContradictoryPartialClocksForHumanReview() throws Exception {
+        rawDraft();
+        var occurrence = (ObjectNode) input.path("events").get(0).path("revision").path("occurrences").get(0);
+        occurrence.putNull("date_start").putNull("date_end").put("time_start", "12:00").put("time_end", "10:00")
+                .put("end_day_offset", 0).put("precision", "unknown").put("knowledge", "ambiguous");
+        assertThat(reader.read(write(), root).events()).hasSize(1);
+    }
+
+    private void rawDraft() {
+        input.put("schema_version", "ai-draft-import-v1");
+        var event = (ObjectNode) input.path("events").get(0);
+        event.put("area_membership", "uncertain");
+        var revision = (ObjectNode) event.path("revision");
+        revision.put("origin", "ai_draft").put("review_status", "draft").putNull("reviewer_id")
+                .putNull("reviewed_at").putNull("title");
+        revision.putArray("types");
+        revision.putArray("originating_run_ids").add("71fb66f0-e610-4f9c-8f26-4bb77655ee8c");
+        var location = (ObjectNode) revision.path("locations").get(0);
+        location.put("status", "unknown").put("coverage", "unknown").putNull("geometry")
+                .putNull("source").putNull("checked_by").putNull("checked_at");
+    }
+
+    @Test
     void acceptsExplicitSourceOnlyBatchWithoutInventingEvents() throws Exception {
         input.put("schema_version", "source-import-v1");
         input.putArray("events"); input.putArray("evidence");

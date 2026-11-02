@@ -43,7 +43,13 @@ public class ReviewedImportRepository {
                 id, sourceKind(batch), batch.inputSha256(), batch.schemaVersion());
     }
 
-    private String sourceKind(ReviewedBatch batch) { return batch.schemaVersion().equals("source-import-v1") ? "source" : "reviewed"; }
+    private String sourceKind(ReviewedBatch batch) {
+        return switch (batch.schemaVersion()) {
+            case "source-import-v1" -> "source";
+            case "ai-draft-import-v1" -> "ai_draft";
+            default -> "reviewed";
+        };
+    }
 
     public void completeBatch(ImportResult result) {
         var refs = mapper.createObjectNode();
@@ -104,7 +110,16 @@ public class ReviewedImportRepository {
             var state = states.getFirst();
             before = (String) state.get("current_review_revision_id");
             require(before != null && state.get("revision_no") != null && ((Number) state.get("revision_no")).longValue() == event.expectedRevisionNo(), "events.expected_revision_no");
-            require(json((String) state.get("payload_json")).path("data_kind").asText().equals(kind), "data_kind");
+            var previous = json((String) state.get("payload_json"));
+            require(previous.path("data_kind").asText().equals(kind), "data_kind");
+            if (action.equals("import") && previous.path("revision").path("origin").asText().equals("ai_draft")) {
+                var revision = json(event.payloadJson()).path("revision");
+                require(revision.path("origin").asText().equals("ai_reviewed") && event.reviewerId() != null
+                        && event.reviewedAt() != null, "events.revision.reviewer_id");
+                require(event.originatingRunIds().containsAll(strings(previous.path("revision").path("originating_run_ids")))
+                        && event.sourceVersionIds().containsAll(strings(previous.path("revision").path("source_version_ids"))),
+                        "events.revision.originating_run_ids");
+            }
             lockVersion = ((Number) state.get("lock_version")).longValue();
         }
         require(lockVersion < Long.MAX_VALUE, "events.lock_version");

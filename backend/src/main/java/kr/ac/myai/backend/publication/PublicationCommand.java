@@ -16,7 +16,7 @@ public sealed interface PublicationCommand {
 
     record Decision(@NotBlank String schemaVersion, @NotBlank String action, @NotBlank @Size(max = 4000) String reason,
                     @NotNull UUID eventId, @Min(1) @Max(Long.MAX_VALUE - 1) long expectedRevisionNo,
-                    @NotNull @Size(min = 1) List<@NotBlank @Size(max = 128) String> evidenceIds) implements PublicationCommand { }
+                    @NotNull List<@NotBlank @Size(max = 128) String> evidenceIds) implements PublicationCommand { }
 
     record Publish(@NotBlank String schemaVersion, @NotBlank String action, @NotBlank @Size(max = 4000) String reason,
                    @NotBlank @Pattern(regexp = "current|replay") String mode, UUID caseId, LocalDate anchorDate,

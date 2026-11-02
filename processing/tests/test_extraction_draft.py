@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from processing.extraction.archive import import_run
 from processing.extraction.draft import draft_run
@@ -162,6 +163,78 @@ class DraftTest(unittest.TestCase):
         self.assertEqual(batch['events'], []); self.assertEqual(batch['evidence'], [])
         self.assertEqual(result['event_ids'], [])
         self.assertTrue(result['review_required'])
+
+    def test_date_only_all_day_and_conflicting_partial_time_keep_their_meaning(self):
+        original = copy.deepcopy(self.output)
+        for mode, precision in [('date_only', 'date_only'), ('all_day', 'explicit_all_day'),
+                                ('conflict', 'unknown'), ('dateless', 'unknown')]:
+            with self.subTest(mode=mode):
+                self.root = self.work / mode
+                self.output = copy.deepcopy(original)
+                occ = self.output['items'][0]['occurrences'][0]
+                if mode in ('date_only', 'all_day'):
+                    for key in ('time_start', 'time_end', 'end_day_offset', 'all_day'):
+                        occ[key] = self.unknown()
+                if mode in ('all_day', 'conflict'):
+                    occ['all_day'] = dict(value=True, knowledge='known', evidence_ids=['e1'], reason=None)
+                if mode == 'dateless':
+                    occ['date_start'] = self.unknown(); occ['date_end'] = self.unknown()
+                    occ['time_start']['value'] = '12:00'; occ['time_end']['value'] = '10:00'
+                self.register()
+                target = self.work / 'private' / (mode + '.json')
+                self.draft(target)
+                result = json.loads(target.read_bytes())['events'][0]['revision']['occurrences'][0]
+                self.assertEqual(result['precision'], precision)
+                self.assertEqual(result['time_start'], occ['time_start']['value'])
+                self.assertEqual(result['time_end'], occ['time_end']['value'])
+
+    def test_original_change_after_freeze_does_not_change_the_draft(self):
+        from processing.extraction import draft
+        self.register()
+        freeze = draft.freeze_run
+        def changed(*args):
+            packet = freeze(*args)
+            (self.root / self.id / 'attempt-1.output').write_bytes(b'PRIVATE_VALUE changed original')
+            return packet
+        with patch.object(draft, 'freeze_run', side_effect=changed):
+            self.draft()
+        title = json.loads(self.target.read_bytes())['events'][0]['revision']['title']
+        self.assertEqual(title, self.output['items'][0]['title']['value'])
+
+    def test_changed_snapshot_is_rejected_before_any_draft_is_written(self):
+        from processing.extraction import draft
+        self.register()
+        freeze = draft.freeze_run
+        def changed(*args):
+            packet = freeze(*args)
+            path = self.root / packet['snapshot_ref'] / 'attempt-1.output'
+            path.chmod(0o600); path.write_bytes(b'PRIVATE_VALUE changed snapshot')
+            return packet
+        with patch.object(draft, 'freeze_run', side_effect=changed), self.assertRaises(ExtractionError):
+            self.draft()
+        self.assertFalse(self.target.exists())
+
+    def test_output_limit_preserves_source_and_does_not_install_a_partial_file(self):
+        from processing.extraction.validation import MAX_BYTES
+        size = len(json.dumps(self.source_body, ensure_ascii=False).encode())
+        self.source_body['documents'][0]['use_note'] = 'x' * (MAX_BYTES - size - 100)
+        self.register()
+        original = self.source.read_bytes()
+        with self.assertRaises(ExtractionError) as error:
+            self.draft()
+        self.assertEqual(error.exception.code, 'DRAFT_OUTPUT_TOO_LARGE')
+        self.assertEqual(self.source.read_bytes(), original)
+        self.assertFalse(self.target.exists())
+
+    def test_read_only_output_parent_fails_without_partial_file(self):
+        self.register()
+        self.target.parent.mkdir(mode=0o500)
+        try:
+            with self.assertRaises(OSError): self.draft()
+            self.assertFalse(self.target.exists())
+            self.assertEqual(list(self.target.parent.iterdir()), [])
+        finally:
+            self.target.parent.chmod(0o700)
 
     def test_failed_source_mismatch_and_conflicting_file_are_preserved(self):
         self.register(raw=b'PRIVATE_VALUE invalid JSON')
