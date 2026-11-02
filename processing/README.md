@@ -39,6 +39,8 @@ python3.13 -m venv .venv
 
 Java D05 등록은 [D03/D05 연결 안내](../backend/docs/extraction-run-import.md)를 따른다. 원문을 먼저 등록하고 같은 전체 블록·전처리 버전의 AI 입력을 사용한다.
 
+등록 시 `freeze`가 원래 archive와 분리한 읽기 전용 보관본을 만든다. POSIX 권한·hard link·원자적 디렉터리 rename 지원과 추가 보관 공간이 필요하며 DB는 보관본의 안정된 경로를 참조한다. 파일은0400, 실행 디렉터리는0500이다.
+
 ## AI 수동 원출력 기록
 
 ```sh

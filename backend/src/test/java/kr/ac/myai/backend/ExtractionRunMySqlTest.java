@@ -10,6 +10,7 @@ import kr.ac.myai.backend.extraction.ExtractionException;
 import kr.ac.myai.backend.extraction.VerifiedExtraction;
 import kr.ac.myai.backend.repository.ExtractionRunRepository;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,7 +36,7 @@ import static org.mockito.Mockito.*;
 @EnabledIfEnvironmentVariable(named = "MYAI_MYSQL_TESTS", matches = "true")
 class ExtractionRunMySqlTest {
     @Autowired JdbcTemplate jdbc;
-    @Autowired ReviewedImportReader reader;
+    @MockitoSpyBean ReviewedImportReader reader;
     @Autowired ReviewedImportService importer;
     @Autowired ExtractionImportService extraction;
     @Autowired kr.ac.myai.backend.service.PublicationService publication;
@@ -53,12 +54,38 @@ class ExtractionRunMySqlTest {
     }
 
     @Test
+    void registrationKeepsExactlyVerifiedBytesWhenOriginalChangesAfterPython() throws Exception {
+        var source = source(); registerSource(source);
+        String id = UUID.randomUUID().toString(); Path archive = archive(source, id, false);
+        Path original = archive.resolve(id).resolve("attempt-1.output");
+        byte[] verified = Files.readAllBytes(original);
+        var changed = new java.util.concurrent.atomic.AtomicBoolean();
+        doAnswer(invocation -> {
+            var parsed = (com.fasterxml.jackson.databind.JsonNode) invocation.callRealMethod();
+            if ((parsed.path("format_version").asText().equals("extraction-archive-v1")
+                    || parsed.path("protocol_version").asText().equals("extraction-registration-v1")) && changed.compareAndSet(false, true)) {
+                Files.writeString(original, "PRIVATE_VALUE changed after Python returned");
+            }
+            return parsed;
+        }).when(reader).parseJson(any(byte[].class));
+        extraction.importRun(id, archive, "synthetic-registrant");
+        assertThat(changed).isTrue();
+        var row = jdbc.queryForMap("SELECT raw_ref,output_sha256 FROM extraction_runs WHERE run_id=?", id);
+        Path registered = Path.of((String) row.get("raw_ref")).resolve("attempt-1.output");
+        assertThat(registered).isNotEqualTo(original);
+        assertThat(Files.readAllBytes(registered)).isEqualTo(verified);
+        assertThat(ReviewedImportReader.sha256(Files.readAllBytes(registered))).isEqualTo(row.get("output_sha256"));
+        assertThat(importer.importBatch(review(source, id), "synthetic-reviewer").revisionIds()).hasSize(1);
+    }
+
+    @Test
     void rejectsDeletedOrAlteredArchiveBeforeD06Reference() throws Exception {
         var source = source(); registerSource(source); var before = counts();
         for (String artifact : List.of("attempt-1.output", "metadata.json", "receipt.json")) {
             String id = UUID.randomUUID().toString(); Path archive = archive(source, id, false);
             extraction.importRun(id, archive, "synthetic-registrant");
-            Files.writeString(archive.resolve(id).resolve(artifact), "PRIVATE_VALUE changed");
+            Path stored = stored(id); ExtractionArchiveReaderTest.unseal(stored);
+            Files.writeString(stored.resolve(artifact), "PRIVATE_VALUE changed");
             var reviewed = review(source, id);
             assertThatThrownBy(() -> importer.importBatch(reviewed, "synthetic-reviewer"))
                     .isInstanceOf(kr.ac.myai.backend.importing.ImportException.class).hasMessageNotContaining("PRIVATE_VALUE");
@@ -66,7 +93,8 @@ class ExtractionRunMySqlTest {
         }
         String id = UUID.randomUUID().toString(); Path archive = archive(source, id, false);
         extraction.importRun(id, archive, "synthetic-registrant");
-        Files.delete(archive.resolve(id).resolve("attempt-1.output"));
+        Path stored = stored(id); ExtractionArchiveReaderTest.unseal(stored);
+        Files.delete(stored.resolve("attempt-1.output"));
         var reviewed = review(source, id);
         assertThatThrownBy(() -> importer.importBatch(reviewed, "synthetic-reviewer"))
                 .isInstanceOf(kr.ac.myai.backend.importing.ImportException.class);
@@ -121,21 +149,24 @@ class ExtractionRunMySqlTest {
         var event = batch.events().getFirst();
         var decision = new kr.ac.myai.backend.publication.PublicationCommand.Decision("publication-command-v1", "approve", "합성 교차 검토",
                 UUID.fromString(event.id()), 1, List.of("heading-quote"));
-        Path output = archive.resolve(id).resolve("attempt-1.output"); byte[] original = Files.readAllBytes(output);
+        Path stored = stored(id); ExtractionArchiveReaderTest.unseal(stored);
+        Path output = stored.resolve("attempt-1.output"); byte[] original = Files.readAllBytes(output);
         Files.delete(output);
         assertThatThrownBy(() -> publication.execute(decision, root, "synthetic-approver"))
                 .isInstanceOf(kr.ac.myai.backend.publication.PublicationException.class);
         assertThat(jdbc.queryForObject("SELECT current_review_revision_id FROM events WHERE event_id=?", String.class, event.id())).isEqualTo(event.revisionId());
         Files.write(output, original);
+        seal(stored);
         var approved = publication.execute(decision, root, "synthetic-approver");
         var preview = (ObjectNode) mapper.readTree(Path.of("examples/publish.json").toFile());
         preview.put("action", "preview"); preview.putArray("revision_ids").add(approved.revisionId());
         var command = commands.read(Files.writeString(root.resolve("preview.json"), preview.toString()));
-        var before = counts(); Files.delete(output);
+        var before = counts(); ExtractionArchiveReaderTest.unseal(stored); Files.delete(output);
         assertThatThrownBy(() -> publication.execute(command, root, "synthetic-publisher"))
                 .isInstanceOf(kr.ac.myai.backend.publication.PublicationException.class);
         assertThat(counts()).isEqualTo(before);
         Files.write(output, original);
+        seal(stored);
         assertThat(publication.execute(command, root, "synthetic-publisher").action()).isEqualTo("preview");
     }
 
@@ -312,6 +343,18 @@ class ExtractionRunMySqlTest {
     void registerSource(ObjectNode input) throws Exception {
         importer.importBatch(reader.read(Files.writeString(root.resolve("source.json"), input.toString()), root), "synthetic-source-collector");
     }
+
+    Path stored(String id) { return Path.of(jdbc.queryForObject("SELECT raw_ref FROM extraction_runs WHERE run_id=?", String.class, id)); }
+
+    static void seal(Path directory) throws Exception {
+        try (var files = Files.list(directory)) {
+            for (Path file : files.toList()) file.toFile().setWritable(false, false);
+        }
+        directory.toFile().setWritable(false, false);
+    }
+
+    @AfterEach
+    void makeOwnedTempsRemovable() throws Exception { ExtractionArchiveReaderTest.unseal(root); }
 
     Path archive(ObjectNode source, String id, boolean failed) throws Exception {
         Path work = Files.createTempDirectory(root, "run-"); var doc = source.path("documents").get(0);

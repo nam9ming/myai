@@ -56,7 +56,9 @@ java -jar backend/build/libs/myai-backend-0.1.0.jar \
   --myai.extraction.actor=synthetic-registrant
 ```
 
-actor는 비어 있지 않은128자 이하 문자열이며 제어 문자를 허용하지 않는다. `MYAI_EXTRACTION_TIMEOUT_MS` 기본60000, 허용1~60000ms다. 실행 파일/workdir는 계산기와 같은 설정이다. DB 트랜잭션 전에 고정 인자 `processing.extraction verify`를 호출하며 입출력8MiB·stderr64KiB·공통 timeout·interrupt/자식 정리를 적용한다. child stderr를 결과에 복사하지 않는다.
+actor는 비어 있지 않은128자 이하 문자열이며 제어 문자를 허용하지 않는다. `MYAI_EXTRACTION_TIMEOUT_MS` 기본60000, 허용1~60000ms다. 실행 파일/workdir는 계산기와 같은 설정이다. DB 트랜잭션 전에 고정 인자 `processing.extraction freeze`를 호출하며 입출력8MiB·stderr64KiB·공통 timeout·interrupt/자식 정리를 적용한다. child stderr를 결과에 복사하지 않는다.
+
+freeze는 입력·metadata·프롬프트·모든 시도 원출력·identity/receipt를 별도 staging에 복사하며 원본 hash를 대조한다. 완성·검증 후 파일0400/실행 디렉터리0500으로 설정하고 `archive-root/registered/<receipt_sha256>/<run_id>`를 원자적으로 내놓는다. DB는 이 읽기 전용 보관본을 참조하므로 원래 작업 파일의 동시 변경과 분리된다. 같은 receipt는 재사용하고 이미 읽기 전용인 보관본은 복제하지 않는다. POSIX 권한·hard link·같은 파일시스템 내 디렉터리 rename 지원과 추가 보관 공간이 필요하다.
 
 Python 성공0과 원출력 검증 실패4를 각각 D05 validated/failed로 등록한다. input/metadata/receipt 원본과 hash를 대조한 뒤 짧은 RR 트랜잭션에서 D03 입력·합성 태그·전처리 버전을 확인한다. 손상·미완료·잘못된 원본은 등록하지 않는다. 같은 run_id·같은 원본은 최초 결과를 재사용하며 다른 원본·archive 경로·receipt는 충돌이다. 동시 중복 복구는 실패 트랜잭션 종료 후 새로 조회한다.
 
@@ -79,6 +81,6 @@ stdout은 안전한 JSON 한 건이다. 바깥 `status=succeeded`는 등록 성�
 
 D05 evidence hash는 블록 UTF-8, D06은 문서 전체 cleaned_text UTF-8다. 검토본 준비 시 문서 버전·블록·인용/code point 위치를 대조하고 hash 대상을 구분한다. 보정한 값으로 AI 원본을 덮어쓰지 않는다.
 
-DB는 비공개 archive 절대 참조와 checksum을 저장한다. 파일을 복제하지 않으므로 경로·0700/0600 권한·백업·코드 버전을 함께 보존한다. 이동·편집·삭제 후 등록 성공을 원본 보존 완료로 간주하지 않는다. 이후 소비 전에도 verify하며 실패 원본을 지우지 않는다. 등록·검토 import만으로 공개 head/API는 바뀌지 않는다. 승인·공개는 기존 별도 명령과 사람 검토를 거친다.
+DB는 읽기 전용 보관본의 비공개 절대 경로와 checksum을 저장한다. 부모 경로·파일 권한·백업·코드 버전을 함께 보존하며 등록본을 편집·이동하지 않는다. 정상 명령은 등록본을 덮어쓰지 않으며 관리자 chmod·삭제·전체 경로 교체를 막는 WORM 저장소는 아니다. 원본 복사와 DB commit은 별개라 DB 등록 실패 후에도 완성 보관본이 남을 수 있고, 강제 종료의 `.freeze-*` 잔여물은 실행 종료 확인 후 관리한다. 이후 소비 때도 보관본을 재검증하며 실패 원본을 지우지 않는다. 등록·검토 import만으로 공개 head/API는 바뀌지 않는다. 승인·공개는 기존 별도 명령과 사람 검토를 거친다.
 
 반려와 이미 공개된 snapshot의 조회·rollback은 기존 불변 공개본 계약을 따른다. 새 AI 출처로 소비할 때의 재검증과 원본 파일의 장기 보존·백업 책임을 구분한다.

@@ -14,6 +14,8 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -42,7 +44,7 @@ public class ExtractionArchiveReader {
             Path base = root.toRealPath();
             Path directory = base.resolve(runId);
             validate(Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS), "archive_root");
-            var process = PythonProcess.execute(executable, workdir, List.of("-m", "processing.extraction", "verify", runId,
+            var process = PythonProcess.execute(executable, workdir, List.of("-m", "processing.extraction", "freeze", runId,
                     "--root", base.toString()), new byte[0], timeout);
             if (process.exitCode() != 0 && process.exitCode() != 4) {
                 throw new ExtractionException(switch (process.exitCode()) {
@@ -52,7 +54,14 @@ public class ExtractionArchiveReader {
                     default -> "EXTRACTION_PROTOCOL_ERROR";
                 }, null, false);
             }
-            JsonNode receipt = json.parseJson(process.stdout());
+            JsonNode packet = json.parseJson(process.stdout());
+            require(keys(packet).equals(Set.of("protocol_version", "snapshot_ref", "receipt"))
+                    && packet.path("protocol_version").asText().equals("extraction-registration-v1"));
+            String snapshot = packet.path("snapshot_ref").asText();
+            require(snapshot.equals(runId) || snapshot.matches("registered/[0-9a-f]{64}/" + runId));
+            directory = base.resolve(snapshot);
+            require(Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS) && directory.toRealPath().equals(directory));
+            JsonNode receipt = packet.path("receipt");
             require(keys(receipt).equals(Set.of("format_version", "run_id", "document_version_id", "data_kind", "execution_mode",
                     "recorded_at", "status", "review_required", "input_sha256", "metadata_sha256", "artifacts", "attempts")));
             require(receipt.path("format_version").asText().equals("extraction-archive-v1") && receipt.path("run_id").asText().equals(runId));
@@ -69,6 +78,7 @@ public class ExtractionArchiveReader {
             require(keys(receipt.path("artifacts")).equals(names));
             byte[] savedReceipt = read(directory.resolve("receipt.json"));
             require(json.parseJson(savedReceipt).equals(receipt));
+            if (!snapshot.equals(runId)) require(snapshot.split("/")[1].equals(ReviewedImportReader.sha256(savedReceipt)));
             byte[] input = checked(directory, "input.json", receipt);
             byte[] metadata = checked(directory, "metadata.json", receipt);
             require(receipt.path("input_sha256").asText().equals(ReviewedImportReader.sha256(input))
@@ -81,6 +91,9 @@ public class ExtractionArchiveReader {
                     && info.path("schema_version").asText().equals("extract-schema-v1"));
             require(info.path("attempts").isIntegralNumber() && info.path("attempts").asInt() == receipt.path("attempts").size());
             require(receipt.path("attempts").get(receipt.path("attempts").size() - 1).path("status").equals(receipt.path("status")));
+            sealed(directory);
+            for (String name : names) sealed(directory.resolve(name));
+            sealed(directory.resolve("identity.json")); sealed(directory.resolve("receipt.json"));
             return new VerifiedExtraction(directory, source, info, receipt, new String(metadata, StandardCharsets.UTF_8),
                     new String(savedReceipt, StandardCharsets.UTF_8), ReviewedImportReader.sha256(savedReceipt));
         } catch (PythonProcess.Failure ex) {
@@ -105,6 +118,14 @@ public class ExtractionArchiveReader {
         try (var stream = Files.newInputStream(file, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
             byte[] bytes = stream.readNBytes(LIMIT + 1); require(bytes.length <= LIMIT); return bytes;
         }
+    }
+
+    private void sealed(Path path) throws IOException {
+        var view = Files.getFileAttributeView(path, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
+        if (view == null) throw new IOException("SNAPSHOT_POSIX_REQUIRED");
+        var permissions = view.readAttributes().permissions();
+        require(java.util.Collections.disjoint(permissions, Set.of(PosixFilePermission.OWNER_WRITE,
+                PosixFilePermission.GROUP_WRITE, PosixFilePermission.OTHERS_WRITE)));
     }
 
     private static Set<String> keys(JsonNode node) {

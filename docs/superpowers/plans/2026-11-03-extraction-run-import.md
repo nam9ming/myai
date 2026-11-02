@@ -71,3 +71,5 @@
 PR12 자동 리뷰의 등록 후 archive 변조/삭제 참조 지적을 실제 MySQL에서 재현했다. import·승인에서 원본 부재가 통과하는 RED를 확인하고 import/approve/preview/publish가 실행별 원본·등록 metadata/receipt·입출력 hash·D03을 트랜잭션 밖에서 다시 검증하도록 연결했다. 쓰기와 중복 경합 복구는 FOR SHARE로 전체 등록 행 fingerprint를 재확인한다. 각 사건의 문서 참조를 별도로 확인하며 반려·기존 불변 공개본 조회/rollback은 기존 계약을 유지한다.
 
 보완 후 실제 MySQL 전체 Java151개·생략0으로 통과했다. 실제 JAR에서도 변조 후 import/승인·삭제 후 preview가 차단되고 복원 후 승인·원본 부재 시 반려가 가능함을 확인했다. 검증 후 DB 행 변경·사건별 문서 참조·중복 경합 복구의 재확인을 포함하며, 공개4테이블 dump는 전후 동일하다.
+
+2차 자동 리뷰의 검증 직후 원출력 변경은 실제 DB 등록 바이트/hash 불일치 RED로 확인했다. Python freeze가 검증한 전체 바이트를 읽기 전용 실행 보관본으로 분리·원자적으로 내놓고 Java는 동일 보관본을 등록한다. 기본 위치는 archive-root/registered/receipt_sha256/run_id, 파일0400/실행 디렉터리0500이며 추가 공간·POSIX 권한·hard link/rename이 필요하다. 원본은 덮어쓰지 않는다. 원본 동시 변경과 등록 참조가 분리되는 Java 회귀·Python 복사/동시/실패/권한/CLI 시험과 실제 JAR을 확인했다. macOS 한글 정규화·대소문자 별칭의 공개 root 오인도 RED→GREEN으로 보완했다. 현재 Java152개·Python103개·Node29개·JSON9개·lint191개·build/JAR 통과이며 실제 모델 호출·배포는 미실행이다.
