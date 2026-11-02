@@ -26,6 +26,24 @@ class ReviewedImportReaderTest {
     }
 
     @Test
+    void acceptsExplicitSourceOnlyBatchWithoutInventingEvents() throws Exception {
+        input.put("schema_version", "source-import-v1");
+        input.putArray("events"); input.putArray("evidence");
+        assertThat(mapper.readTree(Path.of("examples/source-import.json").toFile())).isEqualTo(input);
+        var batch = reader.read(write(), root);
+        assertThat(batch.schemaVersion()).isEqualTo("source-import-v1");
+        assertThat(batch.documents()).hasSize(1); assertThat(batch.events()).isEmpty();
+    }
+
+    @Test
+    void sourceOnlyRejectsEventOrEvidenceAndReviewedStillRequiresBoth() throws Exception {
+        input.put("schema_version", "source-import-v1"); rejected();
+        input.putArray("events"); rejected();
+        input.putArray("evidence");
+        input.put("schema_version", "reviewed-import-v1"); rejected();
+    }
+
+    @Test
     void acceptsFullSyntheticRevisionAndCodePointEvidence() throws Exception {
         var batch = reader.read(write(), root);
         assertThat(batch.schemaVersion()).isEqualTo("reviewed-import-v1");

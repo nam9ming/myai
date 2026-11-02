@@ -52,7 +52,8 @@ public class ReviewedImportReader {
 
     private ReviewedBatch batch(JsonNode input, Path sourceRoot, String inputHash, boolean stored) throws IOException {
             shape(input, "$", "schema_version data_kind documents evidence events");
-            check(text(input, "schema_version", 100).equals("reviewed-import-v1"), "schema_version");
+            String schema = choice(input, "schema_version", "reviewed-import-v1", "source-import-v1");
+            boolean sourceOnly = schema.equals("source-import-v1");
             String kind = choice(input, "data_kind", "synthetic", "real");
             List<ReviewedBatch.Document> documents = new ArrayList<>();
             Map<String, JsonNode> sources = new HashMap<>();
@@ -66,17 +67,19 @@ public class ReviewedImportReader {
                 check(versions.add(document.id() + ":" + document.versionNo()), "documents.version_no");
                 documents.add(document);
             }
-            Map<String, JsonNode> evidence = evidence(input, sources);
+            Map<String, JsonNode> evidence = evidence(input, sources, !sourceOnly);
+            check(!sourceOnly || evidence.isEmpty(), "evidence");
             List<ReviewedBatch.Event> events = new ArrayList<>();
             Set<String> eventIds = new HashSet<>();
             Set<String> revisionIds = new HashSet<>();
-            for (JsonNode event : array(input, "events", true)) {
+            for (JsonNode event : array(input, "events", !sourceOnly)) {
+                check(!sourceOnly, "events");
                 var reviewed = event(event, sources, evidence, kind, stored);
                 check(eventIds.add(reviewed.id()), "events.event_id");
                 check(revisionIds.add(reviewed.revisionId()), "events.revision.revision_id");
                 events.add(reviewed);
             }
-            return new ReviewedBatch("reviewed-import-v1", inputHash, kind, documents, events);
+            return new ReviewedBatch(schema, inputHash, kind, documents, events);
     }
 
     public JsonNode readJson(Path file) {
@@ -165,9 +168,9 @@ public class ReviewedImportReader {
         return new ReviewedBatch.Document(id, versionId, version, url, textHash, metadata.toString(), rawRef, checks);
     }
 
-    private Map<String, JsonNode> evidence(JsonNode input, Map<String, JsonNode> sources) {
+    private Map<String, JsonNode> evidence(JsonNode input, Map<String, JsonNode> sources, boolean required) {
         Map<String, JsonNode> result = new LinkedHashMap<>();
-        for (JsonNode item : array(input, "evidence", true)) {
+        for (JsonNode item : array(input, "evidence", required)) {
             shape(item, "evidence", "evidence_id document_version_id block_id quote start_char end_char text_sha256");
             String id = text(item, "evidence_id", 128);
             check(result.putIfAbsent(id, item) == null, "evidence.evidence_id");

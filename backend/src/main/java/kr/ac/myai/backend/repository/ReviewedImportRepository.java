@@ -30,18 +30,20 @@ public class ReviewedImportRepository {
     }
 
     public Optional<ImportResult> findBatch(ReviewedBatch batch) {
-        return jdbc.query("SELECT import_id, status, result_refs_json FROM import_batches WHERE source_kind = 'reviewed' AND input_sha256 = ? AND schema_version = ?",
+        return jdbc.query("SELECT import_id, status, result_refs_json FROM import_batches WHERE source_kind = ? AND input_sha256 = ? AND schema_version = ?",
                 (row, index) -> {
                     require(row.getString("status").equals("succeeded"), "import_batches");
                     JsonNode refs = json(row.getString("result_refs_json"));
                     return new ImportResult(row.getString("import_id"), strings(refs.path("revision_ids")), strings(refs.path("document_version_ids")), true);
-                }, batch.inputSha256(), batch.schemaVersion()).stream().findFirst();
+                }, sourceKind(batch), batch.inputSha256(), batch.schemaVersion()).stream().findFirst();
     }
 
     public void beginBatch(String id, ReviewedBatch batch) {
-        jdbc.update("INSERT INTO import_batches(import_id, source_kind, input_sha256, schema_version, status) VALUES (?, 'reviewed', ?, ?, 'received')",
-                id, batch.inputSha256(), batch.schemaVersion());
+        jdbc.update("INSERT INTO import_batches(import_id, source_kind, input_sha256, schema_version, status) VALUES (?, ?, ?, ?, 'received')",
+                id, sourceKind(batch), batch.inputSha256(), batch.schemaVersion());
     }
+
+    private String sourceKind(ReviewedBatch batch) { return batch.schemaVersion().equals("source-import-v1") ? "source" : "reviewed"; }
 
     public void completeBatch(ImportResult result) {
         var refs = mapper.createObjectNode();
