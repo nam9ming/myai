@@ -38,4 +38,7 @@ tasks.named('processResources') {
 
 tasks.named('test') {
     useJUnitPlatform()
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+    }
 }
