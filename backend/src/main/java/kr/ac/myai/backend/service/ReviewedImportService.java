@@ -49,6 +49,7 @@ public class ReviewedImportService {
         try {
             var runReferences = extractions.verifyReferences(batch.events(), batch.originatingRunId(),
                     batch.documents().stream().map(ReviewedBatch.Document::versionId).toList());
+            extractions.verifyDraft(batch);
             try {
                 return transaction.execute(status -> {
                     extractions.checkReferences(runReferences);

@@ -7,16 +7,15 @@ import uuid
 
 from .archive import DEFAULT_ROOT, _json, _read, _read_checked, _root, _write, freeze_run
 from .schema import UUID
-from .validation import MAX_BYTES, decode, parse_input, parse_output, require, shape, text
+from .validation import MAX_BYTES, array, decode, parse_input, parse_output, require, shape, text
 
 
-def draft_run(run_id, source_path, output_path, area_id, split_group_id, dictionary_version, root=DEFAULT_ROOT):
+def _project_draft(run_id, source, area_id, split_group_id, dictionary_version, root):
     for value in (run_id, area_id, split_group_id):
         text(value, kind='input', pattern=UUID)
     text(dictionary_version, kind='input')
     require(len(dictionary_version) <= 100
             and not any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in dictionary_version), kind='input')
-    source = decode(_read(source_path), 'input')
     shape(source, 'schema_version data_kind documents evidence events', kind='input')
     require(source['schema_version'] == 'source-import-v1' and type(source['documents']) is list
             and len(source['documents']) == 1 and source['evidence'] == [] and source['events'] == [], kind='input')
@@ -111,17 +110,45 @@ def draft_run(run_id, source_path, output_path, area_id, split_group_id, diction
                                                 evidence_ids=list(evidence_ids.values()))],
                            relations=[], suspected_duplicate_ids=[], split_group_id=split_group_id,
                            expected_revision_no=0, revision=revision))
-    batch = dict(schema_version='ai-draft-import-v1', data_kind=source['data_kind'], originating_run_id=run_id,
-                 documents=source['documents'], evidence=evidence, events=events)
+    return dict(schema_version='ai-draft-import-v1', data_kind=source['data_kind'], originating_run_id=run_id,
+                documents=source['documents'], evidence=evidence, events=events)
+
+
+def _content(batch):
     try:
         content = _json(batch)
     except (TypeError, ValueError):
         require(False, kind='input', code='DRAFT_SOURCE_INVALID')
     require(len(content) <= MAX_BYTES, kind='input', code='DRAFT_OUTPUT_TOO_LARGE')
+    return content
+
+
+def draft_run(run_id, source_path, output_path, area_id, split_group_id, dictionary_version, root=DEFAULT_ROOT):
+    source = decode(_read(source_path), 'input')
+    batch = _project_draft(run_id, source, area_id, split_group_id, dictionary_version, root)
+    content = _content(batch)
     path = Path(output_path).expanduser().absolute()
     require(path.name not in ('', '.', '..'), kind='input')
     destination = _root(path.parent) / path.name
     _write(destination, content)
-    return dict(schema_version='ai-draft-result-v1', run_id=run_id, data_kind=source['data_kind'],
-                status='draft', review_required=True, event_ids=[event['event_id'] for event in events],
+    return dict(schema_version='ai-draft-result-v1', run_id=run_id, data_kind=batch['data_kind'],
+                status='draft', review_required=True, event_ids=[event['event_id'] for event in batch['events']],
                 output_sha256=hashlib.sha256(content).hexdigest())
+
+
+def check_draft(run_id, content, root=DEFAULT_ROOT):
+    batch = decode(content, 'input')
+    shape(batch, 'schema_version data_kind originating_run_id documents evidence events', kind='input')
+    require(batch['schema_version'] == 'ai-draft-import-v1' and batch['originating_run_id'] == run_id, kind='input')
+    events = array(batch['events'], '$.events', 'input')
+    area, split, dictionary = '00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000000000', 'no-event'
+    if events:
+        event = events[0]
+        require(type(event) is dict and type(event.get('revision')) is dict, kind='input')
+        area, split, dictionary = event.get('area_id'), event.get('split_group_id'), event['revision'].get('dictionary_version')
+    source = dict(schema_version='source-import-v1', data_kind=batch['data_kind'],
+                  documents=batch['documents'], evidence=[], events=[])
+    expected = _project_draft(run_id, source, area, split, dictionary, root)
+    require(_content(batch) == _content(expected), kind='input', code='DRAFT_MISMATCH')
+    return dict(protocol_version='ai-draft-check-v1', status='validated', run_id=run_id,
+                input_sha256=hashlib.sha256(content).hexdigest())

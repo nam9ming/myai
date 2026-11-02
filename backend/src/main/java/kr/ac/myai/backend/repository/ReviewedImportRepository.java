@@ -3,7 +3,9 @@ package kr.ac.myai.backend.repository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import kr.ac.myai.backend.importing.ImportException;
+import kr.ac.myai.backend.importing.HumanReviewChanges;
 import kr.ac.myai.backend.importing.ReviewedBatch;
 import kr.ac.myai.backend.service.ReviewedImportService.ImportResult;
 import org.springframework.context.annotation.Profile;
@@ -123,6 +125,7 @@ public class ReviewedImportRepository {
                 require(event.originatingRunIds().containsAll(strings(previous.path("revision").path("originating_run_ids")))
                         && event.sourceVersionIds().containsAll(strings(previous.path("revision").path("source_version_ids"))),
                         "events.revision.originating_run_ids");
+                HumanReviewChanges.validate(previous, json(event.payloadJson()));
             }
             lockVersion = ((Number) state.get("lock_version")).longValue();
         }
@@ -137,7 +140,7 @@ public class ReviewedImportRepository {
     }
 
     private JsonNode json(String value) {
-        try { return mapper.readTree(Objects.requireNonNull(value)); }
+        try { return mapper.reader().with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).readTree(Objects.requireNonNull(value)); }
         catch (JsonProcessingException ex) { throw new IllegalStateException("저장된 import JSON을 읽을 수 없습니다."); }
     }
 

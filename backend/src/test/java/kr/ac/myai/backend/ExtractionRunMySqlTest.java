@@ -54,6 +54,34 @@ class ExtractionRunMySqlTest {
     }
 
     @Test
+    void highPrecisionCoordinateEditsCannotDisappearFromHumanChangeHistory() throws Exception {
+        var source = source(); registerSource(source); String run = UUID.randomUUID().toString();
+        Path archive = archive(source, run, false); extraction.importRun(run, archive, "synthetic-registrant");
+        var old = review(source, run); importer.importBatch(old, "synthetic-reviewer");
+        var payload = (ObjectNode) mapper.readTree(old.events().getFirst().payloadJson());
+        var event = (ObjectNode) payload.path("event"); var revision = (ObjectNode) payload.path("revision");
+        var beforeLocations = revision.path("locations").deepCopy();
+        event.put("expected_revision_no", 1); event.set("revision", revision);
+        revision.put("revision_id", UUID.randomUUID().toString()).put("revision_no", 2);
+        var coordinates = (com.fasterxml.jackson.databind.node.ArrayNode) revision.path("locations").get(0).path("geometry").path("coordinates");
+        coordinates.set(1, com.fasterxml.jackson.databind.node.DecimalNode.valueOf(new java.math.BigDecimal("37.0100000000000000001")));
+        var input = source.deepCopy(); input.put("schema_version", "reviewed-import-v1");
+        input.set("evidence", payload.path("evidence")); input.putArray("events").add(event);
+        Path file = Files.writeString(root.resolve("precision-review.json"), input.toString());
+        assertThatThrownBy(() -> importer.importBatch(reader.read(file, root), "synthetic-reviewer"))
+                .isInstanceOf(kr.ac.myai.backend.importing.ImportException.class);
+        var change = revision.withArray("human_overrides").addObject().put("field_path", "locations")
+                .put("reason", "합성 좌표 정밀도 수정").put("reviewer", revision.path("reviewer_id").asText())
+                .put("time", revision.path("reviewed_at").asText());
+        change.set("before", beforeLocations); change.set("after", revision.path("locations").deepCopy());
+        change.putArray("evidence_ids").add("body-quote");
+        Files.writeString(file, input.toString());
+        var imported = importer.importBatch(reader.read(file, root), "synthetic-reviewer");
+        assertThat(jdbc.queryForObject("SELECT payload_json FROM event_revisions WHERE revision_id=?", String.class,
+                imported.revisionIds().getFirst())).contains("37.0100000000000000001");
+    }
+
+    @Test
     void pythonToDatabaseKeepsDuplicateTextValuesInRawDraft() throws Exception {
         var source = source(); registerSource(source); String run = UUID.randomUUID().toString();
         Path archive = archive(source, run, false, output -> {
@@ -108,6 +136,15 @@ class ExtractionRunMySqlTest {
         assertThatThrownBy(() -> importer.importBatch(reader.read(review, root), "synthetic-reviewer"))
                 .isInstanceOf(kr.ac.myai.backend.importing.ImportException.class);
         revision.put("reviewer_id", "synthetic-reviewer").put("reviewed_at", "2026-11-02T02:00:00Z");
+        String oldTitle = revision.path("title").asText();
+        revision.put("title", "합성 사람이 수정한 제목");
+        Files.writeString(review, reviewed.toString());
+        assertThatThrownBy(() -> importer.importBatch(reader.read(review, root), "synthetic-reviewer"))
+                .isInstanceOf(kr.ac.myai.backend.importing.ImportException.class);
+        var change = revision.withArray("human_overrides").addObject().put("field_path", "title")
+                .put("before", oldTitle).put("after", "합성 사람이 수정한 제목").put("reason", "합성 원문 대조 후 제목 수정")
+                .put("reviewer", "synthetic-reviewer").put("time", "2026-11-02T02:00:00Z");
+        change.putArray("evidence_ids").add(evidenceIds.getFirst());
         Files.writeString(review, reviewed.toString());
         assertThat(importer.importBatch(reader.read(review, root), "synthetic-reviewer").revisionIds()).hasSize(1);
         var approved = new kr.ac.myai.backend.publication.PublicationCommand.Decision("publication-command-v1", "approve", "합成 원문 대조 완료",
@@ -140,9 +177,16 @@ class ExtractionRunMySqlTest {
         Path failed = archive(source, missing, true); extraction.importRun(missing, failed, "synthetic-registrant");
         assertThatThrownBy(() -> importer.importBatch(reader.read(file, root), "synthetic-importer"))
                 .isInstanceOf(kr.ac.myai.backend.importing.ImportException.class);
+        String populated = UUID.randomUUID().toString();
+        Path withEvent = archive(source, populated, false);
+        extraction.importRun(populated, withEvent, "synthetic-registrant");
+        empty.put("originating_run_id", populated);
+        Files.writeString(file, empty.toString());
+        assertThatThrownBy(() -> importer.importBatch(reader.read(file, root), "synthetic-importer"))
+                .isInstanceOf(kr.ac.myai.backend.importing.ImportException.class);
         String run = UUID.randomUUID().toString();
         Path archive = archive(source, run, false, output -> {
-            output.putArray("items"); output.putArray("evidence"); output.putArray("warnings").add("NO_EVENT_FOUND");
+            output.putArray("items"); output.putArray("warnings").add("NO_EVENT_FOUND");
         });
         extraction.importRun(run, archive, "synthetic-registrant");
         Path generated = draft(source, run, archive); var batch = reader.read(generated, root);
@@ -297,7 +341,7 @@ class ExtractionRunMySqlTest {
         var one = review(first, id); var two = review(second, id);
         var documents = new java.util.ArrayList<>(one.documents()); documents.addAll(two.documents());
         var events = new java.util.ArrayList<>(one.events()); events.addAll(two.events());
-        var batch = new kr.ac.myai.backend.importing.ReviewedBatch("reviewed-import-v1", "7".repeat(64), "synthetic", documents, events, null);
+        var batch = new kr.ac.myai.backend.importing.ReviewedBatch("reviewed-import-v1", "7".repeat(64), "synthetic", documents, events, null, null);
         var before = counts();
         assertThatThrownBy(() -> importer.importBatch(batch, "synthetic-reviewer"))
                 .isInstanceOf(kr.ac.myai.backend.importing.ImportException.class);

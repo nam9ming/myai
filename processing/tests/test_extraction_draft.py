@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 from processing.extraction.archive import import_run
-from processing.extraction.draft import draft_run
+from processing.extraction.draft import check_draft, draft_run
 from processing.extraction.validation import ExtractionError
 from processing.tests.test_extraction_prompt_metadata import metadata
 
@@ -163,6 +163,43 @@ class DraftTest(unittest.TestCase):
         self.assertEqual(batch['events'], []); self.assertEqual(batch['evidence'], [])
         self.assertEqual(result['event_ids'], [])
         self.assertTrue(result['review_required'])
+
+    def test_draft_check_binds_the_complete_projection_and_only_returns_safe_metadata(self):
+        self.register(); self.draft()
+        content = self.target.read_bytes()
+        result = check_draft(self.id, content, self.root)
+        self.assertEqual(result, dict(protocol_version='ai-draft-check-v1', status='validated', run_id=self.id,
+                                      input_sha256=hashlib.sha256(content).hexdigest()))
+        for change in ('empty', 'title', 'location', 'extra'):
+            body = json.loads(content)
+            if change == 'empty': body['events'] = []; body['evidence'] = []
+            elif change == 'title': body['events'][0]['revision']['title'] = 'PRIVATE_VALUE changed'
+            elif change == 'location': body['events'][0]['revision']['occurrences'][0]['location_ids'] = []
+            else: body['events'].append(copy.deepcopy(body['events'][0]))
+            with self.subTest(change=change), self.assertRaises(ExtractionError):
+                check_draft(self.id, json.dumps(body).encode(), self.root)
+        self.assertEqual(self.target.read_bytes(), content)
+        self.assertNotIn('PRIVATE_VALUE', json.dumps(result))
+
+    def test_empty_draft_check_preserves_unused_evidence_and_accepts_json_formatting(self):
+        self.output['items'] = []; self.output['warnings'] = ['NO_EVENT_FOUND']
+        self.register(); self.draft()
+        content = json.dumps(json.loads(self.target.read_bytes()), indent=2).encode()
+        self.assertEqual(check_draft(self.id, content, self.root)['input_sha256'], hashlib.sha256(content).hexdigest())
+        self.assertEqual(len(json.loads(self.target.read_bytes())['evidence']), 1)
+
+    def test_check_draft_cli_never_echoes_a_rejected_private_value(self):
+        self.register(); self.draft()
+        args = [sys.executable, '-m', 'processing.extraction', 'check-draft', self.id, '--root', str(self.root)]
+        content = self.target.read_bytes()
+        result = subprocess.run(args, input=content, cwd=REPO, capture_output=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)['input_sha256'], hashlib.sha256(content).hexdigest())
+        body = json.loads(content); body['events'][0]['revision']['title'] = 'PRIVATE_VALUE changed'
+        result = subprocess.run(args, input=json.dumps(body).encode(), cwd=REPO, capture_output=True, timeout=15)
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.stdout, b'')
+        self.assertEqual(result.stderr, b'DRAFT_MISMATCH\n')
 
     def test_date_only_all_day_and_conflicting_partial_time_keep_their_meaning(self):
         original = copy.deepcopy(self.output)

@@ -103,4 +103,14 @@ public class ExtractionImportService {
     }
 
     public void checkReferences(List<Reference> references) { references.forEach(repository::checkReference); }
+
+    public void verifyDraft(ReviewedBatch batch) {
+        if (batch.originatingRunId() == null) return;
+        try {
+            Path directory = Path.of(repository.referenceDirectory(batch.originatingRunId()));
+            archives.checkDraft(batch.originatingRunId(), directory.getParent(), batch.draftJson());
+        } catch (IllegalArgumentException ex) {
+            throw new ExtractionException("EXTRACTION_ARCHIVE_INVALID", null, false);
+        }
+    }
 }

@@ -83,7 +83,7 @@ public class ReviewedImportReader {
                 check(revisionIds.add(reviewed.revisionId()), "events.revision.revision_id");
                 events.add(reviewed);
             }
-            return new ReviewedBatch(schema, inputHash, kind, documents, events, runId);
+            return new ReviewedBatch(schema, inputHash, kind, documents, events, runId, draftImport ? input.toString() : null);
     }
 
     public JsonNode readJson(Path file) {
@@ -439,8 +439,10 @@ public class ReviewedImportReader {
     private String text(JsonNode node, String key, int max) { return string(node.path(key), key, max); }
 
     private String string(JsonNode value, String path, int max) {
-        check(value.isTextual() && !value.textValue().isBlank() && value.textValue().length() <= max, path);
+        check(value.isTextual() && value.textValue().length() <= max, path);
         String text = value.textValue();
+        // Python str.isspace와 같은 공백 집합을 쓰되 원문은 잘라내지 않는다.
+        check(text.codePoints().anyMatch(c -> !Character.isWhitespace(c) && !Character.isSpaceChar(c) && c != 0x85), path);
         validUnicode(text, path);
         return text;
     }
@@ -496,7 +498,7 @@ public class ReviewedImportReader {
 
     private LocalDate parseDate(JsonNode value, String path) {
         String date = string(value, path, 10);
-        check(date.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}"), path);
+        check(date.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}") && !date.startsWith("0000-"), path);
         try { return LocalDate.parse(date); }
         catch (java.time.DateTimeException ex) { throw invalid(path, "유효한 날짜가 필요합니다."); }
     }

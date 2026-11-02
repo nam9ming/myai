@@ -29,6 +29,8 @@ ARCHIVE_ROOT는 run_id 폴더의 상위 경로다. 처음 생성할 때 freeze�
 
 ## 초안에 보존하는 것
 
+Java는 저장 전 Python의 동일 변환 함수로 초안 전체를 재구성해 대조한다. 사건 수뿐 아니라 값·근거·연결·ID가 일치해야 하므로 사건이 있는 출력을 빈 배치로 바꾸거나 raw 의미값을 편집해 넣을 수 없다. JSON 공백·키 순서는 대조에서 무시하되 import 배치의 원본 바이트 hash 규칙은 유지한다. 추가 Python 검증은 DB 트랜잭션 밖에서 실행하며 stdin도8MiB로 제한하고 stdout에는 상태·ID·입력 hash만 반환한다.
+
 - 새 로컬 규격은 ai-draft-import-v1, DB source_kind와 origin은 ai_draft다. 기존 envelope에 originating_run_id를 추가하고 D04/D06 구조를 재사용하되 상태는 draft/hidden, 검토자·시각은 null, human_overrides는 비어 있다.
 - 제목 미상은 null, 유형 미상은 빈 배열이다. 이 예외는 미검토 초안에만 허용하며 일반 reviewed-import-v1에는 적용하지 않는다.
 - 원문·data_kind·FieldValue·인용·code point 위치를 보존한다. 블록 hash를 먼저 검증한 뒤 D06 근거에는 문서 전체 cleaned_text hash를 넣는다. AI의 로컬 ID는 run UUID와 종류별 로컬 ID의 UUID5로 변환한다.
@@ -52,6 +54,29 @@ ARCHIVE_ROOT는 run_id 폴더의 상위 경로다. 처음 생성할 때 freeze�
 6. 교차 검토 후 [별도 approve·preview·publish](review-publication.md)를 사용한다. AI 초안은 직접 approve할 수 없고 일반 승인에는 근거1개 이상이 필요하다.
 
 ai_reviewed로 넘긴 뒤의 후속 수정도 기존 originating_run_ids와 source_version_ids를 유지해야 한다. origin을 human으로 바꿔 AI 추적을 지우는 입력은 거부한다. 새 원문·실행을 추가할 수 있지만 기존 참조를 버리지 않으며, 이후 검증에 필요한 예전 실행 보관본도 함께 보존한다.
+
+## 변경 기록 대조
+
+AI 출처가 있는 기존 사건을 수정할 때는 이전 revision과 바뀐 의미값을 대조한다. 날짜는 Python과 같은1~9999년을 사용하고 공백만 있는 값은 허용하지 않는다. 실제 문자의 앞뒤 공백은 자르지 않는다. 달라진 필드마다 before/after가 실제 전후 값과 같고 reviewer/time이 이번 revision의 reviewer_id/reviewed_at과 같은 기록이 있어야 한다. 수정 이유·근거의 의미는 사람이 확인한다.
+
+- 제목·유형·시간·장소·대상/예외·노선/정류장/방향·lifecycle·근거·문서/실행 참조·규칙/사전 버전을 대조한다. 지역·문서 연결·관계·중복·분할 그룹 변경은 event.area_membership 등 event. 접두사를 쓴다.
+- FieldValue 전체는 applicability처럼, 하위 값만 바꾸면 directions.value처럼 점으로 경로를 쓴다. knowledge·reason·evidence_ids도 달라졌으면 각 변경을 기록하거나 FieldValue 전체를 before/after에 넣는다.
+- 배열은 위치 이동에 따른 잘못된 대응을 피하려고 전체 배열로 대조한다. 장소 내부를 바꿔도 field_path=locations, before/after=변경 전후 전체 locations다. occurrences·types·참조 배열도 같다.
+- revision ID/번호·검토 상태·검토자/시각·origin 등 작업 상태만 바뀌면 의미값 수정 기록은 요구하지 않는다. 이전 수정 기록을 그대로 남겨 둘 수 있다. 새로 넣는 기록도 실제 전후 값과 일치해야 하며, 바뀌지 않은 필드에 허위 수정 기록을 덧붙이는 입력은 거부한다.
+
+다음은 중복 방향 목록을 사람이 정리한 기록의 형식이다. 실제 값·검토자·시각·현재 파일의 근거 ID로 바꾼다.
+
+```json
+{
+  "field_path": "directions.value",
+  "before": ["상행", "상행"],
+  "after": ["상행"],
+  "reason": "원문 대조 후 중복 항목 정리",
+  "evidence_ids": ["현재 파일의 근거 ID"],
+  "reviewer": "reviewer-id",
+  "time": "2026-11-02T02:00:00Z"
+}
+```
 
 사람이 검토를 완료했다고 파일에 기입하는 로컬 작업이며 계정 인증을 대신하지 않는다. 사람이 실제로 원문을 확인했는지는 기계가 판정하지 않는다.
 

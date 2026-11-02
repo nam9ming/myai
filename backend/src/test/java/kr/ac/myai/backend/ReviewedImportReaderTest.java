@@ -26,6 +26,30 @@ class ReviewedImportReaderTest {
     }
 
     @Test
+    void rejectsCalendarYearZeroButAcceptsTheFirstSupportedYear() throws Exception {
+        var occurrence = (ObjectNode) input.path("events").get(0).path("revision").path("occurrences").get(0);
+        occurrence.put("date_start", "0000-01-01").put("date_end", "0000-01-01");
+        rejected();
+        occurrence.put("date_start", "0001-01-01").put("date_end", "0001-01-01");
+        assertThat(reader.read(write(), root).events()).hasSize(1);
+    }
+
+    @Test
+    void rejectsPythonWhitespaceOnlyValuesWithoutTrimmingRealText() throws Exception {
+        int[] whitespace = {9, 10, 11, 12, 13, 28, 29, 30, 31, 32, 133, 160, 5760, 8192, 8193, 8194,
+                8195, 8196, 8197, 8198, 8199, 8200, 8201, 8202, 8232, 8233, 8239, 8287, 12288};
+        var revision = (ObjectNode) input.path("events").get(0).path("revision");
+        for (int point : whitespace) {
+            revision.put("title", new String(Character.toChars(point)));
+            rejected();
+        }
+        String title = Character.toString(160) + "원문 제목" + Character.toString(8239);
+        revision.put("title", title);
+        var saved = mapper.readTree(reader.read(write(), root).events().getFirst().payloadJson());
+        assertThat(saved.path("revision").path("title").asText()).isEqualTo(title);
+    }
+
+    @Test
     void rawDraftPreservesDuplicateTextValuesButReviewedAndReferenceIdsStayUnique() throws Exception {
         rawDraft();
         var revision = (ObjectNode) input.path("events").get(0).path("revision");
