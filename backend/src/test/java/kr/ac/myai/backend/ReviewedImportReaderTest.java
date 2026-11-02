@@ -213,6 +213,19 @@ class ReviewedImportReaderTest {
         return Files.writeString(root.resolve("batch.json"), input.toString());
     }
 
+    @Test
+    void acceptsExplicitContinuousDatesButKeepsRecurringTimeValidation() throws Exception {
+        var occurrence = (ObjectNode) input.path("events").get(0).path("revision").path("occurrences").get(0);
+        occurrence.put("date_end", "2026-11-05").put("time_start", "22:00").put("time_end", "02:00").put("end_day_offset", 0);
+        assertThat(reader.read(write(), root).events()).hasSize(1);
+        occurrence.put("time_start", "10:00").put("time_end", "10:00");
+        assertThat(reader.read(write(), root).events()).hasSize(1);
+        occurrence.putArray("recurrence_dates").add("2026-11-03").add("2026-11-05");
+        rejected();
+        occurrence.put("time_start", "22:00").put("time_end", "02:00").put("end_day_offset", 1);
+        assertThat(reader.read(write(), root).events()).hasSize(1);
+    }
+
     private void rejected() throws Exception {
         Path file = write();
         assertThatThrownBy(() -> reader.read(file, root)).isInstanceOf(ImportException.class);

@@ -2,7 +2,7 @@
 
 안성맞춘팀의 모바일 우선 웹앱 프로젝트입니다. **전체 개발 명세 v1.1: Flutter Web·Dart / Spring Boot·Java / MySQL / Python AI·계산**으로 확정했습니다. 공사·행사·교통 변경 공지를 가게 위치·영업시간과 비교하고 적용 조건·근거·원문을 확인합니다.
 
-**현재 저장소 상태: 문서·인터페이스 예제·참고 시제품과 백엔드 기초입니다. 백엔드 합성 API·MySQL 스키마·검토본 import·로컬 승인/미리보기/공개/복구·공개 snapshot 조회·테스트를 추가했습니다. 실제 프런트·AI 서비스·Python 계산 연결은 아직 구현하지 않았습니다.**
+**현재 저장소 상태: 문서·인터페이스 예제·참고 시제품과 백엔드 기초입니다. 백엔드 합성 API·MySQL 스키마·검토본 import·로컬 승인/미리보기/공개/복구·공개 snapshot 조회와 Python C01~C10 계산 CLI·시험을 추가했습니다. 실제 프런트·AI 추출·Spring에서 Python을 호출하는 adapter는 아직 미구현입니다.**
 
 ## 이번 목표
 
@@ -52,7 +52,7 @@ docs/wednesday-plan.md    # 수요일까지 작업 순서·완료 기준
 
 ## 기술·배포 기준
 
-- 확정 구성은 Flutter Web·Dart, Spring Boot·Java, MySQL, Python AI·계산입니다. 구현 기준은 Flutter stable(번들 Dart), JDK21·Spring Boot3.5.x·Gradle Wrapper, MySQL8.4 LTS, Python3.13입니다. 백엔드 고정 버전·실행 명령은 backend/README.md에 기록했고, Flutter·Python 서비스는 구현 시 해당 README에 남깁니다.
+- 확정 구성은 Flutter Web·Dart, Spring Boot·Java, MySQL, Python AI·계산입니다. 구현 기준은 Flutter stable(번들 Dart), JDK21·Spring Boot3.5.x·Gradle Wrapper, MySQL8.4 LTS, Python3.13입니다. 백엔드·Python 실행 명령은 각 README에 기록했고, Flutter는 구현 시 해당 README에 남깁니다.
 - 수동 수집 → AI 일괄 추출 → 사람 검토 → 저장 → 웹 표시 흐름을 유지합니다. 사용자 조회마다 실시간 AI 호출을 전제하지 않습니다.
 - 희망 배포 주소는 `https://aise.hknu.ac.kr/myai/team/`입니다. **현재 배포되었다는 뜻이 아닙니다.** 연구실 소개/관리 서비스는 수정하지 않았습니다.
 - Flutter 웹 빌드 자산과 Spring API를 같은 하위 경로 아래에서 사용할 수 있게 설계합니다. 외부 API 주소 후보는 `/myai/team/api/v1/...`, 내부 API 계약은 `/api/v1/...`입니다. 실제 프록시 구성은 서버 환경 확인 후 결정합니다.
@@ -76,7 +76,7 @@ docs/wednesday-plan.md    # 수요일까지 작업 순서·완료 기준
 
 공통 로컬 확인은 `npm run lint`, `npm test`, `npm run build`입니다. 계약 JSON과 인프라를 검증하고
 기존 합성 HTML 시제품을 패키징합니다. 백엔드는 `cd backend && ./gradlew test bootJar`로 별도 검증합니다.
-CI는 전용 MySQL을 포함한 백엔드 검증도 실행합니다. 전체 앱·Python 계산 연결 완료를 뜻하지 않습니다.
+Python은 `python3.13 -m unittest discover -s processing/tests -v`로 별도 검증합니다. CI는 Python 계산·CLI와 전용 MySQL을 포함한 백엔드 검증도 실행합니다. 전체 앱·Spring 계산 연결 완료를 뜻하지 않습니다.
 기존 디스코드·보드를 공유하되 시크릿은 myai에도 등록해야 합니다. 공개 프리뷰는 기본 비활성화입니다.
 설정·권한·연결 확인은 [개발 인프라 적용 안내](docs/development-infra.md)를 따릅니다.
 AI 코드 리뷰는 `OPENAI_API_KEY` 시크릿으로 OpenAI API를 사용합니다. 기본 모델은 `gpt-6.1-sol`이며
