@@ -58,7 +58,7 @@ AI 근거는 블록 hash를 먼저 검증한 뒤 D06의 문서 전체 hash로 �
 
 **Files:** `processing/README.md`, `processing/TASK.md`, `backend/docs/reviewed-import.md`, `backend/docs/extraction-run-import.md`, `backend/TASK.md`, `contracts/extraction-run.md`, 관련 spec 구현 상태.
 
-- [ ] 새 명령·입력/출력·안전 경계·사람 검토 다음 revision 작성법·오류·원본 보관·실제 AI 미완료를 한국어로 기록한다.
-- [ ] Python 전체, Java/MySQL 전체, lint·Node·JSON 계약·build 및 실제 JAR 연결 시험 통과.
-- [ ] 작성자가 호출부/승인/반려/공개/재실행/실패/원본/계약 전체를 검토한다. 마지막에 별도 전체 리뷰1회, 유효 지적은 RED→GREEN·전체 회귀로 수정한다.
+- [x] 새 명령·입력/출력·안전 경계·사람 검토 다음 revision 작성법·오류·원본 보관·실제 AI 미완료를 한국어로 기록한다.
+- [x] Python 전체, Java/MySQL 전체, lint·Node·JSON 계약·build 및 실제 JAR 연결 시험 통과.
+- [x] 작성자가 호출부/승인/반려/공개/재실행/실패/원본/계약 전체를 검토한다. 마지막에 별도 전체 리뷰1회, 유효 지적은 RED→GREEN·전체 회귀로 수정한다.
 - [ ] 유효 미해결0이면 foundation 대상 PR 제출. 정확한 head CI·AI/사람 리뷰를 확인하고 유효 미해결0일 때만 하위 PR 머지. main #4는 사람에게 남긴다.

@@ -250,8 +250,8 @@ public class ReviewedImportReader {
             occurrence(occurrence, locations, allowedEvidence, rawDraft);
             check(occurrences.add(uuid(occurrence, "occurrence_id")), "events.revision.occurrences.occurrence_id");
         }
-        for (String name : List.of("applicability", "exceptions")) fieldValue(revision.path(name), allowedEvidence, false);
-        for (String name : List.of("route_names", "stop_names", "directions")) fieldValue(revision.path(name), allowedEvidence, true);
+        for (String name : List.of("applicability", "exceptions")) fieldValue(revision.path(name), allowedEvidence, false, rawDraft);
+        for (String name : List.of("route_names", "stop_names", "directions")) fieldValue(revision.path(name), allowedEvidence, true, rawDraft);
         String lifecycle = choice(revision, "lifecycle", "active", "cancelled", "uncertain");
         evidenceIds(revision, "lifecycle_evidence_ids", allowedEvidence, lifecycle.equals("cancelled"));
         for (JsonNode change : array(revision, "human_overrides", false)) {
@@ -352,8 +352,8 @@ public class ReviewedImportReader {
 
     private void location(JsonNode node, Set<String> evidence) {
         shape(node, "locations", "location_id name address kind status geometry coverage source checked_by checked_at evidence_ids");
-        fieldValue(node.path("name"), evidence, false);
-        fieldValue(node.path("address"), evidence, false);
+        fieldValue(node.path("name"), evidence, false, false);
+        fieldValue(node.path("address"), evidence, false, false);
         for (String key : List.of("name", "address")) {
             JsonNode value = node.path(key).path("value");
             check(value.isNull() || value.isTextual(), "locations." + key + ".value");
@@ -389,7 +389,7 @@ public class ReviewedImportReader {
         check(Double.isFinite(longitude) && Double.isFinite(latitude) && longitude >= -180 && longitude <= 180 && latitude >= -90 && latitude <= 90, "locations.geometry.coordinates");
     }
 
-    private void fieldValue(JsonNode field, Set<String> evidence, boolean listOnly) {
+    private void fieldValue(JsonNode field, Set<String> evidence, boolean listOnly, boolean rawDraft) {
         shape(field, "field_value", "value knowledge evidence_ids reason");
         String knowledge = choice(field, "knowledge", "known", "not_stated", "ambiguous", "not_applicable");
         boolean known = knowledge.equals("known");
@@ -397,8 +397,10 @@ public class ReviewedImportReader {
         String reason = nullableText(field, "reason", LIMIT);
         JsonNode value = field.path("value");
         if (!known) check(value.isNull() && reason != null, "field_value.value");
-        else if (listOnly) ids(field, "value", false, false);
-        else if (value.isArray()) ids(field, "value", false, false);
+        else if (listOnly || value.isArray()) {
+            if (rawDraft) for (JsonNode item : array(field, "value", false)) string(item, "field_value.value", LIMIT);
+            else ids(field, "value", false, false);
+        }
         else text(field, "value", LIMIT);
     }
 

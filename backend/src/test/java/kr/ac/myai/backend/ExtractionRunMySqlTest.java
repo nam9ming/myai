@@ -54,6 +54,28 @@ class ExtractionRunMySqlTest {
     }
 
     @Test
+    void pythonToDatabaseKeepsDuplicateTextValuesInRawDraft() throws Exception {
+        var source = source(); registerSource(source); String run = UUID.randomUUID().toString();
+        Path archive = archive(source, run, false, output -> {
+            var item = (ObjectNode) output.path("items").get(0);
+            for (String name : List.of("exceptions", "route_names", "stop_names", "directions")) {
+                var field = (ObjectNode) item.path(name);
+                field.put("knowledge", "known").putNull("reason");
+                field.putArray("value").add("상행").add("상행");
+                field.putArray("evidence_ids").add("e1");
+            }
+        });
+        extraction.importRun(run, archive, "synthetic-registrant");
+        var batch = reader.read(draft(source, run, archive), root);
+        importer.importBatch(batch, "synthetic-importer");
+        var payload = mapper.readTree(jdbc.queryForObject("SELECT payload_json FROM event_revisions WHERE revision_id=?",
+                String.class, batch.events().getFirst().revisionId()));
+        for (String name : List.of("exceptions", "route_names", "stop_names", "directions")) {
+            assertThat(payload.path("revision").path(name).path("value").toString()).isEqualTo("[\"상행\",\"상행\"]");
+        }
+    }
+
+    @Test
     void pythonDraftImportsPrivatelyAndRequiresIdentifiedHumanReviewBeforeApproval() throws Exception {
         var source = source(); registerSource(source);
         String run = UUID.randomUUID().toString(); Path archive = archive(source, run, false);

@@ -26,6 +26,25 @@ class ReviewedImportReaderTest {
     }
 
     @Test
+    void rawDraftPreservesDuplicateTextValuesButReviewedAndReferenceIdsStayUnique() throws Exception {
+        rawDraft();
+        var revision = (ObjectNode) input.path("events").get(0).path("revision");
+        for (String name : java.util.List.of("exceptions", "route_names", "stop_names", "directions")) {
+            var field = (ObjectNode) revision.path(name);
+            field.put("knowledge", "known").putNull("reason");
+            field.putArray("value").add("상행").add("상행");
+            field.putArray("evidence_ids").add("body-quote");
+        }
+        assertThat(reader.read(write(), root).events()).hasSize(1);
+        ((ObjectNode) revision.path("directions")).putArray("evidence_ids").add("body-quote").add("body-quote");
+        rejected();
+        ((ObjectNode) revision.path("directions")).putArray("evidence_ids").add("body-quote");
+        input.put("schema_version", "reviewed-import-v1"); input.remove("originating_run_id");
+        revision.put("origin", "ai_reviewed").put("title", "합성 제목"); revision.putArray("types").add("traffic");
+        rejected();
+    }
+
+    @Test
     void acceptsHiddenAiDraftWithUnknownTitleAndTypesOnlyInItsSchema() throws Exception {
         rawDraft();
         var batch = reader.read(write(), root);

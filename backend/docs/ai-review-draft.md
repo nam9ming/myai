@@ -32,6 +32,7 @@ ARCHIVE_ROOT는 run_id 폴더의 상위 경로다. 처음 생성할 때 freeze�
 - 새 로컬 규격은 ai-draft-import-v1, DB source_kind와 origin은 ai_draft다. 기존 envelope에 originating_run_id를 추가하고 D04/D06 구조를 재사용하되 상태는 draft/hidden, 검토자·시각은 null, human_overrides는 비어 있다.
 - 제목 미상은 null, 유형 미상은 빈 배열이다. 이 예외는 미검토 초안에만 허용하며 일반 reviewed-import-v1에는 적용하지 않는다.
 - 원문·data_kind·FieldValue·인용·code point 위치를 보존한다. 블록 hash를 먼저 검증한 뒤 D06 근거에는 문서 전체 cleaned_text hash를 넣는다. AI의 로컬 ID는 run UUID와 종류별 로컬 ID의 UUID5로 변환한다.
+- 예외·노선·정류장·방향의 중복 문자열도 초안에 그대로 보존한다. 일반 reviewed 목록은 중복을 허용하지 않으므로 사람 검토 시 정리하고 수정 이유를 기록한다. ID·근거 참조의 유일성은 초안에서도 검사한다.
 - 장소 좌표·검토자·확인 시각은 null, coverage는 unknown, 지역 소속은 uncertain이다. 장소 대응이 없으면 독립 unknown 장소에 연결한다. 서로 다른 날짜와 장소를 임의로 묶지 않는다.
 - 명확한 시간/종일/날짜만 precision으로 정규화한다. 반복 문구·모호한 반복·부분/모순 시간은 unknown으로 남기며 시간 값을 버리지 않는다. normalization_note에 원래 시간 FieldValue JSON을 보존한다. 여기에 있는 근거 ID는 원래 D05의 로컬 ID다.
 - lifecycle 미상은 uncertain이다. title/types/lifecycle/location.kind의 원래 knowledge·사유와 warnings 등 전체 원출력은 D05에서 함께 확인한다.
