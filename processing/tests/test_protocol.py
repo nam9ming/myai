@@ -87,6 +87,26 @@ class ProtocolTest(unittest.TestCase):
         p['query']['selection'] = 'needs_check'
         self.assertEqual(1, run(raw(p))['data']['counts']['needs_check'])
 
+    def test_shared_large_source_is_bounded_while_projecting_selected_items(self):
+        from support import event_copy
+        p = payload()
+        p['source_versions'][0]['title'] = '공유 출처 ' * 20_000
+        original = p['events'][0]
+        p['events'] = [event_copy(original, i + 100) for i in range(100)]
+        content = raw(p)
+        self.assertLess(len(content), MAX_BYTES)
+        with self.assertRaisesRegex(ValueError, 'CALCULATION_OUTPUT_TOO_LARGE'):
+            run(content)
+        proc = self.cli(content)
+        self.assertEqual(3, proc.returncode)
+        self.assertEqual(b'', proc.stdout)
+        self.assertEqual(b'CALCULATION_OUTPUT_TOO_LARGE\n', proc.stderr)
+        # 반환하지 않는 상태의 카드는 투영 한도 때문에 정상 조회를 막지 않는다.
+        p['query']['selection'] = 'needs_check'
+        result = run(raw(p))
+        self.assertEqual([], result['data']['items'])
+        self.assertEqual(100, result['data']['counts']['candidate'])
+
     def test_projection_agrees_with_actual_java_fact_response(self):
         p = payload()
         expected = json.loads((ROOT / 'contracts/examples/event-facts-response.json').read_text())['data']['event']

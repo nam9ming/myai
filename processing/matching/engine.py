@@ -34,6 +34,16 @@ class OutputLimitError(ValueError):
     pass
 
 
+def _encoded_size(value, limit):
+    size = 0
+    encoder = json.JSONEncoder(ensure_ascii=False, allow_nan=False, separators=(',', ':'))
+    for chunk in encoder.iterencode(value):
+        size += len(chunk.encode('utf-8'))
+        if size > limit:
+            raise OutputLimitError('CALCULATION_OUTPUT_TOO_LARGE')
+    return size
+
+
 def utc(value):
     return value.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
 
@@ -150,7 +160,7 @@ def _classify(event, locations, known, unknown, start, end, sources, context):
     return classification, reasons, confirmed, minutes, raw, basis, sorted(matched), min(starts) if starts else None
 
 
-def _overlap_groups(snapshot_id, query, classified):
+def _overlap_groups(snapshot_id, query, classified, max_bytes):
     changes = defaultdict(lambda: [set(), set()])
     for event_id, info in classified.items():
         if info['classification'] != 'candidate':
@@ -171,7 +181,7 @@ def _overlap_groups(snapshot_id, query, classified):
         identity = json.dumps([snapshot_id, digest, utc(lo), utc(hi), ids], separators=(',', ':'))
         group = dict(group_id=str(uuid5(NAMESPACE_URL, identity)), start_at=utc(lo), end_at=utc(hi), event_ids=ids)
         budget += len(json.dumps(group, separators=(',', ':')).encode('utf-8')) + bool(groups)
-        if budget > MAX_BYTES:
+        if budget > max_bytes:
             raise OutputLimitError('CALCULATION_OUTPUT_TOO_LARGE')
         groups.append(group)
     active, pending = set(), None
@@ -235,6 +245,7 @@ def calculate(payload):
     sources = {s['document_version_id']: s for s in payload['source_versions']}
     classified, diagnostics = {}, []
     counts = Counter(candidate=0, needs_check=0, cancelled=0)
+    item_budget = 2
     for event in payload['events']:
         if query['types'] and not set(query['types']).intersection(event['types']):
             continue
@@ -244,19 +255,23 @@ def calculate(payload):
         if status is None:
             diagnostics.append(dict(event_id=event['event_id'], revision_id=event['revision_id'], reason_codes=sorted(reasons)))
             continue
-        item = _public_event(event, sources, context['data_kind'] == 'synthetic')
-        item.update(classification=status, reason_codes=sorted(reasons),
-                    warnings=['직선 500m는 후보 검색 기준이며 실제 통행·영업 영향을 보증하지 않습니다.']
-                             + [WARNINGS[code] for code in sorted(reasons) if code in WARNINGS],
-                    distance_m=None if raw is None else (round(raw, 1) if 495 <= raw <= 505 else int(raw + 0.5)),
-                    distance_basis=basis, time_overlap_minutes=minutes, matched_occurrence_ids=matched)
-        if any(event[key]['value'] for key in ('applicability', 'exceptions', 'route_names', 'stop_names', 'directions')):
-            item['warnings'].append('대상·예외·노선·운행 방향은 원문과 함께 직접 확인해 주세요.')
-        if context['mode'] == 'replay' and context['history_fidelity'] == 'reconstructed':
-            item['warnings'].append('현재 확보한 자료로 재구성한 과거 사례이며 당시 실시간 정확도 평가 대상이 아닙니다.')
-        if context['mode'] == 'replay' and any(sources[v]['current_check_result'] != 'verified' for v in event['source_version_ids']):
-            item['warnings'].append('현재 원문 연결·확인 상태는 당시 지식과 별도로 확인해 주세요.')
-        item['warnings'].extend(_clock_warning(event, start, end, context))
+        item = None
+        if status == query['selection']:
+            item = _public_event(event, sources, context['data_kind'] == 'synthetic')
+            item.update(classification=status, reason_codes=sorted(reasons),
+                        warnings=['직선 500m는 후보 검색 기준이며 실제 통행·영업 영향을 보증하지 않습니다.']
+                                 + [WARNINGS[code] for code in sorted(reasons) if code in WARNINGS],
+                        distance_m=None if raw is None else (round(raw, 1) if 495 <= raw <= 505 else int(raw + 0.5)),
+                        distance_basis=basis, time_overlap_minutes=minutes, matched_occurrence_ids=matched)
+            if any(event[key]['value'] for key in ('applicability', 'exceptions', 'route_names', 'stop_names', 'directions')):
+                item['warnings'].append('대상·예외·노선·운행 방향은 원문과 함께 직접 확인해 주세요.')
+            if context['mode'] == 'replay' and context['history_fidelity'] == 'reconstructed':
+                item['warnings'].append('현재 확보한 자료로 재구성한 과거 사례이며 당시 실시간 정확도 평가 대상이 아닙니다.')
+            if context['mode'] == 'replay' and any(sources[v]['current_check_result'] != 'verified' for v in event['source_version_ids']):
+                item['warnings'].append('현재 원문 연결·확인 상태는 당시 지식과 별도로 확인해 주세요.')
+            item['warnings'].extend(_clock_warning(event, start, end, context))
+            separator = int(item_budget > 2)
+            item_budget += separator + _encoded_size(item, MAX_BYTES - item_budget - separator)
         classified[event['event_id']] = dict(item=item, classification=status, intervals=intervals,
                                              first=first, raw=raw, cancel_time=_cancel_time(event, sources))
         counts[status] += 1
@@ -275,6 +290,6 @@ def calculate(payload):
     if context['mode'] == 'replay':
         query_context.update(_select(context, ('reference_instant', 'knowledge_cutoff', 'history_fidelity')))
     data = dict(data_kind=context['data_kind'], query_context=query_context, counts=dict(counts),
-                items=[info['item'] for info in selected], overlap_groups=_overlap_groups(payload['snapshot_id'], query, classified),
+                items=[info['item'] for info in selected], overlap_groups=_overlap_groups(payload['snapshot_id'], query, classified, MAX_BYTES - item_budget),
                 rules_version=context['rules_version'])
     return dict(data=data, diagnostics=sorted(diagnostics, key=lambda row: row['event_id']))
