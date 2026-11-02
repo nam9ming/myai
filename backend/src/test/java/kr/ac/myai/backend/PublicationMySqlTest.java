@@ -483,6 +483,26 @@ class PublicationMySqlTest {
     }
 
     @Test
+    void historyUsesPublicationOrderWhenAuditTimeDiffersFromSnapshotCreation() throws Exception {
+        var input = fresh(); importBatch(input);
+        var approved = publication.execute(decision(input, "approve", 1), root, "synthetic-approver");
+        var request = publishInput(input, approved.revisionId(), null);
+        var first = publication.execute(command(request), root, "synthetic-publisher");
+        var draft = (ObjectNode) input.path("events").get(0).path("revision");
+        draft.put("revision_id", UUID.randomUUID().toString()).put("revision_no", 3).put("title", "합성 변경 제목");
+        ((ObjectNode) input.path("events").get(0)).put("expected_revision_no", 2);
+        importBatch(input);
+        var changed = publication.execute(decision(input, "approve", 3), root, "synthetic-approver");
+        request.put("expected_head_version", 0).putArray("revision_ids").add(changed.revisionId());
+        var second = publication.execute(command(request), root, "synthetic-publisher");
+        jdbc.update("UPDATE publication_audits SET happened_at = TIMESTAMPADD(SECOND, 1, happened_at) WHERE after_snapshot_id = ?", second.snapshotId());
+        String url = "/api/v1/events/" + input.path("events").get(0).path("event_id").asText() + "?snapshot_id=";
+        assertThat(body(url + second.snapshotId()).path("data").path("event").path("history")).hasSize(1);
+        publication.execute(rollback(first.snapshotId(), 1), null, "synthetic-publisher");
+        assertThat(body(url + first.snapshotId()).path("data").path("event").path("history")).isEmpty();
+    }
+
+    @Test
     void concurrentHeadChangesNeverMixSnapshotCountsAndPointLabels() throws Exception {
         var input = fresh(); importBatch(input);
         var approved = publication.execute(decision(input, "approve", 1), root, "synthetic-approver");

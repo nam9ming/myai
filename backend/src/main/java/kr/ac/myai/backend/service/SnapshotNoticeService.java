@@ -154,7 +154,7 @@ public class SnapshotNoticeService implements PublicNoticeService {
         var result = mapper.createArrayNode();
         ObjectNode previous = null;
         String eventId = selectedEvent.path("event_id").asText();
-        for (var item : repository.history(eventId, channel(selected.path("mode").asText(), selected.path("case_id").textValue()), Instant.parse(selected.path("created_at").asText()))) {
+        for (var item : repository.history(eventId, channel(selected.path("mode").asText(), selected.path("case_id").textValue()), selected.path("snapshot_id").asText())) {
             JsonNode snapshot = item.snapshotId().equals(selected.path("snapshot_id").asText()) ? selected : load(item.snapshotId(), false);
             if (!sameContext(selected, snapshot) || previous != null && previous.path("revision_id").asText().equals(item.revisionId())) continue;
             JsonNode facts = findEvent(snapshot, eventId);

@@ -4,7 +4,6 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
-import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -41,15 +40,15 @@ public class PublicSnapshotRepository {
         return jdbc.query("SELECT snapshot_id FROM publication_heads WHERE channel_key LIKE 'replay:%' ORDER BY channel_key", (row, i) -> row.getString(1));
     }
 
-    public List<Historic> history(String eventId, String channel, Instant cutoff) {
+    public List<Historic> history(String eventId, String channel, String selectedSnapshot) {
         return jdbc.query("""
-                SELECT s.snapshot_id, r.revision_id, a.happened_at, a.action
-                FROM snapshot_revisions r JOIN snapshots s ON s.snapshot_id = r.snapshot_id
-                JOIN publication_audits a ON a.after_snapshot_id = s.snapshot_id
-                WHERE r.event_id = ? AND a.channel_key = ?
-                  AND s.created_at <= ? AND a.happened_at <= ?
+                SELECT r.snapshot_id, r.revision_id, a.happened_at, a.action
+                FROM snapshot_revisions r JOIN publication_audits a ON a.after_snapshot_id = r.snapshot_id
+                WHERE r.event_id = ? AND a.channel_key = ? AND a.head_version <= (
+                    SELECT MIN(p.head_version) FROM publication_audits p
+                    WHERE p.channel_key = ? AND p.after_snapshot_id = ? AND p.action = 'publish')
                 ORDER BY a.head_version, a.audit_id
                 """, (row, i) -> new Historic(row.getString(1), row.getString(2), row.getTimestamp(3).toInstant(), row.getString(4)),
-                eventId, channel, Timestamp.from(cutoff), Timestamp.from(cutoff));
+                eventId, channel, channel, selectedSnapshot);
     }
 }

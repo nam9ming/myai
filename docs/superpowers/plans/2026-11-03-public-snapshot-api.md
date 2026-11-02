@@ -10,7 +10,7 @@
 - canonical checksum·문맥을 확인하고 허용 필드만 반환한다. 최신 작업 revision·지점·비공개 수정 전 값을 섞지 않는다.
 - 현재 채널 head만 공개한다. 교체된 공개본은 409 SNAPSHOT_RETIRED와 current_snapshot_id, 미등록·미공개본은404다. rollback하면 이전본이 다시 활성화된다.
 - I03은 계산 전 사실 응답이다. 기존 표시용 fixture는 유지하고 실제 응답에는 I02 전용 분류·거리·겹침 시간을 만들지 않는다. field_values에 값·knowledge·근거·미상 이유를 보존한다.
-- 공개 변경이력은 선택 snapshot 생성 시점까지 같은 채널의 공개·복구 전환에 등장한 revision을 순서대로 비교한다. 이전 canonical의 공개 필드·근거·출처만 사용한다.
+- 공개 변경이력은 선택 snapshot의 최초 공개 감사 순번까지 같은 채널의 공개·복구 전환에 등장한 revision을 순서대로 비교한다. 이전 canonical의 공개 필드·근거·출처만 사용한다.
 - replay는 선택 공개본의 cutoff·당시 확인 상태와 별도의 current_ 상태를 보존한다. 사례 목록은 같은 구역·자료 종류의 활성 replay만 제공한다.
 - matches는 snapshot·문맥·지점 검증 뒤 CALCULATOR_NOT_READY503. Python·프런트·관리 UI·배포는 후속 작업이다.
 
@@ -29,10 +29,12 @@
 
 ## 로컬 검증 기록
 
-Java62개를 실제 전용 MySQL8.4.13에서 실행해 전부 통과했고 생략은0개다. Node15개·계약 예제8개·lint·build·bootJar도 통과했다. 실행 JAR로 import→승인→공개→config/상세→교체409→복구와 matches503·실제 DB 중단503·health200을 확인했다.
+Java63개를 실제 전용 MySQL8.4.13에서 실행해 전부 통과했고 생략은0개다. Node15개·계약 예제8개·lint·build·bootJar도 통과했다. 실행 JAR로 import→승인→공개→config/상세→교체409→복구와 matches503·실제 DB 중단503·health200을 확인했다.
 
 독립 검토에서 공개 변경 비교 목록에 구역 소속·문서 연결 등의 누락을 발견했다. source_refs·문서 버전·구역 소속 변경의 실패를 재현하고 공개 응답 필드 전체를 비교해 해결했다. 손상된 current 포인터가 다른 모드의 활성 snapshot을 가리키는 경우도500으로 차단한다. replay 이력은 역사 문맥이 같은 공개본만 비교한다.
 
 사례 목록과 변경이력은 소수 자료를 대상으로 순차 조회한다. 자료 증가 시 목록 projection·이력 pagination이 필요하다. Python·프런트·관리 UI·실제 자료 검수·운영 배포는 후속 범위다. CI·자동 리뷰와 PR 링크는 PR 본문에 기록한다.
 
-OpenAI 리뷰 후 공개 A→공개 B→A 복구→B 재공개에서 이력이1개만 남는 문제를 회귀 시험으로 재현했다. 공개 감사 전환을 head_version 순서로 읽고 연속된 동일 revision만 생략해3개 변경을 보존한다. 마지막 반복 공개는 새 변경을 만들지 않는다. 남아 있던 공개 조회 미구현 설명도 수정했다. 수정 후 전체 Java62개·Node15개·계약8개·lint·build·bootJar를 다시 통과했다.
+OpenAI 리뷰 후 공개 A→공개 B→A 복구→B 재공개에서 이력이1개만 남는 문제를 회귀 시험으로 재현했다. 공개 감사 전환을 head_version 순서로 읽고 연속된 동일 revision만 생략해3개 변경을 보존한다. 마지막 반복 공개는 새 변경을 만들지 않는다. 남아 있던 공개 조회 미구현 설명도 수정했다. 수정 후 전체 Java63개·Node15개·계약8개·lint·build·bootJar를 다시 통과했다.
+
+최초 공개 감사의 head_version을 이력 상한으로 사용한다. 생성/감사 시각 차이를 강제로 둔 MySQL 회귀에서 변경 누락을 재현한 뒤, 시스템 시각 대신 감사 순번으로 경계를 고정했다. 이전 snapshot 복구 시 최초 공개 이후의 변경은 계속 제외한다. 전체 Java63개를 생략 없이 통과했다.
