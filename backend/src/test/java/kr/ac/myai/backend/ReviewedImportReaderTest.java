@@ -147,6 +147,23 @@ class ReviewedImportReaderTest {
     }
 
     @Test
+    void rejectsMalformedUnicodeInsideNestedObjectKeys() throws Exception {
+        var changes = ((ObjectNode) input.path("events").get(0).path("revision")).putArray("human_overrides");
+        var change = changes.addObject().put("field_path", "title").put("after", "합성 공지").put("reason", "합성 수정").put("reviewer", "synthetic-reviewer").put("time", "2026-11-02T02:00:00Z");
+        change.putObject("before").put("placeholder", "합성 공지");
+        change.putArray("evidence_ids").add("heading-quote");
+        Path file = Files.writeString(root.resolve("batch.json"), input.toString().replace("\"placeholder\":", "\"\\uD800\":"));
+        assertThatThrownBy(() -> reader.read(file, root)).isInstanceOf(ImportException.class);
+    }
+
+    @Test
+    void preservesDecimalCoordinatePrecision() throws Exception {
+        var geometry = (ObjectNode) input.path("events").get(0).path("revision").path("locations").get(0).path("geometry");
+        geometry.putArray("coordinates").add(new java.math.BigDecimal("127.27000000000000001")).add(new java.math.BigDecimal("37.01000000000000001"));
+        assertThat(reader.read(write(), root).events().getFirst().payloadJson()).contains("127.27000000000000001", "37.01000000000000001");
+    }
+
+    @Test
     void rejectsNormalizedMidnightAndOutOfDatabaseRangeTimestamps() throws Exception {
         var document = (ObjectNode) input.path("documents").get(0);
         document.put("collected_at", "2026-11-02T24:00:00Z");

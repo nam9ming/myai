@@ -29,7 +29,7 @@ public class ReviewedImportReader {
     private final ObjectMapper mapper = new ObjectMapper(JsonFactory.builder()
             .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
             .streamReadConstraints(StreamReadConstraints.builder().maxNestingDepth(100).maxStringLength(LIMIT).build())
-            .build()).enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
+            .build()).enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS, DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
 
     public ReviewedBatch read(Path file, Path sourceRoot) {
         try {
@@ -395,7 +395,10 @@ public class ReviewedImportReader {
     private void unicode(JsonNode node) {
         if (node == null) return;
         if (node.isTextual()) validUnicode(node.textValue(), "file");
-        else if (node.isContainerNode()) node.forEach(this::unicode);
+        else if (node.isContainerNode()) {
+            node.fieldNames().forEachRemaining(name -> validUnicode(name, "file"));
+            node.forEach(this::unicode);
+        }
     }
 
     private void validUnicode(String text, String path) {
