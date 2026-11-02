@@ -11,6 +11,7 @@ const SELF = join(ROOT, "scripts/lint.mjs");
 const SECRET_PATTERNS = [
   [/\b(?:ghp|gho|ghs|ghu)_[A-Za-z0-9]{30,}/, "GitHub 토큰으로 보이는 문자열"],
   [/\bsk-ant-[A-Za-z0-9_-]{30,}/, "Anthropic API 키로 보이는 문자열"],
+  [/\bsk-(?:(?:proj-|svcacct-)[A-Za-z0-9_-]{30,}|[A-Za-z0-9]{40,})/, "OpenAI API 키로 보이는 문자열"],
   [/discord(?:app)?\.com\/api\/webhooks\/[0-9]{10,}\//, "Discord webhook URL"],
 ];
 

@@ -10,7 +10,7 @@
 | --- | --- |
 | CI | PR·main 변경 시 JS 린트, 인프라 테스트, 계약 JSON 검증, HTML 패키징·산출물 보관 |
 | Preview | `ENABLE_PREVIEW=true`일 때 내부 PR의 합성 HTML 시제품을 Pages에 발행 |
-| AI Review | API 키가 있으면 PR 변경분 리뷰·코멘트, 없으면 생략 |
+| AI Review | OpenAI API로 PR 변경분 리뷰·코멘트, `OPENAI_API_KEY`가 없으면 생략 |
 | Notify / PR Notify | CI·Preview 결과와 PR 상태를 기존 디스코드 채널로 전송 |
 | Project Sync | 기존 공유 보드에 이슈·PR 등록·상태 변경 |
 | Weekly Report | 금요일 18:00 KST에 myai 활동을 기존 주간·발주처 채널로 전송 |
@@ -40,6 +40,7 @@ npm run build
 
 ```bash
 bash scripts/set-discord-webhooks.sh nam9ming/myai
+bash scripts/set-secret.sh OPENAI_API_KEY nam9ming/myai
 bash scripts/set-secret.sh ANTHROPIC_API_KEY nam9ming/myai
 bash scripts/set-secret.sh PROJECT_TOKEN nam9ming/myai
 ```
@@ -54,7 +55,13 @@ bash scripts/set-secret.sh PROJECT_TOKEN nam9ming/myai
 | `DISCORD_WEBHOOK_CLIENT` | `#갑-공유` |
 | `DISCORD_WEBHOOK` | 내부 채널별 설정이 없을 때 대체 |
 
-등록하지 않은 자동 알림 채널은 생략한다. 발주처 채널은 대체 webhook을 사용하지 않는다. `ANTHROPIC_API_KEY`가 없으면 리뷰를 생략하고 주간 리포트는 원본 활동 목록을 사용한다. 모델은 기존 인프라와 같으며 필요하면 저장소 변수 `ANTHROPIC_REVIEW_MODEL`, `ANTHROPIC_SUMMARY_MODEL`로 변경한다. API 비용은 등록한 키에 청구된다.
+등록하지 않은 자동 알림 채널은 생략한다. 발주처 채널은 대체 webhook을 사용하지 않는다.
+
+코드 리뷰는 `OPENAI_API_KEY`와 OpenAI Responses API를 사용한다. 기본 모델은 `gpt-6.1-sol`이며 저장소 변수 `OPENAI_REVIEW_MODEL`로 변경한다. SDK 의존성은 추가하지 않는다. 요청에는 기본 브랜치의 팀 규칙과 최대 60000자의 PR diff를 보내고 `store=false`를 사용한다. 부분 검토·API 오류·빈 응답·미완료 응답은 명시하며 최종 승인은 사람이 한다. 모델 응답 예산은 추론 토큰을 포함해 최대 8192토큰이며 요청 제한 시간은 120초다. API 비용은 등록한 OpenAI 키에 청구된다. [OpenAI 텍스트 생성 문서](https://developers.openai.com/api/docs/guides/text), [모델 문서](https://developers.openai.com/api/docs/models/gpt-6.1-sol).
+
+리뷰 스크립트는 비밀값 보호를 위해 기본 브랜치에서 읽는다. 이 전환 PR을 머지하기 전에는 이전 리뷰 스크립트가 실행될 수 있으며, OpenAI 리뷰 자동화는 main 반영 후 새 PR 또는 추가 커밋에서 확인한다.
+
+주간 리포트는 기존 Anthropic 구성을 유지한다. `ANTHROPIC_API_KEY`가 없으면 원본 활동 목록을 사용하며, 요약 모델은 `ANTHROPIC_SUMMARY_MODEL`로 변경한다. `OPENAI_API_KEY`만 등록해도 주간 리포트의 AI 요약이 켜지는 것은 아니다.
 
 main 반영·시크릿 등록 후 아래 명령은 실제 기존 채널에 메시지를 보낸다.
 

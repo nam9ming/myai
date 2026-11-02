@@ -15,6 +15,7 @@ permissions:
 jobs:
   review:
     name: ai-review
+    timeout-minutes: 5
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
@@ -39,20 +40,20 @@ jobs:
       - name: API 키 확인
         id: key
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+          if [ -n "${OPENAI_API_KEY:-}" ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::ANTHROPIC_API_KEY 시크릿이 없어 AI 리뷰를 건너뜀"
+            echo "::notice::OPENAI_API_KEY 시크릿이 없어 AI 리뷰를 건너뜀"
           fi
 
       - name: AI 1차 리뷰 생성
         if: steps.key.outputs.present == 'true' && hashFiles('scripts/ai-review.mjs') != ''
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_REVIEW_MODEL || 'claude-sonnet-5' }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_REVIEW_MODEL || 'gpt-6.1-sol' }}
         run: node scripts/ai-review.mjs /tmp/pr.diff > /tmp/review.md
 
       - name: PR에 리뷰 코멘트

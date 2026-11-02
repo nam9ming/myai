@@ -77,3 +77,5 @@ docs/wednesday-plan.md    # 수요일까지 작업 순서·완료 기준
 기존 합성 HTML 시제품을 패키징합니다. 앱 자체의 빌드·API·DB 연결 검증을 대신하지 않습니다.
 기존 디스코드·보드를 공유하되 시크릿은 myai에도 등록해야 합니다. 공개 프리뷰는 기본 비활성화입니다.
 설정·권한·연결 확인은 [개발 인프라 적용 안내](docs/development-infra.md)를 따릅니다.
+AI 코드 리뷰는 `OPENAI_API_KEY` 시크릿으로 OpenAI API를 사용합니다. 기본 모델은 `gpt-6.1-sol`이며
+`OPENAI_REVIEW_MODEL` 저장소 변수로 변경할 수 있습니다.

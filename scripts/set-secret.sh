@@ -10,6 +10,7 @@ if [ -z "$NAME" ]; then
   echo "사용법: bash scripts/set-secret.sh <시크릿이름> [저장소]"
   echo
   echo "  bash scripts/set-secret.sh DISCORD_WEBHOOK"
+  echo "  bash scripts/set-secret.sh OPENAI_API_KEY"
   echo "  bash scripts/set-secret.sh ANTHROPIC_API_KEY"
   exit 1
 fi
