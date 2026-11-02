@@ -56,7 +56,7 @@ jobs:
       - name: 인프라 테스트·계약 예제 검증
         run: npm test
 
-      - name: Python 계산·CLI 회귀 시험
+      - name: Python AI 계약·기록·계산·CLI 회귀 시험
         run: python -m unittest discover -s processing/tests -v
 
       - name: 백엔드 API·MySQL 마이그레이션 검증·빌드
