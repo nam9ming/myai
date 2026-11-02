@@ -3,10 +3,12 @@
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
+import errno
 import json
 import os
 from pathlib import Path
 import stat
+import shutil
 import tempfile
 
 from .metadata import parse_metadata, stamp
@@ -37,13 +39,25 @@ def _directory(path):
 def _root(root, create=True):
     path = Path(root).expanduser().absolute()
     require(not path.is_symlink(), kind='input', code='ARCHIVE_ROOT_INVALID')
-    # 저장소 안의 별칭 경로도 실제 목적지를 확인해 공개 디렉터리에 쓰지 않는다.
     resolved = path.resolve()
-    require(not resolved.is_relative_to(REPO) or resolved.is_relative_to(REPO / 'data/private'),
-            kind='input', code='ARCHIVE_ROOT_INVALID')
-    if path.is_relative_to(REPO):
-        require(path.is_relative_to(REPO / 'data/private') and path == resolved,
-                kind='input', code='ARCHIVE_ROOT_INVALID')
+
+    def ancestor(value, target):
+        if target.exists():
+            for parent in (value, *value.parents):
+                if parent.exists() and parent.samefile(target):
+                    return parent
+        return None
+
+    # macOS의 한글 정규화·대소문자 별칭도 같은 저장소 디렉터리로 판정한다.
+    repository = ancestor(resolved, REPO)
+    if ancestor(path, REPO) is not None:
+        require(path == resolved, kind='input', code='ARCHIVE_ROOT_INVALID')
+    if repository is not None:
+        private = REPO / 'data/private'
+        require(private == private.resolve(), kind='input', code='ARCHIVE_ROOT_INVALID')
+        inside = ancestor(resolved, private) is not None
+        fresh = not private.exists() and resolved.relative_to(repository).parts[:2] == ('data', 'private')
+        require(inside or fresh, kind='input', code='ARCHIVE_ROOT_INVALID')
     return _directory(resolved) if create else resolved
 
 
@@ -226,3 +240,60 @@ def verify_run(run_id, root=DEFAULT_ROOT):
     except (ExtractionError, FileNotFoundError):
         raise ExtractionError('ARCHIVE_INTEGRITY', kind='archive') from None
     return expected
+
+
+def _sealed(directory, receipt):
+    if directory.stat(follow_symlinks=False).st_mode & 0o222:
+        return False
+    for name in [*receipt['artifacts'], 'identity.json', 'receipt.json']:
+        mode = (directory / name).stat(follow_symlinks=False).st_mode
+        if not stat.S_ISREG(mode) or mode & 0o222:
+            return False
+    return True
+
+
+def freeze_run(run_id, root=DEFAULT_ROOT):
+    receipt = verify_run(run_id, root)
+    base = _root(root, create=False)
+    source = base / run_id
+
+    def result(directory):
+        return dict(protocol_version='extraction-registration-v1', snapshot_ref=directory.relative_to(base).as_posix(), receipt=receipt)
+
+    if _sealed(source, receipt):
+        return result(source)
+    content = _json(receipt)
+    registered = _directory(base / 'registered')
+    destination_root = registered / hashlib.sha256(content).hexdigest()
+    destination = destination_root / run_id
+
+    def check_destination():
+        _archive_check(verify_run(run_id, destination_root) == receipt and _sealed(destination, receipt))
+
+    if destination_root.exists():
+        check_destination()
+        return result(destination)
+    temporary = Path(tempfile.mkdtemp(prefix='.freeze-', dir=registered))
+    try:
+        staged = _directory(temporary / run_id)
+        _write(staged / 'identity.json', _read(source / 'identity.json'))
+        for name, expected in receipt['artifacts'].items():
+            _copy(source / name, staged / name, expected)
+        _write(staged / 'receipt.json', content)
+        _archive_check(verify_run(run_id, temporary) == receipt)
+        for path in staged.iterdir():
+            path.chmod(0o400)
+        staged.chmod(0o500)
+        try:
+            os.rename(temporary, destination_root)
+        except OSError as error:
+            if error.errno not in (errno.EEXIST, errno.ENOTEMPTY):
+                raise
+        check_destination()
+        return result(destination)
+    finally:
+        # 이 함수가 만든 staging만 정리하며 읽기 전용 하위 디렉터리를 먼저 해제한다.
+        if temporary.exists():
+            for directory, _, _ in os.walk(temporary):
+                Path(directory).chmod(0o700)
+            shutil.rmtree(temporary)

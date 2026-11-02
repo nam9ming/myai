@@ -12,14 +12,11 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.*;
+import java.util.concurrent.Semaphore;
 
 @Component
 @Profile("!fixture")
@@ -67,67 +64,14 @@ public class PythonCalculator {
     }
 
     private byte[] execute(Path directory, byte[] input) {
-        Process process = null;
-        ExecutorService workers = Executors.newVirtualThreadPerTaskExecutor();
-        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
         try {
-            process = new ProcessBuilder(executable, "-m", "processing.matching").directory(directory.toFile()).start();
-            Process child = process;
-            var output = CompletableFuture.supplyAsync(() -> bounded(child.getInputStream(), MAX_BYTES), workers);
-            var errors = CompletableFuture.supplyAsync(() -> bounded(child.getErrorStream(), 65536), workers);
-            var write = CompletableFuture.runAsync(() -> {
-                try (var stdin = child.getOutputStream()) { stdin.write(input); }
-                catch (IOException ex) { throw new UncheckedIOException(ex); }
-            }, workers);
-            var failed = new CompletableFuture<Void>();
-            for (var task : new CompletableFuture<?>[]{output, errors, write}) {
-                task.whenComplete((value, error) -> { if (error != null) failed.completeExceptionally(error); });
-            }
-            CompletableFuture.anyOf(process.onExit(), failed).get(remaining(deadline), TimeUnit.NANOSECONDS);
-            if (process.exitValue() != 0) throw unavailable(false);
-            write.get(remaining(deadline), TimeUnit.NANOSECONDS);
-            errors.get(remaining(deadline), TimeUnit.NANOSECONDS);
-            return output.get(remaining(deadline), TimeUnit.NANOSECONDS);
-        } catch (IOException | ExecutionException ex) {
-            throw unavailable(false);
-        } catch (TimeoutException ex) {
-            throw unavailable(true);
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            throw unavailable(true);
-        } finally {
-            boolean interrupted = Thread.interrupted();
-            try {
-                if (process != null) {
-                    process.descendants().forEach(ProcessHandle::destroyForcibly);
-                    process.destroyForcibly();
-                    try { process.waitFor(200, TimeUnit.MILLISECONDS); }
-                    catch (InterruptedException ex) { interrupted = true; }
-                    try { process.getOutputStream().close(); } catch (IOException ignored) { }
-                    try { process.getInputStream().close(); } catch (IOException ignored) { }
-                    try { process.getErrorStream().close(); } catch (IOException ignored) { }
-                }
-                workers.shutdownNow();
-                try { workers.awaitTermination(200, TimeUnit.MILLISECONDS); }
-                catch (InterruptedException ex) { interrupted = true; }
-            } finally {
-                if (interrupted) Thread.currentThread().interrupt();
-            }
+            var result = kr.ac.myai.backend.process.PythonProcess.execute(executable, directory.toString(),
+                    java.util.List.of("-m", "processing.matching"), input, timeoutMillis);
+            if (result.exitCode() != 0) throw unavailable(false);
+            return result.stdout();
+        } catch (kr.ac.myai.backend.process.PythonProcess.Failure ex) {
+            throw unavailable(ex.retryable());
         }
-    }
-
-    private static long remaining(long deadline) throws TimeoutException {
-        long remaining = deadline - System.nanoTime();
-        if (remaining <= 0) throw new TimeoutException();
-        return remaining;
-    }
-
-    private static byte[] bounded(InputStream stream, int max) {
-        try {
-            byte[] bytes = stream.readNBytes(max + 1);
-            if (bytes.length > max) throw new IOException("CALCULATION_IO_LIMIT");
-            return bytes;
-        } catch (IOException ex) { throw new UncheckedIOException(ex); }
     }
 
     static Set<String> keys(JsonNode node) {

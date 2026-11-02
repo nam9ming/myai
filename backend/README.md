@@ -17,6 +17,8 @@ Java 21 / Spring Boot **3.5.16** / Gradle Wrapper **8.14.3** / MySQL **8.4.13**.
 - `local-publication` 일회성 명령은 승인·반려 revision, 읽기 전용 공개 JSON 미리보기, 불변 snapshot 공개·복구를 처리한다. V2 `publication_audits`에 공개 포인터 변경 이력을 남기며 충돌·실패 시 이전 공개본을 보존한다.
 - `local-export`는 이미 공개한 snapshot을 고정 UTF-8/hash 그대로 파일로 내보낸다. 파일 실패는 DB 공개 성공과 분리하고 동일 파일 재실행·충돌 보존을 지원한다. [내보내기 안내](docs/review-publication.md#snapshot-json-내보내기)를 따른다.
 
+`source-import-v1`은 local-import에서 D03만 먼저 등록한다. `local-extraction`은 Python archive를 검증해 D05 성공/실패·nullable 모델·정밀 metadata/receipt 원본을 불변 등록한다. [D03/D05 연결 안내](docs/extraction-run-import.md)를 따른다. V3는 기존 행을 보존하며 검증 정보 없는 legacy를 D06 origin으로 승격하지 않는다.
+
 **미구현:** 관리 UI, 운영 배포·실자료 평가. 저장 계층에는 이미 포함된 Spring JDBC를 사용한다. JPA entity/일반 CRUD와 Java 후보 판정 엔진은 추가하지 않았다. 승인·공개·복구·계산 연결·내보내기는 합성 자료와 전용 DB로 시험하며 실제 자료의 사실성·이용권한 검토를 완료한 상태는 아니다.
 
 ## DB 없이 합성 API 실행
@@ -63,7 +65,7 @@ read -rs DB_PASSWORD; export DB_PASSWORD; echo
 
 기본 `public` 프로필은 DB 연결·Flyway 적용 후 기동한다. 공개 전 config는 `503 PUBLIC_DATA_NOT_READY`, 공개 후 config·상세는 고정 snapshot을 조회한다. matches는 snapshot·지점을 검증한 뒤 아래 설정의 Python을 호출한다. fixture로 자동 전환하거나 JSON seed를 넣지 않는다.
 
-스키마 생성은 Flyway만 담당하고 JPA는 `ddl-auto=validate`를 사용한다. canonical JSON은 LONGTEXT 원문과 별도 checksum으로 보존한다. ID/hash는 ASCII 대소문자를 구분한다. JDBC session·Hibernate는 UTC를 사용하고 격리 수준은 REPEATABLE READ로 설정한다. 적용된 V1·V2를 수정하지 말고 변경 사항은 후속 migration으로 추가한다. 개발 DB는 `docker compose stop`으로 종료하며 볼륨을 삭제하지 않는다.
+스키마 생성은 Flyway만 담당하고 JPA는 `ddl-auto=validate`를 사용한다. canonical JSON은 LONGTEXT 원문과 별도 checksum으로 보존한다. ID/hash는 ASCII 대소문자를 구분한다. JDBC session·Hibernate는 UTC를 사용하고 격리 수준은 REPEATABLE READ로 설정한다. 적용된 V1·V2·V3를 수정하지 말고 변경 사항은 후속 migration으로 추가한다. 개발 DB는 `docker compose stop`으로 종료하며 볼륨을 삭제하지 않는다.
 
 ## Python 계산 연결
 
@@ -115,7 +117,7 @@ cd backend
 java -jar build/libs/myai-backend-0.1.0.jar --spring.profiles.active=fixture
 ```
 
-일반 `test`도 실제 자식 프로세스 시험에 **Python3.13**이 필요하다. 프로세스와 공개 조회의 검증·오류를 시험하며 DB 없는 fixture API·import·공개 명령 검사도 유지한다. `MySqlFoundationTest`·`ReviewedImportMySqlTest`·`PublicationMySqlTest`·`CalculationMySqlTest`는 전용 MySQL 테스트 DB와 `MYAI_MYSQL_TESTS=true`일 때 실행한다. 운영·공유 DB에서는 실행하지 않는다. CI는 매 실행 분리된 `myai_test` DB를 준비해 저장·공개·복구·실제 조회와 Python 계산을 검증한다.
+일반 `test`도 실제 자식 프로세스·archive 시험에 **Python3.13**이 필요하다. 프로세스와 공개 조회의 검증·오류를 시험하며 DB 없는 fixture API·import·공개 명령 검사도 유지한다. `MySqlFoundationTest`·`ReviewedImportMySqlTest`·`PublicationMySqlTest`·`CalculationMySqlTest`·`ExtractionRunMySqlTest`는 전용 MySQL 테스트 DB와 `MYAI_MYSQL_TESTS=true`일 때 실행한다. 운영·공유 DB에서는 실행하지 않는다. CI는 매 실행 분리된 `myai_test` DB를 준비해 저장·공개·복구·실제 조회와 Python 계산을 검증한다.
 
 `MYAI_MYSQL_TESTS=true`일 때는 외부 DB 상태를 캐시하지 않고 매번 시험을 실행한다. 검토 입력·사실 응답 예제와 실제 호출하는 Python 소스·계산 입력 예제도 Gradle 시험 입력에 포함한다.
 

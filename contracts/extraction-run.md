@@ -35,6 +35,8 @@ python3.13 -m processing.extraction verify 71fb66f0-e610-4f9c-8f26-4bb77655ee8c
 
 ## 파일·재실행·인계
 
+Java 등록은 `python3.13 -m processing.extraction freeze RUN_ID --root ROOT`로 별도 읽기 전용 실행 보관본을 만든다. `extraction-registration-v1` 응답은 `protocol_version/snapshot_ref/receipt`의3키이며 snapshot_ref는 `registered/<receipt_sha256>/<run_id>` 또는 이미 읽기 전용인 현재 run_id의 상대 경로다. 전체 원본을 hash 대조 복사·검증하고 파일0400/실행 디렉터리0500으로 설정한 뒤 원자적으로 내놓는다. 같은 보관본은 재사용하며 원래 archive를 덮어쓰지 않는다. 실패/과다 출력도 그대로 보존하고 종료0/4는 receipt.status에 대응한다. 추가 저장 공간과 POSIX 권한 지원이 필요하다. 관리자 권한 변경·이동·삭제를 방어하는 WORM 보장은 아니다.
+
 `--root` 기본값은 Git 제외 `data/private/extraction-runs`입니다. 저장소 안에서는 `data/private/` 아래만 허용하며, 저장소 밖에서는 운영자가 지정한 비공개 디렉터리를 사용합니다. 새 디렉터리는0700, 파일은0600입니다. 기존 상위 디렉터리 권한·백업·공유 여부는 운영자가 관리합니다. 원본은 닫힌 일반 파일이어야 하며 symlink·FIFO는 거부합니다.
 
 실행 폴더 `<run_id>/`에는 `identity.json`, `input.json`, `metadata.json`, `attempt-N.prompt`, `attempt-N.output`, `receipt.json`이 있습니다. identity가 원본 전체의 크기·SHA-256과 실행을 고정합니다. 복사 중 원본 변경은 거부하고, 완성 임시 파일의 배타 hard link로 원본 덮어쓰기를 막습니다. 같은 ID·같은 원본은 재사용하며, 다른 원본은 충돌입니다. 중단 후 동일 원본으로 다시 실행하면 누락 파일을 채웁니다. 완료 receipt는 마지막에 기록합니다. `verify`는 모든 원본 hash·메타데이터·검증 결과를 다시 확인하며, 미완료·손상을 성공으로 바꾸지 않습니다. hash는 우발 손상 검증이며 관리자가 원본과 기록 전체를 바꾸는 공격의 전자서명은 아닙니다.
@@ -50,4 +52,4 @@ stdout은 ID·상태·hash·고정 상대 파일명·안전한 오류 코드/필
 | 5 | 파일 I/O 실패 |
 | 1 | 내부 오류 |
 
-Java `extraction_runs` 등록·전체 D05 metadata 마이그레이션·D06 사람 수정/검토 연결은 후속 작업입니다. 현재 DB의 provider/model 필수 제약에 null을 임의 문자열로 대입하지 않습니다. 전달 전에 `verify`하고 마지막 원출력을 조회하며, AI 원본과 사람 수정값을 분리합니다. 실제 자료 처리·정답표 평가·공개 승인·운영 배포는 이 명령의 완료 범위에 포함하지 않습니다.
+Java `local-extraction`은 [D03/D05 연결 안내](../backend/docs/extraction-run-import.md)에 따라 검증된 archive의 성공/실패·nullable metadata 원본을 등록한다. 같은 전체 D03 입력·전처리 버전이 필요하며 원본 경로를 유지한다. 검증 정보가 없는 legacy와 failed는 D06 AI origin으로 사용할 수 없다. import·승인·미리보기·공개 때 archive 원본과 DB 등록 기록을 다시 대조하며 Python 검증 중 DB 트랜잭션을 유지하지 않는다. D06 자동 초안 변환·실제 모델/API 실행·실자료 평가·공개 승인·운영 배포는 후속 작업이다.

@@ -37,9 +37,11 @@ tasks.named('processResources') {
 }
 
 tasks.named('test') {
+    dependsOn tasks.named('bootJar')
     useJUnitPlatform()
     inputs.files(fileTree('examples'), file('../contracts/examples/event-facts-response.json'))
-    inputs.files(fileTree('../processing') { include '__init__.py', 'matching/**/*.py', 'examples/*.json' })
+    inputs.files(fileTree('../processing') { include '__init__.py', 'matching/**/*.py', 'extraction/**/*.py', 'examples/*.json' })
+    inputs.files(file('../contracts/examples/ai-input.json'), file('../contracts/examples/ai-extraction.json'))
     inputs.property('calculatorPython', System.getenv('MYAI_PYTHON_EXECUTABLE') ?: 'python3.13')
     inputs.property('mysqlTestsEnabled', System.getenv('MYAI_MYSQL_TESTS') == 'true')
     outputs.upToDateWhen { System.getenv('MYAI_MYSQL_TESTS') != 'true' }
