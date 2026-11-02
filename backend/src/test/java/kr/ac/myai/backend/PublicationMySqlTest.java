@@ -8,6 +8,8 @@ import kr.ac.myai.backend.publication.PublicationCommandReader;
 import kr.ac.myai.backend.publication.PublicationException;
 import kr.ac.myai.backend.publication.LocalPublicationCommand;
 import kr.ac.myai.backend.importing.LocalImportCommand;
+import kr.ac.myai.backend.publication.LocalSnapshotExportCommand;
+import kr.ac.myai.backend.service.SnapshotExportService;
 import kr.ac.myai.backend.service.PublicationService;
 import kr.ac.myai.backend.service.ReviewedImportService;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +17,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -29,6 +33,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
@@ -54,6 +61,7 @@ class PublicationMySqlTest {
     @Autowired ReviewedImportReader imports;
     @Autowired JdbcTemplate jdbc;
     @Autowired MockMvc mvc;
+    @Autowired SnapshotExportService exporter;
     @TempDir Path root;
     final ObjectMapper mapper = new ObjectMapper();
 
@@ -281,6 +289,87 @@ class PublicationMySqlTest {
             assertThat(context.getBean(LocalPublicationCommand.class).getExitCode()).isEqualTo(2);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM events WHERE event_id = ?", Long.class, unimported.path("events").get(0).path("event_id").asText())).isZero();
         }
+    }
+
+    @Test
+    void exportPreservesCommittedBytesAndAllDatabaseRowsAcrossFailureAndRetry() throws Exception {
+        var input = fresh(); importBatch(input);
+        var approved = publication.execute(decision(input, "approve", 1), root, "PRIVATE_EXPORT_REVIEWER");
+        var request = publishInput(input, approved.revisionId(), null);
+        var published = publication.execute(command(request), root, "PRIVATE_EXPORT_PUBLISHER");
+        byte[] original = canonical(published.snapshotId()).getBytes(StandardCharsets.UTF_8);
+        var working = (ObjectNode) input.path("events").get(0); working.put("expected_revision_no", 2);
+        ((ObjectNode) working.path("revision")).put("revision_id", UUID.randomUUID().toString()).put("revision_no", 3).put("title", "PRIVATE_EXPORT_DRAFT");
+        importBatch(input); Files.delete(root.resolve("synthetic-source.txt"));
+        var before = exportDatabaseState(); Path directory = root.resolve("exports");
+        assertThatThrownBy(() -> exporter.export(UUID.fromString(published.snapshotId()), directory)).isInstanceOfSatisfying(PublicationException.class,
+                error -> assertThat(error.code()).isEqualTo("EXPORT_IO_ERROR"));
+        assertThat(exportDatabaseState()).isEqualTo(before);
+        Files.createDirectory(directory); var result = exporter.export(UUID.fromString(published.snapshotId()), directory);
+        byte[] bytes = Files.readAllBytes(directory.resolve(result.fileName()));
+        assertThat(bytes).isEqualTo(original); assertThat(ReviewedImportReader.sha256(bytes)).isEqualTo(published.checksum());
+        assertThat(new String(bytes, StandardCharsets.UTF_8)).doesNotContain("PRIVATE_EXPORT_", "raw_asset_path", "reviewer_id", "checked_by", "human_overrides", "raw_output");
+        assertThat(exporter.export(UUID.fromString(published.snapshotId()), directory).alreadyExported()).isTrue();
+        assertThat(exportDatabaseState()).isEqualTo(before);
+        try (var files = Files.list(directory)) { assertThat(files.toList()).containsExactly(directory.resolve(result.fileName())); }
+    }
+
+    @Test
+    void exportSupportsRetiredRollbackAndReplayWithoutMovingAnyHead() throws Exception {
+        var input = fresh(); importBatch(input); var approved = publication.execute(decision(input, "approve", 1), root, "synthetic-reviewer");
+        var request = publishInput(input, approved.revisionId(), null); var first = publication.execute(command(request), root, "synthetic-publisher");
+        var replacement = request.deepCopy(); replacement.put("expected_head_version", 0).putArray("revision_ids"); publication.execute(command(replacement), root, "synthetic-publisher");
+        var replay = request.deepCopy(); replay.put("mode", "replay").put("case_id", UUID.randomUUID().toString()).put("anchor_date", "2026-11-02")
+                .put("reference_instant", "2026-11-02T12:00:00Z").put("knowledge_cutoff", "2026-11-02T11:00:00Z").put("history_fidelity", "verified_snapshot");
+        var historical = publication.execute(command(replay), root, "synthetic-publisher");
+        var before = exportDatabaseState(); Path directory = Files.createDirectory(root.resolve("exports"));
+        var retired = exporter.export(UUID.fromString(first.snapshotId()), directory); var result = exporter.export(UUID.fromString(historical.snapshotId()), directory);
+        assertThat(Files.readAllBytes(directory.resolve(retired.fileName()))).isEqualTo(canonical(first.snapshotId()).getBytes(StandardCharsets.UTF_8));
+        assertThat(Files.readAllBytes(directory.resolve(result.fileName()))).isEqualTo(canonical(historical.snapshotId()).getBytes(StandardCharsets.UTF_8));
+        assertThat(exportDatabaseState()).isEqualTo(before);
+        publication.execute(rollback(first.snapshotId(), 1), null, "synthetic-publisher"); before = exportDatabaseState();
+        assertThat(exporter.export(UUID.fromString(first.snapshotId()), directory).alreadyExported()).isTrue();
+        assertThat(exportDatabaseState()).isEqualTo(before);
+    }
+
+    @Test
+    void localExportUsesExistingSchemaWithoutRunningMigrations() throws Exception {
+        var input = fresh(); importBatch(input); var approved = publication.execute(decision(input, "approve", 1), root, "synthetic-reviewer");
+        var published = publication.execute(command(publishInput(input, approved.revisionId(), null)), root, "synthetic-publisher");
+        var before = exportDatabaseState(); Path directory = Files.createDirectory(root.resolve("exports"));
+        Path migrations = Files.createDirectory(root.resolve("pending-migrations"));
+        Files.writeString(migrations.resolve("V999999__export_must_not_run.sql"), "SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'EXPORT_MIGRATION_WAS_EXECUTED';");
+        try (var context = new SpringApplicationBuilder(MyaiBackendApplication.class).profiles("local-export").run(
+                "--myai.export.snapshot-id=" + published.snapshotId(), "--myai.export.directory=" + directory,
+                "--spring.flyway.locations=classpath:db/migration,filesystem:" + migrations)) {
+            assertThat(context).isNotInstanceOf(WebApplicationContext.class);
+            assertThat(context.getBean(LocalSnapshotExportCommand.class).getExitCode()).isZero();
+        }
+        assertThat(Files.readAllBytes(directory.resolve(published.snapshotId() + "-" + published.checksum() + ".json")))
+                .isEqualTo(canonical(published.snapshotId()).getBytes(StandardCharsets.UTF_8));
+        assertThat(exportDatabaseState()).isEqualTo(before);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE version = '999999'", Long.class)).isZero();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"local-import", "local-publication"})
+    void mixedExportProfilesPerformNoWrites(String profile) throws Exception {
+        var input = fresh();
+        if (profile.equals("local-publication")) importBatch(input);
+        var decision = fixture("approve"); decision.put("event_id", input.path("events").get(0).path("event_id").asText());
+        Path importFile = Files.writeString(root.resolve("import.json"), input.toString());
+        Path publicationFile = Files.writeString(root.resolve("decision.json"), decision.toString());
+        var before = exportDatabaseState(); Path directory = Files.createDirectory(root.resolve("exports"));
+        try (var context = new SpringApplicationBuilder(MyaiBackendApplication.class).profiles("local-export", profile).run(
+                "--myai.export.snapshot-id=" + UUID.randomUUID(), "--myai.export.directory=" + directory,
+                "--myai.import.file=" + importFile, "--myai.import.source-root=" + root, "--myai.import.actor=synthetic-importer",
+                "--myai.publication.file=" + publicationFile, "--myai.publication.source-root=" + root, "--myai.publication.actor=synthetic-reviewer")) {
+            assertThat(context).isNotInstanceOf(WebApplicationContext.class);
+            assertThat(context.getBean(LocalSnapshotExportCommand.class).getExitCode()).isEqualTo(2);
+            int writerExit = profile.equals("local-import") ? context.getBean(LocalImportCommand.class).getExitCode() : context.getBean(LocalPublicationCommand.class).getExitCode();
+            assertThat(writerExit).isEqualTo(2);
+        }
+        assertThat(exportDatabaseState()).isEqualTo(before); try (var files = Files.list(directory)) { assertThat(files.toList()).isEmpty(); }
     }
 
     @Test
@@ -683,6 +772,18 @@ class PublicationMySqlTest {
     }
 
     private ObjectNode fixture(String name) throws Exception { return (ObjectNode) mapper.readTree(Path.of("examples/" + name + ".json").toFile()); }
+    private Map<String, List<Map<String, String>>> exportDatabaseState() {
+        var state = new LinkedHashMap<String, List<Map<String, String>>>();
+        for (String table : List.of("test_points", "place_dictionary", "documents", "document_versions", "source_checks", "extraction_runs", "events", "event_revisions",
+                "review_audits", "snapshots", "snapshot_revisions", "publication_heads", "import_batches", "publication_audits")) {
+            var rows = new ArrayList<Map<String, String>>();
+            for (var row : jdbc.queryForList("SELECT * FROM " + table + " ORDER BY 1")) {
+                var values = new LinkedHashMap<String, String>(); row.forEach((k, v) -> values.put(k, v == null ? null : v.toString())); rows.add(values);
+            }
+            state.put(table, rows);
+        }
+        return state;
+    }
     private long count(String table) { return jdbc.queryForObject("SELECT COUNT(*) FROM " + table, Long.class); }
     private String canonical(String id) { return jdbc.queryForObject("SELECT canonical_json FROM snapshots WHERE snapshot_id = ?", String.class, id); }
     private void conflict(org.assertj.core.api.ThrowableAssert.ThrowingCallable action) {
