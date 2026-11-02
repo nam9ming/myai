@@ -8,6 +8,7 @@
 2. 사람이 원문·근거·수정값을 대조한 뒤 `approve` 또는 `reject`를 실행한다. 새 revision·검토자·시각·이유·감사 기록을 저장하며 이전 revision은 보존한다.
 3. `preview`로 공개 예정 JSON을 확인한다. DB에는 저장하지 않는다. 확인 후 `publish`로 승인된 현행 revision과 검토 지점 5개를 불변 snapshot으로 묶고 공개 포인터를 전환한다.
 4. 문제가 생기면 `rollback`으로 같은 채널에서 공개했던 snapshot을 다시 선택한다. 복구 이력도 남긴다.
+5. 파일 전달이 필요하면 별도 `local-export`로 이미 공개한 snapshot을 내보낸다. DB 공개 성공과 파일 저장 성공은 별개다.
 
 승인은 `approved/public`, 반려는 `rejected/hidden`인 새 작업 revision을 만든다. 여기서 public은 공개 후보 자격이다. **승인·반려만으로 기존 공개본을 바꾸지 않는다.** 이미 공개한 사건을 반려한 경우에도 새 snapshot 공개 또는 포인터 복구를 별도로 수행해야 한다.
 
@@ -30,7 +31,7 @@ java -jar backend/build/libs/myai-backend-0.1.0.jar \
 
 명령은 HTTP 서버 없이 한 번 실행하고 종료한다. 결과 JSON은 stdout, 로그는 stderr에 출력한다. `result`의 `action`, `event_id`, `revision_id`, `snapshot_id`, `checksum`, `head_version` 중 해당 작업에 필요한 값만 채워진다. preview는 `result.preview`에 공개 예정 내용을 반환한다. 이때 ID·생성 시각·checksum은 미리보기용이며 실제 공개 결과와 구분한다. 성공은 종료 코드 `0`, 입력 오류·미등록 ID는 `2`, 버전 충돌은 `3`, DB 접근 실패는 `4`다. 예상하지 못한 오류 또는 Spring/DB 초기 기동 실패는 `1`이며 기동 실패에는 결과 JSON이 없을 수 있다. 오류 응답에는 원문·SQL·비밀값·절대 경로를 담지 않는다.
 
-`local-import`와 `local-publication`은 함께 활성화하지 않는다. 혼합하면 작업을 거부한다. 별도 가입·복잡한 역할 체계는 만들지 않았으며 로컬 실행 권한을 가진 단일 관리자가 운영하는 기존 S10 가정을 따른다. actor는 감사용 팀원 식별자이고 인증 토큰이 아니다.
+`local-import`, `local-publication`, `local-export`는 하나씩 활성화한다. 혼합하면 작업을 거부한다. 별도 가입·복잡한 역할 체계는 만들지 않았으며 로컬 실행 권한을 가진 단일 관리자가 운영하는 기존 S10 가정을 따른다. actor는 감사용 팀원 식별자이고 인증 토큰이 아니다.
 
 ## 명령 파일 규격
 
@@ -70,6 +71,40 @@ canonical JSON은 UTF-8 원문과 별도 SHA-256으로 저장한다. checksum은
 
 rollback은 같은 채널에서 실제 공개했던 snapshot인지, canonical checksum과 저장 문맥이 맞는지 확인한다. 원문 파일이나 계산기를 호출하지 않고 공개 포인터와 감사 기록만 바꾼다. DB의 최신 지점 행을 되돌리는 작업이 아니며 복구 시 기준은 snapshot 안에 고정된 지점·사건이다. DB 스키마 복구와도 구분한다.
 
-공개 API의 config·상세는 DB snapshot을 조회한다. matches는 문맥·지점 검증 후 [설정된 Python](../README.md#python-계산-연결)을 호출한다. 관리 UI·JSON 파일 export·운영 서버 배포·실자료 검수는 미완료다. DB 공개 포인터 전환을 운영 서비스 배포 완료로 표현하지 않는다.
+공개 API의 config·상세는 DB snapshot을 조회한다. matches는 문맥·지점 검증 후 [설정된 Python](../README.md#python-계산-연결)을 호출한다. 관리 UI·운영 서버 배포·실자료 검수는 미완료다. DB 공개 포인터 전환이나 JSON 파일 저장을 운영 서비스 배포 완료로 표현하지 않는다.
 
 공개 포인터가 바뀌면 이전 공개본의 직접 조회는409다. rollback으로 다시 선택한 공개본은 즉시 조회 가능하며, 지점도 해당 snapshot의 고정 값을 사용한다.
+
+## Snapshot JSON 내보내기
+
+DB 설정과 빌드 후 저장소 루트에서 실행한다. `SNAPSHOT_ID`에는 **publish 성공 결과의 실제 ID**를 넣는다. actor·원문 디렉터리·Python은 요구하지 않는다.
+
+```bash
+mkdir -p data/public/snapshots
+SNAPSHOT_ID=10000000-0000-4000-8000-000000000007 # 예시이며 실제 공개 ID로 교체
+java -jar backend/build/libs/myai-backend-0.1.0.jar \
+  --spring.profiles.active=local-export \
+  --myai.export.snapshot-id="$SNAPSHOT_ID" \
+  --myai.export.directory="$PWD/data/public/snapshots"
+```
+
+정상 실행은 HTTP 서버 없이 종료하고 stdout에 JSON 한 건을 반환한다. `result`의 `snapshot_id`, `checksum`, `file_name`, `already_exported`를 확인한다. 파일명은 `<snapshot_id>-<checksum>.json`이며 DB의 canonical UTF-8 바이트를 재직렬화·줄바꿈 추가 없이 보존한다. `shasum -a 256 <파일>` 값은 결과 checksum·파일명의 hash와 같아야 한다. 파일 내용은 내부 `snapshot-v1` 형식이며 공개 API 응답이나 계산 결과 fixture를 대신하지 않는다.
+
+이미 공개했던 이전 snapshot·replay도 명시 ID로 내보낼 수 있다. preview·미공개 ID는 거부하며 export가 현재 head나 공개 이력을 바꾸지 않는다. 짧은 읽기 전용 RR에서 ID·checksum·저장 문맥·공개 필드 범위를 확인하고 연결을 반환한 뒤 파일을 쓴다. 이후 head 교체나 원문 파일 삭제로 선택한 고정 내용이 바뀌지 않는다.
+
+`local-export`에서는 Flyway를 실행하지 않는다. DB 스키마는 기존 import·공개·서버 준비 절차에서 먼저 적용해야 한다. 내보내기 명령이 기동 중 대기 migration을 적용하지 않으며, DB 접속 계정도 조회 권한으로 분리할 수 있다.
+
+파일을 완성한 뒤 같은 디렉터리의 hard link로 최종 이름을 배타 생성한다. Linux/macOS의 hard link 지원 파일시스템과 쓰기 가능한 기존 디렉터리가 필요하다. 같은 내용의 regular file은 `already_exported=true`로 재사용한다. 다른 내용·디렉터리·symlink는 보존하고 충돌로 종료한다. 임시 파일의 기본 권한을 상속하므로 별도 서비스 계정에 전달할 때 필요한 읽기 권한은 배포 절차에서 설정한다.
+
+| 종료 코드 | 오류·처리 |
+|---|---|
+| 0 | 파일 생성 또는 동일 파일 재사용 |
+| 2 | EXPORT_VALIDATION_ERROR / EXPORT_NOT_FOUND / EXPORT_INVALID_SNAPSHOT. 설정·공개 ID·저장 무결성 확인 |
+| 3 | EXPORT_FILE_CONFLICT. 기존 파일을 덮어쓰지 않음. 다른 디렉터리를 선택하거나 기존 항목을 별도 보존한 뒤 재시도 |
+| 4 | EXPORT_DATABASE_UNAVAILABLE. 일시 DB 접속·자원 장애, retryable=true |
+| 5 | EXPORT_IO_ERROR. 권한·디렉터리·파일시스템 확인 후 같은 ID로 재시도, retryable=true |
+| 1 | 예상치 못한 실패. 초기 DB 기동 실패는 결과 JSON이 없을 수 있음 |
+
+오류 JSON·실행 결과를 운영 기록으로 보관한다. **파일 저장 실패는 이전 DB 공개 성공을 취소하지 않는다.** 실패 시 파일 유무를 추정하지 말고 같은 ID로 재실행한다. 이미 같은 파일이 완성되었다면 재사용한다. 공개 조회의 기준은 계속 DB snapshot이다. 파일 복사·웹 서버 연결·운영 공개 전환은 별도 배포 작업이다.
+
+`local-import`, `local-publication`, `local-export`는 하나씩 실행한다. 혼합 프로필과 웹 서버 강제 실행은 명령 검증에서 거부하며 DB·출력 파일을 변경하지 않는다. 잘못된 혼합 실행에서는 각 명령의 오류 JSON이 나올 수 있다.
