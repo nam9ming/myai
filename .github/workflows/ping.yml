@@ -1,0 +1,88 @@
+name: Ping
+
+# 채널별 웹훅 연결을 확인하고, 필요할 때 임의 메시지를 보낸다.
+# 웹 UI 의 Run workflow 버튼 또는 gh workflow run 으로 실행한다.
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 보낼 채널
+        required: true
+        default: ci
+        type: choice
+        options: [pr, ci, deploy, error, weekly, client, all]
+      message:
+        description: 보낼 메시지
+        required: false
+        default: 파이프라인 연결 확인
+      title:
+        description: 제목
+        required: false
+        default: Ping
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    name: ping
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: 선택한 채널로 전송
+        env:
+          CH_PR: ${{ secrets.DISCORD_WEBHOOK_PR }}
+          CH_CI: ${{ secrets.DISCORD_WEBHOOK_CI }}
+          CH_DEPLOY: ${{ secrets.DISCORD_WEBHOOK_DEPLOY }}
+          CH_ERROR: ${{ secrets.DISCORD_WEBHOOK_ERROR }}
+          CH_WEEKLY: ${{ secrets.DISCORD_WEBHOOK_WEEKLY }}
+          CH_CLIENT: ${{ secrets.DISCORD_WEBHOOK_CLIENT }}
+          FALLBACK: ${{ secrets.DISCORD_WEBHOOK }}
+          TARGET: ${{ inputs.channel }}
+          TITLE: ${{ inputs.title }}
+          MESSAGE: ${{ inputs.message }}
+          REPO: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          export FIELDS="저장소=${REPO}
+          실행자=${ACTOR}"
+
+          send() {
+            local name="$1" url="$2"
+            if [ -z "$url" ]; then
+              echo "  ${name}: 웹훅 없음 — 건너뜀"
+              return 0
+            fi
+            WEBHOOK="$url" bash scripts/discord-send.sh "${TITLE} · #${name}" "$MESSAGE" 13140997
+            SENT=$((SENT + 1))
+          }
+
+          SENT=0
+          case "$TARGET" in
+            pr)     send pr     "${CH_PR:-${FALLBACK:-}}" ;;
+            ci)     send ci     "${CH_CI:-${FALLBACK:-}}" ;;
+            deploy) send deploy "${CH_DEPLOY:-${FALLBACK:-}}" ;;
+            error)  send error  "${CH_ERROR:-${FALLBACK:-}}" ;;
+            weekly) send weekly "${CH_WEEKLY:-${FALLBACK:-}}" ;;
+            client) send client "${CH_CLIENT:-}" ;;
+            all)
+              send pr     "${CH_PR:-}"
+              send ci     "${CH_CI:-}"
+              send deploy "${CH_DEPLOY:-}"
+              send error  "${CH_ERROR:-}"
+              send weekly "${CH_WEEKLY:-}"
+              send client "${CH_CLIENT:-}"
+              ;;
+          esac
+
+          if [ "$SENT" -eq 0 ]; then
+            echo "::error::전송된 채널이 없다. 웹훅 시크릿을 등록해야 한다."
+            echo "등록: bash scripts/set-discord-webhooks.sh"
+            exit 1
+          fi
+          echo "전송한 채널 수: ${SENT}"

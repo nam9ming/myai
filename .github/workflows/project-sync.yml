@@ -1,0 +1,65 @@
+name: Project Sync
+
+# 이슈와 PR 을 보드에 자동으로 올리고 상태를 옮긴다.
+# 사람이 카드를 끌어다 놓지 않아도 보드가 실제 상태를 따라간다.
+on:
+  issues:
+    types: [opened, reopened, closed]
+  pull_request:
+    types: [opened, reopened, closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: project-sync-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+env:
+  # 보드 노드 ID. 비밀이 아니라 식별자다.
+  # ai-lounge-infra와 같은 보드: https://github.com/users/YUNGI-KIM/projects/1
+  PROJECT_ID: PVT_kwHOBcP-6s4BiHww
+
+jobs:
+  sync:
+    name: project-sync
+    if: github.event_name == 'issues' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: 보드에 등록하고 상태 반영
+        if: hashFiles('scripts/project-sync.sh') != ''
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          CONTENT_ID: ${{ github.event.issue.node_id || github.event.pull_request.node_id }}
+          IS_PR: ${{ github.event_name == 'pull_request' }}
+          ACTION: ${{ github.event.action }}
+          MERGED: ${{ github.event.pull_request.merged }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::notice::PROJECT_TOKEN 시크릿이 없어 보드 동기화를 건너뜀"
+            exit 0
+          fi
+
+          # 어떤 상태로 옮길지 정한다. 빈 값이면 등록만 하고 상태는 그대로 둔다.
+          if [ "$IS_PR" = "true" ]; then
+            case "$ACTION" in
+              opened|reopened) TARGET="리뷰중" ;;
+              closed) [ "$MERGED" = "true" ] && TARGET="검수대기" || TARGET="" ;;
+              *) TARGET="" ;;
+            esac
+          else
+            case "$ACTION" in
+              opened|reopened) TARGET="대기" ;;
+              closed) TARGET="완료" ;;
+              *) TARGET="" ;;
+            esac
+          fi
+
+          bash scripts/project-sync.sh "$PROJECT_ID" "$CONTENT_ID" "$TARGET"

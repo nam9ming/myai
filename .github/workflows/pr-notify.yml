@@ -1,0 +1,49 @@
+name: PR Notify
+
+on:
+  pull_request:
+    types: [opened, reopened, closed, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    name: pr-notify
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: PR 상태를 #pr 로 전송
+        if: hashFiles('scripts/discord-send.sh') != ''
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_PR }}
+          FALLBACK: ${{ secrets.DISCORD_WEBHOOK }}
+          ACTION: ${{ github.event.action }}
+          MERGED: ${{ github.event.pull_request.merged }}
+          NUM: ${{ github.event.number }}
+          TITLE: ${{ github.event.pull_request.title }}
+          USER: ${{ github.event.pull_request.user.login }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          export WEBHOOK="${WEBHOOK:-${FALLBACK:-}}"
+
+          if [ "$ACTION" = "closed" ]; then
+            if [ "$MERGED" = "true" ]; then
+              MARK="머지됨"; COLOR=3046231
+            else
+              MARK="닫힘"; COLOR=6841958
+            fi
+          else
+            MARK="열림"; COLOR=13140997
+          fi
+
+          export FIELDS="저장소=${REPO}
+          작성자=${USER}"
+          bash scripts/discord-send.sh "PR #${NUM} · ${MARK}" "$TITLE" "$COLOR" "$PR_URL"

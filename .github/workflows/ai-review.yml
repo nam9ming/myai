@@ -1,0 +1,76 @@
+name: AI Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ai-review-${{ github.event.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    name: ai-review
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+
+      - name: 변경분 추출
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.number }}
+        run: |
+          set -euo pipefail
+          gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" > /tmp/pr.diff
+          wc -c /tmp/pr.diff
+
+      - name: API 키 확인
+        id: key
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::ANTHROPIC_API_KEY 시크릿이 없어 AI 리뷰를 건너뜀"
+          fi
+
+      - name: AI 1차 리뷰 생성
+        if: steps.key.outputs.present == 'true' && hashFiles('scripts/ai-review.mjs') != ''
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_REVIEW_MODEL || 'claude-sonnet-5' }}
+        run: node scripts/ai-review.mjs /tmp/pr.diff > /tmp/review.md
+
+      - name: PR에 리뷰 코멘트
+        if: steps.key.outputs.present == 'true' && hashFiles('scripts/ai-review.mjs') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.number }}
+        run: |
+          set -euo pipefail
+          MARKER='<!-- ai-review -->'
+          BODY="${MARKER}
+          $(cat /tmp/review.md)"
+
+          ID=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" \
+                 --jq "[.[] | select(.body | contains(\"${MARKER}\"))][0].id // empty")
+
+          if [ -n "$ID" ]; then
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${ID}" -f body="$BODY" >/dev/null
+          else
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" -f body="$BODY" >/dev/null
+          fi
