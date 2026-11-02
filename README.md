@@ -1,6 +1,6 @@
 # 가게앞 변화알림 안성
 
-안성맞춘팀의 모바일 우선 웹앱 프로젝트입니다. 공사·행사·교통 변경 공지를 가게 위치·영업시간과 비교하고 적용 조건·근거·원문을 확인합니다.
+안성맞춘팀의 모바일 우선 웹앱 프로젝트입니다. **전체 개발 명세 v1.1: Flutter Web·Dart / Spring Boot·Java / MySQL / Python AI·계산**으로 확정했습니다. 공사·행사·교통 변경 공지를 가게 위치·영업시간과 비교하고 적용 조건·근거·원문을 확인합니다.
 
 **현재 저장소 상태: 팀 작업을 시작하기 위한 문서·인터페이스 예제·참고 시제품입니다. 실제 프런트·백엔드·AI 서비스는 아직 구현하지 않았습니다.**
 
@@ -11,17 +11,17 @@
 | 담당 | 수요일 작업 | 담당 폴더 |
 |---|---|---|
 | 이상헌 | 디자인 방향 선택·모바일 사용자 화면·API 연결 | `frontend/` |
-| 강명묵 | 데이터 저장·조회·조건 선별 API·AI 검토본 연결 | `backend/` |
-| 김윤기 | AI 추출·원문 대조·원출력/사람 수정본 분리 | `processing/` |
+| 강명묵 | Spring Boot·MySQL·공개 API·검토본 import·Python 계산 연결 | `backend/` |
+| 김윤기 | Python AI 추출·원문 대조·시간/거리 계산 CLI | `processing/` |
 | 남규민 | 공통 규격·자료 인계·통합 검수·배포 조율 | `contracts/`, `docs/` 및 통합 |
 
-이는 수요일까지의 단기 실행 분담입니다. 기존 장기 WBS와 담당이 다르면 이번 표와 [수요일 실행안](docs/wednesday-plan.md)을 우선합니다. 각25%는 초기 배분 목표이며 실제 공수 균등은 아직 확인하지 않았습니다.
+이는 현재 실행 분담입니다. 전체 WBS도 [인원별 WBS v1.2](docs/spec/10_인원별WBS.md)로 갱신했습니다. 개발자는 [착수 가이드](docs/spec/11_개발착수가이드.md)와 [전체 명세 목차](docs/spec/00_목차.md)를 먼저 확인합니다. 각25%는 초기 배분 목표이며 실제 공수 균등은 아직 확인하지 않았습니다.
 
 **첫 결과 인계는 11/3(화) 오후 6시(KST)**입니다. 실행 가능한 화면·API·AI 처리 결과와 실행 방법을 전달합니다. [수요일 화면 시연 작업 기준](docs/wednesday-screen-brief.md)을 먼저 읽고, 전체 명세는 관련 기능을 구현할 때 참고합니다. 수요일 정확한 시연 시각은 미정입니다.
 
 ## 먼저 할 일
 
-1. [화면 시연 작업 기준](docs/wednesday-screen-brief.md)과 [수요일 실행안](docs/wednesday-plan.md)을 읽습니다. 전체 [제품 요구사항](docs/spec/01_제품요구사항.md)은 구현 범위의 기준으로 함께 확인합니다.
+1. [전체 개발 착수 가이드](docs/spec/11_개발착수가이드.md)→[기술 구성](docs/spec/08_기술구성과연결.md)→[인원별 WBS](docs/spec/10_인원별WBS.md)를 읽습니다. 이번 단기 인계는 [화면 시연 작업 기준](docs/wednesday-screen-brief.md)과 [수요일 실행안](docs/wednesday-plan.md)을 따릅니다. 전체 [제품 요구사항](docs/spec/01_제품요구사항.md)은 유지합니다.
 2. [인터페이스 기준](contracts/README.md)과 예제 JSON을 함께 확인합니다. 가상 예제로 필드명·null·상태·시간 형식을 맞추기 위한 초안입니다.
 3. 각 담당 폴더의 README와 `TASK.md`를 읽고 작업합니다.
 4. 화요일 오후 6시에 첫 결과를 취합합니다. 실행 가능한 부분부터 연결하고 수요일에는 연구실 환경에서 화면·연결·오류를 점검합니다.
@@ -31,9 +31,9 @@
 ## 구조
 
 ```text
-frontend/                 # 이상헌: 모바일 화면 / 필터 / 상세 / 원문
-backend/                  # 강명묵: config / matches / events API와 저장
-processing/               # 김윤기: 전처리 / AI 추출 / 원문 대조 / 검토 데이터
+frontend/                 # 이상헌: Flutter Web / 반응형 화면 / API 연결
+backend/                  # 강명묵: Spring Boot / MySQL / 공개 API / Python 연결
+processing/               # 김윤기: Python AI / 검토 데이터 / 시간·거리 계산 CLI
 contracts/                # 팀 공통: 인터페이스와 가상 JSON 예제
 data/public/              # 사람이 검토한 공개 데이터 저장 위치
 data/private/             # Git 제외: 원문 작업본·비공개 처리 자료
@@ -52,10 +52,12 @@ docs/wednesday-plan.md    # 수요일까지 작업 순서·완료 기준
 
 ## 기술·배포 기준
 
-- 기본 환경안은 React/TypeScript/Vite + Node.js 24 LTS·npm, Python 3.13/FastAPI, SQLite·공개 JSON입니다. 실제 버전·실행 명령·의존성은 담당자가 구현하면서 고정하고 해당 폴더 README에 남깁니다. 현재는 실행 가능한 앱 스캐폴드가 없습니다.
+- 확정 구성은 Flutter Web·Dart, Spring Boot·Java, MySQL, Python AI·계산입니다. 구현 기준은 Flutter stable(번들 Dart), JDK21·Spring Boot3.5.x·Gradle Wrapper, MySQL8.4 LTS, Python3.13입니다. 실제 버전·실행 명령·의존성은 담당자가 구현하면서 고정하고 해당 폴더 README에 남깁니다. 현재는 실행 가능한 앱 스캐폴드가 없습니다.
 - 수동 수집 → AI 일괄 추출 → 사람 검토 → 저장 → 웹 표시 흐름을 유지합니다. 사용자 조회마다 실시간 AI 호출을 전제하지 않습니다.
 - 희망 배포 주소는 `https://aise.hknu.ac.kr/myai/team/`입니다. **현재 배포되었다는 뜻이 아닙니다.** 연구실 소개/관리 서비스는 수정하지 않았습니다.
-- 프런트 자산과 API를 같은 하위 경로 아래에서 사용할 수 있게 설계합니다. 외부 API 주소 후보는 `/myai/team/api/v1/...`, 내부 API 계약은 `/api/v1/...`입니다. 실제 프록시 구성은 서버 환경 확인 후 결정합니다.
+- Flutter 웹 빌드 자산과 Spring API를 같은 하위 경로 아래에서 사용할 수 있게 설계합니다. 외부 API 주소 후보는 `/myai/team/api/v1/...`, 내부 API 계약은 `/api/v1/...`입니다. 실제 프록시 구성은 서버 환경 확인 후 결정합니다.
+
+공개 API는 Spring이 제공하고 Python은 JSON stdin/stdout 계산 CLI로 연결합니다. 상세는 [기술 구성](docs/spec/08_기술구성과연결.md), [MySQL 설계](docs/spec/09_DB설계와트랜잭션.md), [계산 연결 계약](contracts/calculation-bridge.md)을 확인합니다. 기존 기술 선택으로 된 이전 ZIP은 v1.1로 대체합니다.
 
 ## 함께 지킬 기준
 

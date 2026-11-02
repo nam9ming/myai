@@ -25,3 +25,17 @@ credentials*.json
 service-account*.json
 *.pem
 *.key
+
+# Flutter / Java / MySQL local artifacts
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.gradle/
+*.class
+*.jar
+!**/gradle/wrapper/gradle-wrapper.jar
+*.war
+*.iml
+mysql-data/
+*.sql.gz
+*.dump
