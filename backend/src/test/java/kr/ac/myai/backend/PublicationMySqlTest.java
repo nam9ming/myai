@@ -454,6 +454,35 @@ class PublicationMySqlTest {
     }
 
     @Test
+    void historyKeepsRollbackTransitionsBeforeLaterPublication() throws Exception {
+        var input = fresh(); importBatch(input);
+        var approved = publication.execute(decision(input, "approve", 1), root, "synthetic-approver");
+        var request = publishInput(input, approved.revisionId(), null);
+        var first = publication.execute(command(request), root, "synthetic-publisher");
+        var draft = (ObjectNode) input.path("events").get(0).path("revision");
+        draft.put("revision_id", UUID.randomUUID().toString()).put("revision_no", 3).put("title", "합성 변경 제목");
+        ((ObjectNode) input.path("events").get(0)).put("expected_revision_no", 2);
+        importBatch(input);
+        var changed = publication.execute(decision(input, "approve", 3), root, "synthetic-approver");
+        request.put("expected_head_version", 0).putArray("revision_ids").add(changed.revisionId());
+        publication.execute(command(request), root, "synthetic-publisher");
+        publication.execute(rollback(first.snapshotId(), 1), null, "synthetic-publisher");
+        request.put("expected_head_version", 2);
+        var current = publication.execute(command(request), root, "synthetic-publisher");
+        String url = "/api/v1/events/" + input.path("events").get(0).path("event_id").asText() + "?snapshot_id=";
+        var history = body(url + current.snapshotId()).path("data").path("event").path("history");
+        assertThat(history).hasSize(3);
+        assertThat(history.get(0).path("changes").get(0).path("after").asText()).isEqualTo("합성 변경 제목");
+        assertThat(history.get(1).path("changes").get(0).path("before").asText()).isEqualTo("합성 변경 제목");
+        assertThat(history.get(1).path("changes").get(0).path("after").asText()).isEqualTo("합성 공지 😀");
+        assertThat(history.get(1).path("action").asText()).isEqualTo("rollback");
+        assertThat(history.get(2).path("changes").get(0).path("after").asText()).isEqualTo("합성 변경 제목");
+        request.put("expected_head_version", 3);
+        var repeated = publication.execute(command(request), root, "synthetic-publisher");
+        assertThat(body(url + repeated.snapshotId()).path("data").path("event").path("history")).hasSize(3);
+    }
+
+    @Test
     void concurrentHeadChangesNeverMixSnapshotCountsAndPointLabels() throws Exception {
         var input = fresh(); importBatch(input);
         var approved = publication.execute(decision(input, "approve", 1), root, "synthetic-approver");

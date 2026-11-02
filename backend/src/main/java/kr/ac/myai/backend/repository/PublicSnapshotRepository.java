@@ -17,7 +17,7 @@ public class PublicSnapshotRepository {
     public PublicSnapshotRepository(JdbcTemplate jdbc) { this.jdbc = jdbc; }
 
     public record Published(PublicationRepository.Snapshot snapshot, String schemaVersion, Instant createdAt, String currentId) { }
-    public record Historic(String snapshotId, String revisionId, Instant publishedAt) { }
+    public record Historic(String snapshotId, String revisionId, Instant publishedAt, String action) { }
 
     public Optional<String> head(String channel) {
         return jdbc.query("SELECT snapshot_id FROM publication_heads WHERE channel_key = ?", (row, i) -> row.getString(1), channel).stream().findFirst();
@@ -43,13 +43,13 @@ public class PublicSnapshotRepository {
 
     public List<Historic> history(String eventId, String channel, Instant cutoff) {
         return jdbc.query("""
-                SELECT s.snapshot_id, r.revision_id, MIN(a.happened_at) AS published_at
+                SELECT s.snapshot_id, r.revision_id, a.happened_at, a.action
                 FROM snapshot_revisions r JOIN snapshots s ON s.snapshot_id = r.snapshot_id
                 JOIN publication_audits a ON a.after_snapshot_id = s.snapshot_id
-                WHERE r.event_id = ? AND a.channel_key = ? AND a.action = 'publish'
+                WHERE r.event_id = ? AND a.channel_key = ?
                   AND s.created_at <= ? AND a.happened_at <= ?
-                GROUP BY s.snapshot_id, r.revision_id ORDER BY published_at, s.snapshot_id
-                """, (row, i) -> new Historic(row.getString(1), row.getString(2), row.getTimestamp(3).toInstant()),
+                ORDER BY a.head_version, a.audit_id
+                """, (row, i) -> new Historic(row.getString(1), row.getString(2), row.getTimestamp(3).toInstant(), row.getString(4)),
                 eventId, channel, Timestamp.from(cutoff), Timestamp.from(cutoff));
     }
 }

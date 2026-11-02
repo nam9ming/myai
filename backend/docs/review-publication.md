@@ -70,6 +70,6 @@ canonical JSON은 UTF-8 원문과 별도 SHA-256으로 저장한다. checksum은
 
 rollback은 같은 채널에서 실제 공개했던 snapshot인지, canonical checksum과 저장 문맥이 맞는지 확인한다. 원문 파일이나 계산기를 호출하지 않고 공개 포인터와 감사 기록만 바꾼다. DB의 최신 지점 행을 되돌리는 작업이 아니며 복구 시 기준은 snapshot 안에 고정된 지점·사건이다. DB 스키마 복구와도 구분한다.
 
-현재 공개 API는 실제 조회·계산 연결 전까지 503을 유지한다. 관리 UI·Python 계산·실제 공개 조회·JSON 파일 export·운영 서버 배포는 구현하지 않았다. DB 공개 포인터 전환을 운영 서비스 배포 완료로 표현하지 않는다.
+공개 API의 config·상세는 DB snapshot을 조회한다. matches는 문맥·지점 검증 후 Python 계산기 미연결로503을 반환한다. 관리 UI·Python 계산·JSON 파일 export·운영 서버 배포는 구현하지 않았다. DB 공개 포인터 전환을 운영 서비스 배포 완료로 표현하지 않는다.
 
 공개 포인터가 바뀌면 이전 공개본의 직접 조회는409다. rollback으로 다시 선택한 공개본은 즉시 조회 가능하며, 지점도 해당 snapshot의 고정 값을 사용한다.

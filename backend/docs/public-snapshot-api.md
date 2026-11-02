@@ -31,9 +31,9 @@ I03은 조건 없는 사실 응답이다. 분류·거리·시간 겹침·matched
 
 ## 공개 변경이력
 
-history는 선택 snapshot 생성 시점까지 같은 채널에서 실제 공개된 revision을 순서대로 비교한다. 최초 공개는 변경 항목이 없고, 다음 revision부터 `revision_id/snapshot_id/published_at/changes`를 담는다. 각 changes 항목은 `field/before/after`다. 이전 근거와 출처는 `before_revision_id/before_evidence/before_source_refs`, 새 근거와 출처는 `evidence/source_refs`에 담는다. 비공개 draft나 human_overrides의 임의 before/after는 읽지 않는다.
+history는 선택 snapshot 생성 시점까지 같은 채널에서 실제 공개된 revision을 순서대로 비교한다. 최초 공개는 변경 항목이 없고, 다음 revision부터 `revision_id/snapshot_id/published_at/action/changes`를 담는다. action은 publish 또는 rollback이다. 각 changes 항목은 `field/before/after`다. 이전 근거와 출처는 `before_revision_id/before_evidence/before_source_refs`, 새 근거와 출처는 `evidence/source_refs`에 담는다. 비공개 draft나 human_overrides의 임의 before/after는 읽지 않는다.
 
-같은 revision의 반복 공개는 중복 제거한다. replay는 기준일·reference_instant·knowledge_cutoff가 같은 과거 공개본만 비교하여 다른 역사 문맥이 유입되지 않게 한다. rollback하면 선택한 이전 snapshot 이후의 변경을 보여주지 않는다. 자료가 늘면 사례 목록 projection과 이력 pagination을 별도 설계한다.
+공개·복구 포인터 전환 순서로 비교하며 연속된 같은 revision만 중복 제거한다. 다른 revision을 거쳐 이전 revision으로 복구한 경우도 변경으로 기록한다. replay는 기준일·reference_instant·knowledge_cutoff가 같은 과거 공개본만 비교하여 다른 역사 문맥이 유입되지 않게 한다. rollback하면 선택한 이전 snapshot 이후의 변경을 보여주지 않는다. 자료가 늘면 사례 목록 projection과 이력 pagination을 별도 설계한다.
 
 ## 실패와 현재 제한
 

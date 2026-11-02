@@ -152,17 +152,16 @@ public class SnapshotNoticeService implements PublicNoticeService {
 
     private ArrayNode history(JsonNode selected, JsonNode selectedEvent) {
         var result = mapper.createArrayNode();
-        Set<String> seen = new HashSet<>();
         ObjectNode previous = null;
         String eventId = selectedEvent.path("event_id").asText();
         for (var item : repository.history(eventId, channel(selected.path("mode").asText(), selected.path("case_id").textValue()), Instant.parse(selected.path("created_at").asText()))) {
             JsonNode snapshot = item.snapshotId().equals(selected.path("snapshot_id").asText()) ? selected : load(item.snapshotId(), false);
-            if (!sameContext(selected, snapshot) || !seen.add(item.revisionId())) continue;
+            if (!sameContext(selected, snapshot) || previous != null && previous.path("revision_id").asText().equals(item.revisionId())) continue;
             JsonNode facts = findEvent(snapshot, eventId);
             if (facts == null || !facts.path("revision_id").asText().equals(item.revisionId())) throw invalidSnapshot();
             ObjectNode current = publicEvent(snapshot, facts);
             if (previous != null) {
-                var entry = mapper.createObjectNode().put("revision_id", item.revisionId()).put("snapshot_id", item.snapshotId()).put("published_at", item.publishedAt().toString());
+                var entry = mapper.createObjectNode().put("revision_id", item.revisionId()).put("snapshot_id", item.snapshotId()).put("published_at", item.publishedAt().toString()).put("action", item.action());
                 var changes = entry.putArray("changes");
                 for (var fields = current.fieldNames(); fields.hasNext();) {
                     String field = fields.next();

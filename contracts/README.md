@@ -51,7 +51,7 @@ I03은 [계산·API 명세](../docs/spec/04_계산규칙과기술설계.md)에 �
 
 - 대상·예외·노선·정류장·방향의 기존 값 필드는 유지합니다. 추가 `field_values`는 각 필드의 `value/knowledge/evidence_ids/reason`을 담고 null과 알려진 빈 배열을 구분합니다. 장소의 name/address도 같은 방식입니다.
 - `evidence`에 근거ID·문서 버전·블록·인용·Python code point 오프셋·본문 hash를 보존합니다. `source_refs`는 해당 공개본의 문서 버전과 당시 확인 상태를 제공합니다. replay의 `current_*`는 공개본 생성 시 확보한 현재 확인 상태이며 실시간 재확인값이 아닙니다.
-- `history`는 비공개 수정 기록 대신 같은 문맥에서 실제 공개된 revision의 값 차이와 이전/새 근거·출처를 제공합니다. 구조·오류·실행 예시는 [백엔드 공개 조회 안내](../backend/docs/public-snapshot-api.md)를 따릅니다.
+- `history`는 비공개 수정 기록 대신 같은 문맥의 공개·복구 전환에서 revision의 값 차이와 이전/새 근거·출처를 제공합니다. 구조·오류·실행 예시는 [백엔드 공개 조회 안내](../backend/docs/public-snapshot-api.md)를 따릅니다.
 
 ### 실패
 
