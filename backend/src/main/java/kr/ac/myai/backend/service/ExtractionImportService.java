@@ -3,6 +3,8 @@ package kr.ac.myai.backend.service;
 import kr.ac.myai.backend.extraction.ExtractionArchiveReader;
 import kr.ac.myai.backend.extraction.ExtractionException;
 import kr.ac.myai.backend.repository.ExtractionRunRepository;
+import kr.ac.myai.backend.importing.ReviewedBatch;
+import kr.ac.myai.backend.repository.ExtractionRunRepository.Reference;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.*;
 import org.springframework.stereotype.Service;
@@ -12,6 +14,9 @@ import org.springframework.transaction.TransactionException;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.nio.file.Path;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
 
 @Service
 @Profile("!fixture")
@@ -61,4 +66,31 @@ public class ExtractionImportService {
             throw new ExtractionException("EXTRACTION_VALIDATION_ERROR", "actor", false);
         }
     }
+
+    public List<Reference> verifyReferences(List<ReviewedBatch.Event> events) {
+        var verified = new LinkedHashMap<String, Reference>();
+        for (var event : events) {
+            for (String id : event.originatingRunIds()) {
+                var reference = verified.get(id);
+                if (reference == null) {
+                    Path directory;
+                    try { directory = Path.of(repository.referenceDirectory(id)); }
+                    catch (IllegalArgumentException ex) { throw new ExtractionException("EXTRACTION_ARCHIVE_INVALID", null, false); }
+                    if (!directory.isAbsolute() || directory.getFileName() == null || !directory.getFileName().toString().equals(id)) {
+                        throw new ExtractionException("EXTRACTION_ARCHIVE_INVALID", null, false);
+                    }
+                    var run = archives.read(id, directory.getParent());
+                    repository.checkDocument(run);
+                    reference = repository.verifiedReference(run);
+                    verified.put(id, reference);
+                }
+                if (!event.sourceVersionIds().contains(reference.documentVersionId())) {
+                    throw new ExtractionException("EXTRACTION_ARCHIVE_INVALID", null, false);
+                }
+            }
+        }
+        return verified.values().stream().sorted(Comparator.comparing(Reference::runId)).toList();
+    }
+
+    public void checkReferences(List<Reference> references) { references.forEach(repository::checkReference); }
 }

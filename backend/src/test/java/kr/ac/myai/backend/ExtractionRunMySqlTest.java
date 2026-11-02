@@ -38,6 +38,8 @@ class ExtractionRunMySqlTest {
     @Autowired ReviewedImportReader reader;
     @Autowired ReviewedImportService importer;
     @Autowired ExtractionImportService extraction;
+    @Autowired kr.ac.myai.backend.service.PublicationService publication;
+    @Autowired kr.ac.myai.backend.publication.PublicationCommandReader commands;
     @MockitoSpyBean ExtractionArchiveReader archives;
     @MockitoSpyBean ExtractionRunRepository runs;
     @TempDir Path root;
@@ -48,6 +50,93 @@ class ExtractionRunMySqlTest {
         properties.add("app.calculation.workdir", () -> PythonProbe.REPO.toString());
         properties.add("app.calculation.python-executable", () -> PythonProbe.PYTHON);
         properties.add("app.extraction.timeout-ms", () -> 10000);
+    }
+
+    @Test
+    void rejectsDeletedOrAlteredArchiveBeforeD06Reference() throws Exception {
+        var source = source(); registerSource(source); var before = counts();
+        for (String artifact : List.of("attempt-1.output", "metadata.json", "receipt.json")) {
+            String id = UUID.randomUUID().toString(); Path archive = archive(source, id, false);
+            extraction.importRun(id, archive, "synthetic-registrant");
+            Files.writeString(archive.resolve(id).resolve(artifact), "PRIVATE_VALUE changed");
+            var reviewed = review(source, id);
+            assertThatThrownBy(() -> importer.importBatch(reviewed, "synthetic-reviewer"))
+                    .isInstanceOf(kr.ac.myai.backend.importing.ImportException.class).hasMessageNotContaining("PRIVATE_VALUE");
+            assertThat(counts()).isEqualTo(before);
+        }
+        String id = UUID.randomUUID().toString(); Path archive = archive(source, id, false);
+        extraction.importRun(id, archive, "synthetic-registrant");
+        Files.delete(archive.resolve(id).resolve("attempt-1.output"));
+        var reviewed = review(source, id);
+        assertThatThrownBy(() -> importer.importBatch(reviewed, "synthetic-reviewer"))
+                .isInstanceOf(kr.ac.myai.backend.importing.ImportException.class);
+        assertThat(counts()).isEqualTo(before);
+    }
+
+    @Test
+    void rechecksChangedRegistrationUnderTheWriteTransaction() throws Exception {
+        var source = source(); registerSource(source); var before = counts();
+        String id = UUID.randomUUID().toString(); Path archive = archive(source, id, false);
+        extraction.importRun(id, archive, "synthetic-registrant");
+        var batch = review(source, id);
+        String original = jdbc.queryForObject("SELECT receipt_json FROM extraction_runs WHERE run_id=?", String.class, id);
+        doAnswer(invocation -> {
+            CompletableFuture.runAsync(() -> jdbc.update("UPDATE extraction_runs SET receipt_json=JSON_SET(receipt_json,'$.review_required',false) WHERE run_id=?", id))
+                    .get(5, TimeUnit.SECONDS);
+            return invocation.callRealMethod();
+        }).when(runs).checkReference(any(ExtractionRunRepository.Reference.class));
+        try {
+            assertThatThrownBy(() -> importer.importBatch(batch, "synthetic-reviewer"))
+                    .isInstanceOfSatisfying(kr.ac.myai.backend.importing.ImportException.class, ex -> assertThat(ex.code()).isEqualTo("IMPORT_CONFLICT"));
+            assertThat(counts()).isEqualTo(before);
+        } finally { jdbc.update("UPDATE extraction_runs SET receipt_json=? WHERE run_id=?", original, id); }
+    }
+
+    @Test
+    void cachedRunStillMustMatchEachEventsOwnSourceVersions() throws Exception {
+        var first = source(); registerSource(first); var second = source(); registerSource(second);
+        String id = UUID.randomUUID().toString(); Path archive = archive(first, id, false);
+        extraction.importRun(id, archive, "synthetic-registrant");
+        var one = review(first, id); var two = review(second, id);
+        var documents = new java.util.ArrayList<>(one.documents()); documents.addAll(two.documents());
+        var events = new java.util.ArrayList<>(one.events()); events.addAll(two.events());
+        var batch = new kr.ac.myai.backend.importing.ReviewedBatch("reviewed-import-v1", "7".repeat(64), "synthetic", documents, events);
+        var before = counts();
+        assertThatThrownBy(() -> importer.importBatch(batch, "synthetic-reviewer"))
+                .isInstanceOf(kr.ac.myai.backend.importing.ImportException.class);
+        assertThat(counts()).isEqualTo(before);
+    }
+
+    @Test
+    void approvalAndPreviewReverifyAiOriginOutsideTransactions() throws Exception {
+        var source = source(); registerSource(source);
+        String id = UUID.randomUUID().toString(); Path archive = archive(source, id, false);
+        extraction.importRun(id, archive, "synthetic-registrant");
+        var batch = review(source, id);
+        doAnswer(invocation -> {
+            assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+            return invocation.callRealMethod();
+        }).when(archives).read(eq(id), any(Path.class));
+        importer.importBatch(batch, "synthetic-reviewer");
+        var event = batch.events().getFirst();
+        var decision = new kr.ac.myai.backend.publication.PublicationCommand.Decision("publication-command-v1", "approve", "합성 교차 검토",
+                UUID.fromString(event.id()), 1, List.of("heading-quote"));
+        Path output = archive.resolve(id).resolve("attempt-1.output"); byte[] original = Files.readAllBytes(output);
+        Files.delete(output);
+        assertThatThrownBy(() -> publication.execute(decision, root, "synthetic-approver"))
+                .isInstanceOf(kr.ac.myai.backend.publication.PublicationException.class);
+        assertThat(jdbc.queryForObject("SELECT current_review_revision_id FROM events WHERE event_id=?", String.class, event.id())).isEqualTo(event.revisionId());
+        Files.write(output, original);
+        var approved = publication.execute(decision, root, "synthetic-approver");
+        var preview = (ObjectNode) mapper.readTree(Path.of("examples/publish.json").toFile());
+        preview.put("action", "preview"); preview.putArray("revision_ids").add(approved.revisionId());
+        var command = commands.read(Files.writeString(root.resolve("preview.json"), preview.toString()));
+        var before = counts(); Files.delete(output);
+        assertThatThrownBy(() -> publication.execute(command, root, "synthetic-publisher"))
+                .isInstanceOf(kr.ac.myai.backend.publication.PublicationException.class);
+        assertThat(counts()).isEqualTo(before);
+        Files.write(output, original);
+        assertThat(publication.execute(command, root, "synthetic-publisher").action()).isEqualTo("preview");
     }
 
     @Test
@@ -104,7 +193,8 @@ class ExtractionRunMySqlTest {
         String failed = UUID.randomUUID().toString(); Path archive = archive(source, failed, true);
         assertThat(extraction.importRun(failed, archive, "synthetic-registrant").status()).isEqualTo("failed");
         assertThat(counts()).isEqualTo(before);
-        assertThatThrownBy(() -> importer.importBatch(review(source, failed), "synthetic-reviewer")).isInstanceOf(kr.ac.myai.backend.importing.ImportException.class);
+        assertThatThrownBy(() -> importer.importBatch(review(source, failed), "synthetic-reviewer")).isInstanceOfSatisfying(kr.ac.myai.backend.importing.ImportException.class,
+                ex -> assertThat(ex.code()).isEqualTo("IMPORT_VALIDATION_ERROR"));
         assertThat(counts()).isEqualTo(before);
         String legacy = UUID.randomUUID().toString();
         jdbc.update("INSERT INTO extraction_runs(run_id,document_version_id,input_sha256,provider,model,prompt_version,status) VALUES (?,?,?,'legacy','legacy','legacy','validated')",

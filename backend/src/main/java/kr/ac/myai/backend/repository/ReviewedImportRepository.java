@@ -84,11 +84,6 @@ public class ReviewedImportRepository {
         return Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM events WHERE event_id = ?)", Boolean.class, id));
     }
 
-    public boolean runMatches(String id, List<String> sources) {
-        var versions = jdbc.query("SELECT document_version_id FROM extraction_runs WHERE run_id = ? AND status = 'validated' AND schema_version = 'extract-schema-v1' AND metadata_sha256 IS NOT NULL AND receipt_sha256 IS NOT NULL", (row, index) -> row.getString(1), id);
-        return versions.size() == 1 && sources.contains(versions.getFirst());
-    }
-
     public void appendEvent(ReviewedBatch.Event event, String kind, String actor) {
         require((event.reviewStatus().equals("draft") || event.reviewStatus().equals("needs_review")) && event.publicationIntent().equals("hidden"), "review_status");
         append(event, kind, actor, "import", "검토 JSON 로컬 import", json(event.payloadJson()).path("evidence").toString());

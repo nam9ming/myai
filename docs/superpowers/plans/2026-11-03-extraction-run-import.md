@@ -65,3 +65,9 @@
 - 실제 MySQL8.4.13·Python3.13 포함 Java147개·생략0, Python97개·Node29개·JSON9개·lint190개·build/JAR 통과. 원문 선등록→D05 성공/실패/재실행→숨김 ai_reviewed D06, 실패 참조 거부·정밀 원본·강제 웹/혼합 프로필 차단·공개4테이블 dump 불변을 실제 JAR로 확인했다.
 - 자체 검토의 cold DB 기동 오류·receipt 태그 결합은 추적 RED→GREEN과 전체 회귀로 수정했다. 9246773 별도 전체 리뷰 지적0건이며 실제 Python archive→JAR Java reader의 원본/고정밀 비용/변조 거부를 독립 재현했다. 검토자는 DB 전체 재실행을 생략했고 작성자의 실제 DB 검증 기록과 코드를 검토했다.
 - source-only 별도 schema는 D03→D05→D06 선후 관계를 위한 선택이다. D05 전체 측정값은 LONGTEXT 원본으로 읽는다. archive 경로·권한·백업은 운영자가 유지한다. 실제 API·D06 자동 초안·실자료 평가·배포·legacy 이관·chunk는 전체 Goal의 후속 범위다.
+
+## PR 자동 리뷰 보완
+
+PR12 자동 리뷰의 등록 후 archive 변조/삭제 참조 지적을 실제 MySQL에서 재현했다. import·승인에서 원본 부재가 통과하는 RED를 확인하고 import/approve/preview/publish가 실행별 원본·등록 metadata/receipt·입출력 hash·D03을 트랜잭션 밖에서 다시 검증하도록 연결했다. 쓰기와 중복 경합 복구는 FOR SHARE로 전체 등록 행 fingerprint를 재확인한다. 각 사건의 문서 참조를 별도로 확인하며 반려·기존 불변 공개본 조회/rollback은 기존 계약을 유지한다.
+
+보완 후 실제 MySQL 전체 Java151개·생략0으로 통과했다. 실제 JAR에서도 변조 후 import/승인·삭제 후 preview가 차단되고 복원 후 승인·원본 부재 시 반려가 가능함을 확인했다. 검증 후 DB 행 변경·사건별 문서 참조·중복 경합 복구의 재확인을 포함하며, 공개4테이블 dump는 전후 동일하다.

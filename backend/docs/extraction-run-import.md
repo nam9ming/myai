@@ -75,8 +75,10 @@ stdout은 안전한 JSON 한 건이다. 바깥 `status=succeeded`는 등록 성�
 
 ## D06 인계·보관
 
-사람이 원문을 대조해 기존 reviewed-import-v1의 숨김 draft/needs_review를 준비한다. AI를 참고한 revision은 `origin=ai_reviewed`, `originating_run_ids`와 해당 `source_version_ids`를 연결한다. D05 기계 검증 성공·전체 metadata/hash가 있는 실행만 참조할 수 있으며 failed·legacy는 거부한다. 검증 성공이 의미·예외·종일·좌표·현재 상태를 승인하지 않는다. D06 자동 초안 변환은 후속 작업이다.
+사람이 원문을 대조해 기존 reviewed-import-v1의 숨김 draft/needs_review를 준비한다. AI를 참고한 revision은 `origin=ai_reviewed`, `originating_run_ids`와 해당 `source_version_ids`를 연결한다. D05 기계 검증 성공·전체 metadata/hash가 있는 실행만 참조할 수 있으며 failed·legacy는 거부한다. import·승인·preview·publish는 등록 후에도 archive를 다시 검증하고 DB의 metadata/receipt·입출력 hash·D03 입력과 대조한다. 검증은 트랜잭션 밖이며 실행 ID별로 중복을 줄이고 각 사건의 source_version_ids를 따로 확인한다. 쓰기 직전에는 등록 행을 FOR SHARE로 읽어 전체 행 fingerprint가 같은지 확인한다. 검증 성공이 의미·예외·종일·좌표·현재 상태를 승인하지 않는다. D06 자동 초안 변환은 후속 작업이다.
 
 D05 evidence hash는 블록 UTF-8, D06은 문서 전체 cleaned_text UTF-8다. 검토본 준비 시 문서 버전·블록·인용/code point 위치를 대조하고 hash 대상을 구분한다. 보정한 값으로 AI 원본을 덮어쓰지 않는다.
 
 DB는 비공개 archive 절대 참조와 checksum을 저장한다. 파일을 복제하지 않으므로 경로·0700/0600 권한·백업·코드 버전을 함께 보존한다. 이동·편집·삭제 후 등록 성공을 원본 보존 완료로 간주하지 않는다. 이후 소비 전에도 verify하며 실패 원본을 지우지 않는다. 등록·검토 import만으로 공개 head/API는 바뀌지 않는다. 승인·공개는 기존 별도 명령과 사람 검토를 거친다.
+
+반려와 이미 공개된 snapshot의 조회·rollback은 기존 불변 공개본 계약을 따른다. 새 AI 출처로 소비할 때의 재검증과 원본 파일의 장기 보존·백업 책임을 구분한다.

@@ -37,7 +37,11 @@ public class ExtractionRunRepository {
     public Optional<Result> existing(VerifiedExtraction run) {
         var rows = jdbc.queryForList("SELECT * FROM extraction_runs WHERE run_id=?", run.runId());
         if (rows.isEmpty()) return Optional.empty();
-        var row = rows.getFirst();
+        requireSame(run, rows.getFirst());
+        return Optional.of(result(run, true));
+    }
+
+    private void requireSame(VerifiedExtraction run, java.util.Map<String, Object> row) {
         var fields = new LinkedHashMap<String, String>();
         fields.put("document_version_id", run.documentVersionId()); fields.put("input_sha256", run.inputSha256());
         fields.put("output_sha256", run.outputSha256()); fields.put("status", run.status());
@@ -48,7 +52,33 @@ public class ExtractionRunRepository {
         fields.put("model", run.nullable("model_label"));
         fields.forEach((key, value) -> require(Objects.equals(row.get(key), value)));
         require(row.get("attempts") instanceof Number count && count.intValue() == run.attempts());
-        return Optional.of(result(run, true));
+    }
+
+    public record Reference(String runId, String documentVersionId, String rowSha256) { }
+
+    public String referenceDirectory(String id) {
+        var paths = jdbc.query("SELECT raw_ref FROM extraction_runs WHERE run_id=? AND status='validated' AND schema_version='extract-schema-v1' AND metadata_sha256 IS NOT NULL AND receipt_sha256 IS NOT NULL",
+                (row, index) -> row.getString(1), id);
+        if (paths.size() != 1 || paths.getFirst() == null) throw new ExtractionException("EXTRACTION_ARCHIVE_INVALID", null, false);
+        return paths.getFirst();
+    }
+
+    public Reference verifiedReference(VerifiedExtraction run) {
+        var rows = jdbc.queryForList("SELECT * FROM extraction_runs WHERE run_id=?", run.runId());
+        require(rows.size() == 1 && run.status().equals("validated"));
+        requireSame(run, rows.getFirst());
+        return new Reference(run.runId(), run.documentVersionId(), rowHash(rows.getFirst()));
+    }
+
+    public void checkReference(Reference reference) {
+        var rows = jdbc.queryForList("SELECT * FROM extraction_runs WHERE run_id=? FOR SHARE", reference.runId());
+        require(rows.size() == 1 && rowHash(rows.getFirst()).equals(reference.rowSha256()));
+    }
+
+    private String rowHash(java.util.Map<String, Object> row) {
+        var payload = JsonNodeFactory.instance.objectNode();
+        row.forEach((key, value) -> payload.put(key, value == null ? null : value.toString()));
+        return ReviewedImportReader.sha256(payload.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     public void insert(VerifiedExtraction run, String actor) {

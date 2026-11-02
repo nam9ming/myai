@@ -4,6 +4,7 @@ import kr.ac.myai.backend.publication.PublicationCommand;
 import kr.ac.myai.backend.publication.PublicationContent;
 import kr.ac.myai.backend.publication.PublicationException;
 import kr.ac.myai.backend.importing.ImportException;
+import kr.ac.myai.backend.extraction.ExtractionException;
 import kr.ac.myai.backend.importing.ReviewedBatch;
 import kr.ac.myai.backend.importing.ReviewedImportReader;
 import kr.ac.myai.backend.repository.PublicationRepository;
@@ -35,10 +36,12 @@ public class PublicationService {
     private final PublicationContent content;
     private final ObjectMapper mapper;
     private final TransactionTemplate transaction;
+    private final ExtractionImportService extractions;
 
     public PublicationService(PublicationRepository repository, ReviewedImportRepository reviews, PublicationContent content,
-                              ObjectMapper mapper, PlatformTransactionManager manager) {
+                              ObjectMapper mapper, PlatformTransactionManager manager, ExtractionImportService extractions) {
         this.repository = repository; this.reviews = reviews; this.content = content; this.mapper = mapper;
+        this.extractions = extractions;
         this.transaction = new TransactionTemplate(manager);
         this.transaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
@@ -54,6 +57,9 @@ public class PublicationService {
         } catch (ImportException ex) {
             if (ex.code().equals("IMPORT_CONFLICT")) throw new PublicationException("PUBLICATION_CONFLICT", "검토 revision이 변경되었습니다. 최신 상태를 확인해 주세요.", ex.field());
             throw new PublicationException("PUBLICATION_VALIDATION_ERROR", ex.getMessage(), ex.field());
+        } catch (ExtractionException ex) {
+            throw new PublicationException(ex.code().equals("EXTRACTION_CONFLICT") ? "PUBLICATION_CONFLICT" : "PUBLICATION_VALIDATION_ERROR",
+                    "AI 원본 또는 등록 기록을 다시 검증할 수 없습니다. 기존 검토·공개 상태는 보존됩니다.", "originating_run_ids");
         } catch (DataIntegrityViolationException | TransientDataAccessException ex) {
             throw new PublicationException("PUBLICATION_CONFLICT", "동시 변경 또는 저장 제약과 충돌했습니다. 이전 공개본은 보존됩니다.", null);
         } catch (DataAccessException | TransactionException ex) {
@@ -85,7 +91,9 @@ public class PublicationService {
         }
         var evidence = mapper.createArrayNode();
         command.evidenceIds().forEach(evidence::add);
+        var runReferences = extractions.verifyReferences(approve ? List.of(event) : List.of());
         return transaction.execute(status -> {
+            extractions.checkReferences(runReferences);
             lockDocuments(documents);
             repository.lockRevision(original);
             reviews.appendDecision(event, payload.path("data_kind").asText(), actor, command.reason(), evidence.toString());
@@ -96,18 +104,21 @@ public class PublicationService {
     private Result publish(PublicationCommand.Publish command, Path root, String actor) {
         var revisions = command.revisionIds().stream().map(id -> repository.revision(id.toString())).sorted(Comparator.comparing(PublicationRepository.Revision::eventId)).toList();
         var documents = new TreeMap<String, PublicationRepository.Document>();
+        var events = new ArrayList<ReviewedBatch.Event>();
         for (var revision : revisions) {
             conflict(revision.currentId().equals(revision.id()) && revision.status().equals("approved") && revision.intent().equals("public"), "revision_ids");
             var payload = content.payload(revision); var sources = documents(payload);
             // shortcut: 사건별 원문 재검증은 소규모 수동 배치용이며 대량 공개 시 공통 원문 검증을 합친다.
-            content.validate(payload, sources, root);
+            events.add(content.validate(payload, sources, root));
             sources.forEach(source -> documents.put(source.versionId(), source));
         }
+        var runReferences = extractions.verifyReferences(events);
         String id = UUID.randomUUID().toString(); Instant now = now();
         var snapshot = content.snapshot(command, revisions, documents, id, now);
         if (command.action().equals("preview")) return new Result("preview", null, null, id, snapshot.checksum(), null, content.parse(snapshot.canonical()));
         String channel = channel(command.mode(), command.caseId());
         return transaction.execute(status -> {
+            extractions.checkReferences(runReferences);
             lockDocuments(new ArrayList<>(documents.values()));
             revisions.forEach(repository::lockRevision);
             command.points().stream().sorted(Comparator.comparing(p -> p.pointId().toString())).forEach(point -> repository.savePoint(point, command.dataKind()));

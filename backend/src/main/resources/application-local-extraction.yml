@@ -4,6 +4,3 @@ spring:
     banner-mode: 'off'
 logging:
   config: classpath:logback-local-import.xml
-app:
-  extraction:
-    timeout-ms: ${MYAI_EXTRACTION_TIMEOUT_MS:60000}
