@@ -107,6 +107,22 @@ class ProtocolTest(unittest.TestCase):
         self.assertEqual([], result['data']['items'])
         self.assertEqual(100, result['data']['counts']['candidate'])
 
+    def test_known_end_datetime_bounds_unknown_start_for_all_offsets(self):
+        for offset in (None, 0, 1):
+            with self.subTest(offset=offset):
+                p = payload()
+                p['events'][0]['occurrences'][0].update(date_start=None, date_end='2026-11-03', time_start=None,
+                                                       time_end='02:00', end_day_offset=offset,
+                                                       precision='unknown', knowledge='not_stated')
+                p['query']['selection'] = 'needs_check'
+                result = run(raw(p))
+                self.assertEqual(0, sum(result['data']['counts'].values()))
+                self.assertIn('TIME_NO_OVERLAP', result['diagnostics'][0]['reason_codes'])
+        p['events'][0]['occurrences'][0].update(date_end='2026-11-02', time_end=None)
+        result = run(raw(p))
+        self.assertEqual(0, sum(result['data']['counts'].values()))
+        self.assertEqual('WINDOW_OUTSIDE', result['diagnostics'][0]['reason_codes'][0])
+
     def test_projection_agrees_with_actual_java_fact_response(self):
         p = payload()
         expected = json.loads((ROOT / 'contracts/examples/event-facts-response.json').read_text())['data']['event']

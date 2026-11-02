@@ -110,7 +110,7 @@ def occurrence_intervals(occ, start, end):
                 hi = datetime.max.replace(tzinfo=KST)
         else:
             lo = midnight(lo_day) if lo_day else start
-            explicit_end = lo_day is not None and hi_day is not None and lo_day < hi_day and recurrence is None
+            explicit_end = hi_day is not None and (lo_day is None or lo_day < hi_day) and recurrence is None
             day_offset = occ['end_day_offset']
             if occ['precision'] == 'unknown' and lo_day == hi_day and lo_day is not None and day_offset is None:
                 offsets = [0, 1]
@@ -127,7 +127,7 @@ def occurrence_intervals(occ, start, end):
                     lo = datetime.combine(lo_day, time.fromisoformat(occ['time_start']), KST)
                 if hi_day and occ['time_end'] and (explicit_end or day_offset is not None):
                     hi = datetime.combine(hi_day, time.fromisoformat(occ['time_end']), KST)
-                    if lo_day is None or lo_day == hi_day:
+                    if not explicit_end:
                         try:
                             hi += day_offset * DAY
                         except OverflowError:
