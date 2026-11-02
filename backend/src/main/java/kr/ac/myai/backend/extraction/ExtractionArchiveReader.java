@@ -75,8 +75,12 @@ public class ExtractionArchiveReader {
                     && receipt.path("metadata_sha256").asText().equals(ReviewedImportReader.sha256(metadata)));
             JsonNode source = json.parseJson(input), info = json.parseJson(metadata);
             require(info.path("run_id").asText().equals(runId) && info.path("document_version_id").equals(receipt.path("document_version_id"))
-                    && source.path("document_version_id").equals(receipt.path("document_version_id")));
+                    && source.path("document_version_id").equals(receipt.path("document_version_id"))
+                    && source.path("data_kind").equals(receipt.path("data_kind"))
+                    && info.path("execution_mode").equals(receipt.path("execution_mode"))
+                    && info.path("schema_version").asText().equals("extract-schema-v1"));
             require(info.path("attempts").isIntegralNumber() && info.path("attempts").asInt() == receipt.path("attempts").size());
+            require(receipt.path("attempts").get(receipt.path("attempts").size() - 1).path("status").equals(receipt.path("status")));
             return new VerifiedExtraction(directory, source, info, receipt, new String(metadata, StandardCharsets.UTF_8),
                     new String(savedReceipt, StandardCharsets.UTF_8), ReviewedImportReader.sha256(savedReceipt));
         } catch (PythonProcess.Failure ex) {

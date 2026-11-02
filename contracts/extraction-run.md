@@ -50,4 +50,4 @@ stdout은 ID·상태·hash·고정 상대 파일명·안전한 오류 코드/필
 | 5 | 파일 I/O 실패 |
 | 1 | 내부 오류 |
 
-Java `extraction_runs` 등록·전체 D05 metadata 마이그레이션·D06 사람 수정/검토 연결은 후속 작업입니다. 현재 DB의 provider/model 필수 제약에 null을 임의 문자열로 대입하지 않습니다. 전달 전에 `verify`하고 마지막 원출력을 조회하며, AI 원본과 사람 수정값을 분리합니다. 실제 자료 처리·정답표 평가·공개 승인·운영 배포는 이 명령의 완료 범위에 포함하지 않습니다.
+Java `local-extraction`은 [D03/D05 연결 안내](../backend/docs/extraction-run-import.md)에 따라 검증된 archive의 성공/실패·nullable metadata 원본을 등록한다. 같은 전체 D03 입력·전처리 버전이 필요하며 원본 경로를 유지한다. 검증 정보가 없는 legacy와 failed는 D06 AI origin으로 사용할 수 없다. D06 자동 초안 변환·실제 모델/API 실행·실자료 평가·공개 승인·운영 배포는 후속 작업이다.

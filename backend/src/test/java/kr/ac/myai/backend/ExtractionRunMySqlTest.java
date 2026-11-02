@@ -4,6 +4,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import kr.ac.myai.backend.importing.ReviewedImportReader;
 import kr.ac.myai.backend.service.ReviewedImportService;
+import kr.ac.myai.backend.service.ExtractionImportService;
+import kr.ac.myai.backend.extraction.ExtractionArchiveReader;
+import kr.ac.myai.backend.extraction.ExtractionException;
+import kr.ac.myai.backend.extraction.VerifiedExtraction;
+import kr.ac.myai.backend.repository.ExtractionRunRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
@@ -11,13 +16,19 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.*;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 @SpringBootTest
 @ActiveProfiles("public")
@@ -26,8 +37,135 @@ class ExtractionRunMySqlTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired ReviewedImportReader reader;
     @Autowired ReviewedImportService importer;
+    @Autowired ExtractionImportService extraction;
+    @MockitoSpyBean ExtractionArchiveReader archives;
+    @MockitoSpyBean ExtractionRunRepository runs;
     @TempDir Path root;
     final ObjectMapper mapper = new ObjectMapper();
+
+    @DynamicPropertySource
+    static void python(DynamicPropertyRegistry properties) {
+        properties.add("app.calculation.workdir", () -> PythonProbe.REPO.toString());
+        properties.add("app.calculation.python-executable", () -> PythonProbe.PYTHON);
+        properties.add("app.extraction.timeout-ms", () -> 10000);
+    }
+
+    @Test
+    void registersExactRunOnceWithNullableModelsOutsideTransactionAndNoPublication() throws Exception {
+        var source = source(); registerSource(source); var before = counts();
+        String id = UUID.randomUUID().toString(); Path archive = archive(source, id, false);
+        doAnswer(invocation -> {
+            assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+            return invocation.callRealMethod();
+        }).when(archives).read(id, archive);
+        var first = extraction.importRun(id, archive, "synthetic-registrant");
+        var repeated = extraction.importRun(id, archive, "another-registrant");
+        assertThat(first.alreadyRegistered()).isFalse(); assertThat(repeated.alreadyRegistered()).isTrue();
+        assertThat(first.runId()).isEqualTo(repeated.runId()); assertThat(first.reviewRequired()).isTrue();
+        var row = jdbc.queryForMap("SELECT * FROM extraction_runs WHERE run_id=?", id);
+        assertThat(row.get("provider")).isNull(); assertThat(row.get("model")).isNull();
+        assertThat(row.get("registered_by")).isEqualTo("synthetic-registrant");
+        assertThat(row.get("metadata_json")).isEqualTo(Files.readString(archive.resolve(id).resolve("metadata.json")));
+        assertThat((String) row.get("metadata_json")).contains("0.1234567890123456789", "123456789Z", "123456790Z");
+        assertThat(row.get("receipt_json")).isEqualTo(Files.readString(archive.resolve(id).resolve("receipt.json")));
+        assertThat(row.get("status")).isEqualTo("validated"); assertThat(row.get("attempts")).isEqualTo(1);
+        assertThat(counts()).isEqualTo(before);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM extraction_runs WHERE run_id=?", Long.class, id)).isEqualTo(1);
+    }
+
+    @Test
+    void rejectsEverySourceProjectionMismatchAndChangedIdentityWithoutOverwriting() throws Exception {
+        var source = source(); registerSource(source);
+        for (String field : List.of("title", "published_date", "block_index", "preprocessing_version", "data_kind", "document_version_id")) {
+            var changed = source.deepCopy(); var doc = (ObjectNode) changed.path("documents").get(0);
+            switch (field) {
+                case "block_index" -> ((ObjectNode) doc.path("block_index").get(0)).put("text", "다른 합성 원문");
+                case "data_kind" -> changed.put("data_kind", "real");
+                case "published_date" -> doc.put(field, "2026-11-01");
+                case "document_version_id" -> doc.put(field, UUID.randomUUID().toString());
+                default -> doc.put(field, "다른 합성 값");
+            }
+            String id = UUID.randomUUID().toString(); Path archive = archive(changed, id, false);
+            assertThatThrownBy(() -> extraction.importRun(id, archive, "synthetic-registrant")).isInstanceOf(ExtractionException.class);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM extraction_runs WHERE run_id=?", Long.class, id)).isZero();
+        }
+        String id = UUID.randomUUID().toString(); Path archive = archive(source, id, false);
+        extraction.importRun(id, archive, "synthetic-registrant");
+        String old = jdbc.queryForObject("SELECT receipt_json FROM extraction_runs WHERE run_id=?", String.class, id);
+        Path changed = archive(source, id, false);
+        assertThatThrownBy(() -> extraction.importRun(id, changed, "synthetic-registrant")).isInstanceOfSatisfying(ExtractionException.class,
+                ex -> assertThat(ex.code()).isEqualTo("EXTRACTION_CONFLICT"));
+        assertThat(jdbc.queryForObject("SELECT receipt_json FROM extraction_runs WHERE run_id=?", String.class, id)).isEqualTo(old);
+    }
+
+    @Test
+    void preservesFailedRunAndOnlyVerifiedSuccessCanEnterReviewedOrigin() throws Exception {
+        var source = source(); registerSource(source); var before = counts();
+        String failed = UUID.randomUUID().toString(); Path archive = archive(source, failed, true);
+        assertThat(extraction.importRun(failed, archive, "synthetic-registrant").status()).isEqualTo("failed");
+        assertThat(counts()).isEqualTo(before);
+        assertThatThrownBy(() -> importer.importBatch(review(source, failed), "synthetic-reviewer")).isInstanceOf(kr.ac.myai.backend.importing.ImportException.class);
+        assertThat(counts()).isEqualTo(before);
+        String legacy = UUID.randomUUID().toString();
+        jdbc.update("INSERT INTO extraction_runs(run_id,document_version_id,input_sha256,provider,model,prompt_version,status) VALUES (?,?,?,'legacy','legacy','legacy','validated')",
+                legacy, source.path("documents").get(0).path("document_version_id").asText(), "0".repeat(64));
+        assertThatThrownBy(() -> importer.importBatch(review(source, legacy), "synthetic-reviewer")).isInstanceOf(kr.ac.myai.backend.importing.ImportException.class);
+        Path legacyArchive = archive(source, legacy, false);
+        assertThatThrownBy(() -> extraction.importRun(legacy, legacyArchive, "synthetic-registrant")).isInstanceOf(ExtractionException.class);
+        String validated = UUID.randomUUID().toString(); Path good = archive(source, validated, false);
+        extraction.importRun(validated, good, "synthetic-registrant");
+        var reviewed = importer.importBatch(review(source, validated), "synthetic-reviewer");
+        assertThat(reviewed.revisionIds()).hasSize(1);
+        assertThat(jdbc.queryForObject("SELECT review_status FROM event_revisions WHERE revision_id=?", String.class, reviewed.revisionIds().getFirst())).isEqualTo("needs_review");
+        assertThat(jdbc.queryForObject("SELECT publication_intent FROM event_revisions WHERE revision_id=?", String.class, reviewed.revisionIds().getFirst())).isEqualTo("hidden");
+        assertThat(counts().subList(2, 4)).isEqualTo(before.subList(2, 4));
+    }
+
+    @Test
+    void concurrentSameRunCreatesOneRowAndLateFailureRollsBack() throws Exception {
+        var source = source(); registerSource(source);
+        String id = UUID.randomUUID().toString(); Path archive = archive(source, id, false);
+        var barrier = new CyclicBarrier(4);
+        try (var workers = Executors.newVirtualThreadPerTaskExecutor()) {
+            var futures = java.util.stream.IntStream.range(0, 4).mapToObj(i -> workers.submit(() -> {
+                barrier.await(5, TimeUnit.SECONDS); return extraction.importRun(id, archive, "synthetic-registrant");
+            })).toList();
+            int created = 0;
+            for (var future : futures) if (!future.get(15, TimeUnit.SECONDS).alreadyRegistered()) created++;
+            assertThat(created).isEqualTo(1);
+        }
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM extraction_runs WHERE run_id=?", Long.class, id)).isEqualTo(1);
+        String failed = UUID.randomUUID().toString(); Path failedArchive = archive(source, failed, false);
+        doAnswer(invocation -> {
+            invocation.callRealMethod();
+            throw new org.springframework.dao.DataIntegrityViolationException("PRIVATE_VALUE late failure");
+        }).when(runs).insert(any(VerifiedExtraction.class), eq("late-failure-test"));
+        assertThatThrownBy(() -> extraction.importRun(failed, failedArchive, "late-failure-test"))
+                .isInstanceOf(ExtractionException.class).hasMessageNotContaining("PRIVATE_VALUE");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM extraction_runs WHERE run_id=?", Long.class, failed)).isZero();
+        assertThat(Files.isRegularFile(failedArchive.resolve(failed).resolve("receipt.json"))).isTrue();
+    }
+
+    @Test
+    void invalidActorStopsBeforePythonAndDatabaseErrorsKeepSafeClassification() throws Exception {
+        for (String actor : new String[]{null, "", "x".repeat(129), "PRIVATE_VALUE\n"}) {
+            assertThatThrownBy(() -> extraction.importRun(UUID.randomUUID().toString(), root, actor))
+                    .isInstanceOfSatisfying(ExtractionException.class, ex -> assertThat(ex.code()).isEqualTo("EXTRACTION_VALIDATION_ERROR"));
+        }
+        verifyNoInteractions(archives, runs);
+        var source = source(); registerSource(source);
+        String id = UUID.randomUUID().toString(); Path archive = archive(source, id, false);
+        var failures = List.of(new org.springframework.dao.DataAccessResourceFailureException("PRIVATE_VALUE"),
+                new org.springframework.jdbc.BadSqlGrammarException("PRIVATE_VALUE", "PRIVATE_SQL", new java.sql.SQLException("PRIVATE_VALUE")));
+        String[] codes = {"EXTRACTION_DATABASE_UNAVAILABLE", "EXTRACTION_INTERNAL_ERROR"};
+        for (int i = 0; i < failures.size(); i++) {
+            doThrow(failures.get(i)).when(runs).checkDocument(any(VerifiedExtraction.class));
+            final String code = codes[i];
+            assertThatThrownBy(() -> extraction.importRun(id, archive, "synthetic-registrant"))
+                    .isInstanceOfSatisfying(ExtractionException.class, ex -> assertThat(ex.code()).isEqualTo(code)).hasMessageNotContaining("PRIVATE_VALUE");
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM extraction_runs WHERE run_id=?", Long.class, id)).isZero();
+        }
+    }
 
     @Test
     void sourceOnlyImportIsIdempotentAndNeverCreatesAnEventOrPublication() throws Exception {
@@ -72,12 +210,55 @@ class ExtractionRunMySqlTest {
     }
 
     ObjectNode source() throws Exception {
-        Files.copy(Path.of("examples/synthetic-source.txt"), root.resolve("synthetic-source.txt"));
+        Files.copy(Path.of("examples/synthetic-source.txt"), root.resolve("synthetic-source.txt"), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         var input = (ObjectNode) mapper.readTree(Path.of("examples/reviewed-import.json").toFile());
         input.put("schema_version", "source-import-v1"); input.putArray("evidence"); input.putArray("events");
         var doc = (ObjectNode) input.path("documents").get(0);
         doc.put("document_id", UUID.randomUUID().toString()).put("document_version_id", UUID.randomUUID().toString());
         for (var check : doc.path("checks")) ((ObjectNode) check).put("check_id", UUID.randomUUID().toString());
         return input;
+    }
+
+    void registerSource(ObjectNode input) throws Exception {
+        importer.importBatch(reader.read(Files.writeString(root.resolve("source.json"), input.toString()), root), "synthetic-source-collector");
+    }
+
+    Path archive(ObjectNode source, String id, boolean failed) throws Exception {
+        Path work = Files.createTempDirectory(root, "run-"); var doc = source.path("documents").get(0);
+        var input = mapper.createObjectNode().put("data_kind", source.path("data_kind").asText())
+                .put("document_version_id", doc.path("document_version_id").asText()).put("title", doc.path("title").asText());
+        input.set("published_date", doc.path("published_date")); input.set("blocks", doc.path("block_index"));
+        var meta = (ObjectNode) mapper.readTree(PythonProbe.REPO.resolve("processing/examples/extraction-metadata.json").toFile());
+        meta.put("run_id", id).put("document_version_id", doc.path("document_version_id").asText())
+                .put("preprocessing_version", doc.path("preprocessing_version").asText()).putNull("provider");
+        ((ObjectNode) meta.path("unavailable_reasons")).put("provider", "합성 시험, 실제 모델 호출 없음");
+        meta.put("started_at", "2026-11-03T01:00:00.123456789Z").put("finished_at", "2026-11-03T01:00:00.123456790Z");
+        String metadata = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(meta).replace("\"cost\" : null", "\"cost\" : 0.1234567890123456789");
+        var output = (ObjectNode) mapper.readTree(PythonProbe.REPO.resolve("contracts/examples/ai-extraction.json").toFile());
+        output.put("document_version_id", doc.path("document_version_id").asText());
+        var block = doc.path("block_index").get(0); String content = block.path("text").asText();
+        var evidence = (ObjectNode) output.path("evidence").get(0);
+        evidence.put("block_id", block.path("block_id").asText()).put("quote", content).put("start_char", 0)
+                .put("end_char", content.codePointCount(0, content.length())).put("text_sha256", ReviewedImportReader.sha256(content.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        Path in = Files.writeString(work.resolve("input.json"), input.toString());
+        Path info = Files.writeString(work.resolve("metadata.json"), metadata);
+        Path prompt = Files.writeString(work.resolve("prompt.txt"), "합성 수동 입력, 실제 AI 실행 아님");
+        Path out = work.resolve("output.json"); Files.write(out, failed ? new byte[]{(byte) 0xff} : output.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        Path archive = work.resolve("archive");
+        var process = new ProcessBuilder(PythonProbe.PYTHON, "-m", "processing.extraction", "import", "--input", in.toString(), "--metadata", info.toString(),
+                "--attempt", prompt.toString(), out.toString(), "--root", archive.toString()).directory(PythonProbe.REPO.toFile()).start();
+        assertThat(process.waitFor(10, TimeUnit.SECONDS)).isTrue(); assertThat(process.exitValue()).isEqualTo(failed ? 4 : 0);
+        return archive;
+    }
+
+    kr.ac.myai.backend.importing.ReviewedBatch review(ObjectNode source, String runId) throws Exception {
+        var input = (ObjectNode) mapper.readTree(Path.of("examples/reviewed-import.json").toFile());
+        input.set("documents", source.path("documents")); var doc = source.path("documents").get(0);
+        for (var evidence : input.path("evidence")) ((ObjectNode) evidence).put("document_version_id", doc.path("document_version_id").asText());
+        var event = (ObjectNode) input.path("events").get(0); String id = UUID.randomUUID().toString(); event.put("event_id", id);
+        for (var link : event.path("document_links")) ((ObjectNode) link).put("document_id", doc.path("document_id").asText());
+        var revision = (ObjectNode) event.path("revision"); revision.put("event_id", id).put("revision_id", UUID.randomUUID().toString()).put("origin", "ai_reviewed");
+        revision.putArray("originating_run_ids").add(runId); revision.putArray("source_version_ids").add(doc.path("document_version_id").asText());
+        return reader.read(Files.writeString(root.resolve("review.json"), input.toString()), root);
     }
 }

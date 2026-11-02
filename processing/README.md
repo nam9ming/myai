@@ -1,6 +1,6 @@
 # Python AI·계산 — 김윤기
 
-C01~C10 순수 계산과 `calc-v1` CLI, Spring 공개 matches 연결, AI 추출 계약 검증·수동 원출력 보관 CLI를 구현했습니다. **실제 모델 호출·D05 DB 등록은 아직 미구현**입니다. 공개 API·DB는 Spring이 맡으며 계산 CLI는 AI·네트워크·DB를 호출하거나 사용자 조건을 저장하지 않습니다. 서버의 Python 실행 파일·작업 경로는 [백엔드 안내](../backend/README.md#python-계산-연결)를 따릅니다.
+C01~C10 순수 계산과 `calc-v1` CLI, Spring 공개 matches 연결, AI 추출 계약 검증·수동 원출력 보관 CLI를 구현했습니다. **실제 모델 호출은 아직 미구현**입니다. 공개 API·DB는 Spring이 맡으며 계산 CLI는 AI·네트워크·DB를 호출하거나 사용자 조건을 저장하지 않습니다. 서버의 Python 실행 파일·작업 경로는 [백엔드 안내](../backend/README.md#python-계산-연결)를 따릅니다.
 
 ## 설치·실행
 
@@ -36,6 +36,8 @@ python3.13 -m venv .venv
 - date_only와 미상 영업을 종일로 채우지 않습니다. 확정 overlap만 묶고, 총량을 확정하지 못하면 분 수는 null입니다. 부분 geometry에서 확인된 이내는 후보가 될 수 있지만 전체 최소 거리는 null로 유지합니다.
 - 명시된 다른 종료 날짜에는 익일 offset을 다시 더하지 않습니다. 반복 날짜가 있으면 각 날짜의 시간+offset을 적용하며 빈 반복 배열은 발생 없음입니다. 날짜 범위만 보고 매일 반복시키지 않습니다.
 - replay는 고정 cutoff 이전 문서·확인만 사용하고, 24시간 경과는 고정 reference_instant로 계산합니다. 재구성과 당시 검증본을 구분하며 현재 연결 상태는 별도 표시합니다.
+
+Java D05 등록은 [D03/D05 연결 안내](../backend/docs/extraction-run-import.md)를 따른다. 원문을 먼저 등록하고 같은 전체 블록·전처리 버전의 AI 입력을 사용한다.
 
 ## AI 수동 원출력 기록
 

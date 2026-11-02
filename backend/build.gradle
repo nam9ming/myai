@@ -37,6 +37,7 @@ tasks.named('processResources') {
 }
 
 tasks.named('test') {
+    dependsOn tasks.named('bootJar')
     useJUnitPlatform()
     inputs.files(fileTree('examples'), file('../contracts/examples/event-facts-response.json'))
     inputs.files(fileTree('../processing') { include '__init__.py', 'matching/**/*.py', 'extraction/**/*.py', 'examples/*.json' })

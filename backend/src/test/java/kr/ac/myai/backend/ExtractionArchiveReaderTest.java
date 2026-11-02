@@ -32,6 +32,16 @@ class ExtractionArchiveReaderTest {
     }
 
     @Test
+    void bindsReturnedReceiptTagToTheActualInput() throws Exception {
+        Path archive = archive(false);
+        Path receiptPath = archive.resolve(id).resolve("receipt.json");
+        String changed = Files.readString(receiptPath).replace("\"data_kind\":\"synthetic\"", "\"data_kind\":\"real\"");
+        Files.writeString(receiptPath, changed);
+        Path probe = probe("print(" + new ObjectMapper().writeValueAsString(changed) + ")");
+        assertThatThrownBy(() -> reader(probe, 3000).read(id, archive)).isInstanceOf(ExtractionException.class);
+    }
+
+    @Test
     void preservesMultipleAttemptResultsAndLastStatus() throws Exception {
         var result = reader(PythonProbe.REPO, 10000).read(id, archive(false, 2));
         assertThat(result.attempts()).isEqualTo(2);

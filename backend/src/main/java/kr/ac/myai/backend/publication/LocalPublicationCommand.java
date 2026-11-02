@@ -33,7 +33,7 @@ public class LocalPublicationCommand implements ApplicationRunner, ExitCodeGener
     @Override
     public void run(ApplicationArguments args) {
         try {
-            if (context instanceof WebApplicationContext || environment.matchesProfiles("local-import", "local-export")) {
+            if (context instanceof WebApplicationContext || environment.matchesProfiles("local-import", "local-export", "local-extraction")) {
                 throw new PublicationException("PUBLICATION_VALIDATION_ERROR", "local-publication은 HTTP 서버와 다른 로컬 명령 프로필 없이 실행해야 합니다.", "spring.profiles.active");
             }
             PublicationCommand command = reader.read(Path.of(required("myai.publication.file")));

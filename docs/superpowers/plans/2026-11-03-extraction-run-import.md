@@ -34,9 +34,9 @@
 
 **Interfaces:** `source-import-v1`은 reviewed-import-v1과 같은5키, documents≥1·evidence=[]·events=[]이며 source_kind=source로 저장. 기존 reviewed-import-v1의 사건/근거 최소1은 유지. V3는 provider/model nullable, model_version/schema_version/preprocessing_version/execution_mode/attempts/data_kind/metadata_json/metadata_sha256/receipt_json/receipt_sha256/registered_by/registered_at을 추가하며 legacy 값은 null 유지.
 
-- [ ] Step1: source-only 정상·사건/근거 혼입 거부·기존 빈 reviewed 거부·동일 배치 재사용·D03만 저장·V3 기존 행 보존/null·정밀 원본 시험 작성 후 RED 확인.
-- [ ] Step2: 기존 문서 검증/저장을 재사용하고 V3 migration만 추가한다. source-only는 별도 schema/source_kind로 식별한다.
-- [ ] Step3: 해당 단위·실제 MySQL 시험 GREEN 후 커밋. Expected: 사건/공개 행 증가 없음, migration 재실행0.
+- [x] Step1: source-only 정상·사건/근거 혼입 거부·기존 빈 reviewed 거부·동일 배치 재사용·D03만 저장·V3 기존 행 보존/null·정밀 원본 시험 작성 후 RED 확인.
+- [x] Step2: 기존 문서 검증/저장을 재사용하고 V3 migration만 추가한다. source-only는 별도 schema/source_kind로 식별한다.
+- [x] Step3: 해당 단위·실제 MySQL 시험 GREEN 후 커밋. Expected: 사건/공개 행 증가 없음, migration 재실행0.
 
 ### Task 2: Python 검증·archive 읽기
 
@@ -44,9 +44,9 @@
 
 **Interfaces:** `PythonProcess.execute(executable,workdir,args,input,timeout)->Result(exitCode,stdout)`는 기존 안전 IO를 이동한다. `ExtractionArchiveReader.read(runId,root)->VerifiedExtraction`은 Python verify의 receipt와 입력/metadata/receipt 원본 hash를 대조하고0/4·상태 일치를 확인한다. 기본 실행 파일/workdir는 기존 Python 설정을 사용하며 extraction timeout은60000ms(1~60000)다.
 
-- [ ] Step1: 실제 Python 생성 archive의 성공/실패·다중 시도·정밀 metadata·손상/미완료/다른 run·잘못된 root/파일·timeout/비정상 출력·안전한 오류·기존 계산 프로세스 회귀 RED.
-- [ ] Step2: 중복 subprocess 구현 대신 기존 IO를 공유한다. root/run/artifact는 일반 파일·고정 파일명만 사용하며 입력/metadata 각각8MiB로 제한한다. Python 작업·파일 읽기는 DB 밖이다.
-- [ ] Step3: 관련 시험·기존 계산 시험 GREEN 후 커밋. Expected: 원문 없이 안전한 실패, child 정리, 원본 bytes/hash 보존.
+- [x] Step1: 실제 Python 생성 archive의 성공/실패·다중 시도·정밀 metadata·손상/미완료/다른 run·잘못된 root/파일·timeout/비정상 출력·안전한 오류·기존 계산 프로세스 회귀 RED.
+- [x] Step2: 중복 subprocess 구현 대신 기존 IO를 공유한다. root/run/artifact는 일반 파일·고정 파일명만 사용하며 입력/metadata 각각8MiB로 제한한다. Python 작업·파일 읽기는 DB 밖이다.
+- [x] Step3: 관련 시험·기존 계산 시험 GREEN 후 커밋. Expected: 원문 없이 안전한 실패, child 정리, 원본 bytes/hash 보존.
 
 ### Task 3: 원자 등록·CLI·D06 연결·전체 검토
 
@@ -54,8 +54,8 @@
 
 **Interfaces:** `ExtractionImportService.importRun(runId,root,actor)->Result`는 먼저 archive를 검증하고 짧은 REQUIRES_NEW에서 D03 projection·전처리 버전을 대조해 INSERT한다. Result는 ID·상태·attempts·data_kind·hash·already_registered·review_required만 반환한다. actor≤128, main profile `local-extraction`; 설정 myai.extraction.run-id/archive-root/actor, 기존 MYAI_PYTHON_EXECUTABLE/WORKDIR 및 MYAI_EXTRACTION_TIMEOUT_MS 사용.
 
-- [ ] Step1: 등록/재실행·다른 원본 충돌·문서/블록/전처리/tag 불일치·실패run 보존/D06참조거부·동시 등록·DB rollback·Python 진입 트랜잭션 없음·공개 미노출·강제web/혼합profile·CLI exit0/2/3/4/5/1 RED.
-- [ ] Step2: V3에 입력/출력 hash·nullable표시값·원본 metadata/receipt·archive 참조·최초 actor를 불변 저장한다. duplicate 경합 복구 조회는 실패 트랜잭션 종료 후 새 트랜잭션에서 대조한다. legacy 행을 검증 없이 성공으로 승격하지 않는다.
-- [ ] Step3: 실제 MySQL 전체 Java·Python97+·npm lint/test/build·실제 JAR 원문→D05→AI-origin D06 import/공개 미반영·실패/재실행·출력 안전성 검증. Expected: 모든 시험 GREEN·생략0, 기존 공개 head 불변.
+- [x] Step1: 등록/재실행·다른 원본 충돌·문서/블록/전처리/tag 불일치·실패run 보존/D06참조거부·동시 등록·DB rollback·Python 진입 트랜잭션 없음·공개 미노출·강제web/혼합profile·CLI exit0/2/3/4/5/1 RED.
+- [x] Step2: V3에 입력/출력 hash·nullable표시값·원본 metadata/receipt·archive 참조·최초 actor를 불변 저장한다. duplicate 경합 복구 조회는 실패 트랜잭션 종료 후 새 트랜잭션에서 대조한다. legacy 행을 검증 없이 성공으로 승격하지 않는다.
+- [x] Step3: 실제 MySQL 전체 Java·Python97+·npm lint/test/build·실제 JAR 원문→D05→AI-origin D06 import/공개 미반영·실패/재실행·출력 안전성 검증. Expected: 모든 시험 GREEN·생략0, 기존 공개 head 불변.
 - [ ] Step4: 한국어 실행/미완료·hash 대상·원본 보관/복구 책임을 갱신한다. 자체 전체 리뷰 후 한 번의 fresh 전체 reviewer, 유효 지적 RED→GREEN·전체 회귀로0까지 수정한다.
 - [ ] Step5: backend/api-foundation PR 제출·최신 CI/AI/사람 지적 검토. CI 성공·유효 미해결0이면 expected-head 병합, main PR4는 사람 대기. 이번 작업의 전용 임시 DB/자료만 정리하며 전체 Goal은 유지한다.

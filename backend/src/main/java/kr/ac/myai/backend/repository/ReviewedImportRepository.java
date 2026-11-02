@@ -85,7 +85,7 @@ public class ReviewedImportRepository {
     }
 
     public boolean runMatches(String id, List<String> sources) {
-        var versions = jdbc.query("SELECT document_version_id FROM extraction_runs WHERE run_id = ? AND status = 'validated'", (row, index) -> row.getString(1), id);
+        var versions = jdbc.query("SELECT document_version_id FROM extraction_runs WHERE run_id = ? AND status = 'validated' AND schema_version = 'extract-schema-v1' AND metadata_sha256 IS NOT NULL AND receipt_sha256 IS NOT NULL", (row, index) -> row.getString(1), id);
         return versions.size() == 1 && sources.contains(versions.getFirst());
     }
 
