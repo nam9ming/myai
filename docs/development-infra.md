@@ -8,7 +8,7 @@
 
 | 워크플로 | 현재 동작 |
 | --- | --- |
-| CI | PR·main 변경 시 JS 린트, 인프라 테스트, 계약 JSON 검증, HTML 패키징·산출물 보관 |
+| CI | PR·main 변경 시 JS 린트, 인프라·계약 검증, JDK21 백엔드·MySQL 시험, HTML/JAR 산출물 보관 |
 | Preview | `ENABLE_PREVIEW=true`일 때 내부 PR의 합성 HTML 시제품을 Pages에 발행 |
 | AI Review | OpenAI API로 PR 변경분 리뷰·코멘트, `OPENAI_API_KEY`가 없으면 생략 |
 | Notify / PR Notify | CI·Preview 결과와 PR 상태를 기존 디스코드 채널로 전송 |
@@ -16,7 +16,7 @@
 | Weekly Report | 금요일 18:00 KST에 myai 활동을 기존 주간·발주처 채널로 전송 |
 | Ping | 사람이 실행할 때 선택 채널에 연결 확인 메시지 전송 |
 
-현재 Flutter·Spring·Python 서비스 스캐폴드는 없다. CI 성공은 앱 빌드·DB 연결·성능 시험의 완료를 뜻하지 않는다. 앱 구현 시 실제 빌드·테스트 명령을 각 README와 CI에 추가한다. `npm run build`는 `docs/reference/meeting-demo.html` 하나만 `dist/index.html`로 복사한다. 가상 자료 표시를 유지하고 비공개 자료·저장소 전체를 배포하지 않는다.
+현재 Spring 백엔드 기초·합성 API·MySQL 스키마가 있다. CI의 `check`에서 MySQL8.4 전용 테스트 DB와 JDK21을 사용해 백엔드 시험·JAR 빌드를 실행한다. CI의 DB 비밀번호는 실행 ID로 만든 일회성 테스트 값이며 실서비스 자격증명이 아니다. Flutter·Python 서비스와 실제 import·공개·계산 연결은 미구현이므로 CI 성공을 전체 앱·성능 시험 완료로 표현하지 않는다. `npm run build`는 기존 합성 HTML 하나만 패키징한다.
 
 ## 로컬 확인
 

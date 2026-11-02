@@ -1,5 +1,7 @@
 # 백엔드·DB 작업
 
+현재 기초 구현·실행 명령·미완료 범위는 [README](README.md)에 기록합니다. 아래 전체 작업 중 합성 API·초기 스키마부터 구현하며, 실제 import·공개·Python 연결 완료를 뜻하지 않습니다.
+
 담당: 강명묵 · 기술 결정: Spring Boot·MySQL · 첫 결과: **11/3(화) 오후6시(KST)** · 연구실 시연: **11/4(수), 시각미정**
 
 - Java21·Spring Boot3.5.x·Gradle Wrapper 프로젝트와 MySQL8.4 LTS 연결을 구성합니다. 실제 패치/Wrapper 버전을 고정합니다.
