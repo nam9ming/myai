@@ -8,7 +8,7 @@ PR #8이 병합된 `b3095ad`를 기준으로, 실제 DB snapshot의 public match
 
 ## 연결 경계
 
-- `SnapshotNoticeService.matches`의 모드·snapshot·지점 검증 후, 원본 canonical checksum·고정 사실·출처·검토 좌표와 정규화한 요청을 조립한다. checksum은 재직렬화한 JSON으로 바꾸지 않는다. 기존 REPEATABLE_READ와 공개본/retired 검증을 유지한다.
+- `SnapshotNoticeService.matches`의 모드·snapshot·지점 검증 후, 원본 canonical checksum·고정 사실·출처·검토 좌표와 정규화한 요청을 조립한다. checksum은 재직렬화한 JSON으로 바꾸지 않는다. 공개본/retired 검증과 REPEATABLE_READ 일관성은 짧은 읽기 경계에서 유지하고 DB 명세에 따라 트랜잭션·연결을 반환한 뒤 Python을 호출한다.
 - current의 기준 시각은 서버 Clock에서 한 번 정하고 KST anchor를 만든다. replay는 snapshot의 고정 anchor/reference/cutoff/fidelity를 사용한다. data_kind·규칙·사전 버전은 같은 snapshot에서 가져온다.
 - Java ProcessBuilder는 서버 설정의 Python 실행 파일·저장소 루트 workdir과 고정 `-m processing.matching`만 사용한다. 사용자 값은 stdin JSON으로만 전달한다. stdout·stderr·stdin 쓰기를 함께 처리하고 공통5초 제한·입출력8MiB·제한된 동시 실행을 적용한다.
 - 시작 실패·비정상 종료·과다 출력·timeout·중단에서 생성한 프로세스/스트림/작업을 정리한다. 원문·명령·로컬 경로·사용자 조건·stderr는 공개 응답/로그에 넣지 않는다. retryable은 일시 장애 여부로 구분한다.

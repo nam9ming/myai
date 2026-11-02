@@ -17,6 +17,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.time.Clock;
@@ -25,7 +28,6 @@ import java.util.*;
 
 @Service
 @Profile("!fixture")
-@Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
 public class SnapshotNoticeService implements PublicNoticeService {
     private static final String FIELDS = "applicability exceptions route_names stop_names directions";
     private static final String FACTS = "event_id revision_id title types lifecycle lifecycle_evidence_ids area_membership document_links relations source_version_ids";
@@ -34,13 +36,18 @@ public class SnapshotNoticeService implements PublicNoticeService {
     private final ObjectMapper mapper;
     private final PythonCalculator calculator;
     private final Clock clock;
+    private final TransactionTemplate reads;
 
-    public SnapshotNoticeService(PublicSnapshotRepository repository, PublicationContent content, ObjectMapper mapper, PythonCalculator calculator, Clock clock) {
+    public SnapshotNoticeService(PublicSnapshotRepository repository, PublicationContent content, ObjectMapper mapper, PythonCalculator calculator, Clock clock, PlatformTransactionManager transactions) {
         this.repository = repository; this.content = content; this.mapper = mapper;
         this.calculator = calculator; this.clock = clock;
+        reads = new TransactionTemplate(transactions);
+        reads.setReadOnly(true); reads.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
+        reads.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     @Override
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public JsonNode config(String mode, UUID caseId) {
         JsonNode snapshot = active(mode, caseId);
         var data = content.select(snapshot, "created_at data_kind timezone window_days radius_m document_count event_count mode case_id anchor_date reference_instant knowledge_cutoff history_fidelity collection_range last_check_min last_check_max rules_version dictionary_version");
@@ -65,6 +72,15 @@ public class SnapshotNoticeService implements PublicNoticeService {
 
     @Override
     public JsonNode matches(MatchRequest query) {
+        var selected = reads.execute(status -> calculationInput(query));
+        ObjectNode data = calculator.calculate(selected.input());
+        CalculationResponse.validate(selected.input(), data, id -> publicEvent(selected.snapshot(), findEvent(selected.snapshot(), id)));
+        return envelope(selected.snapshot(), data);
+    }
+
+    private record CalculationInput(JsonNode snapshot, ObjectNode input) {}
+
+    private CalculationInput calculationInput(MatchRequest query) {
         JsonNode snapshot = query.snapshotId() == null ? active(query.mode(), query.caseId()) : load(query.snapshotId().toString(), true);
         if (!snapshot.path("mode").asText().equals(query.mode()) || !Objects.equals(snapshot.path("case_id").textValue(), query.caseId() == null ? null : query.caseId().toString())) {
             throw ApiException.invalid("snapshot_id", "선택한 모드·사례와 같은 snapshot을 사용해 주세요.");
@@ -87,12 +103,11 @@ public class SnapshotNoticeService implements PublicNoticeService {
         var types = normalized.putArray("types"); query.types().stream().distinct().sorted().forEach(types::add);
         input.set("query", normalized);
         input.set("events", snapshot.path("event_public_payloads")); input.set("source_versions", snapshot.path("sources"));
-        ObjectNode data = calculator.calculate(input);
-        CalculationResponse.validate(input, data, id -> publicEvent(snapshot, findEvent(snapshot, id)));
-        return envelope(snapshot, data);
+        return new CalculationInput(snapshot, input);
     }
 
     @Override
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public JsonNode event(UUID eventId, UUID snapshotId) {
         JsonNode snapshot = load(snapshotId.toString(), true);
         JsonNode facts = findEvent(snapshot, eventId.toString());

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import kr.ac.myai.backend.importing.ReviewedImportReader;
+import kr.ac.myai.backend.calculation.PythonCalculator;
 import kr.ac.myai.backend.publication.PublicationCommandReader;
 import kr.ac.myai.backend.service.PublicationService;
 import kr.ac.myai.backend.service.ReviewedImportService;
@@ -21,15 +22,20 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import javax.sql.DataSource;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.time.*;
 import java.util.*;
 import java.util.regex.Pattern;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -45,6 +51,8 @@ class CalculationMySqlTest {
     @Autowired ReviewedImportReader reader;
     @Autowired JdbcTemplate jdbc;
     @Autowired MockMvc mvc;
+    @Autowired DataSource dataSource;
+    @MockitoSpyBean PythonCalculator calculator;
     @TempDir Path root;
     final ObjectMapper mapper = new ObjectMapper();
 
@@ -105,6 +113,24 @@ class CalculationMySqlTest {
         var before = databaseState();
         assertThat(matches(query).path("data")).isEqualTo(first);
         assertThat(databaseState()).isEqualTo(before);
+    }
+
+    @Test
+    void releasesDatabaseBeforePythonAndKeepsSelectedSnapshotDuringHeadChange() throws Exception {
+        var input = fresh(); var command = publishCommand(input, approve(input), null); String original = execute(command);
+        var replacement = command.deepCopy(); replacement.put("expected_head_version", 0).putArray("revision_ids");
+        var current = new AtomicReference<String>();
+        doAnswer(call -> {
+            assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+            assertThat(dataSource.unwrap(com.zaxxer.hikari.HikariDataSource.class).getHikariPoolMXBean().getActiveConnections()).isZero();
+            current.set(execute(replacement));
+            return call.callRealMethod();
+        }).when(calculator).calculate(any());
+        var response = matches(query(command, original));
+        assertThat(response.path("snapshot_id").asText()).isEqualTo(original);
+        assertThat(response.path("data").path("counts").path("candidate").asInt()).isEqualTo(1);
+        mvc.perform(post("/api/v1/matches").contentType("application/json").content(query(command, original).toString()))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.current_snapshot_id").value(current.get()));
     }
 
     @Test

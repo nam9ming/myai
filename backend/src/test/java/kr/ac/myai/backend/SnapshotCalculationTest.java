@@ -139,13 +139,110 @@ class SnapshotCalculationTest {
                 .doesNotContain("PRIVATE_PATH", root.toString());
     }
 
+    @Test
+    void rejectsNonCandidateOverlapReferences() throws Exception {
+        Path probe = PythonProbe.realEngine(root, """
+                candidate = json.loads(raw)
+                candidate['query']['selection'] = 'candidate'
+                item = run(json.dumps(candidate).encode())['data']['items'][0]
+                item.update(classification='needs_check', reason_codes=['TIME_UNKNOWN'])
+                response['data']['items'] = [item]
+                response['data']['counts'] = dict(candidate=2, needs_check=1, cancelled=0)
+                members = response['data']['overlap_groups'][0]['event_ids']
+                response['data']['overlap_groups'][0]['event_ids'] = [item['event_id'], next(v for v in members if v != item['event_id'])]
+                """);
+        var q = query(); q = new MatchRequest(q.pointId(), q.weeklyHours(), q.mode(), null, q.types(), null, "needs_check", null);
+        var service = service(snapshotWithEvents(3), calculator(probe), fixed); var request = q;
+        assertThat(catchThrowable(() -> service.matches(request))).isInstanceOfSatisfying(ApiException.class,
+                error -> assertThat(error.code()).isEqualTo("CALCULATION_PROTOCOL_ERROR"));
+    }
+
+    @Test
+    void rejectsOverlapUnionAboveCandidateCount() throws Exception {
+        Path probe = PythonProbe.realEngine(root, """
+                members = response['data']['overlap_groups'][0]['event_ids']
+                response['data']['counts']['candidate'] = 2
+                response['data']['overlap_groups'] = [
+                    dict(group_id='20000000-0000-4000-8000-000000000001', start_at='2026-11-03T01:00:00Z', end_at='2026-11-03T02:00:00Z', event_ids=members[:2]),
+                    dict(group_id='20000000-0000-4000-8000-000000000002', start_at='2026-11-03T02:00:00Z', end_at='2026-11-03T03:00:00Z', event_ids=members[2:])]
+                """);
+        var q = query(); q = new MatchRequest(q.pointId(), q.weeklyHours(), q.mode(), null, q.types(), null, "needs_check", null);
+        var service = service(snapshotWithEvents(4), calculator(probe), fixed); var request = q;
+        assertThat(catchThrowable(() -> service.matches(request))).isInstanceOfSatisfying(ApiException.class,
+                error -> assertThat(error.code()).isEqualTo("CALCULATION_PROTOCOL_ERROR"));
+    }
+
+    @Test
+    void rejectsCancelledResultForActiveFacts() throws Exception {
+        Path probe = PythonProbe.realEngine(root, """
+                candidate = json.loads(raw)
+                candidate['query']['selection'] = 'candidate'
+                item = run(json.dumps(candidate).encode())['data']['items'][0]
+                item.update(classification='cancelled', reason_codes=['CANCELLED'])
+                response['data']['items'] = [item]
+                response['data']['counts'] = dict(candidate=0, needs_check=0, cancelled=1)
+                """);
+        var q = query(); q = new MatchRequest(q.pointId(), q.weeklyHours(), q.mode(), null, q.types(), null, "cancelled", null);
+        var service = service(CalculationFixtures.snapshot(mapper), calculator(probe), fixed); var request = q;
+        assertThat(catchThrowable(() -> service.matches(request))).isInstanceOfSatisfying(ApiException.class,
+                error -> assertThat(error.code()).isEqualTo("CALCULATION_PROTOCOL_ERROR"));
+    }
+
+    @Test
+    void rejectsUnselectedCountsThatContradictFrozenLifecycle() throws Exception {
+        for (String lifecycle : java.util.List.of("active", "cancelled")) {
+            var snapshot = CalculationFixtures.snapshot(mapper); var event = (ObjectNode) snapshot.path("event_public_payloads").get(0);
+            event.put("lifecycle", lifecycle).putArray("lifecycle_evidence_ids").add("body-quote");
+            String counts = lifecycle.equals("active") ? "dict(candidate=0, needs_check=0, cancelled=1)" : "dict(candidate=0, needs_check=1, cancelled=0)";
+            Path probe = PythonProbe.realEngine(root, "response['data']['items']=[]\nresponse['data']['counts']=" + counts);
+            var service = service(snapshot, calculator(probe), fixed); var request = query();
+            assertThat(catchThrowable(() -> service.matches(request))).as(lifecycle).isInstanceOfSatisfying(ApiException.class,
+                    error -> assertThat(error.code()).isEqualTo("CALCULATION_PROTOCOL_ERROR"));
+        }
+    }
+
+    @Test
+    void rejectsCandidateCountsForUncertainFacts() throws Exception {
+        for (String field : java.util.List.of("lifecycle", "area_membership")) {
+            var snapshot = CalculationFixtures.snapshot(mapper); ((ObjectNode) snapshot.path("event_public_payloads").get(0)).put(field, "uncertain");
+            Path probe = PythonProbe.realEngine(root, "response['data']['items']=[]\nresponse['data']['counts']=dict(candidate=1, needs_check=0, cancelled=0)");
+            var q = query(); var request = new MatchRequest(q.pointId(), q.weeklyHours(), q.mode(), null, q.types(), null, "needs_check", null);
+            var service = service(snapshot, calculator(probe), fixed);
+            assertThat(catchThrowable(() -> service.matches(request))).as(field).isInstanceOfSatisfying(ApiException.class,
+                    error -> assertThat(error.code()).isEqualTo("CALCULATION_PROTOCOL_ERROR"));
+        }
+    }
+
+    @Test
+    void rejectsNonCancelledCountsAboveFrozenNonCancelledFacts() throws Exception {
+        var snapshot = snapshotWithEvents(2); var event = (ObjectNode) snapshot.path("event_public_payloads").get(1);
+        event.put("lifecycle", "cancelled").putArray("lifecycle_evidence_ids").add("body-quote");
+        Path probe = PythonProbe.realEngine(root, "response['data']['items']=[]\nresponse['data']['counts']=dict(candidate=1, needs_check=1, cancelled=0)");
+        var q = query(); var request = new MatchRequest(q.pointId(), q.weeklyHours(), q.mode(), null, q.types(), null, "cancelled", null);
+        var service = service(snapshot, calculator(probe), fixed);
+        assertThat(catchThrowable(() -> service.matches(request))).isInstanceOfSatisfying(ApiException.class,
+                error -> assertThat(error.code()).isEqualTo("CALCULATION_PROTOCOL_ERROR"));
+    }
+
+    private ObjectNode snapshotWithEvents(int count) throws Exception {
+        var snapshot = CalculationFixtures.snapshot(mapper); var events = snapshot.withArray("event_public_payloads");
+        for (int i = 1; i < count; i++) {
+            var event = ((ObjectNode) events.get(0)).deepCopy();
+            event.put("event_id", UUID.randomUUID().toString()).put("revision_id", UUID.randomUUID().toString());
+            events.add(event); snapshot.withArray("revision_ids").add(event.path("revision_id"));
+        }
+        return snapshot.put("event_count", count);
+    }
+
     private SnapshotNoticeService service(ObjectNode snapshot, PythonCalculator calculator, Clock clock) throws Exception {
         var repository = mock(PublicSnapshotRepository.class);
         var row = CalculationFixtures.published(snapshot, mapper);
         String channel = row.snapshot().mode().equals("current") ? "current" : "replay:" + row.snapshot().caseId();
         when(repository.head(channel)).thenReturn(Optional.of(row.snapshot().id()));
         when(repository.published(row.snapshot().id())).thenReturn(Optional.of(row));
-        return new SnapshotNoticeService(repository, new PublicationContent(json, mapper), mapper, calculator, clock);
+        var transactions = mock(org.springframework.transaction.PlatformTransactionManager.class);
+        when(transactions.getTransaction(any())).thenReturn(new org.springframework.transaction.support.SimpleTransactionStatus());
+        return new SnapshotNoticeService(repository, new PublicationContent(json, mapper), mapper, calculator, clock, transactions);
     }
 
     private PythonCalculator calculator(Path workdir) {

@@ -48,13 +48,19 @@ public final class CalculationResponse {
             total += count.intValue();
         }
         require(total <= filtered.size() && data.path("items").isArray());
+        long cancelled = filtered.stream().filter(id -> facts.get(id).path("lifecycle").asText().equals("cancelled")).count();
+        long eligible = filtered.stream().filter(id -> facts.get(id).path("lifecycle").asText().equals("active") && facts.get(id).path("area_membership").asText().equals("verified")).count();
+        long candidates = data.path("counts").path("candidate").longValue();
+        require(data.path("counts").path("cancelled").longValue() <= cancelled && candidates <= eligible
+                && candidates + data.path("counts").path("needs_check").longValue() <= filtered.size() - cancelled);
         String selection = query.path("selection").asText(); var returned = new HashSet<String>();
         for (JsonNode item : data.path("items")) {
             String id = item.path("event_id").asText();
             require(filtered.contains(id) && returned.add(id) && item.path("classification").asText().equals(selection));
             JsonNode event = facts.get(id);
-            if (event.path("lifecycle").asText().equals("cancelled")) require(selection.equals("cancelled"));
-            else if (event.path("lifecycle").asText().equals("uncertain") || event.path("area_membership").asText().equals("uncertain")) require(selection.equals("needs_check"));
+            boolean isCancelled = event.path("lifecycle").asText().equals("cancelled");
+            require(isCancelled == selection.equals("cancelled"));
+            if (!isCancelled && (event.path("lifecycle").asText().equals("uncertain") || event.path("area_membership").asText().equals("uncertain"))) require(selection.equals("needs_check"));
             ObjectNode expected = publicFacts.apply(id);
             var allowed = new HashSet<>(keys(expected)); allowed.addAll(Set.of(METRICS.split(" ")));
             require(keys(item).equals(allowed));
@@ -73,14 +79,16 @@ public final class CalculationResponse {
         }
         require(returned.size() == data.path("counts").path(selection).asInt(-1));
         require(data.path("overlap_groups").isArray());
-        var groupIds = new HashSet<String>(); Instant previousEnd = null; Set<String> previousIds = Set.of();
+        var groupIds = new HashSet<String>(); var grouped = new HashSet<String>(); Instant previousEnd = null; Set<String> previousIds = Set.of();
         for (JsonNode group : data.path("overlap_groups")) {
             shape(group, "group_id start_at end_at event_ids");
             String id = group.path("group_id").asText();
             require(UUID.fromString(id).toString().equals(id) && groupIds.add(id));
             var members = strings(group.path("event_ids"));
-            require(members.size() >= 2 && members.size() <= data.path("counts").path("candidate").asInt() && filtered.containsAll(members));
+            require(members.size() >= 2 && members.size() <= candidates && filtered.containsAll(members));
             if (selection.equals("candidate")) require(returned.containsAll(members));
+            else require(Collections.disjoint(returned, members));
+            grouped.addAll(members); require(grouped.size() <= candidates);
             for (String member : members) {
                 require(facts.get(member).path("lifecycle").asText().equals("active") && facts.get(member).path("area_membership").asText().equals("verified"));
             }

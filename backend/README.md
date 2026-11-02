@@ -85,6 +85,8 @@ Java는 고정 인자 `-m processing.matching`과 JSON stdin만 사용한다. �
 
 원본 snapshot checksum과 실제 전송 바이트 hash를 구분하고 ID·버전·응답 형식·사실 필드·참조/집계 일관성을 검사한다. 시간·거리·후보 판정은 Python이 담당한다. 계산 요청은 DB와 사용자 조건을 저장하지 않는다.
 
+계산 입력과 원본 checksum은 짧은 읽기 전용 REPEATABLE READ 트랜잭션에서 함께 확보한다. DB 연결을 반환한 뒤 Python을 실행하며, 실행 중 공개 head가 교체되어도 이미 선택한 고정 사실을 섞지 않는다. 이후 이전본을 다시 요청하면409다.
+
 설정 미준비·기동/비정상 종료·출력 초과는 `503 CALCULATION_UNAVAILABLE`, retryable=false다. timeout·interrupt·실행 한도 초과는 같은 코드와 retryable=true다. 응답 JSON/hash/ID/버전/사실 불일치는 `500 CALCULATION_PROTOCOL_ERROR`, retryable=false다. `health`200은 계산 준비 완료를 뜻하지 않는다. 자세한 입출력은 [CLI 계약](../contracts/calculation-bridge.md)을 따른다.
 
 ## 검토 JSON 로컬 import
