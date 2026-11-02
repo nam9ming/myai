@@ -110,16 +110,26 @@ def occurrence_intervals(occ, start, end):
                 hi = datetime.max.replace(tzinfo=KST)
         else:
             lo = midnight(lo_day) if lo_day else start
-            offset = 1 + (occ['end_day_offset'] or 0)
+            explicit_end = lo_day is not None and hi_day is not None and lo_day < hi_day and recurrence is None
+            day_offset = occ['end_day_offset']
+            if occ['precision'] == 'unknown' and lo_day == hi_day and lo_day is not None and day_offset is None:
+                offsets = [0, 1]
+                if occ['time_start'] and occ['time_end']:
+                    a, b = time.fromisoformat(occ['time_start']), time.fromisoformat(occ['time_end'])
+                    seconds = lambda t: t.hour * 3600 + t.minute * 60 + t.second
+                    offsets = [v for v in offsets if 0 < seconds(b) + v * 86400 - seconds(a) <= 86400]
+                # 가능한 종료 상한만 계산하며 미상 offset 자체는 채우지 않는다.
+                day_offset = max(offsets)
+            offset = 1 + (0 if explicit_end else (day_offset or 0))
             hi = _after(hi_day, offset) if hi_day else end
             if occ['precision'] == 'unknown':
                 if lo_day and occ['time_start']:
                     lo = datetime.combine(lo_day, time.fromisoformat(occ['time_start']), KST)
-                if hi_day and occ['time_end'] and occ['end_day_offset'] is not None:
+                if hi_day and occ['time_end'] and (explicit_end or day_offset is not None):
                     hi = datetime.combine(hi_day, time.fromisoformat(occ['time_end']), KST)
                     if lo_day is None or lo_day == hi_day:
                         try:
-                            hi += occ['end_day_offset'] * DAY
+                            hi += day_offset * DAY
                         except OverflowError:
                             hi = datetime.max.replace(tzinfo=KST)
         if max(start, lo) < min(end, hi):

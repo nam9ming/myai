@@ -7,11 +7,10 @@ import math
 import re
 from urllib.parse import urlsplit
 
-from .engine import calculate
+from .engine import MAX_BYTES, OutputLimitError, calculate
 from .geometry import segment_distance
 from .intervals import KST, WEEKDAYS, midnight, instant_ns
 
-MAX_BYTES = 8 * 1024 * 1024
 UUID = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 HASH = r'[0-9a-f]{64}'
 STAMP = r'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,9})?Z'
@@ -135,7 +134,7 @@ def _source(source, context, now, cutoff):
     day(source['published_date'], nullable=True)
     text(source['official_url'])
     url = urlsplit(source['official_url'])
-    check(url.scheme in ('http', 'https') and bool(url.hostname)
+    check(url.scheme in ('http', 'https') and bool(url.hostname) and url.username is None
           and re.search(r'[\s\x00-\x1f\x7f]', source['official_url']) is None)
     text(source['text_sha256'], HASH)
     collected = stamp(source['collected_at'])
@@ -215,7 +214,8 @@ def _occurrence(occ, locations, evidence):
         check(lo is not None and hi is not None and offset is not None)
     elif precision != 'unknown':
         check(lo is None and hi is None and offset is None)
-    if lo is not None and hi is not None and offset is not None:
+    explicit_dates = first is not None and last is not None and first < last and occ['recurrence_dates'] is None
+    if lo is not None and hi is not None and offset is not None and not explicit_dates:
         seconds = lambda t: t.hour * 3600 + t.minute * 60 + t.second
         check(0 < seconds(hi) + offset * 86400 - seconds(lo) <= 86400)
     recurrence = occ['recurrence_dates']

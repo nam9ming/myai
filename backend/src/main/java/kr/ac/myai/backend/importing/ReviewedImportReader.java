@@ -312,7 +312,9 @@ public class ReviewedImportReader {
             check(start != null && end != null && offset != null, "occurrences.time_start");
         } else if (!precision.equals("unknown")) check(start == null && end == null && offset == null, "occurrences.time_start");
         // 미상 날짜의 부분 시간은 보존하되 완전한 시간 구간의 모순은 거부한다.
-        if (start != null && end != null && offset != null) {
+        boolean explicitDates = startDate != null && endDate != null && endDate.isAfter(startDate)
+                && node.path("recurrence_dates").isNull();
+        if (start != null && end != null && offset != null && !explicitDates) {
             long seconds = end.toSecondOfDay() + offset * 86400 - start.toSecondOfDay();
             check(seconds > 0 && seconds <= 86400, "occurrences.time_end");
         }

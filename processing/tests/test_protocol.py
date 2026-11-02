@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta
 
 from processing.matching.protocol import run, ProtocolError, MAX_BYTES
 from support import payload, ROOT
@@ -31,6 +32,60 @@ class ProtocolTest(unittest.TestCase):
         p = payload()
         p['events'][0]['exceptions'] = dict(value='보행자 제외', knowledge='known', evidence_ids=['body-quote'], reason=None)
         self.assertEqual('보행자 제외', run(raw(p))['data']['items'][0]['exceptions'])
+
+    def test_explicit_multiday_uses_datetime_not_same_day_clock_duration(self):
+        p = payload()
+        occ = p['events'][0]['occurrences'][0]
+        occ.update(date_end='2026-11-05', time_start='22:00', time_end='02:00', end_day_offset=0)
+        self.assertEqual(540.0, run(raw(p))['data']['items'][0]['time_overlap_minutes'])
+        occ.update(time_start='10:00', time_end='10:00')
+        self.assertEqual(1080.0, run(raw(p))['data']['items'][0]['time_overlap_minutes'])
+        occ['recurrence_dates'] = ['2026-11-03', '2026-11-05']
+        with self.assertRaises(ProtocolError):
+            run(raw(p))
+
+    def test_explicit_partial_end_bounds_exclude_before_business_or_window(self):
+        for changes, reason in [
+            (dict(date_start='2026-11-02', date_end='2026-11-03', time_start=None, time_end='02:00', end_day_offset=None), 'TIME_NO_OVERLAP'),
+            (dict(date_start='2026-11-01', date_end='2026-11-02', time_start='22:00', time_end=None, end_day_offset=1), 'WINDOW_OUTSIDE'),
+        ]:
+            with self.subTest(changes=changes):
+                p = payload()
+                p['events'][0]['occurrences'][0].update(changes | dict(precision='unknown', knowledge='not_stated'))
+                p['query']['selection'] = 'needs_check'
+                result = run(raw(p))
+                self.assertEqual(0, sum(result['data']['counts'].values()))
+                self.assertIn(reason, result['diagnostics'][0]['reason_codes'])
+
+    def test_overlap_amplification_stops_during_calculation(self):
+        p = payload()
+        original = p['events'][0]
+        from support import event_copy
+        p['events'] = []
+        for i in range(1000):
+            e = event_copy(original, i + 100)
+            occ = e['occurrences'][0]
+            occ['time_start'] = (datetime(2026, 11, 3, 9) + timedelta(seconds=i)).strftime('%H:%M:%S')
+            occ['time_end'] = (datetime(2026, 11, 3, 17) + timedelta(seconds=i)).strftime('%H:%M:%S')
+            p['events'].append(e)
+        content = raw(p)
+        self.assertLess(len(content), MAX_BYTES)
+        with self.assertRaisesRegex(ValueError, 'CALCULATION_OUTPUT_TOO_LARGE'):
+            run(content)
+        proc = self.cli(content)
+        self.assertEqual(3, proc.returncode)
+        self.assertEqual(b'', proc.stdout)
+        self.assertEqual(b'CALCULATION_OUTPUT_TOO_LARGE\n', proc.stderr)
+
+    def test_unknown_overnight_offset_keeps_possible_next_day_hours(self):
+        p = payload()
+        p['events'][0]['occurrences'][0].update(time_start='22:00', time_end='02:00', end_day_offset=None,
+                                               precision='unknown', knowledge='ambiguous')
+        for hours in p['query']['weekly_hours'].values():
+            hours.update(state='closed', intervals=[])
+        p['query']['weekly_hours']['wednesday'].update(state='open', intervals=[dict(start='00:00', end='03:00', end_day_offset=0)])
+        p['query']['selection'] = 'needs_check'
+        self.assertEqual(1, run(raw(p))['data']['counts']['needs_check'])
 
     def test_projection_agrees_with_actual_java_fact_response(self):
         p = payload()
@@ -109,6 +164,7 @@ class ProtocolTest(unittest.TestCase):
             ('events.0.applicability.knowledge', 'maybe'), ('events.0.exceptions.value', []),
             ('events.0.evidence.0.end_char', 8), ('events.0.evidence.0.text_sha256', '0'*64),
             ('source_versions.0.official_url', 'javascript:alert(1)'),
+            ('source_versions.0.official_url', 'https://private:password@example.org/notice'),
             ('source_versions.0.last_verified_at', None),
             ('source_versions.0.check_result', 'unreachable'),
             ('source_versions.0.collected_at', '2027-01-01T00:00:00Z'),

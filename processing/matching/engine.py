@@ -27,6 +27,11 @@ WARNINGS = {
     'RELATION_UNCERTAIN': '정정·취소 관계가 미확정입니다. 원문을 확인해 주세요.',
     'CANCELLED': '취소 전 안내의 기간·장소는 범위 조회에만 사용합니다.',
 }
+MAX_BYTES = 8 * 1024 * 1024
+
+
+class OutputLimitError(ValueError):
+    pass
 
 
 def utc(value):
@@ -153,7 +158,23 @@ def _overlap_groups(snapshot_id, query, classified):
         for lo, hi in info['intervals']:
             changes[lo][1].add(event_id)
             changes[hi][0].add(event_id)
-    active, spans = set(), []
+    # 화면 선택·정렬은 동시간 구간의 의미를 바꾸지 않는다.
+    conditions = _select(query, ('point_id', 'weekly_hours', 'mode', 'case_id', 'types'))
+    conditions['types'] = sorted(set(conditions['types']))
+    for day in conditions['weekly_hours'].values():
+        day['intervals'].sort(key=lambda x: (x['start'], x['end'], x['end_day_offset']))
+    digest = hashlib.sha256(json.dumps(conditions, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode('utf-8')).hexdigest()
+    groups, budget = [], 2
+    def emit(span):
+        nonlocal budget
+        lo, hi, ids = span
+        identity = json.dumps([snapshot_id, digest, utc(lo), utc(hi), ids], separators=(',', ':'))
+        group = dict(group_id=str(uuid5(NAMESPACE_URL, identity)), start_at=utc(lo), end_at=utc(hi), event_ids=ids)
+        budget += len(json.dumps(group, separators=(',', ':')).encode('utf-8')) + bool(groups)
+        if budget > MAX_BYTES:
+            raise OutputLimitError('CALCULATION_OUTPUT_TOO_LARGE')
+        groups.append(group)
+    active, pending = set(), None
     times = sorted(changes)
     for i, current in enumerate(times[:-1]):
         stops, starts = changes[current]
@@ -161,21 +182,18 @@ def _overlap_groups(snapshot_id, query, classified):
         active.update(starts)
         following = times[i + 1]
         ids = sorted(active)
-        if len(ids) >= 2:
-            if spans and spans[-1][1] == current and spans[-1][2] == ids:
-                spans[-1] = (spans[-1][0], following, ids)
-            else:
-                spans.append((current, following, ids))
-    # 화면 선택·정렬은 동시간 구간의 의미를 바꾸지 않는다.
-    conditions = _select(query, ('point_id', 'weekly_hours', 'mode', 'case_id', 'types'))
-    conditions['types'] = sorted(set(conditions['types']))
-    for day in conditions['weekly_hours'].values():
-        day['intervals'].sort(key=lambda x: (x['start'], x['end'], x['end_day_offset']))
-    digest = hashlib.sha256(json.dumps(conditions, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode('utf-8')).hexdigest()
-    groups = []
-    for lo, hi, ids in spans:
-        identity = json.dumps([snapshot_id, digest, utc(lo), utc(hi), ids], separators=(',', ':'))
-        groups.append(dict(group_id=str(uuid5(NAMESPACE_URL, identity)), start_at=utc(lo), end_at=utc(hi), event_ids=ids))
+        if len(ids) < 2:
+            if pending:
+                emit(pending)
+                pending = None
+        elif pending and pending[1] == current and pending[2] == ids:
+            pending = (pending[0], following, ids)
+        else:
+            if pending:
+                emit(pending)
+            pending = (current, following, ids)
+    if pending:
+        emit(pending)
     return groups
 
 
