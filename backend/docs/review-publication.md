@@ -64,10 +64,12 @@ snapshot의 출처에는 당시 cutoff까지의 `checks`·`last_verified_at`과 
 
 ## 공개 내용·실패·복구
 
-snapshot에는 D07 문맥, 고정 지점, 승인된 사건 사실·FieldValue·근거·문서 관계, 공개 출처와 수집/확인 범위를 담는다. event별 근거 ID 범위를 유지한다. 원문 전체·raw 경로·AI 출력·평가·검토자·수정 전 비공개 값·내부 감사 기록은 제외한다. 공개 JSON을 I03 응답이나 계산 완료 결과로 사용하지 않는다.
+snapshot에는 D07 문맥, 고정 지점, 승인된 사건 사실·FieldValue·근거·문서 관계, 공개 출처와 수집/확인 범위를 담는다. event별 근거 ID 범위를 유지한다. 원문 전체·raw 경로·AI 출력·평가·검토자·수정 전 비공개 값·내부 감사 기록은 제외한다. 공개 JSON은 내부 snapshot 형식이다. [공개 조회 API](public-snapshot-api.md)가 사실·근거를 응답 형식으로 변환하며 계산 완료 결과로 사용하지 않는다.
 
 canonical JSON은 UTF-8 원문과 별도 SHA-256으로 저장한다. checksum은 checksum 필드를 제외한 고정 원문에 대응하며 snapshot은 수정하지 않는다. 쓰기 트랜잭션에서 문서·revision을 다시 확인하고 지점·snapshot·구성 revision·공개 포인터·감사 기록을 함께 commit한다. 한 부분이라도 실패하면 이번 변경 전체를 rollback한다.
 
 rollback은 같은 채널에서 실제 공개했던 snapshot인지, canonical checksum과 저장 문맥이 맞는지 확인한다. 원문 파일이나 계산기를 호출하지 않고 공개 포인터와 감사 기록만 바꾼다. DB의 최신 지점 행을 되돌리는 작업이 아니며 복구 시 기준은 snapshot 안에 고정된 지점·사건이다. DB 스키마 복구와도 구분한다.
 
 현재 공개 API는 실제 조회·계산 연결 전까지 503을 유지한다. 관리 UI·Python 계산·실제 공개 조회·JSON 파일 export·운영 서버 배포는 구현하지 않았다. DB 공개 포인터 전환을 운영 서비스 배포 완료로 표현하지 않는다.
+
+공개 포인터가 바뀌면 이전 공개본의 직접 조회는409다. rollback으로 다시 선택한 공개본은 즉시 조회 가능하며, 지점도 해당 snapshot의 고정 값을 사용한다.

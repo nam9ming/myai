@@ -45,9 +45,17 @@ JSON 응답의 공통 껍데기는 `schema_version / snapshot_id / generated_at 
 
 예제 데이터4개 전체는 [public-events.json](examples/public-events.json)에 있습니다. 서로 다른 selection 예제를 만들 때 counts는 동일 필터 기준으로 유지하고 items만 선택합니다.
 
+### 실제 DB 상세 조회
+
+I03은 [계산·API 명세](../docs/spec/04_계산규칙과기술설계.md)에 따른 **조건 없는 사실 응답**입니다. 기존 `event-response.json`은 고정 조건의 계산까지 포함한 화면용 합성 예제이며 fixture 프로필에서 그대로 유지합니다. 실제 DB 상세에는 I02 전용 `classification`, `reason_codes`, `distance_m`, `distance_basis`, `time_overlap_minutes`, `matched_occurrence_ids`를 넣지 않습니다. 프런트는 같은 snapshot의 I02 결과와 조합하고, 계산 미준비를0이나 후보로 표시하지 않습니다.
+
+- 대상·예외·노선·정류장·방향의 기존 값 필드는 유지합니다. 추가 `field_values`는 각 필드의 `value/knowledge/evidence_ids/reason`을 담고 null과 알려진 빈 배열을 구분합니다. 장소의 name/address도 같은 방식입니다.
+- `evidence`에 근거ID·문서 버전·블록·인용·Python code point 오프셋·본문 hash를 보존합니다. `source_refs`는 해당 공개본의 문서 버전과 당시 확인 상태를 제공합니다. replay의 `current_*`는 공개본 생성 시 확보한 현재 확인 상태이며 실시간 재확인값이 아닙니다.
+- `history`는 비공개 수정 기록 대신 같은 문맥에서 실제 공개된 revision의 값 차이와 이전/새 근거·출처를 제공합니다. 구조·오류·실행 예시는 [백엔드 공개 조회 안내](../backend/docs/public-snapshot-api.md)를 따릅니다.
+
 ### 실패
 
-[error-response.json](examples/error-response.json): `error.code / message / field_errors / retryable`, `request_id`. 입력422·미등록404·버전충돌409·미준비503·기타500을 구분합니다. 실제 traceback·비밀키·비공개 원문 경로를 공개하지 않습니다.
+[error-response.json](examples/error-response.json): `error.code / message / field_errors / retryable`, `request_id`. 입력422·미등록404·버전충돌409·미준비503·기타500을 구분합니다. 교체된 공개본은409 `SNAPSHOT_RETIRED`와 최상위 `current_snapshot_id`를 반환하며, 사용자가 새 버전 적용을 선택한 뒤 재조회합니다. 실제 traceback·비밀키·비공개 원문 경로를 공개하지 않습니다.
 
 ## AI → 검토 → 저장
 
