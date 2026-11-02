@@ -25,6 +25,8 @@ java -jar backend/build/libs/myai-backend-0.1.0.jar \
 
 모든 객체는 정의한 키만 허용하며 nullable 키도 생략할 수 없다. 중복 JSON 키·후행 JSON·잘못된 UTF-8/Unicode·문자열 숫자·정수 자리에 실수를 거부한다. ID는 소문자 UUID, hash는 소문자 SHA-256 64자리다.
 
+근거가 있는 `known` 빈 목록은 확인된 항목 없음으로 보존하며 미상을 나타내는 null과 구분한다. `precision=unknown`의 부분 날짜·시간도 그대로 보존하되 시작·종료·익일 값이 모두 있는 시간 구간은 모순 여부를 검사한다.
+
 | 필드 | 내용 |
 |---|---|
 | `schema_version` | 정확히 `reviewed-import-v1` |

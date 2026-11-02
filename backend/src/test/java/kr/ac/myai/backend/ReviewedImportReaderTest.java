@@ -176,6 +176,22 @@ class ReviewedImportReaderTest {
         rejected();
     }
 
+    @Test
+    void validatesCompleteTimeRangeEvenWhenDatePrecisionIsUnknown() throws Exception {
+        var occurrence = (ObjectNode) input.path("events").get(0).path("revision").path("occurrences").get(0);
+        occurrence.put("precision", "unknown").put("knowledge", "ambiguous").putNull("date_end");
+        var saved = mapper.readTree(reader.read(write(), root).events().getFirst().payloadJson()).path("revision").path("occurrences").get(0);
+        assertThat(saved.path("date_start").asText()).isEqualTo("2026-11-03");
+        assertThat(saved.path("date_end").isNull()).isTrue();
+        assertThat(saved.path("time_start").asText()).isEqualTo("10:00");
+        occurrence.putNull("time_end").putNull("end_day_offset");
+        saved = mapper.readTree(reader.read(write(), root).events().getFirst().payloadJson()).path("revision").path("occurrences").get(0);
+        assertThat(saved.path("time_start").asText()).isEqualTo("10:00");
+        assertThat(saved.path("time_end").isNull()).isTrue();
+        occurrence.put("time_start", "12:00").put("time_end", "10:00").put("end_day_offset", 0);
+        rejected();
+    }
+
     private Path write() throws Exception {
         return Files.writeString(root.resolve("batch.json"), input.toString());
     }
