@@ -34,6 +34,7 @@ public class ReviewedImportRepository {
                 (row, index) -> {
                     require(row.getString("status").equals("succeeded"), "import_batches");
                     JsonNode refs = json(row.getString("result_refs_json"));
+                    require(batch.originatingRunId() == null || batch.originatingRunId().equals(refs.path("originating_run_id").textValue()), "import_batches");
                     return new ImportResult(row.getString("import_id"), strings(refs.path("revision_ids")), strings(refs.path("document_version_ids")), true);
                 }, sourceKind(batch), batch.inputSha256(), batch.schemaVersion()).stream().findFirst();
     }
@@ -51,8 +52,9 @@ public class ReviewedImportRepository {
         };
     }
 
-    public void completeBatch(ImportResult result) {
+    public void completeBatch(ImportResult result, String runId) {
         var refs = mapper.createObjectNode();
+        if (runId != null) refs.put("originating_run_id", runId);
         var revisions = refs.putArray("revision_ids");
         result.revisionIds().forEach(revisions::add);
         var documents = refs.putArray("document_version_ids");

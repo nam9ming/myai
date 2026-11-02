@@ -60,6 +60,8 @@ class ReviewedImportReaderTest {
     void rawNoEventFoundKeepsDocumentOnlyAndCannotBecomeReviewedBatch() throws Exception {
         input.put("schema_version", "ai-draft-import-v1");
         input.putArray("events"); input.putArray("evidence");
+        rejected();
+        input.put("originating_run_id", "71fb66f0-e610-4f9c-8f26-4bb77655ee8c");
         assertThat(reader.read(write(), root).events()).isEmpty();
         input.put("schema_version", "reviewed-import-v1"); rejected();
     }
@@ -85,6 +87,7 @@ class ReviewedImportReaderTest {
 
     private void rawDraft() {
         input.put("schema_version", "ai-draft-import-v1");
+        input.put("originating_run_id", "71fb66f0-e610-4f9c-8f26-4bb77655ee8c");
         var event = (ObjectNode) input.path("events").get(0);
         event.put("area_membership", "uncertain");
         var revision = (ObjectNode) event.path("revision");

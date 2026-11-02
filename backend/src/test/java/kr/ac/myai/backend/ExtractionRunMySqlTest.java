@@ -76,6 +76,7 @@ class ExtractionRunMySqlTest {
         assertThat(jdbc.queryForObject("SELECT current_review_revision_id FROM events WHERE event_id=?", String.class, event.id())).isEqualTo(event.revisionId());
         var reviewed = (ObjectNode) mapper.readTree(file.toFile());
         reviewed.put("schema_version", "reviewed-import-v1");
+        reviewed.remove("originating_run_id");
         var updated = (ObjectNode) reviewed.path("events").get(0);
         updated.put("expected_revision_no", 1);
         var revision = (ObjectNode) updated.path("revision");
@@ -92,6 +93,36 @@ class ExtractionRunMySqlTest {
         assertThat(publication.execute(approved, root, "synthetic-approver").action()).isEqualTo("approve");
         assertThat(counts().subList(2, 4)).isEqualTo(before.subList(2, 4));
         assertThat(jdbc.queryForObject("SELECT review_status FROM event_revisions WHERE revision_id=?", String.class, event.revisionId())).isEqualTo("draft");
+    }
+
+    @Test
+    void noEventDraftStillRequiresItsValidatedRunAndRechecksItOnReplay() throws Exception {
+        var source = source(); registerSource(source);
+        var empty = source.deepCopy(); empty.put("schema_version", "ai-draft-import-v1");
+        String missing = UUID.randomUUID().toString(); empty.put("originating_run_id", missing);
+        Path file = Files.writeString(root.resolve("empty.json"), empty.toString());
+        assertThatThrownBy(() -> importer.importBatch(reader.read(file, root), "synthetic-importer"))
+                .isInstanceOf(kr.ac.myai.backend.importing.ImportException.class);
+        Path failed = archive(source, missing, true); extraction.importRun(missing, failed, "synthetic-registrant");
+        assertThatThrownBy(() -> importer.importBatch(reader.read(file, root), "synthetic-importer"))
+                .isInstanceOf(kr.ac.myai.backend.importing.ImportException.class);
+        String run = UUID.randomUUID().toString();
+        Path archive = archive(source, run, false, output -> {
+            output.putArray("items"); output.putArray("evidence"); output.putArray("warnings").add("NO_EVENT_FOUND");
+        });
+        extraction.importRun(run, archive, "synthetic-registrant");
+        Path generated = draft(source, run, archive); var batch = reader.read(generated, root);
+        var before = counts();
+        var result = importer.importBatch(batch, "synthetic-importer");
+        assertThat(result.revisionIds()).isEmpty();
+        assertThat(importer.importBatch(batch, "synthetic-importer").alreadyImported()).isTrue();
+        assertThat(counts()).isEqualTo(before);
+        assertThat(jdbc.queryForObject("SELECT JSON_UNQUOTE(JSON_EXTRACT(result_refs_json,'$.originating_run_id')) FROM import_batches WHERE import_id=?",
+                String.class, result.importId())).isEqualTo(run);
+        Path saved = stored(run); ExtractionArchiveReaderTest.unseal(saved);
+        Files.delete(saved.resolve("attempt-1.output"));
+        assertThatThrownBy(() -> importer.importBatch(batch, "synthetic-importer"))
+                .isInstanceOf(kr.ac.myai.backend.importing.ImportException.class);
     }
 
     @Test
@@ -132,6 +163,7 @@ class ExtractionRunMySqlTest {
         Path file = draft(source, run, archive);
         var batch = reader.read(file, root); importer.importBatch(batch, "synthetic-importer");
         var input = (ObjectNode) mapper.readTree(file.toFile()); input.put("schema_version", "reviewed-import-v1");
+        input.remove("originating_run_id");
         var event = (ObjectNode) input.path("events").get(0); event.put("expected_revision_no", 1);
         var revision = (ObjectNode) event.path("revision");
         revision.put("revision_id", UUID.randomUUID().toString()).put("revision_no", 2).put("origin", "human")
@@ -231,7 +263,7 @@ class ExtractionRunMySqlTest {
         var one = review(first, id); var two = review(second, id);
         var documents = new java.util.ArrayList<>(one.documents()); documents.addAll(two.documents());
         var events = new java.util.ArrayList<>(one.events()); events.addAll(two.events());
-        var batch = new kr.ac.myai.backend.importing.ReviewedBatch("reviewed-import-v1", "7".repeat(64), "synthetic", documents, events);
+        var batch = new kr.ac.myai.backend.importing.ReviewedBatch("reviewed-import-v1", "7".repeat(64), "synthetic", documents, events, null);
         var before = counts();
         assertThatThrownBy(() -> importer.importBatch(batch, "synthetic-reviewer"))
                 .isInstanceOf(kr.ac.myai.backend.importing.ImportException.class);

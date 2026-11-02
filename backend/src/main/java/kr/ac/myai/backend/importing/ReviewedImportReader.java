@@ -51,10 +51,11 @@ public class ReviewedImportReader {
     }
 
     private ReviewedBatch batch(JsonNode input, Path sourceRoot, String inputHash, boolean stored) throws IOException {
-            shape(input, "$", "schema_version data_kind documents evidence events");
             String schema = choice(input, "schema_version", "reviewed-import-v1", "source-import-v1", "ai-draft-import-v1");
             boolean sourceOnly = schema.equals("source-import-v1");
             boolean draftImport = schema.equals("ai-draft-import-v1");
+            shape(input, "$", "schema_version data_kind documents evidence events" + (draftImport ? " originating_run_id" : ""));
+            String runId = draftImport ? uuid(input, "originating_run_id") : null;
             String kind = choice(input, "data_kind", "synthetic", "real");
             List<ReviewedBatch.Document> documents = new ArrayList<>();
             Map<String, JsonNode> sources = new HashMap<>();
@@ -77,11 +78,12 @@ public class ReviewedImportReader {
             for (JsonNode event : array(input, "events", !sourceOnly && !draftImport)) {
                 check(!sourceOnly, "events");
                 var reviewed = event(event, sources, evidence, kind, stored, draftImport);
+                check(!draftImport || reviewed.originatingRunIds().equals(List.of(runId)), "events.revision.originating_run_ids");
                 check(eventIds.add(reviewed.id()), "events.event_id");
                 check(revisionIds.add(reviewed.revisionId()), "events.revision.revision_id");
                 events.add(reviewed);
             }
-            return new ReviewedBatch(schema, inputHash, kind, documents, events);
+            return new ReviewedBatch(schema, inputHash, kind, documents, events, runId);
     }
 
     public JsonNode readJson(Path file) {

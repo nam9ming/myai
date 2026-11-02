@@ -111,7 +111,7 @@ def draft_run(run_id, source_path, output_path, area_id, split_group_id, diction
                                                 evidence_ids=list(evidence_ids.values()))],
                            relations=[], suspected_duplicate_ids=[], split_group_id=split_group_id,
                            expected_revision_no=0, revision=revision))
-    batch = dict(schema_version='ai-draft-import-v1', data_kind=source['data_kind'],
+    batch = dict(schema_version='ai-draft-import-v1', data_kind=source['data_kind'], originating_run_id=run_id,
                  documents=source['documents'], evidence=evidence, events=events)
     try:
         content = _json(batch)
