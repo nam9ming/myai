@@ -1,6 +1,6 @@
 # AI 추출 검증·수동 실행 기록
 
-Python3.13 표준 라이브러리로 실행합니다. 현재 지원은 `manual_import`이며 실제 모델·네트워크·DB 호출은 없습니다. 계산 CLI와 공개 API도 호출하지 않습니다. 입력·원출력·프롬프트·메타데이터는 비공개 기록이며, 공개 snapshot으로 직접 전달하지 않습니다.
+Python3.13 표준 라이브러리로 `manual_import`와 OpenAI `api` 실행을 지원합니다. 네트워크 호출은 명시적인 `run`만 수행하며 `verify/freeze/draft/check-draft`와 계산 CLI·Java 공개 조회는 AI를 호출하지 않습니다. Python은 DB를 쓰지 않습니다. 입력·원출력·프롬프트·메타데이터는 비공개 기록이며, 공개 snapshot으로 직접 전달하지 않습니다.
 
 ## 입력·검증
 
@@ -31,7 +31,21 @@ python3.13 -m processing.extraction import \
 python3.13 -m processing.extraction verify 71fb66f0-e610-4f9c-8f26-4bb77655ee8c
 ```
 
-`--attempt PROMPT OUTPUT`은 실제 시도 순서대로1~3회 지정하며 metadata.attempts와 같아야 합니다. 명령이 자동 재시도하지는 않습니다. 모든 시도 원본·검증 실패를 남기고 **마지막 출력**의 검증 상태를 실행 상태로 사용합니다. `retryable`은 후속 API 단계의 구조 오류 분류이며 수동 명령의 재호출 지시가 아닙니다. 근거 불일치·문서/위치 참조·확정된 시간 모순은 review 오류로 남깁니다. 실제 API의 전송/구조 오류 최대3시도 정책은 아직 미구현입니다.
+`--attempt PROMPT OUTPUT`은 실제 시도 순서대로1~3회 지정하며 metadata.attempts와 같아야 합니다. 수동 명령은 자동 재시도하지 않습니다. 모든 시도 원본·검증 실패를 남기고 **마지막 출력**의 검증 상태를 실행 상태로 사용합니다. `retryable`은 구조 오류 분류이며 수동 명령의 재호출 지시가 아닙니다. 근거 불일치·문서/위치 참조·확정된 시간 모순은 review 오류로 남깁니다.
+
+## OpenAI API 실행
+
+`run --input FILE --preprocessing-version VERSION [--run-id UUID] [--model MODEL] [--root ROOT]`는 `OPENAI_API_KEY`를 헤더에서만 사용합니다. 모델 선택은 `--model`→`OPENAI_MODEL`→현재 리뷰 기본값 `gpt-6.1-sol` 순서입니다. 개발 키 재사용은 사용자 결정이며 실제 자료의 검토·비식별화 책임을 대신하지 않습니다.
+
+`https://api.openai.com/v1/responses`만 호출하며 리다이렉트를 따라가지 않습니다. [공식 Responses 안내](https://developers.openai.com/api/docs/guides/migrate-to-responses)에 따라 `store=false`, 지시와 원문 입력을 전달합니다. 도구·검색·평가 정답·사용자 조건을 요청하지 않습니다. 매 시도 원문과 prompt-v1 전체 계약을 다시 보내고 구조 오류 피드백은 경로만 전달합니다.
+
+요청별120초·최대3시도·출력8192토큰입니다. timeout/전송·HTTP408/429/5xx와 구조 오류만1초·2초 간격으로 재시도합니다. 인증/다른4xx/리다이렉트·거절·근거/시간 모순은 중단합니다. 실패도 완료 receipt를 보관하며 종료4입니다. 클라이언트 요청 시작/종료 시각과 공급자가 제공한 모든 시도의 token 사용량만 기록합니다. 어떤 시도라도 사용량이 미상이면 그 합계는 null입니다. 상세 모델 버전·요금·통화는 추정하지 않고 raw 응답의 표시값을 남깁니다.
+
+API 실행은 시도별 `attempt-N.prompt`(실제 HTTP JSON body, 헤더 제외), `.response`(수신 응답 본문), `.exchange`(HTTP 상태·전송 오류·완전 수신 여부·시각), `.output`(응답의 추출 텍스트)를 보관합니다. 수신 한도8MiB+1의 초과/중단은 prefix와 불완전 상태를 남기며, 정상 전체 응답으로 처리하지 않습니다. 입력8MiB·출력 검증8MiB는 유지합니다. JSON 인코딩으로 커진 요청은 원본 전체 fingerprint와 재구성한 요청을 대조하므로 조용히 잘라내지 않습니다.
+
+오프라인 `verify`는 모든 파일 hash, 원문/요청 일치, 응답→추출 텍스트, 실패/재시도 정책, 시각·사용량을 다시 계산합니다. 수동 receipt 형식은 유지하며 API는 `execution_mode=api`와 추가 artifact를 구분합니다. Java는 두 방식 모두 같은 freeze·DB 등록·재검증·초안 경계를 적용합니다.
+
+완료 run_id는 동일 입력 바이트·모델·전처리 버전일 때 재사용하며 새 네트워크 호출이 없습니다. 디렉터리 배타 생성으로 동시 중복 호출을 차단합니다. 중단한 실행은 미완료로 남깁니다. 이미 처리됐을 수 있는 요청의 중복 과금을 피하도록 자동 재전송하지 않습니다. 원본을 확인한 뒤 별도 run_id를 사용합니다.
 
 ## 파일·재실행·인계
 
@@ -52,7 +66,7 @@ stdout은 ID·상태·hash·고정 상대 파일명·안전한 오류 코드/필
 | 5 | 파일 I/O 실패 |
 | 1 | 내부 오류 |
 
-Java `local-extraction`은 [D03/D05 연결 안내](../backend/docs/extraction-run-import.md)에 따라 검증된 archive의 성공/실패·nullable metadata 원본을 등록한다. 같은 전체 D03 입력·전처리 버전이 필요하며 원본 경로를 유지한다. 검증 정보가 없는 legacy와 failed는 D06 AI origin으로 사용할 수 없다. import·승인·미리보기·공개 때 archive 원본과 DB 등록 기록을 다시 대조하며 Python 검증 중 DB 트랜잭션을 유지하지 않는다. D06 숨김 초안 변환·저장·사람 검토 다음 revision 연결은 [초안 안내](../backend/docs/ai-review-draft.md)를 따른다. 실제 모델/API 실행·실자료 평가·공개 승인·운영 배포는 후속 작업이다.
+Java `local-extraction`은 [D03/D05 연결 안내](../backend/docs/extraction-run-import.md)에 따라 검증된 archive의 성공/실패·nullable metadata 원본을 등록한다. 같은 전체 D03 입력·전처리 버전이 필요하며 원본 경로를 유지한다. 검증 정보가 없는 legacy와 failed는 D06 AI origin으로 사용할 수 없다. import·승인·미리보기·공개 때 archive 원본과 DB 등록 기록을 다시 대조하며 Python 검증 중 DB 트랜잭션을 유지하지 않는다. D06 숨김 초안 변환·저장·사람 검토 다음 revision 연결은 [초안 안내](../backend/docs/ai-review-draft.md)를 따른다. 실제 자료3건/40건·실자료 평가·공개 승인·운영 배포는 후속 작업이다.
 
 ## Java의 초안 전체 대조
 

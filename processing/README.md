@@ -1,6 +1,6 @@
 # Python AI·계산 — 김윤기
 
-C01~C10 순수 계산과 `calc-v1` CLI, Spring 공개 matches 연결, AI 추출 계약 검증·수동 원출력 보관 CLI를 구현했습니다. **실제 모델 호출은 아직 미구현**입니다. 공개 API·DB는 Spring이 맡으며 계산 CLI는 AI·네트워크·DB를 호출하거나 사용자 조건을 저장하지 않습니다. 서버의 Python 실행 파일·작업 경로는 [백엔드 안내](../backend/README.md#python-계산-연결)를 따릅니다.
+C01~C10 순수 계산과 `calc-v1` CLI, Spring 공개 matches 연결, OpenAI 추출·수동 원출력 보관 CLI를 구현했습니다. 실제 API 연결 결과는 각 실행의 receipt로 확인하며, 합성 연결 시험을 실제 공지 처리·품질 평가로 세지 않습니다. 공개 API·DB는 Spring이 맡으며 계산 CLI는 AI·네트워크·DB를 호출하거나 사용자 조건을 저장하지 않습니다. 서버의 Python 실행 파일·작업 경로는 [백엔드 안내](../backend/README.md#python-계산-연결)를 따릅니다.
 
 ## 설치·실행
 
@@ -28,6 +28,7 @@ python3.13 -m venv .venv
 | `extraction/schema.py`, `validation.py` | AI 입력/출력 구조·knowledge·근거·참조·시간 순서 검증 |
 | `extraction/prompt.py`, `metadata.py` | 고정 프롬프트·문서/블록/hash 제약·D05 제공값 검증 |
 | `extraction/archive.py`, `__main__.py` | 비공개 준비/수동 가져오기/무결성 검증·실패 원출력 보존 |
+| `extraction/api.py` | 고정 OpenAI Responses API·최대3시도·요청/응답/전송 상태 보관·오프라인 재검증 |
 | `extraction/draft.py` | 검증된 원출력→숨김 검토 초안·안정 ID·근거 hash 변환·미상 보존 |
 
 [계산 연결 계약](../contracts/calculation-bridge.md)을 따릅니다. 지원 규칙은 `rules-v1`이며 미지원 버전을 정상 결과로 바꾸지 않습니다. `dictionary_version`은 선택한 snapshot의 고정 식별자이며 계산 중 새 사전을 읽지 않습니다. 입력 원본 바이트 SHA-256을 반환하며 개인 조건은 로그에 남기지 않습니다.
@@ -54,9 +55,29 @@ python3.13 -m processing.extraction verify 71fb66f0-e610-4f9c-8f26-4bb77655ee8c
 
 첫 명령은 합성 입력의 프롬프트만 생성합니다. 가져오기에는 실제 제공한 프롬프트·원출력과 새 run_id의 메타데이터를 준비합니다. 기본 저장 위치는 Git 제외 `data/private/extraction-runs`입니다. 같은 ID의 원본을 덮어쓰지 않으며 실패·과다 출력도 전부 보존합니다. 마지막 출력이 기계 검증을 통과해도 `review_required=true`이며 사람 승인과 다릅니다. 종료 코드·1~3시도·복구·hash 대상·미상 제공값 처리 등은 [실행 기록 계약](../contracts/extraction-run.md)을 따릅니다.
 
+## OpenAI 개발용 추출
+
+사용자 결정에 따라 개발 단계에서는 코드리뷰와 같은 OpenAI 키를 사용합니다. 로컬은 `OPENAI_API_KEY` 환경변수, GitHub는 기존 Actions Secret을 사용합니다. GitHub Secret을 로컬로 꺼내는 기능은 없습니다. 키를 인자·JSON·Git에 넣지 않습니다.
+
+```sh
+# 키는 실행 터미널의 OPENAI_API_KEY에 직접 설정한다.
+export OPENAI_MODEL=gpt-6.1-sol
+python3.13 -m processing.extraction run \
+  --input processing/examples/ai-smoke-input.json \
+  --preprocessing-version smoke-nfc-v1
+```
+
+기본 모델은 현재 코드리뷰 기본값과 같습니다. `--model`로 명시할 수 있으며 실제 계정의 접근 권한·비용은 실행 기록과 공급자 정보를 확인합니다. 실제 자료는 검토·비식별화한 `data/private/` 입력을 명시적으로 전달합니다. 도구는 파일을 자동 수집하거나 공개하지 않습니다.
+
+요청별120초·최대3시도·출력8192토큰, 고정 HTTPS 주소·`store=false`를 사용합니다. 전송/구조 오류만 재시도하며 인증·근거·의미 오류와 거절 응답은 중단합니다. 모든 시도의 원문 입력·실제 요청·응답 본문·전송 상태·추출 텍스트를 보관합니다. 수신 본문은8MiB+1에서 중단하고 초과·부분 수신을 명시하므로 그 경우 전체 응답 보관을 뜻하지 않습니다. 사용량은 모든 시도의 제공값이 있을 때만 합산하고, 상세 모델 버전·금액·통화는 추정하지 않습니다.
+
+같은 `--run-id UUID`의 완료 실행은 입력·모델·전처리 버전이 일치하면 키 없이 재사용합니다. 동시 실행·중단한 실행은 자동 재전송하지 않습니다. 원본을 확인한 뒤 새 실행 ID로 재시도하며 이전 디렉터리는 남깁니다. 실행 기록은 기존 Java `local-extraction`→숨김 초안 경로로 등록합니다.
+
+같은 저장소 PR에 `run-openai-extraction` 라벨을 **적용하는 이벤트**만 실제 합성 API 시험을 실행합니다. 일반 push/synchronize는 유료 추출을 실행하지 않습니다. 라벨을 다시 적용하거나 실패 작업을 재실행하면 새 호출이 발생합니다. 기존 `OPENAI_API_KEY`·리뷰 모델을 직접 사용하며 합성 원본 artifact는3일 보관합니다. 실제 공지는 이 workflow에 넣지 않습니다.
+
 ## 검증·남은 작업
 
-등록한 D05에서 `python3.13 -m processing.extraction draft`로 ai-draft-import-v1을 생성하고 Java local-import로 저장할 수 있다. 실행 인자·사람 검토본 작성·승인 경계는 [초안 연결 안내](../backend/docs/ai-review-draft.md)를 따른다. 실제 모델 호출과 분리된 로컬 변환이며 AI 원본과 초안을 사람이 확인해야 한다.
+등록한 D05에서 `python3.13 -m processing.extraction draft`로 ai-draft-import-v1을 생성하고 Java local-import로 저장할 수 있다. 실행 인자·사람 검토본 작성·승인 경계는 [초안 연결 안내](../backend/docs/ai-review-draft.md)를 따른다. API 실행과 분리된 로컬 변환이며 AI 원본과 초안을 사람이 확인해야 한다.
 
 자동 시험으로 시간·거리·결합·취소·최신성·재현·정렬·중첩·실제 CLI 오류를 확인합니다. 실제 Java 공개 상세 예제와 사실 필드 전체도 대조합니다. AI 검증은 한글/emoji·미상·형식/근거 오류·실패 원본·충돌·동시 실행·중단 재개·손상·실제 subprocess를 확인합니다. CI에서 Python3.13 시험과 기존 계약·백엔드 시험을 함께 실행합니다. 시험 목록은 `tests/`, 설계 결정은 [계산 계획](../docs/superpowers/plans/2026-11-03-calculation-cli.md)과 [추출 기록 계획](../docs/superpowers/plans/2026-11-03-extraction-validation.md)에 있습니다.
 
