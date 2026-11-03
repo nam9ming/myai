@@ -124,7 +124,7 @@ class DatasetStorageTest(unittest.TestCase):
 
     def test_failed_atomic_install_cleans_only_its_staging(self):
         self.root.mkdir(); sentinel = self.root / 'operator-note'; sentinel.write_text('KEEP')
-        with patch('processing.evaluation.storage.os.rename', side_effect=PermissionError(errno.EACCES, 'PRIVATE_SECRET')):
+        with patch('processing.evaluation.storage._rename_exclusive', side_effect=PermissionError(errno.EACCES, 'PRIVATE_SECRET')):
             with self.assertRaises(OSError): freeze_dataset(self.input, self.root)
         self.assertEqual([p.name for p in self.root.iterdir()], ['operator-note'])
         self.assertEqual(sentinel.read_text(), 'KEEP')
@@ -139,6 +139,44 @@ class DatasetStorageTest(unittest.TestCase):
             with self.assertRaises(ExtractionError): freeze_dataset(self.input, self.root)
         self.assertEqual(list(self.root.iterdir()), [])
         self.assertEqual(self.input.read_bytes(), FIXTURE.read_bytes())
+
+    def test_expanded_read_permissions_fail_verification(self):
+        receipt = freeze_dataset(self.input, self.root); folder = self.root / receipt['dataset_ref']
+        for path, expanded, original in ((folder/'manifest.json',0o444,0o400),
+                                         (folder/'identity.json',0o440,0o400),
+                                         (folder/'receipt.json',0o404,0o400),
+                                         (folder,0o555,0o500)):
+            path.chmod(expanded)
+            with self.subTest(path=path.name), self.assertRaises(ExtractionError):
+                verify_dataset(receipt['dataset_ref'], self.root)
+            path.chmod(original)
+        self.assertEqual(receipt, verify_dataset(receipt['dataset_ref'], self.root))
+
+    def test_empty_destination_created_after_staging_is_never_replaced(self):
+        from processing.evaluation.storage import _verify_directory
+        inserted = []
+        def race(directory, ref):
+            result = _verify_directory(directory, ref)
+            if directory.name.startswith('.dataset-'):
+                target = self.root / ref; target.mkdir(mode=0o700)
+                inserted.append((target, target.stat().st_ino))
+            return result
+        with patch('processing.evaluation.storage._verify_directory', side_effect=race):
+            with self.assertRaises(ExtractionError): freeze_dataset(self.input, self.root)
+        target, inode = inserted[0]
+        self.assertEqual(target.stat().st_ino, inode)
+        self.assertEqual(list(target.iterdir()), [])
+        self.assertEqual(list(self.root.iterdir()), [target])
+
+    def test_unsupported_atomic_rename_never_falls_back_to_overwriting(self):
+        for unavailable in ('symbol', 'platform'):
+            guard = (patch('processing.evaluation.storage.ctypes.CDLL', return_value=object())
+                     if unavailable == 'symbol' else patch('processing.evaluation.storage.sys.platform', 'unsupported'))
+            with self.subTest(unavailable=unavailable), guard, self.assertRaises(OSError) as caught:
+                freeze_dataset(self.input, self.root)
+            self.assertEqual(caught.exception.errno, errno.ENOTSUP)
+            self.assertEqual(list(self.root.iterdir()), [])
+            self.assertEqual(self.input.read_bytes(), FIXTURE.read_bytes())
 
     def test_invalid_input_and_future_assignments_do_not_create_root(self):
         self.input.write_bytes(b'{}')

@@ -49,7 +49,9 @@ python3.13 -m processing.evaluation verify DATASET_REF
 
 기본 root는 Git 제외 `data/private/evaluation/datasets`, 각 명령에 `--root ROOT`를 지정할 수 있다. 저장소 안에서는 기존 비공개 경로 검증을 적용해 data/private 아래만 허용한다. dataset_ref는 dataset_version UTF-8의 SHA-256이다. 같은 버전의 다른 원본 바이트는 충돌이며 동일 바이트는 기존 고정 시각·receipt를 재사용한다.
 
-원본 manifest.json, 원본 hash/크기·고정 시각의 identity.json, 재계산 가능한 receipt.json을 별도 staging에서 완성하고 원자적으로 배치한다. 파일0400·디렉터리0500이며 verify는 파일/hash·집계·시각·권한·파일 목록을 다시 확인한다. 배정/관계/검토 시각은 고정 시각보다 미래일 수 없다. 부분 기록·변조·symlink는 거부하고 원본을 자동 수정하지 않는다. 실패 staging만 정리하며 기존 파일·운영자 메모를 지우지 않는다.
+원본 manifest.json, 원본 hash/크기·고정 시각의 identity.json, 재계산 가능한 receipt.json을 별도 staging에서 완성·재검증하고 덮어쓰기 없이 원자 배치한다. 파일0400·디렉터리0500을 정확히 검사하며 읽기 권한 확대도 거부한다. 배정/관계/검토 시각은 고정 시각보다 미래일 수 없다. 부분 기록·변조·symlink는 거부하고 원본을 자동 수정하지 않는다. 저장 직전 생긴 빈 목적지도 교체하지 않는다. 실패 staging만 정리하며 기존 파일·운영자 메모를 지우지 않는다.
+
+배치는 표준 라이브러리 ctypes로 macOS의 renamex_np(RENAME_EXCL), Linux의 renameat2(RENAME_NOREPLACE)를 호출한다. [Apple 안내](https://developer.apple.com/documentation/foundation/urlresourcevalues/volumesupportsexclusiverenaming)·[Linux man-pages](https://man7.org/linux/man-pages/man2/renameat2.2.html)를 따른다. 해당 함수/파일시스템 지원이 없으면 I/O 오류5로 중단하며 일반 rename으로 대체하지 않는다. Linux는 glibc2.28+와 해당 플래그를 지원하는 파일시스템이 필요하다.
 
 stdout은 안전한 집계 JSON 한 건, stderr는 고정 코드다. 성공0, 입력/인자2, archive 충돌/손상/미완료3, 파일 I/O5, 내부 오류1이다. POSIX 권한·원자 rename·hard link가 필요하며 Windows·전원 중단 내구성은 미검증이다. 관리자 권한으로 전체 파일을 바꿀 수 있는 저장소에 전자서명/WORM 보장은 없다.
 

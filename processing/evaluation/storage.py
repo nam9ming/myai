@@ -1,12 +1,14 @@
 """D08 manifest 원본을 버전별로 고정한다. 원문·금표 보관과는 별개다."""
 
 from datetime import datetime, timezone
+import ctypes
 import errno
 import hashlib
 import os
 from pathlib import Path
 import shutil
 import stat
+import sys
 import tempfile
 
 from processing.extraction.archive import REPO, _identity, _json, _read, _root, _write
@@ -46,12 +48,33 @@ def _receipt(content, identity):
 
 
 def _sealed(directory):
-    if directory.is_symlink() or not directory.is_dir() or directory.stat().st_mode & 0o222:
+    if directory.is_symlink() or not directory.is_dir() or stat.S_IMODE(directory.stat().st_mode) != 0o500:
         return False
     if set(p.name for p in directory.iterdir()) != set(FILES):
         return False
     return all(stat.S_ISREG((directory / name).stat(follow_symlinks=False).st_mode)
-               and not (directory / name).stat(follow_symlinks=False).st_mode & 0o222 for name in FILES)
+               and stat.S_IMODE((directory / name).stat(follow_symlinks=False).st_mode) == 0o400 for name in FILES)
+
+
+def _rename_exclusive(source, destination):
+    if sys.platform not in ('darwin', 'linux'):
+        raise OSError(errno.ENOTSUP, 'DATASET_ATOMIC_RENAME_UNSUPPORTED')
+    library = ctypes.CDLL(None, use_errno=True)
+    try:
+        if sys.platform == 'darwin':
+            function = library.renamex_np
+            function.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
+            arguments = (os.fsencode(source), os.fsencode(destination), 0x4)  # RENAME_EXCL
+        else:
+            function = library.renameat2
+            function.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+            arguments = (-100, os.fsencode(source), -100, os.fsencode(destination), 1)  # AT_FDCWD, RENAME_NOREPLACE
+    except AttributeError:
+        raise OSError(errno.ENOTSUP, 'DATASET_ATOMIC_RENAME_UNSUPPORTED') from None
+    function.restype = ctypes.c_int
+    if function(*arguments) != 0:
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error))
 
 
 def _verify_directory(directory, dataset_ref):
@@ -96,7 +119,7 @@ def freeze_dataset(input_path, root=DEFAULT_ROOT):
         temporary.chmod(0o500)
         _verify_directory(temporary, summary['dataset_ref'])
         try:
-            os.rename(temporary, destination)
+            _rename_exclusive(temporary, destination)
         except OSError as error:
             # macOS는 읽기 전용 목적지의 동시 배치에도 EACCES를 반환한다.
             if error.errno not in (errno.EEXIST, errno.ENOTEMPTY, errno.EACCES) or not destination.exists():
