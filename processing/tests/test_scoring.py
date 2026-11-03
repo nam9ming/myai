@@ -301,6 +301,41 @@ class ScoringTest(unittest.TestCase):
         result=self.score(prediction,links)
         self.assertFalse(next(r['correct'] for r in result['field_results'] if r['field']=='time_start'))
 
+    def test_pure_occurrence_omission_is_wrong_without_unassessed_generation(self):
+        self.two_occurrences()
+        for keep_unused in (False,True):
+            prediction=copy.deepcopy(self.gold);prediction['items'][0]['occurrences'].pop()
+            if not keep_unused:prediction['items'][0]['locations'].pop()
+            links=copy.deepcopy(self.links);links['item_links'][0]['occurrence_links'].pop()
+            with self.subTest(keep_unused=keep_unused):
+                summary=self.score(prediction,links)['summary']
+                self.assertEqual((summary['correct_fields'],summary['known_fields']),(3,8))
+                self.assertEqual(summary['generation_review_pending'],0)
+                self.assertEqual(summary['generation_rate_percent'],0)
+                self.assertEqual(summary['binding_errors'],0)
+
+    def test_partial_known_fact_omissions_are_not_new_assertions(self):
+        self.source_text(self.document['blocks'][0]['text']+' 교통도 해당한다. 가상주소. 노선R1/R2. 예외A/B.')
+        item=self.gold['items'][0];item['types']=fv(['construction','traffic']);item['exceptions']=fv(['예외A','예외B'])
+        item['route_names']=fv(['R1','R2']);item['locations'][0]['address']=fv('가상주소')
+        prediction=copy.deepcopy(self.gold);actual=prediction['items'][0]
+        actual.update(types=fv(['construction']),exceptions=fv(['예외A']),route_names=fv(['R1']))
+        actual['locations'][0].update(address=fv(),kind=fv());actual['occurrences'][0]['end_day_offset']=fv()
+        summary=self.score(prediction)['summary']
+        self.assertEqual((summary['correct_fields'],summary['known_fields']),(3,8))
+        self.assertEqual(summary['generation_review_pending'],0);self.assertEqual(summary['generation_rate_percent'],0)
+        actual['exceptions']=fv([])
+        self.assertGreater(self.score(prediction)['summary']['generation_review_pending'],0)
+
+    def test_crossed_location_components_still_require_generation_review(self):
+        item=self.gold['items'][0];item['locations'][0]['address']=fv('주소A')
+        other=copy.deepcopy(item['locations'][0]);other.update(local_location_id='l2',name=fv('장소B'),address=fv('주소B'))
+        item['locations'].append(other)
+        prediction=copy.deepcopy(self.gold);prediction['items'][0]['locations'][0]['address']=fv('주소B')
+        summary=self.score(prediction)['summary']
+        self.assertEqual(summary['correct_fields'],7)
+        self.assertEqual(summary['generation_review_pending'],1);self.assertIsNone(summary['generation_rate_percent'])
+
     def test_duplicate_events_are_not_merged_into_one_free_extra_match(self):
         prediction=copy.deepcopy(self.gold);other=copy.deepcopy(prediction['items'][0]);other['local_item_id']='p2'
         other['occurrences'][0]['local_occurrence_id']='p2o';other['locations'][0]['local_location_id']='p2l'

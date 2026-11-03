@@ -55,6 +55,7 @@ def _projection(item,aliases):
         row = {}
         for key in ('date_start','date_end'):
             row[key] = ('date',occ[key]['value']) if occ[key]['knowledge']=='known' else None
+            if row[key] is not None:fields[key]['claims'].add(row[key])
         for key in ('time_start','time_end'):
             seconds = None
             claims = set()
@@ -84,6 +85,7 @@ def _projection(item,aliases):
         if value['knowledge']=='known':
             values = tuple(sorted({normalized(key,v) for v in value['value']}))
             add(key,('set',values))
+            fields[key]['claims'].update({('member',v) for v in values} if values else {('empty',)})
     facets = {}
     for key in ('applicability','route_names','stop_names','directions'):
         value = item[key]
@@ -91,6 +93,8 @@ def _projection(item,aliases):
             v = value['value']
             v = tuple(sorted({normalized('applicability',x) for x in v})) if type(v) is list else normalized('applicability',v)
             add('applicability',(key,v));facets[key]=v
+            claims = {(key,x) for x in v} if type(v) is tuple and v else {(key,v)}
+            fields['applicability']['claims'].update(claims)
     return dict(fields=fields,rows=rows,facets=facets,auxiliary=auxiliary)
 
 
@@ -108,10 +112,15 @@ def _binding_fields(gold,prediction):
                 for row in profile['rows'].values():
                     if any(row[k] is None for k in keys):continue
                     if any((not set(row[k])<=shared[k]) if k=='locations' else row[k] not in shared[k] for k in keys):continue
-                    result.add(tuple(row[k] for k in keys))
+                    for location in row['locations'] if 'locations' in keys else (None,):
+                        result.add(tuple(location if k=='locations' else row[k] for k in keys))
                 return result
-            if relation(gold)!=relation(prediction):failures.append(keys)
+            if relation(prediction)-relation(gold):failures.append(keys)
     return set().union(*(set(keys) for keys in failures)) if failures else set()
+
+
+def _new_locations(expected,actual):
+    return any(not any(set(value)<=set(known) for known in expected) for value in actual)
 
 
 def _annotations(content,gold,prediction):
@@ -187,7 +196,9 @@ def score_document(input_bytes,gold_bytes,prediction_bytes,annotation_bytes,inst
                     predicted_value = predicted_row[key] if predicted_row else None
                     if row[key] is not None and row[key]!=predicted_value:
                         correct = False if g['provided'] else None
-                        if predicted_value is not None:correspondence_review.add((local,key))
+                        if predicted_value is not None and (key in ('date_start','date_end') or
+                                key=='locations' and _new_locations(row[key],predicted_value)):
+                            correspondence_review.add((local,key))
                     if row[key] is None and predicted_value is not None:
                         auto_generation.add((local,key));correct = False if g['provided'] else None
                     if key in ('time_start','time_end'):
@@ -201,8 +212,8 @@ def score_document(input_bytes,gold_bytes,prediction_bytes,annotation_bytes,inst
             if p and p['provided'] and not g['provided']:auto_generation.add((local,key))
             results.append(dict(slot_id=slot,local_item_id=local,field=key,gold_known=g['provided'],correct=correct,
                 gold_values=sorted(g['facts'],key=_json),output_values=sorted(p['facts'],key=_json) if p else [],
-                gold_auxiliary_claims=sorted(g['claims'],key=_json),
-                output_auxiliary_claims=sorted(p['claims'],key=_json) if p else [],
+                gold_auxiliary_claims=sorted(g['claims'],key=_json) if key in ('time_start','time_end') else [],
+                output_auxiliary_claims=sorted(p['claims'],key=_json) if p and key in ('time_start','time_end') else [],
                 reason_codes=[] if correct or not g['provided'] else ['MISSING_EVENT' if not actual else
                     'BINDING_MISMATCH' if key in binding else 'VALUE_MISMATCH']))
     generation,pending = [],[]
@@ -214,7 +225,8 @@ def score_document(input_bytes,gold_bytes,prediction_bytes,annotation_bytes,inst
             claimed = p['provided'] or bool(p['claims'])
             gold_claimed = g is not None and (g['provided'] or bool(g['claims']))
             automatic = (local,key) in auto_generation or bool(g is not None and not gold_claimed and claimed)
-            needs_review = bool(claimed and (g is None or p['facts']!=g['facts'] or p['claims']-g['claims']
+            needs_review = bool(claimed and (g is None or
+                (_new_locations(g['facts'],p['facts']) if key=='locations' else p['claims']-g['claims'])
                 or (local,key) in correspondence_review or key in binding
                 or p['known_count']>g['known_count']))
             review = reviews.get((local,key))
