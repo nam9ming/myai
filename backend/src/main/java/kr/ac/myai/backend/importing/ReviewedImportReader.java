@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import kr.ac.myai.backend.extraction.ExtractionException;
+import kr.ac.myai.backend.handoff.HandoffReference;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -50,11 +52,34 @@ public class ReviewedImportReader {
         }
     }
 
+    public ReviewedBatch prepareHandoff(JsonNode input, Path sourceRoot, String inputHash, String runId) {
+        try {
+            unicode(input);
+            check(input.path("schema_version").asText().equals("reviewed-import-v1") && input.has("human_handoffs"), "schema_version");
+            check(inputHash != null && inputHash.matches("[0-9a-f]{64}"), "input_sha256");
+            check(runId != null && runId.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"), "originating_run_id");
+            var batch = batch(input, sourceRoot, inputHash, false);
+            for (var event : batch.events()) check(event.originatingRunIds().contains(runId)
+                    && event.reviewStatus().equals("needs_review") && event.publicationIntent().equals("hidden"), "events.revision");
+            return new ReviewedBatch("human-handoff-import-v1", inputHash, batch.dataKind(), batch.documents(), batch.events(),
+                    runId, null, input.path("human_handoffs").toString());
+        } catch (IOException | IllegalArgumentException ex) {
+            throw invalid("file", "인계 검토본 또는 원문 파일을 검증할 수 없습니다.");
+        }
+    }
+
     private ReviewedBatch batch(JsonNode input, Path sourceRoot, String inputHash, boolean stored) throws IOException {
             String schema = choice(input, "schema_version", "reviewed-import-v1", "source-import-v1", "ai-draft-import-v1");
             boolean sourceOnly = schema.equals("source-import-v1");
             boolean draftImport = schema.equals("ai-draft-import-v1");
-            shape(input, "$", "schema_version data_kind documents evidence events" + (draftImport ? " originating_run_id" : ""));
+            boolean handoff = input.has("human_handoffs");
+            shape(input, "$", "schema_version data_kind documents evidence events" + (draftImport ? " originating_run_id" : "")
+                    + (handoff && !sourceOnly && !draftImport ? " human_handoffs" : ""));
+            if (handoff) {
+                check(input.path("human_handoffs").isArray() && !input.path("human_handoffs").isEmpty(), "human_handoffs");
+                try { HandoffReference.list(input.path("human_handoffs")); }
+                catch (ExtractionException ex) { throw invalid("human_handoffs", "인계 참조 형식이 유효하지 않습니다."); }
+            }
             String runId = draftImport ? uuid(input, "originating_run_id") : null;
             String kind = choice(input, "data_kind", "synthetic", "real");
             List<ReviewedBatch.Document> documents = new ArrayList<>();
@@ -70,20 +95,21 @@ public class ReviewedImportReader {
                 documents.add(document);
             }
             check(!draftImport || documents.size() == 1, "documents");
-            Map<String, JsonNode> evidence = evidence(input, sources, !sourceOnly && !draftImport);
+            Map<String, JsonNode> evidence = evidence(input, sources, !sourceOnly && !draftImport && !handoff);
             check(!sourceOnly || evidence.isEmpty(), "evidence");
             List<ReviewedBatch.Event> events = new ArrayList<>();
             Set<String> eventIds = new HashSet<>();
             Set<String> revisionIds = new HashSet<>();
-            for (JsonNode event : array(input, "events", !sourceOnly && !draftImport)) {
+            for (JsonNode event : array(input, "events", !sourceOnly && !draftImport && !handoff)) {
                 check(!sourceOnly, "events");
-                var reviewed = event(event, sources, evidence, kind, stored, draftImport);
+                var reviewed = event(event, sources, evidence, kind, stored, draftImport, handoff ? input.path("human_handoffs") : null);
                 check(!draftImport || reviewed.originatingRunIds().equals(List.of(runId)), "events.revision.originating_run_ids");
                 check(eventIds.add(reviewed.id()), "events.event_id");
                 check(revisionIds.add(reviewed.revisionId()), "events.revision.revision_id");
                 events.add(reviewed);
             }
-            return new ReviewedBatch(schema, inputHash, kind, documents, events, runId, draftImport ? input.toString() : null);
+            return new ReviewedBatch(schema, inputHash, kind, documents, events, runId, draftImport ? input.toString() : null,
+                    handoff ? input.path("human_handoffs").toString() : null);
     }
 
     public JsonNode readJson(Path file) {
@@ -196,7 +222,7 @@ public class ReviewedImportReader {
         return result;
     }
 
-    private ReviewedBatch.Event event(JsonNode event, Map<String, JsonNode> sources, Map<String, JsonNode> evidence, String kind, boolean stored, boolean draftImport) {
+    private ReviewedBatch.Event event(JsonNode event, Map<String, JsonNode> sources, Map<String, JsonNode> evidence, String kind, boolean stored, boolean draftImport, JsonNode handoffs) {
         shape(event, "events", "event_id area_id area_membership document_links relations suspected_duplicate_ids split_group_id expected_revision_no revision");
         String id = uuid(event, "event_id");
         uuid(event, "area_id");
@@ -209,13 +235,16 @@ public class ReviewedImportReader {
         shape(revision, "events.revision", "revision_id event_id revision_no title types occurrences locations applicability exceptions route_names stop_names directions lifecycle lifecycle_evidence_ids human_overrides review_status reviewer_id reviewed_at publication_intent origin source_version_ids originating_run_ids rules_version dictionary_version");
         String origin = choice(revision, "origin", "human", "ai_reviewed", "ai_draft");
         boolean rawDraft = origin.equals("ai_draft");
+        String status = stored ? choice(revision, "review_status", "draft", "needs_review", "approved", "rejected") : choice(revision, "review_status", "draft", "needs_review");
+        String intent = stored ? choice(revision, "publication_intent", "hidden", "public") : choice(revision, "publication_intent", "hidden");
+        boolean partial = rawDraft || handoffs != null && status.equals("needs_review") && intent.equals("hidden");
         check(stored || draftImport == rawDraft, "events.revision.origin");
         check(uuid(revision, "event_id").equals(id), "events.revision.event_id");
         String revisionId = uuid(revision, "revision_id");
         long number = integer(revision, "revision_no", 1, Long.MAX_VALUE);
         check(number == expected + 1, "events.revision.revision_no");
-        if (rawDraft) nullableText(revision, "title", LIMIT); else text(revision, "title", LIMIT);
-        for (String type : ids(revision, "types", !rawDraft, false)) check(Set.of("construction", "event", "traffic").contains(type), "events.revision.types");
+        if (partial) nullableText(revision, "title", LIMIT); else text(revision, "title", LIMIT);
+        for (String type : ids(revision, "types", !partial, false)) check(Set.of("construction", "event", "traffic").contains(type), "events.revision.types");
         List<String> sourceIds = ids(revision, "source_version_ids", true, true);
         Set<String> documentIds = new HashSet<>();
         for (String sourceId : sourceIds) {
@@ -231,7 +260,7 @@ public class ReviewedImportReader {
             check(documentIds.contains(documentId) && linked.add(documentId), "events.document_links.document_id");
             choice(link, "role", "original", "correction", "cancellation", "repost");
             check(!rawDraft || link.path("role").asText().equals("original"), "events.document_links.role");
-            for (String evidenceId : evidenceIds(link, "evidence_ids", allowedEvidence, !rawDraft)) {
+            for (String evidenceId : evidenceIds(link, "evidence_ids", allowedEvidence, !partial)) {
                 check(sources.get(evidence.get(evidenceId).path("document_version_id").asText()).path("document_id").asText().equals(documentId), "events.document_links.evidence_ids");
             }
         }
@@ -247,11 +276,11 @@ public class ReviewedImportReader {
         }
         Set<String> occurrences = new HashSet<>();
         for (JsonNode occurrence : array(revision, "occurrences", true)) {
-            occurrence(occurrence, locations, allowedEvidence, rawDraft);
+            occurrence(occurrence, locations, allowedEvidence, partial);
             check(occurrences.add(uuid(occurrence, "occurrence_id")), "events.revision.occurrences.occurrence_id");
         }
-        for (String name : List.of("applicability", "exceptions")) fieldValue(revision.path(name), allowedEvidence, false, rawDraft);
-        for (String name : List.of("route_names", "stop_names", "directions")) fieldValue(revision.path(name), allowedEvidence, true, rawDraft);
+        for (String name : List.of("applicability", "exceptions")) fieldValue(revision.path(name), allowedEvidence, false, partial);
+        for (String name : List.of("route_names", "stop_names", "directions")) fieldValue(revision.path(name), allowedEvidence, true, partial);
         String lifecycle = choice(revision, "lifecycle", "active", "cancelled", "uncertain");
         evidenceIds(revision, "lifecycle_evidence_ids", allowedEvidence, lifecycle.equals("cancelled"));
         for (JsonNode change : array(revision, "human_overrides", false)) {
@@ -260,10 +289,10 @@ public class ReviewedImportReader {
             text(change, "reason", LIMIT);
             text(change, "reviewer", 128);
             instant(change, "time", false);
-            evidenceIds(change, "evidence_ids", allowedEvidence, true);
+            // 검증한 과거 인용은 현재 근거에서 제거될 수 있어 실제 역사 대조는 repository가 수행한다.
+            if (handoffs == null) evidenceIds(change, "evidence_ids", allowedEvidence, true);
+            else ids(change, "evidence_ids", false, false);
         }
-        String status = stored ? choice(revision, "review_status", "draft", "needs_review", "approved", "rejected") : choice(revision, "review_status", "draft", "needs_review");
-        String intent = stored ? choice(revision, "publication_intent", "hidden", "public") : choice(revision, "publication_intent", "hidden");
         check(!intent.equals("public") || status.equals("approved"), "events.revision.publication_intent");
         String reviewer = nullableText(revision, "reviewer_id", 128);
         Instant reviewedAt = instant(revision, "reviewed_at", true);
@@ -282,6 +311,7 @@ public class ReviewedImportReader {
         text(revision, "rules_version", 100);
         text(revision, "dictionary_version", 100);
         ObjectNode payload = mapper.createObjectNode().put("data_kind", kind);
+        if (handoffs != null) payload.set("human_handoffs", handoffs);
         ObjectNode facts = event.deepCopy();
         facts.remove(List.of("revision", "expected_revision_no"));
         payload.set("event", facts);

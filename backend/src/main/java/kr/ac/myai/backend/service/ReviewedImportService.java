@@ -47,8 +47,7 @@ public class ReviewedImportService {
             throw new ImportException("IMPORT_VALIDATION_ERROR", "import 담당자를 128자 이하로 지정해 주세요.", "actor");
         }
         try {
-            var runReferences = extractions.verifyReferences(batch.events(), batch.originatingRunId(),
-                    batch.documents().stream().map(ReviewedBatch.Document::versionId).toList());
+            var runReferences = extractions.verifyReferences(batch);
             extractions.verifyDraft(batch);
             try {
                 return transaction.execute(status -> {
@@ -64,11 +63,12 @@ public class ReviewedImportService {
                         for (String duplicate : event.suspectedDuplicateIds()) {
                             if (!eventIds.contains(duplicate) && !repository.eventExists(duplicate)) throw reference("events.suspected_duplicate_ids");
                         }
-                        repository.appendEvent(event, batch.dataKind(), actor);
+                        if (batch.schemaVersion().equals("human-handoff-import-v1")) repository.appendEvent(event, batch.dataKind(), actor, true);
+                        else repository.appendEvent(event, batch.dataKind(), actor);
                     }
                     var result = new ImportResult(importId, batch.events().stream().map(ReviewedBatch.Event::revisionId).toList(),
                             batch.documents().stream().map(ReviewedBatch.Document::versionId).toList(), false);
-                    repository.completeBatch(result, batch.originatingRunId());
+                    repository.completeBatch(result, batch);
                     return result;
                 });
             } catch (DuplicateKeyException ex) {

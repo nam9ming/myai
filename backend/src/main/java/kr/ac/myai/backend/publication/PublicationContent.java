@@ -36,6 +36,7 @@ public class PublicationContent {
     public ReviewedBatch.Event validate(JsonNode payload, List<PublicationRepository.Document> documents, Path root) {
         check(root != null, "source_root");
         var envelope = mapper.createObjectNode().put("schema_version", "reviewed-import-v1").put("data_kind", payload.path("data_kind").asText());
+        if (payload.has("human_handoffs")) envelope.set("human_handoffs", payload.path("human_handoffs"));
         var sources = envelope.putArray("documents");
         for (var row : documents) {
             var metadata = parse(row.metadata()); var document = metadata.path("document");

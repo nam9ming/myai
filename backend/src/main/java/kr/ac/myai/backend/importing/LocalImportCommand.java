@@ -3,6 +3,7 @@ package kr.ac.myai.backend.importing;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import kr.ac.myai.backend.service.ReviewedImportService;
+import kr.ac.myai.backend.service.HumanHandoffImportService;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.ExitCodeGenerator;
@@ -20,18 +21,20 @@ import java.util.UUID;
 public class LocalImportCommand implements ApplicationRunner, ExitCodeGenerator {
     private final ReviewedImportReader reader;
     private final ReviewedImportService importer;
+    private final HumanHandoffImportService handoffs;
     private final Environment environment;
     private final ApplicationContext context;
     private final ObjectMapper mapper;
     private int exitCode;
 
     public LocalImportCommand(ReviewedImportReader reader, ReviewedImportService importer, Environment environment,
-                              ApplicationContext context, ObjectMapper mapper) {
+                              ApplicationContext context, ObjectMapper mapper, HumanHandoffImportService handoffs) {
         this.reader = reader;
         this.importer = importer;
         this.environment = environment;
         this.context = context;
         this.mapper = mapper;
+        this.handoffs = handoffs;
     }
 
     @Override
@@ -43,8 +46,13 @@ public class LocalImportCommand implements ApplicationRunner, ExitCodeGenerator 
             if (context instanceof WebApplicationContext) {
                 throw new ImportException("IMPORT_VALIDATION_ERROR", "local-import는 웹 서버 없이 실행해야 합니다.", "spring.main.web-application-type");
             }
-            var batch = reader.read(Path.of(required("myai.import.file")), Path.of(required("myai.import.source-root")));
-            var result = importer.importBatch(batch, required("myai.import.actor"));
+            Path file = Path.of(required("myai.import.file"));
+            Path source = Path.of(required("myai.import.source-root"));
+            String actor = required("myai.import.actor");
+            var input = reader.readJson(file);
+            var result = input.path("schema_version").asText().equals("human-handoff-import-v1")
+                    ? handoffs.importFile(file, source, Path.of(required("myai.import.handoff-root")), actor)
+                    : importer.importBatch(reader.read(file, source), actor);
             ObjectNode output = mapper.createObjectNode().put("status", "succeeded");
             output.set("result", mapper.valueToTree(result));
             System.out.println(output);

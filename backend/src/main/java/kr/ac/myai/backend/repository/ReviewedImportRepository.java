@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import kr.ac.myai.backend.importing.ImportException;
 import kr.ac.myai.backend.importing.HumanReviewChanges;
 import kr.ac.myai.backend.importing.ReviewedBatch;
+import kr.ac.myai.backend.importing.ReviewedImportReader;
 import kr.ac.myai.backend.service.ReviewedImportService.ImportResult;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -37,6 +38,7 @@ public class ReviewedImportRepository {
                     require(row.getString("status").equals("succeeded"), "import_batches");
                     JsonNode refs = json(row.getString("result_refs_json"));
                     require(batch.originatingRunId() == null || batch.originatingRunId().equals(refs.path("originating_run_id").textValue()), "import_batches");
+                    require(batch.handoffJson() == null || json(batch.handoffJson()).equals(refs.path("human_handoffs")), "import_batches");
                     return new ImportResult(row.getString("import_id"), strings(refs.path("revision_ids")), strings(refs.path("document_version_ids")), true);
                 }, sourceKind(batch), batch.inputSha256(), batch.schemaVersion()).stream().findFirst();
     }
@@ -50,13 +52,15 @@ public class ReviewedImportRepository {
         return switch (batch.schemaVersion()) {
             case "source-import-v1" -> "source";
             case "ai-draft-import-v1" -> "ai_draft";
+            case "human-handoff-import-v1" -> "human_handoff";
             default -> "reviewed";
         };
     }
 
-    public void completeBatch(ImportResult result, String runId) {
+    public void completeBatch(ImportResult result, ReviewedBatch batch) {
         var refs = mapper.createObjectNode();
-        if (runId != null) refs.put("originating_run_id", runId);
+        if (batch.originatingRunId() != null) refs.put("originating_run_id", batch.originatingRunId());
+        if (batch.handoffJson() != null) refs.set("human_handoffs", json(batch.handoffJson()));
         var revisions = refs.putArray("revision_ids");
         result.revisionIds().forEach(revisions::add);
         var documents = refs.putArray("document_version_ids");
@@ -95,38 +99,68 @@ public class ReviewedImportRepository {
     }
 
     public void appendEvent(ReviewedBatch.Event event, String kind, String actor) {
+        appendEvent(event, kind, actor, false);
+    }
+
+    public void appendEvent(ReviewedBatch.Event event, String kind, String actor, boolean generatedHandoff) {
         require((event.reviewStatus().equals("draft") || event.reviewStatus().equals("needs_review")) && event.publicationIntent().equals("hidden"), "review_status");
-        append(event, kind, actor, "import", "검토 JSON 로컬 import", json(event.payloadJson()).path("evidence").toString());
+        append(event, kind, actor, "import", "검토 JSON 로컬 import", json(event.payloadJson()).path("evidence").toString(), generatedHandoff);
     }
 
     public void appendDecision(ReviewedBatch.Event event, String kind, String actor, String reason, String evidenceJson) {
-        append(event, kind, actor, event.reviewStatus().equals("approved") ? "approve" : "reject", reason, evidenceJson);
+        append(event, kind, actor, event.reviewStatus().equals("approved") ? "approve" : "reject", reason, evidenceJson, false);
     }
 
-    private void append(ReviewedBatch.Event event, String kind, String actor, String action, String reason, String evidenceJson) {
-        var states = jdbc.queryForList("SELECT e.current_review_revision_id, e.lock_version, r.revision_no, r.payload_json FROM events e LEFT JOIN event_revisions r ON r.revision_id = e.current_review_revision_id WHERE e.event_id = ?", event.id());
+    public JsonNode previousPayload(String eventId, long number) {
+        if (number == 0) return null;
+        var rows = jdbc.queryForList("SELECT revision_id, payload_json, payload_sha256 FROM event_revisions WHERE event_id=? AND revision_no=?", eventId, number);
+        require(rows.size() == 1, "events.expected_revision_no");
+        var row = rows.getFirst();
+        String value = (String) row.get("payload_json");
+        require(ReviewedImportReader.sha256(value.getBytes(java.nio.charset.StandardCharsets.UTF_8)).equals(row.get("payload_sha256")), "payload_sha256");
+        var payload = json(value);
+        require(payload.path("event").path("event_id").asText().equals(eventId)
+                && payload.path("revision").path("event_id").asText().equals(eventId)
+                && payload.path("revision").path("revision_no").asLong() == number
+                && payload.path("revision").path("revision_id").asText().equals(row.get("revision_id")), "events.expected_revision_no");
+        return payload;
+    }
+
+    private void append(ReviewedBatch.Event event, String kind, String actor, String action, String reason, String evidenceJson, boolean generatedHandoff) {
+        var states = jdbc.queryForList("SELECT e.current_review_revision_id, e.lock_version, r.revision_no, r.payload_json, r.payload_sha256 FROM events e LEFT JOIN event_revisions r ON r.revision_id = e.current_review_revision_id WHERE e.event_id = ?", event.id());
+        var next = json(event.payloadJson());
         String before = null;
         long lockVersion = 0;
         if (states.isEmpty()) {
             require(event.expectedRevisionNo() == 0, "events.expected_revision_no");
+            require(generatedHandoff || !next.has("human_handoffs"), "human_handoffs");
             jdbc.update("INSERT INTO events(event_id) VALUES (?)", event.id());
         } else {
             var state = states.getFirst();
             before = (String) state.get("current_review_revision_id");
             require(before != null && state.get("revision_no") != null && ((Number) state.get("revision_no")).longValue() == event.expectedRevisionNo(), "events.expected_revision_no");
-            var previous = json((String) state.get("payload_json"));
+            String previousJson = (String) state.get("payload_json");
+            require(ReviewedImportReader.sha256(previousJson.getBytes(java.nio.charset.StandardCharsets.UTF_8)).equals(state.get("payload_sha256")), "payload_sha256");
+            var previous = json(previousJson);
             require(previous.path("data_kind").asText().equals(kind), "data_kind");
+            var oldProofs = previous.path("human_handoffs");
+            var newProofs = next.path("human_handoffs");
+            if (oldProofs.isArray()) {
+                require(newProofs.isArray() && newProofs.size() >= oldProofs.size(), "human_handoffs");
+                for (int i = 0; i < oldProofs.size(); i++) require(oldProofs.get(i).equals(newProofs.get(i)), "human_handoffs");
+            }
             if (action.equals("import") && previous.path("revision").path("origin").asText().equals("ai_draft")) {
                 var revision = json(event.payloadJson()).path("revision");
                 require(revision.path("origin").asText().equals("ai_reviewed") && event.reviewerId() != null
                         && event.reviewedAt() != null, "events.revision.reviewer_id");
             }
-            if (action.equals("import") && !previous.path("revision").path("originating_run_ids").isEmpty()) {
+            boolean hadRuns = !previous.path("revision").path("originating_run_ids").isEmpty();
+            if (action.equals("import") && hadRuns) {
                 require(event.originatingRunIds().containsAll(strings(previous.path("revision").path("originating_run_ids")))
                         && event.sourceVersionIds().containsAll(strings(previous.path("revision").path("source_version_ids"))),
                         "events.revision.originating_run_ids");
-                HumanReviewChanges.validate(previous, json(event.payloadJson()));
             }
+            if (action.equals("import") && (hadRuns || next.has("human_handoffs"))) HumanReviewChanges.validate(previous, next, generatedHandoff);
             lockVersion = ((Number) state.get("lock_version")).longValue();
         }
         require(lockVersion < Long.MAX_VALUE, "events.lock_version");

@@ -4,6 +4,8 @@
 
 D03 선등록·D05 archive 검증/등록·D06 실행 참조는 [연결 안내](docs/extraction-run-import.md)를 따른다. Python OpenAI 개발용 실행의 api archive도 같은 경로로 등록하며 Java가 직접 AI를 호출하지 않는다. D06 숨김 초안과 검토 승격은 [초안 안내](docs/ai-review-draft.md)를 따른다. 개발용 실제3건은 기계 검증·전용 시험 DB의 D05 등록까지 확인했으며, 실자료 D06 저장·사람 검토·평가·배포는 후속 작업이다.
 
+동결한 사람 수정본은 [인계 명령](docs/human-handoff-import.md)으로 D06에 저장한다. 명시 revision·실제 DB 전후 값·전체 원본을 보존하고 수정/승인/공개 때 다시 대조한다. 비공개 미상과 실패 부모 연결을 실제 자료 승인으로 간주하지 않는다.
+
 담당: 강명묵 · 기술 결정: Spring Boot·MySQL · 첫 결과: **11/3(화) 오후6시(KST)** · 연구실 시연: **11/4(수), 시각미정**
 
 - Java21·Spring Boot3.5.x·Gradle Wrapper 프로젝트와 MySQL8.4 LTS 연결을 구성합니다. 실제 패치/Wrapper 버전을 고정합니다.

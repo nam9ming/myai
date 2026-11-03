@@ -86,4 +86,4 @@ AI 출처가 있는 기존 사건을 수정할 때는 이전 revision과 바뀐 
 
 ## 동결 사람 수정 원본의 인계 준비
 
-[human-handoff-v1](../../contracts/human-handoff.md)은 수정된 extract-schema 값과 원래 D05를 검증하고 workflow 없는 D06 사실 투영을 별도0400/0500 이미지에 보존한다. status=projection_only·backend_import_supported=false이며 현재 local-import는 투영 schema를 거부한다. raw를 가짜 성공 D05로 재등록하거나 origin=human으로 출처를 지우지 않는다. 다음 Java 연결 단계에서 실제 원문 파일·등록 D05/사람 원본 hash·기존 revision/정확한 변경 기록·승인/공개 재검증을 연결해야 하며 이번 투영을 저장·인계 완료로 표시하지 않는다.
+[human-handoff-v1](../../contracts/human-handoff.md)은 수정된 extract-schema 값과 원래 D05를 검증하고 workflow 없는 D06 사실 투영을 별도0400/0500 이미지에 보존한다. status=projection_only·backend_import_supported=false이며 현재 local-import는 투영 schema를 거부한다. raw를 가짜 성공 D05로 재등록하거나 origin=human으로 출처를 지우지 않는다. 별도 [Java 인계 요청](human-handoff-import.md)이 실제 원문 파일·등록 D03/D05/사람 원본 hash·명시 revision/실제 DB 변경 기록·승인/공개 재검증을 연결한다. Python 투영 성공만으로 DB 저장 완료를 표시하지 않는다.

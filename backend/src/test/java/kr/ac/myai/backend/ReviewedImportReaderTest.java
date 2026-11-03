@@ -26,6 +26,96 @@ class ReviewedImportReaderTest {
     }
 
     @Test
+    void preparesPrivateHandoffWithExplicitRunHashAndEmptyEventList() throws Exception {
+        handoff();
+        var batch = reader.prepareHandoff(input, root, "c".repeat(64), "71fb66f0-e610-4f9c-8f26-4bb77655ee8c");
+        assertThat(batch.schemaVersion()).isEqualTo("human-handoff-import-v1");
+        assertThat(batch.inputSha256()).isEqualTo("c".repeat(64));
+        assertThat(batch.originatingRunId()).isEqualTo("71fb66f0-e610-4f9c-8f26-4bb77655ee8c");
+        assertThat(batch.draftJson()).isNull();
+        assertThat(mapper.readTree(batch.handoffJson())).isEqualTo(input.path("human_handoffs"));
+        input.putArray("events"); input.putArray("evidence");
+        assertThat(reader.prepareHandoff(input, root, "c".repeat(64), "71fb66f0-e610-4f9c-8f26-4bb77655ee8c").events()).isEmpty();
+        input.put("schema_version", "human-handoff-import-v1");
+        rejected();
+    }
+
+    @Test
+    void preservesHandoffPartialFactsAndProofButApprovalRemainsStrict() throws Exception {
+        handoff();
+        var revision = (ObjectNode) input.path("events").get(0).path("revision");
+        revision.putNull("title").putArray("types");
+        var directions = (ObjectNode) revision.path("directions");
+        directions.put("knowledge", "known").putNull("reason");
+        directions.putArray("value").add("상행").add("상행");
+        directions.putArray("evidence_ids").add("body-quote");
+        var occurrence = (ObjectNode) revision.path("occurrences").get(0);
+        occurrence.putNull("date_start").putNull("date_end").put("time_start", "12:00").put("time_end", "10:00")
+                .put("end_day_offset", 0).put("precision", "unknown").put("knowledge", "ambiguous");
+        var saved = mapper.readTree(reader.read(write(), root).events().getFirst().payloadJson());
+        assertThat(saved.path("human_handoffs")).isEqualTo(input.path("human_handoffs"));
+        assertThat(saved.path("revision")).isEqualTo(revision);
+        revision.put("review_status", "approved");
+        assertThatThrownBy(() -> reader.validateStored(input, root)).isInstanceOf(ImportException.class);
+        revision.put("title", "합성 제목"); revision.putArray("types").add("traffic");
+        assertThatThrownBy(() -> reader.validateStored(input, root)).isInstanceOf(ImportException.class);
+        directions.putArray("value").add("상행");
+        assertThatThrownBy(() -> reader.validateStored(input, root)).isInstanceOf(ImportException.class);
+    }
+
+    @Test
+    void handoffCanPreserveEvidenceFreeUnknownEventsAndHistoricalCitations() throws Exception {
+        handoff();
+        var revision = (ObjectNode) input.path("events").get(0).path("revision");
+        revision.putNull("title").putArray("types");
+        var occurrence = (ObjectNode) revision.path("occurrences").get(0);
+        occurrence.putNull("date_start").putNull("date_end").putNull("time_start").putNull("time_end")
+                .putNull("end_day_offset").put("precision", "unknown").put("knowledge", "not_stated");
+        occurrence.putArray("evidence_ids");
+        var location = (ObjectNode) revision.path("locations").get(0);
+        location.put("status", "unknown").put("coverage", "unknown").putNull("geometry")
+                .putNull("source").putNull("checked_by").putNull("checked_at").putArray("evidence_ids");
+        for (var field : java.util.List.of(location.withObject("name"), revision.withObject("applicability"))) {
+            field.putNull("value").put("knowledge", "not_stated").put("reason", "미상").putArray("evidence_ids");
+        }
+        ((ObjectNode) input.path("events").get(0).path("document_links").get(0)).putArray("evidence_ids");
+        input.putArray("evidence");
+        var history = revision.withArray("human_overrides").addObject().put("field_path", "evidence")
+                .put("reason", "과거 인용 보존").put("reviewer", "past-reviewer").put("time", "2026-11-02T01:00:00Z");
+        history.putArray("before"); history.putArray("after"); history.putArray("evidence_ids").add("removed-evidence");
+        assertThat(reader.read(write(), root).events()).hasSize(1);
+        history.putArray("evidence_ids");
+        assertThat(reader.read(write(), root).events()).hasSize(1);
+        input.putArray("events");
+        var empty = reader.read(write(), root);
+        assertThat(empty.events()).isEmpty();
+        assertThat(empty.handoffJson()).isEqualTo(input.path("human_handoffs").toString());
+        input.remove("human_handoffs");
+        rejected();
+    }
+
+    @Test
+    void rejectsMalformedProofAndKeepsD06TimestampPrecision() throws Exception {
+        handoff();
+        ((ObjectNode) input.path("events").get(0).path("revision")).put("reviewed_at", "2026-11-02T02:00:00.123456789Z");
+        rejected();
+        ((ObjectNode) input.path("events").get(0).path("revision")).put("reviewed_at", "2026-11-02T02:00:00.123456Z");
+        assertThat(reader.read(write(), root).events()).hasSize(1);
+        ((ObjectNode) input.path("human_handoffs").get(0)).put("unexpected", true);
+        rejected();
+        handoff(); input.putArray("human_handoffs"); rejected();
+        handoff(); input.putNull("human_handoffs"); rejected();
+        handoff(); input.put("schema_version", "source-import-v1"); rejected();
+    }
+
+    private void handoff() {
+        input.putArray("human_handoffs").addObject().put("directory", root.resolve("a".repeat(64)).toString())
+                .put("handoff_ref", "a".repeat(64)).put("receipt_sha256", "b".repeat(64));
+        var revision = (ObjectNode) input.path("events").get(0).path("revision");
+        revision.put("origin", "ai_reviewed").putArray("originating_run_ids").add("71fb66f0-e610-4f9c-8f26-4bb77655ee8c");
+    }
+
+    @Test
     void rejectsHumanHandoffProjectionBeforeRevisionImport() throws Exception {
         assertThat(reader.read(write(), root).events()).hasSize(1);
         input.put("schema_version", "human-handoff-projection-v1");
@@ -353,6 +443,28 @@ class ReviewedImportReaderTest {
         assertThat(saved.path("time_end").isNull()).isTrue();
         occurrence.put("time_start", "12:00").put("time_end", "10:00").put("end_day_offset", 0);
         rejected();
+    }
+
+    @Test
+    void retainsPreHandoffUtcMicrosecondInputLimits() throws Exception {
+        var original = input.deepCopy();
+        assertThat(reader.read(write(), root).events()).hasSize(1);
+        for (String stamp : java.util.List.of("2026-11-02T01:00:00.123456789Z", "2026-11-02T10:00:00+09:00")) {
+            for (String field : java.util.List.of("reviewed_at", "override_time")) {
+                input = original.deepCopy();
+                var revision = (ObjectNode) input.path("events").get(0).path("revision");
+                revision.put("reviewer_id", "synthetic-reviewer").put("reviewed_at", "2026-11-02T01:00:00Z");
+                if (field.equals("reviewed_at")) revision.put("reviewed_at", stamp);
+                else {
+                    var record = revision.putArray("human_overrides").addObject().put("field_path", "title").put("before", "old")
+                            .put("reason", "합성 시각 규격 검증").put("reviewer", "synthetic-reviewer").put("time", stamp);
+                    record.set("after", revision.path("title"));
+                    record.putArray("evidence_ids").add(input.path("evidence").get(0).path("evidence_id"));
+                }
+                assertThatThrownBy(() -> reader.read(write(), root)).isInstanceOfSatisfying(ImportException.class,
+                        error -> assertThat(error.field()).isEqualTo(field.equals("reviewed_at") ? "reviewed_at" : "time"));
+            }
+        }
     }
 
     private Path write() throws Exception {
