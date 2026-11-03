@@ -101,6 +101,10 @@ python3.13 -m processing.evaluation verify DATASET_REF
 
 예제는 합성4문서/5버전입니다. 실제 개발용3건은 dev만 배정한 비공개 manifest로 check/freeze/verify를 확인했으며 holdout은0건입니다. 같은 dataset_version의 다른 바이트는 충돌이고 기존 원본을 덮어쓰지 않습니다. 기본 root는 `data/private/evaluation/datasets`, 보관본 파일0400·디렉터리0500입니다. 키·AI·네트워크·DB를 사용하지 않습니다.
 
+2026-11-04 공식 사이트에서 후보49개를 관찰하고 게시판·게시ID로 대조해 고유 게시물48개를 정리했습니다. 본문 수신47개에는 기존 개발3건이 포함되며, 나머지1개는 가입 안내만 반환돼 검색전용으로 남겼습니다. 조회 시각·수신 표현·hash·URL 별칭·재공지 관계 후보는 Git 제외 `data/private/evaluation/intake/official-notices-2026-11-04/`에 보관했습니다. `intake-index.json`과 `review-list.csv`로 목록을 확인하며 원래 제목·수신 내용은 JSON을 기준으로 합니다.
+
+후보는 미배정 상태입니다. 지역·첨부·이용권한·사건 관계 검토, D03 입력 정리와 등록, 개발20/확인20 분할·독립 정답표·신규 추출/평가가 남아 있습니다. 수신한 DOM·도구 응답은 서버 원본 바이트나 공식 수정 시각을 인증하지 않으며 실제 데이터셋은 dev3/holdout0을 유지합니다.
+
 manifest만으로는 실제 본문이나 정답을 인증하지 않으며 `unexposed_as_declared`도 blind 평가 보증이 아닙니다. 실제 입력·실행 연결은 별도 [dataset-bindings-v1](../contracts/dataset-bindings.md) 명세로 검사합니다.
 
 ```sh
