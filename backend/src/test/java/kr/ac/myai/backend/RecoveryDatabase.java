@@ -141,31 +141,39 @@ final class RecoveryDatabase implements AutoCloseable {
 
     @Override public void close() {
         if (closed) return;
-        verifyOwner();
+        boolean interrupted = Thread.interrupted();
         try {
+            verifyOwner();
             command(List.of("docker", "rm", "--force", "--volumes", id), null, null, Duration.ofSeconds(30));
             Files.delete(credentials);
             closed = true;
         } catch (IOException error) {
             throw new IllegalStateException("Recovery database cleanup failed", error);
+        } finally {
+            if (interrupted) Thread.currentThread().interrupt();
         }
     }
 
     private void cleanupAfterFailedStart() throws IOException {
-        if (id == null) {
-            String found = Files.readString(command(List.of("docker", "container", "ls", "--all", "--no-trunc", "--filter", "name=^/" + name + "$",
-                    "--filter", "label=" + OWNER_LABEL + "=" + owner, "--format", "{{.ID}}"), null, null, Duration.ofSeconds(15))).trim();
-            if (!found.isEmpty()) {
-                if (!found.matches("[a-f0-9]{64}")) throw new IllegalStateException("Recovery failed-start container ambiguous");
-                id = found;
+        boolean interrupted = Thread.interrupted();
+        try {
+            if (id == null) {
+                String found = Files.readString(command(List.of("docker", "container", "ls", "--all", "--no-trunc", "--filter", "name=^/" + name + "$",
+                        "--filter", "label=" + OWNER_LABEL + "=" + owner, "--format", "{{.ID}}"), null, null, Duration.ofSeconds(15))).trim();
+                if (!found.isEmpty()) {
+                    if (!found.matches("[a-f0-9]{64}")) throw new IllegalStateException("Recovery failed-start container ambiguous");
+                    id = found;
+                }
             }
+            if (id != null) {
+                verifyOwner();
+                command(List.of("docker", "rm", "--force", "--volumes", id), null, null, Duration.ofSeconds(30));
+            }
+            Files.delete(credentials);
+            closed = true;
+        } finally {
+            if (interrupted) Thread.currentThread().interrupt();
         }
-        if (id != null) {
-            verifyOwner();
-            command(List.of("docker", "rm", "--force", "--volumes", id), null, null, Duration.ofSeconds(30));
-        }
-        Files.delete(credentials);
-        closed = true;
     }
 
     private Path command(List<String> arguments, Path input, Path output, Duration timeout) throws IOException {

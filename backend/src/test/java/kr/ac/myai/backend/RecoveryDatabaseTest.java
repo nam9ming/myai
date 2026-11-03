@@ -121,6 +121,25 @@ class RecoveryDatabaseTest {
         Files.createSymbolicLink(link, root);
         assertThatThrownBy(() -> RecoveryDatabase.start(link)).isInstanceOf(IllegalArgumentException.class);
     }
+    @Test
+    void shouldCloseOwnedDatabaseWhilePreservingCallerInterrupt() throws Exception {
+        Files.setPosixFilePermissions(root, PosixFilePermissions.fromString("rwx------"));
+        var database = RecoveryDatabase.start(root);
+        String id = database.id();
+        try {
+            Thread.currentThread().interrupt();
+            assertThatCode(database::close).doesNotThrowAnyException();
+            assertThat(Thread.currentThread().isInterrupted()).isTrue();
+        } finally {
+            Thread.interrupted();
+            database.close();
+        }
+        assertThat(docker("container", "ls", "--all", "--no-trunc", "--filter", "id=" + id, "--format", "{{.ID}}")).isEmpty();
+        try (var files = Files.list(root)) {
+            assertThat(files.filter(p -> p.getFileName().toString().endsWith(".env"))).isEmpty();
+        }
+    }
+
     private String docker(String... arguments) throws Exception {
         Path stdout = Files.createTempFile(root, "probe-", ".stdout", PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
         Path stderr = Files.createTempFile(root, "probe-", ".stderr", PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
