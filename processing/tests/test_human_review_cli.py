@@ -67,6 +67,17 @@ class HumanReviewCliTest(ReviewFixture):
         result = self.cli('check-review', '--input', self.work / 'PRIVATE_MISSING')
         self.assertEqual((result.returncode, result.stdout, result.stderr), (5, b'', b'DATASET_IO_FAILED\n'))
 
+    def test_actual_fractional_identity_is_archive3(self):
+        args = self.prepare_review()
+        frozen = self.cli('freeze-review', *args, '--root', self.review_root)
+        self.assertEqual(frozen.returncode, 0)
+        reference = json.loads(frozen.stdout)['review_ref']
+        path = self.review_root / reference / 'identity.json'
+        value = json.loads(path.read_bytes()); value['recorded_at'] = 1.5
+        self.rewrite(path, json.dumps(value).encode())
+        result = self.cli('verify-review', reference, '--root', self.review_root)
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (3, b'', b'HUMAN_REVIEW_INTEGRITY\n'))
+
     def test_legacy_evaluation_command_still_scores_original_ai(self):
         control = self.work / 'legacy-control'; control.write_text(json.dumps(self.control))
         result = self.cli('check-evaluation', '--input', control, '--gold-root', self.gold_root,

@@ -237,6 +237,21 @@ class HumanReviewTest(ReviewFixture):
         target.symlink_to(copied); image.chmod(0o500)
         with self.assertRaises(ExtractionError): reviews.verify_review(receipt['review_ref'], self.review_root)
 
+    def test_fractional_identity_values_are_classified_as_archive_corruption(self):
+        receipt = self.freeze_review(); identity = self.image(receipt) / 'identity.json'
+        original = identity.read_bytes()
+        for field in ('recorded_at', 'artifact_size'):
+            value = json.loads(original)
+            if field == 'recorded_at': value['recorded_at'] = 1.5
+            else: value['artifacts']['review.json']['size'] = 1.5
+            self.rewrite(identity, json.dumps(value).encode())
+            with self.subTest(field=field):
+                with self.assertRaises(Exception) as caught:
+                    reviews.verify_review(receipt['review_ref'], self.review_root)
+                self.assertIsInstance(caught.exception, ExtractionError)
+                self.assertEqual((caught.exception.kind, caught.exception.code), ('archive', 'HUMAN_REVIEW_INTEGRITY'))
+            self.rewrite(identity, original)
+
     def test_conflict_and_partial_destination_are_preserved(self):
         receipt = self.freeze_review(); value = self.changed()
         with self.assertRaises(ExtractionError) as caught: self.freeze_review(value)

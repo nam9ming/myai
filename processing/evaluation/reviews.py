@@ -160,7 +160,7 @@ def _verify_directory(directory, reference):
                 | {name: artifacts[name] for name in ('review.json', 'output.json')}, kind='archive')
         expected = _receipt(identity, packet['summary'])
         require(_read(directory / 'receipt.json') == _json(expected), kind='archive')
-    except (ExtractionError, FileNotFoundError, NotADirectoryError):
+    except (ExtractionError, FileNotFoundError, NotADirectoryError, TypeError):
         raise ExtractionError('HUMAN_REVIEW_INTEGRITY', kind='archive') from None
     return expected
 
