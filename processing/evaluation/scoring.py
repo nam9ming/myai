@@ -95,7 +95,9 @@ def _projection(item,aliases):
 
 
 def _binding_fields(gold,prediction):
-    shared = {key:gold['fields'][key]['facts'] & prediction['fields'][key]['facts'] for key in BOUND}
+    # 값 오류로 줄어든 부분 교집합을 다른 필드의 결합 오류로 전파하지 않는다.
+    shared = {key:gold['fields'][key]['facts'] if gold['fields'][key]['facts']==prediction['fields'][key]['facts']
+              else set() for key in BOUND}
     failures = []
     for size in range(2,len(BOUND)+1):
         for keys in combinations(BOUND,size):
@@ -168,7 +170,7 @@ def score_document(input_bytes,gold_bytes,prediction_bytes,annotation_bytes,inst
     pred_profiles = {i['local_item_id']:_projection(i,aliases) for i in prediction['items']} if prediction is not None else {}
     primary = {link['slot_id']:link for link in links.values() if link['kind']=='match'}
     results,binding_slots = [],0
-    auto_generation,auxiliary_review = set(),set()
+    auto_generation,correspondence_review = set(),set()
     for slot,expected in gold_profiles.items():
         link = primary.get(slot)
         local = link['local_item_id'] if link else None
@@ -183,13 +185,15 @@ def score_document(input_bytes,gold_bytes,prediction_bytes,annotation_bytes,inst
                 for identity,row in expected['rows'].items():
                     predicted_row = actual['rows'].get(paired.get(identity))
                     predicted_value = predicted_row[key] if predicted_row else None
-                    if row[key] is not None and row[key]!=predicted_value:correct = False if g['provided'] else None
+                    if row[key] is not None and row[key]!=predicted_value:
+                        correct = False if g['provided'] else None
+                        if predicted_value is not None:correspondence_review.add((local,key))
                     if row[key] is None and predicted_value is not None:
                         auto_generation.add((local,key));correct = False if g['provided'] else None
                     if key in ('time_start','time_end'):
                         known_claims = expected['auxiliary'][identity][key]
                         output_claims = actual['auxiliary'].get(paired.get(identity),{}).get(key,set())
-                        if output_claims-known_claims:auxiliary_review.add((local,key))
+                        if output_claims-known_claims:correspondence_review.add((local,key))
                         if not g['provided'] and output_claims-known_claims:
                             auto_generation.add((local,key))
             if actual and key=='applicability' and actual['facets'].keys()-expected['facets'].keys():
@@ -211,7 +215,7 @@ def score_document(input_bytes,gold_bytes,prediction_bytes,annotation_bytes,inst
             gold_claimed = g is not None and (g['provided'] or bool(g['claims']))
             automatic = (local,key) in auto_generation or bool(g is not None and not gold_claimed and claimed)
             needs_review = bool(claimed and (g is None or p['facts']!=g['facts'] or p['claims']-g['claims']
-                or (local,key) in auxiliary_review or key in binding
+                or (local,key) in correspondence_review or key in binding
                 or p['known_count']>g['known_count']))
             review = reviews.get((local,key))
             if review:

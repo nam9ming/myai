@@ -199,6 +199,23 @@ class ScoringTest(unittest.TestCase):
         self.assertEqual(result['fields']['time_end']['known'],0)
         self.assertEqual(result['generation_errors'],1)
 
+    def test_swapped_dates_with_equal_relations_still_require_correspondence_review(self):
+        self.source_text(self.document['blocks'][0]['text']+' 같은 장소·시간으로2026-11-08에도 진행한다.')
+        other=copy.deepcopy(self.gold['items'][0]['occurrences'][0])
+        other.update(local_occurrence_id='o2',date_start=fv('2026-11-08'),date_end=fv('2026-11-08'))
+        self.gold['items'][0]['occurrences'].append(other)
+        self.links['item_links'][0]['occurrence_links'].append(dict(gold_occurrence_id='o2',local_occurrence_id='o2'))
+        prediction=copy.deepcopy(self.gold);a,b=prediction['items'][0]['occurrences']
+        for key in ('date_start','date_end'):a[key],b[key]=b[key],a[key]
+        summary=self.score(prediction)['summary']
+        self.assertEqual((summary['correct_fields'],summary['known_fields']),(6,8))
+        self.assertEqual(summary['binding_errors'],0)
+        self.assertEqual(summary['generation_review_pending'],2);self.assertIsNone(summary['generation_rate_percent'])
+        links=copy.deepcopy(self.links);links['generation_reviews']=[dict(local_item_id='s1',field=key,unsupported=False,
+            reason='합성 대응 오류지만 값 자체는 원문에 존재한다는 검토 선언') for key in ('date_start','date_end')]
+        reviewed=self.score(prediction,links)['summary']
+        self.assertEqual(reviewed['correct_fields'],6);self.assertEqual(reviewed['generation_rate_percent'],0)
+
     def test_approved_aliases_and_space_normalization_are_fixed(self):
         prediction=copy.deepcopy(self.gold);prediction['items'][0]['locations'][0]['name']=fv('  가상로   A ')
         self.assertEqual(self.score(prediction)['summary']['correct_fields'],8)
@@ -239,6 +256,13 @@ class ScoringTest(unittest.TestCase):
         result=self.score(prediction)
         self.assertEqual(result['summary']['binding_errors'],0)
         self.assertEqual([r['field'] for r in result['field_results'] if r['correct'] is False],['time_end'])
+
+    def test_one_wrong_time_among_shared_values_does_not_corrupt_dates_or_places(self):
+        self.two_occurrences();prediction=copy.deepcopy(self.gold)
+        prediction['items'][0]['occurrences'][0]['time_end']=fv('15:00')
+        result=self.score(prediction)
+        self.assertEqual([r['field'] for r in result['field_results'] if r['correct'] is False],['time_end'])
+        self.assertEqual(result['summary']['binding_errors'],0)
 
     def test_higher_order_binding_detects_parity_with_equal_pair_marginals(self):
         item=self.gold['items'][0];prototype=copy.deepcopy(item['occurrences'][0])
