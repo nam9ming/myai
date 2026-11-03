@@ -495,3 +495,50 @@ class UserStudyTest(UserStudyFixture):
         self.assertEqual(summary['primary']['eligible_pairs'], 6)
         self.assertIs(summary['m04']['meets_target_6_as_declared'], True)
         self.assertIs(summary['primary']['improvement_supported_as_declared'], True)
+
+    def unknown_operations(self, participant):
+        for session in participant['sessions']:
+            session.update(instruction_seconds=None, timing_includes_loading=None)
+            session['source_check']['originals_changed'] = None
+            for row in session['records']:
+                row.update(answer_feedback_given=None, operation_taken_over=None)
+
+    def test_unknown_operational_conditions_keep_all_correct_answers_without_invented_values(self):
+        self.fictional_real(); self.unknown_operations(self.records['participants'][0])
+        packet = self.study(); person = packet['result']['participants'][0]; analysis = person['analysis']
+        self.assertTrue(analysis['all_correct']); self.assertTrue(analysis['finished_all'])
+        self.assertIs(analysis['eligible_pair'], False)
+        self.assertEqual(set(analysis['deviations']), {'INSTRUCTION_TIME_UNKNOWN', 'LOADING_TIME_UNKNOWN',
+            'ASSISTANCE_STATUS_UNKNOWN', 'ORIGINAL_CHANGE_STATUS_UNKNOWN'})
+        for session in person['sessions']:
+            self.assertIsNone(session['instruction_ns']); self.assertIsNone(session['timing_includes_loading'])
+            self.assertIsNone(session['source_check']['originals_changed'])
+            for row in session['records']:
+                self.assertIsNone(row['answer_feedback_given']); self.assertIsNone(row['operation_taken_over'])
+        primary = packet['summary']['primary']
+        self.assertEqual(primary['eligible_pairs'], 0)
+        self.assertIs(primary['comparison_conditions_confirmed'], False)
+        self.assertIsNone(primary['improvement_supported_as_declared'])
+        for method in ('board', 'prototype'):
+            self.assertEqual((packet['summary']['methods'][method]['started_tasks'], packet['summary']['methods'][method]['exact_correct']), (3, 3))
+
+    def test_unknown_operational_user_keeps_other_valid_time_pair_but_whole_improvement_unknown(self):
+        self.fictional_real(); participant = self.add_person(2); self.unknown_operations(participant)
+        primary = self.study()['summary']['primary']
+        self.assertEqual(primary['eligible_pairs'], 1)
+        self.assertEqual(primary['median_reduction_percent'], 20.0)
+        self.assertIs(primary['meets_20_percent_as_declared'], True)
+        self.assertIs(primary['comparison_conditions_confirmed'], False)
+        self.assertIsNone(primary['improvement_supported_as_declared'])
+        changes = [lambda p, bad: p['sessions'][0].update(instruction_seconds=bad),
+            lambda p, bad: p['sessions'][0].update(timing_includes_loading=bad),
+            lambda p, bad: p['sessions'][0]['source_check'].update(originals_changed=bad),
+            lambda p, bad: p['sessions'][0]['records'][0].update(answer_feedback_given=bad),
+            lambda p, bad: p['sessions'][0]['records'][0].update(operation_taken_over=bad)]
+        for change in changes:
+            for bad in (1, 'unknown'):
+                if bad == 1 and change is changes[0]: continue
+                value = copy.deepcopy(self.records); change(value['participants'][0], bad)
+                with self.subTest(change=change, bad=bad): self.invalid(value)
+        value = copy.deepcopy(self.records); value['participants'][0]['sessions'][0]['instruction_seconds'] = True
+        self.invalid(value)

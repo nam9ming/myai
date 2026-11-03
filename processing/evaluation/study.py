@@ -62,7 +62,7 @@ def _record(value, prepared, tasks, consent, budget):
     expected = set(prepared['tasks'][value['task_id']]['expected_event_ids'])
     _check(value['outcome'] in OUTCOMES)
     for key in CORRECTNESS: _boolean(value[key], True)
-    for key in ('answer_feedback_given', 'operation_taken_over'): _boolean(value[key])
+    for key in ('answer_feedback_given', 'operation_taken_over'): _boolean(value[key], True)
     _optional_text(value['assistance_notes'])
     lists = {key: _ids(value[key], nullable=True) for key in SETS}
     elapsed = None; interval = None
@@ -100,13 +100,13 @@ def _session(value, method, set_id, prepared, consent, budget):
     expected_set = next(item for item in prepared['protocol']['task_sets'] if item['set_id'] == set_id)
     _check(value['method'] == method and value['task_set'] == set_id and value['task_set_version'] == expected_set['version'])
     for field in ('device_browser', 'network'): _label(value[field], MAX_BYTES)
-    instruction = duration_ns(value['instruction_seconds'], positive=False)
-    _boolean(value['timing_includes_loading'])
+    instruction = None if value['instruction_seconds'] is None else duration_ns(value['instruction_seconds'], positive=False)
+    _boolean(value['timing_includes_loading'], True)
     check = value['source_check']; checked = None
     if check is not None:
         shape(check, 'checked_at originals_changed', kind='input')
         checked = stamp_ns(check['checked_at']); _check(checked <= prepared['evaluated_ns'])
-        _boolean(check['originals_changed'])
+        _boolean(check['originals_changed'], True)
     tasks = prepared['task_sets'][set_id]; seen = set(); rows, intervals = [], []
     for raw in array(value['records'], '$.records', 'input'):
         row, interval = _record(raw, prepared, tasks, consent, budget)
@@ -114,11 +114,16 @@ def _session(value, method, set_id, prepared, consent, budget):
         if interval: intervals.append(interval)
     _check(seen == set(tasks))
     deviations = []
-    if not value['timing_includes_loading']: deviations.append('LOADING_TIME_EXCLUDED')
+    if instruction is None: deviations.append('INSTRUCTION_TIME_UNKNOWN')
+    if value['timing_includes_loading'] is None: deviations.append('LOADING_TIME_UNKNOWN')
+    elif not value['timing_includes_loading']: deviations.append('LOADING_TIME_EXCLUDED')
     if check is None: deviations.append('SOURCE_CHECK_MISSING')
+    elif check['originals_changed'] is None: deviations.append('ORIGINAL_CHANGE_STATUS_UNKNOWN')
     elif check['originals_changed']: deviations.append('ORIGINALS_CHANGED')
     if checked is not None and any(checked > start or day_kst(checked) != day_kst(start) for start, _ in intervals):
         deviations.append('SOURCE_CHECK_NOT_SAME_DAY_BEFORE_START')
+    if any(row[key] is None for row in rows for key in ('answer_feedback_given', 'operation_taken_over')):
+        deviations.append('ASSISTANCE_STATUS_UNKNOWN')
     if any(row['answer_feedback_given'] for row in rows): deviations.append('ANSWER_FEEDBACK_GIVEN')
     if any(row['operation_taken_over'] for row in rows): deviations.append('OPERATION_TAKEN_OVER')
     normalized = {key: copy.deepcopy(item) for key, item in value.items() if key not in ('records', 'instruction_seconds')}
@@ -161,7 +166,8 @@ def _participant(value, status, prepared, sequences, budget):
         a, b = normalized_sessions
         for field, code in (('device_browser', 'DEVICE_BROWSER_MISMATCH'), ('network', 'NETWORK_MISMATCH'),
                             ('instruction_ns', 'INSTRUCTION_TIME_MISMATCH')):
-            if a[field] != b[field]: deviations.append(code)
+            if a[field] != b[field] and (field != 'instruction_ns' or a[field] is not None and b[field] is not None):
+                deviations.append(code)
         flat = sorted(time for times in intervals for time in times)
         _check(all(before[1] <= after[0] for before, after in zip(flat, flat[1:])))
         _check(not all(intervals) or max(end for _, end in intervals[0]) <= min(start for start, _ in intervals[1]))
