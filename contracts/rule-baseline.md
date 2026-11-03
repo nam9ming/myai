@@ -4,7 +4,7 @@
 
 ## 고정 프로필
 
-`rule-profile-v1`의 필수 키는 `schema_version`, `profile_version`, `rule_version`, `data_kind`, `type_keywords`, `target_keywords`, `exception_keywords`, `places`다. 추가 키·중복 JSON 키는 거부한다. `rule_version=rule-extract-v1`, data_kind는 입력과 같은 real/synthetic이다. 프로필 버전은100자, 키워드/지명/별칭은160자 이하 NFC·양끝 공백/제어문자 없는 문자열이다.
+`rule-profile-v1`의 필수 키는 `schema_version`, `profile_version`, `rule_version`, `data_kind`, `type_keywords`, `target_keywords`, `exception_keywords`, `places`다. 추가 키·중복 JSON 키는 거부한다. `rule_version=rule-extract-v1`, data_kind는 입력과 같은 real/synthetic이다. 프로필 버전은100자, 키워드/지명/별칭은160자 이하 NFC·양끝 공백/Unicode Cc 제어문자 없는 문자열이다.
 
 type_keywords는 construction/event/traffic 세 배열이며 배열당32개 이하 리터럴이다. 대상/예외 키워드도 각각32개 이하이다. places는 최대256개의 `{name,aliases,kind}`이며 aliases는 최대16개, kind는 point/segment/stops/area 또는 null이다. canonical name을 포함한 별칭은 프로필 전체에서 중복할 수 없다. 정규식 실행·좌표·외부 사전 조회는 없다. [공개 예제](../processing/examples/rule-profile.json)는 합성 전용이다. 실제 확인 평가에는 개발용에서 검토·고정한 프로필을 먼저 준비하며 같은 자료/지침으로 비교한다.
 

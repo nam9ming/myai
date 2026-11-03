@@ -194,6 +194,19 @@ class RulesTest(unittest.TestCase):
         with self.assertRaises(ExtractionError):
             rules.extract_rules(encoded(self.document), encoded(self.profile))
 
+    def test_profile_rejects_unicode_c1_controls_in_every_literal_field(self):
+        for control in ('\u0085', '\u009f'):
+            for field in ('profile_version', 'type', 'target', 'exception', 'name', 'alias'):
+                value = profile(); bad = '합성' + control + '값'
+                if field == 'profile_version': value['profile_version'] = bad
+                elif field == 'type': value['type_keywords']['construction'] = [bad]
+                elif field == 'target': value['target_keywords'] = [bad]
+                elif field == 'exception': value['exception_keywords'] = [bad]
+                elif field == 'name': value['places'][0]['name'] = bad
+                else: value['places'][0]['aliases'] = [bad]
+                with self.subTest(field=field, control=ord(control)), self.assertRaises(ExtractionError):
+                    rules.parse_profile(encoded(value))
+
     def test_size_budget_emits_failed_raw_diagnostic_instead_of_truncated_success(self):
         with patch.object(rules, 'MAX_BYTES', 200):
             raw, error = rules.extract_rules(encoded(self.document), encoded(self.profile))

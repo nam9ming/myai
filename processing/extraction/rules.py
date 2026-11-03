@@ -27,7 +27,7 @@ def parse_profile(content):
     def label(entry, limit=160):
         text(entry, kind='input')
         require(len(entry) <= limit and entry == entry.strip() and unicodedata.is_normalized('NFC', entry)
-                and not any(ord(c) < 32 or ord(c) == 127 for c in entry), kind='input')
+                and not any(unicodedata.category(c) == 'Cc' for c in entry), kind='input')
         return entry
 
     def literals(entries, maximum):
