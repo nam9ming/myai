@@ -212,7 +212,7 @@ class ApiTest(unittest.TestCase):
         self.assertGreater((self.root / RUN / 'attempt-1.prompt').stat().st_size, MAX_BYTES)
         self.assertEqual(verify_run(RUN, self.root), result)
 
-    def server(self, body, *, prefix=None, delay=0, extra_length=0):
+    def server(self, body, *, prefix=None, delay=0, extra_length=0, slow_header=False, slow_chunk=False, slow_dns=False):
         requests = []
 
         class Handler(BaseHTTPRequestHandler):
@@ -224,6 +224,23 @@ class ApiTest(unittest.TestCase):
             def do_POST(self):
                 data = self.rfile.read(int(self.headers['Content-Length']))
                 requests.append((self.path, self.headers['Authorization'], data))
+                if slow_header or slow_chunk:
+                    try:
+                        if slow_header:
+                            self.wfile.write(b'HTTP/1.1 200 OK\r\nX-Slow: '); self.wfile.flush()
+                            for _ in range(25):
+                                self.wfile.write(b'x'); self.wfile.flush(); time.sleep(0.04)
+                            self.wfile.write(b'\r\nContent-Length: 2\r\n\r\n{}'); self.wfile.flush()
+                        else:
+                            self.wfile.write(b'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4;slow=')
+                            self.wfile.flush()
+                            for _ in range(25):
+                                self.wfile.write(b'x'); self.wfile.flush(); time.sleep(0.04)
+                            self.wfile.write(b'\r\ndata\r\n0\r\n\r\n'); self.wfile.flush()
+                    except OSError:
+                        pass
+                    self.close_connection = True
+                    return
                 self.send_response(200)
                 self.send_header('Content-Length', str(len(body) + extra_length))
                 self.send_header('Connection', 'close')
@@ -242,11 +259,64 @@ class ApiTest(unittest.TestCase):
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
 
-        def connection(host, timeout):
-            self.assertEqual(host, 'api.openai.com')
-            return http.client.HTTPConnection('127.0.0.1', server.server_port, timeout=timeout)
+        popen = subprocess.Popen
+        script = f'''
+import http.client
+import socket, time
+resolve = socket.getaddrinfo
+def dns(*args, **kwargs):
+    if {slow_dns!r}:
+        time.sleep(2)
+    return resolve(*args, **kwargs)
+socket.getaddrinfo = dns
+def connection(host, timeout):
+    assert host == 'api.openai.com'
+    return http.client.HTTPConnection('127.0.0.1', {server.server_port}, timeout=timeout)
+http.client.HTTPSConnection = connection
+from processing.extraction.transport import main
+raise SystemExit(main())
+'''
+        processes = []
 
-        return patch('processing.extraction.api.http.client.HTTPSConnection', side_effect=connection), requests
+        def start(command, **kwargs):
+            self.assertEqual(command[1:], ['-m', 'processing.extraction.transport'])
+            process = popen([command[0], '-c', script], **kwargs)
+            processes.append(process)
+            return process
+
+        self.addCleanup(lambda: self.assertTrue(all(p.poll() is not None for p in processes)))
+        return patch('processing.extraction.api.subprocess.Popen', side_effect=start), requests
+
+    def test_deadline_kills_slow_dns_before_any_late_request(self):
+        from processing.extraction.api import _exchange
+        network, requests = self.server(b'{}', slow_dns=True)
+        with network, patch('processing.extraction.api.REQUEST_TIMEOUT', 0.25):
+            start = time.monotonic()
+            result = _exchange(b'{}', KEY)
+            elapsed = time.monotonic() - start
+        self.assertEqual(result, (None, b'', 'API_TIMEOUT', False))
+        self.assertLess(elapsed, 0.8)
+        self.assertEqual(requests, [])
+
+    def test_slow_headers_and_chunk_framing_cannot_extend_deadline(self):
+        from processing.extraction.api import _exchange
+        for options in ({'slow_header': True}, {'slow_chunk': True}):
+            with self.subTest(options=options):
+                network, _ = self.server(b'', **options)
+                with network, patch('processing.extraction.api.REQUEST_TIMEOUT', 0.25):
+                    start = time.monotonic()
+                    status, raw, error, complete = _exchange(b'{}', KEY)
+                    elapsed = time.monotonic() - start
+                self.assertEqual((error, complete), ('API_TIMEOUT', False))
+                self.assertLess(elapsed, 0.8)
+
+    def test_partial_permanent_http_responses_do_not_retry(self):
+        for status in (400, 401, 403, 302):
+            self.root = self.work / ('partial-' + str(status))
+            result, calls = self.run_api([(status, b'PRIVATE_PARTIAL', 'API_TRANSPORT_ERROR', False)] * 3)
+            self.assertEqual((calls, result['status']), (1, 'failed'))
+            self.assertFalse(result['attempts'][0]['retryable'])
+            self.assertEqual(result['attempts'][0]['error_code'], 'API_HTTP_' + str(status))
 
     def test_actual_http_request_and_response_are_archived(self):
         from processing.extraction.api import run_api
@@ -269,13 +339,13 @@ class ApiTest(unittest.TestCase):
 
     def test_actual_http_timeout_preserves_partial_body_and_deadline(self):
         from processing.extraction.api import _exchange
-        network, _ = self.server(b'{"status":"completed"}', prefix=b'{"', delay=0.4)
-        with network, patch('processing.extraction.api.REQUEST_TIMEOUT', 0.15):
+        network, _ = self.server(b'{"status":"completed"}', prefix=b'{"', delay=1)
+        with network, patch('processing.extraction.api.REQUEST_TIMEOUT', 0.5):
             start = time.monotonic()
             status, raw, error, complete = _exchange(b'{}', KEY)
             elapsed = time.monotonic() - start
         self.assertEqual((status, raw, error, complete), (200, b'{"', 'API_TIMEOUT', False))
-        self.assertLess(elapsed, 1)
+        self.assertLess(elapsed, 2)
 
     def test_actual_http_oversize_retains_only_marked_prefix(self):
         from processing.extraction.api import _exchange

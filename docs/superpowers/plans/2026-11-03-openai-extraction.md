@@ -4,7 +4,7 @@
 
 **Goal:** 개발용으로 기존 코드리뷰 키를 사용해 OpenAI 추출을 실행하고 시도별 원본·실패를 검증 가능한 D05 archive로 연결한다.
 
-**Architecture:** 기존 prompt-v1·추출 검증·archive/freeze·Java 등록을 재사용한다. 표준 HTTPS 클라이언트가 고정 Responses API를 호출하며 각 요청, 수신 응답, 추출 텍스트, 전송 상태를 먼저 비공개 보관한다. archive 검증은 네트워크 없이 원본으로 결과·재시도 정책·metadata를 다시 계산한다.
+**Architecture:** 기존 prompt-v1·추출 검증·archive/freeze·Java 등록을 재사용한다. 부모 deadline으로 종료하는 표준 HTTPS 작업 프로세스가 고정 Responses API를 호출하며 각 요청, 수신 응답, 추출 텍스트, 전송 상태를 비공개 보관한다. archive 검증은 네트워크 없이 원본으로 결과·재시도 정책·metadata를 다시 계산한다.
 
 **Tech Stack:** Python3.13 표준 라이브러리, Java21/Spring Boot, 기존 GitHub Actions/OpenAI Secret.
 
@@ -29,9 +29,11 @@
 
 ## Task 1: 검증 가능한 API 실행·CLI·Java 연결
 
-**Files:** Create `processing/extraction/api.py`, `processing/tests/test_extraction_api.py`; modify `archive.py`, `metadata.py`, `__main__.py`, Java `ExtractionArchiveReader.java`와 관련 시험.
+**Files:** Create `processing/extraction/api.py`, `processing/extraction/transport.py`, `processing/tests/test_extraction_api.py`; modify `archive.py`, `metadata.py`, `__main__.py`, Java `ExtractionArchiveReader.java`와 관련 시험.
 
 **Interfaces:** `run_api(input_path, preprocessing_version, root=DEFAULT_ROOT, run_id=None, model=None) -> receipt`; `request_bytes(document, model, error_path=None) -> bytes`; `check_api_attempt(request, response, exchange, document, model, error_path=None) -> (output_bytes, result, usage)`.
+
+내부 `python -m processing.extraction.transport`는 stdin 요청과 환경변수 키를 읽고 stdout에 HTTP 상태 한 줄·수신 본문만 쓴다. 종료0=완전 수신,2=timeout,3=전송 실패,4=본문 한도 초과다. 부모가 DNS·헤더·chunk 수신 전체를 제한하고 종료 정리에 최대1초가 추가될 수 있다.
 
 - [ ] API 성공→시도 원본/사용량/시간 보관·verify/freeze, 구조 재시도3회·근거 오류 중단·전송/인증/부분 응답·변조·동시/중단/재사용 시험을 먼저 작성한다.
 - [ ] `/opt/homebrew/bin/python3.13 -m unittest processing.tests.test_extraction_api -v`에서 미구현 실패를 확인한다.

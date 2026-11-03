@@ -2,8 +2,9 @@
 
 from datetime import datetime, timezone
 import hashlib
-import http.client
 import os
+import subprocess
+import sys
 import time
 import uuid
 
@@ -26,46 +27,37 @@ def request_bytes(document, model, error_path=None):
 
 
 def _exchange(request, key):
-    connection = http.client.HTTPSConnection('api.openai.com', timeout=REQUEST_TIMEOUT)
-    deadline = time.monotonic() + REQUEST_TIMEOUT
-    status, body, sock, response = None, bytearray(), None, None
-
-    def remaining():
-        seconds = deadline - time.monotonic()
-        if seconds <= 0:
-            raise TimeoutError()
-        if sock is not None:
-            sock.settimeout(seconds)
-
+    environment = os.environ.copy()
+    environment['OPENAI_API_KEY'] = key
+    process, expired, output = None, False, b''
     try:
-        connection.connect()
-        sock = connection.sock
-        remaining()
-        connection.request('POST', '/v1/responses', request,
-                           {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key})
-        remaining()
-        response = connection.getresponse()
-        status = response.status
-        while True:
-            remaining()
-            chunk = response.read1(min(65536, MAX_BYTES + 1 - len(body)))
-            if not chunk:
-                if response.length not in (None, 0):
-                    return status, bytes(body), 'API_TRANSPORT_ERROR', False
-                return status, bytes(body), None, True
-            body.extend(chunk)
-            if len(body) > MAX_BYTES:
-                return status, bytes(body), 'API_RESPONSE_LIMIT', False
-            if response.length == 0:
-                return status, bytes(body), None, True
-    except TimeoutError:
-        return status, bytes(body), 'API_TIMEOUT', False
-    except (OSError, http.client.HTTPException):
-        return status, bytes(body), 'API_TRANSPORT_ERROR', False
+        process = subprocess.Popen([sys.executable, '-m', 'processing.extraction.transport'], cwd=archive.REPO,
+                                   env=environment, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        try:
+            output, _ = process.communicate(request, timeout=REQUEST_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            expired = True
+            process.kill()
+            try:
+                output, _ = process.communicate(timeout=1)
+            except subprocess.TimeoutExpired as error:
+                output = error.output or b''
+        line, separator, body = output.partition(b'\n')
+        status = int(line) if separator and line.isdigit() else None
+        if status is None or not 100 <= status <= 599 or len(body) > MAX_BYTES + 1:
+            return None, b'', 'API_TIMEOUT' if expired else 'API_TRANSPORT_ERROR', False
+        error = ('API_TIMEOUT' if expired or process.returncode == 2 else
+                 'API_RESPONSE_LIMIT' if process.returncode == 4 else
+                 'API_TRANSPORT_ERROR' if process.returncode != 0 else None)
+        return status, body, error, error is None
+    except OSError:
+        return None, b'', 'API_TRANSPORT_ERROR', False
     finally:
-        if response is not None:
-            response.close()
-        connection.close()
+        if process is not None:
+            if process.poll() is None:
+                process.kill()
+            for stream in (process.stdin, process.stdout):
+                stream.close()
 
 
 def _failure(code, retryable, kind='transport', path=None):
@@ -85,6 +77,8 @@ def check_api_attempt(request, response, exchange, document, model, error_path=N
     archive._archive_check(status is not None or response == b'')
     archive._archive_check(error != 'API_RESPONSE_LIMIT' or len(response) == MAX_BYTES + 1)
     usage = (None, None)
+    if status is not None and status != 200 and status not in (408, 429) and status < 500:
+        return b'', _failure(f'API_HTTP_{status}', False), usage
     if error is not None:
         return b'', _failure(error, error != 'API_RESPONSE_LIMIT'), usage
     if status != 200:
