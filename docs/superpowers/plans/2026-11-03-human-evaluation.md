@@ -52,5 +52,5 @@
 
 ## Final integration
 
-- [ ] Whole self-review and one fresh whole-branch review; all valid findings inclminor fixed/verified, unresolved0 before PR develop.
+- [x] Whole self-review and one fresh whole-branch review; all valid findings inclminor fixed/verified, unresolved0 before PR develop.
 - [ ] Exact-head CI/AI/new human review loop, authorized develop merge/integration verification and evidence/rulings report. Cleanup only this plan workspace; full goal remains active.

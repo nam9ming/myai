@@ -75,6 +75,8 @@ method=human_reviewed의 policy는 schema_version=extract-schema-v1, review_sche
 
 부모 D05의 시작/종료 시각이 알려져 있어야 한다. parent 시작≤종료≤기록≤검토 시작≤종료≤평가자의 reviewed_at≤평가, 검토 종료≤검토 archive 동결≤평가를 검사한다. initial은 gold 동결<parent 시작·basis=source_only다. 시각 미상 수동 source는 원본 보관을 유지하되 통제된 최초/재시험 평가에는 사용하지 않는다. retest의 gold_feedback은 semantic_feedback_used=true/exposure_status=exposed가 필요하며 unknown/gold_feedback은 HUMAN_REVIEW_BASIS_UNCLEARED 경고를 남긴다.
 
+같은 평가 안에서도 부모 source_run_id는 버전마다 유일해야 한다. 서로 다른 검토 이미지가 같은 부모 ID의 다른 원본을 내장하면 최초 평가 전에 거부한다.
+
 human retest는 같은 방법/cohort/정규화 지침의 frozen initial만 참조한다. 같은 review_id는 최초 receipt SHA와 같아야 하고 새 검토는 initial 동결 뒤 시작한다. 같은 parent run_id의 다른 receipt도 거부한다. 기존 parent에 새 검토를 붙이거나 금표 수정에 기존 검토를 재사용할 수 있으며 원래 이미지·시각을 유지한다. 다른 방법이나 retest를 initial로 참조할 수 없다.
 
 summary.human_review_time은 status=declared_only, review_count, total_duration_ns와 dev/holdout별 같은 합계를 제공한다. 문서별 선언 소요시간의 합으로, 동시/중복 구간을 정리한 사람별 순소요시간은 아니다. 기존 검토를 재사용한 재시험은 원래 시간을 유지하며 이번 회차의 추가 작업시간을 뜻하지 않는다. 검토자·실제 판독·basis 진실성을 인증하지 않는다. 관측 점수는 남기되 AI M02는 M02_REQUIRES_AI_AUTO와 N/A다.

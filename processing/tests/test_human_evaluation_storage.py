@@ -109,6 +109,35 @@ class HumanEvaluationStorageTest(HumanEvaluationFixture):
         with self.assertRaises(ExtractionError) as caught: self.freeze(value, hour=8)
         self.assertEqual(caught.exception.code, 'EVALUATION_RETEST_PARENT_MISMATCH')
 
+    def test_initial_rejects_parent_uuid_reused_for_different_document_versions(self):
+        second = copy.deepcopy(self.source); second['document_version_id'] = uid(102)
+        path = self.work / 'second-version.json'; path.write_bytes(_json(second))
+        self.manifest['dataset_version'] = 'fictional-parent-collision'
+        self.manifest['documents'][0]['versions'].append(dict(document_version_id=uid(102),
+            input_sha256=hashlib.sha256(path.read_bytes()).hexdigest()))
+        manifest_path = self.work / 'two-version-manifest.json'; manifest_path.write_bytes(_json(self.manifest))
+        with patch('processing.extraction.archive.datetime', DatasetClock):
+            dataset = freeze_dataset(manifest_path, self.dataset_root)
+        answer = copy.deepcopy(self.value['documents'][0]); answer.update(document_version_id=uid(102), input_path=str(path))
+        answer['output']['document_version_id'] = uid(102)
+        self.value.update(gold_version='fictional-parent-collision-gold', dataset_ref=dataset['dataset_ref'],
+                          manifest_sha256=dataset['manifest_sha256'])
+        self.value['documents'].append(answer); self.gold_receipt = self.make_gold()
+        value = copy.deepcopy(self.control); value.update(gold_ref=self.gold_receipt['gold_ref'],
+            gold_receipt_sha256=self.gold_receipt_hash())
+        original_input, original_output, original_root = self.input, self.good_output, self.run_root
+        try:
+            self.input, self.good_output, self.run_root = path, answer['output'], self.work / 'colliding-parent'
+            parent = self.make_run(self.selected['run_id'])
+            selected = self.make_human(uid(965), source=parent)
+        finally: self.input, self.good_output, self.run_root = original_input, original_output, original_root
+        value['documents'].append(dict(document_version_id=uid(102), **selected, annotation=self.annotations(answer['output'])))
+        with self.assertRaises(ExtractionError) as caught: self.evaluate(value)
+        self.assertEqual(caught.exception.code, 'EVALUATION_PARENT_IDENTITY_CONFLICT')
+        with self.assertRaises(ExtractionError) as caught: self.freeze(value)
+        self.assertEqual(caught.exception.code, 'EVALUATION_PARENT_IDENTITY_CONFLICT')
+        self.assertEqual(list(self.initial_root.iterdir()), [])
+
     def test_gold_feedback_and_unknown_retests_keep_observed_scores_with_exposure(self):
         initial = self.freeze()
         for index, basis in enumerate(('gold_feedback', 'unknown')):

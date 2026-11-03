@@ -8,7 +8,7 @@
 
 최상위 extraction-evaluation-v1/review/phase/gold는 기존과 같다. human 정책은 schema_version=extract-schema-v1, review_schema_version=human-review-v1 두 키다. documents는 document_version_id/review_id/review_ref/receipt_sha256/annotation이며 모든 gold 버전을 정확히 한 번 명시한다. review_ref는 review_id UTF-8 SHA-256, receipt_sha256은 실제 human-review archive receipt다. annotation은 기존 score-links-v1의 수동 사건/일정 대응·생성 판정이다. 누락 문서를 조용히 제외하지 않는다.
 
-verify_review로 전체 원본·수정 이력을 재검증하고 문서ID/data_kind·parent input 바이트를 gold 입력과 대조한다. 검증한 output.json을 같은8필드 scorer에 보낸다. 실제 review/parent D05의 ID·receipt hash·원래 모드/실패 상태와 선언 duration/basis를 보존하며 가짜 attempt/model/metadata를 만들지 않는다. 실패 parent를 사람이 수정한 점수는 AI 자동 성공이 아니다. 빈 검토 출력도 gold 분모를 유지한다.
+verify_review로 전체 원본·수정 이력을 재검증하고 문서ID/data_kind·parent input 바이트를 gold 입력과 대조한다. 검증한 output.json을 같은8필드 scorer에 보낸다. 실제 review/parent D05의 ID·receipt hash·원래 모드/실패 상태와 선언 duration/basis를 보존하며 가짜 attempt/model/metadata를 만들지 않는다. 같은 평가 안에서 parent source_run_id도 버전마다 유일해야 하며 같은 ID의 상이한 원본을 최초 선택 전에 거부한다. 실패 parent를 사람이 수정한 점수는 AI 자동 성공이 아니다. 빈 검토 출력도 gold 분모를 유지한다.
 
 ## 시간·재시험
 

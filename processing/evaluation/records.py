@@ -131,11 +131,14 @@ def _load_sources(value,gold_root,run_root):
     inputs = {v:_read_checked(directory/f'input-{v}.json',artifacts[f'input-{v}.json']) for v in versions}
     gold = dict(receipt=receipt,value=gold_value,manifest=manifest,dataset=dataset,documents=versions,inputs=inputs)
     sources = _collect(directory,[*artifacts,'identity.json','receipt.json'],f"gold/{value['gold_ref']}")
-    runs = []
+    runs,parent_ids = [],set()
     base = _root(run_root,create=False)
     for doc in value['documents']:
         if value['method']=='human_reviewed':
             packet,files = _human_source(value,doc,base,gold)
+            parent_id = packet['parent']['run_id']
+            _check(parent_id not in parent_ids,'EVALUATION_PARENT_IDENTITY_CONFLICT')
+            parent_ids.add(parent_id)
             runs.append(packet);sources.update(files)
             continue
         run_id,reference = doc['run_id'],doc['snapshot_ref']
