@@ -29,6 +29,7 @@ python3.13 -m venv .venv
 | `extraction/prompt.py`, `metadata.py` | 고정 프롬프트·문서/블록/hash 제약·D05 제공값 검증 |
 | `extraction/archive.py`, `__main__.py` | 비공개 준비/수동 가져오기/무결성 검증·실패 원출력 보존 |
 | `extraction/api.py` | 고정 OpenAI Responses API·최대3시도·요청/응답/전송 상태 보관·오프라인 재검증 |
+| `extraction/rules.py`, `rule_runs.py` | 고정 키워드/날짜/지명 기준선·AI와 분리한 규칙 실행 원본 보관 |
 | `extraction/draft.py` | 검증된 원출력→숨김 검토 초안·안정 ID·근거 hash 변환·미상 보존 |
 | `evaluation/dataset.py`, `storage.py`, `__main__.py` | D08 문서/사건 연결·분할 검증·비공개 manifest 불변 보관·CLI |
 | `evaluation/bindings.py` | 동결 manifest·실제 입력 바이트·명시 선택한 D05 원본의 읽기 전용 대조 |
@@ -136,7 +137,25 @@ initial은 gold 동결 이후 시작한 실행만 받습니다. retest는 동일
 
 보관본은 `selection.json`, 비공개 `result.json`, gold 전체, 선택한 D05 전체, retest의 최초 평가 전체를 포함합니다. 파일0400·디렉터리0500으로 검증한 뒤 배타 설치하며 같은 ID의 다른 입력은 충돌입니다. 원래 경로가 없어도 재검증·같은 입력 재사용이 가능합니다. 최초 평가와 실패 원본을 덮어쓰지 않습니다. 상세 값·근거·검토자·원래 경로는 private 파일에만 두고 stdout에는 요약/상대 artifact 목록만 출력합니다. 성공0·입력2·보관본 손상/충돌3·I/O5·내부 오류1로 종료합니다.
 
-키·AI·네트워크·DB를 사용하지 않는 도구이며 실제40문서 성과를 측정하지 않았습니다. M02 수치는 real/문서 수/비노출 등의 선언과 확인용 정답 분모가 갖춰진 initial에서만 제공하며, 그 자체로 의미 정확성·신원·blind holdout을 인증하지 않습니다. 단순 규칙 기준선·사람 수정값 연결·실제 독립 금표/40건 평가는 후속 작업입니다.
+키·AI·네트워크·DB를 사용하지 않는 도구이며 실제40문서 성과를 측정하지 않았습니다. M02 수치는 real/문서 수/비노출 등의 선언과 확인용 정답 분모가 갖춰진 initial에서만 제공하며, 그 자체로 의미 정확성·신원·blind holdout을 인증하지 않습니다. 규칙 실행기는 아래와 같고 D08 규칙/사람 수정값 연결·실제 독립 금표/40건 평가는 후속 작업입니다.
+
+## 규칙 자동 기준선
+
+[rule-profile-v1/rules-run-v1](../contracts/rule-baseline.md)은 개발용에서 고정한 리터럴 유형 키워드·날짜/시간 패턴·지명/별칭·대상/예외 주변 문장으로 추출합니다. 아래 프로필·입력은 합성입니다. 실제 확인 평가에 쓰기 전 개발용 사전의 검토·고정이 필요하며 도구가 검토를 인증하지 않습니다.
+
+```sh
+python3.13 -m processing.extraction rules-run \
+  --input contracts/examples/ai-input.json \
+  --profile processing/examples/rule-profile.json \
+  --preprocessing-version smoke-nfc-v1
+python3.13 -m processing.extraction rules-verify RUN_UUID
+```
+
+기본 위치는 Git 제외 `data/private/rule-runs`이며 `--root`로 지정합니다. 입력·프로필·실제 출력·메타데이터·identity·receipt를 파일0400/디렉터리0500의6파일 이미지로 배타 설치합니다. 입력/프로필의 정확한 바이트와 전처리 버전이 같을 때만 같은 `--run-id UUID`를 재사용합니다. 원래 입력 경로 없이 전체 hash·시간 순서·결정적 결과를 재검증합니다. AI D05 등록·초안 경로에는 이 형식을 넣지 않습니다.
+
+문서당 사건/일정1건의 약한 기준선이며 복수/미지원 날짜·시간은 미상으로 남깁니다. 원문에 없는 연도/주소/좌표를 채우지 않고 알려진 빈 예외와 미기재를 구별합니다. 출력8MiB 또는 대상/예외 각각256문장 초과는 실패 원본과 RULE_OUTPUT_LIMIT으로 보존합니다. stdout은 원문·경로 없는 receipt이며 성공0·실행 실패4·입력2·보관 손상/충돌3·I/O5·내부1입니다. 키·AI·네트워크·DB를 사용하지 않습니다.
+
+출력은 기존8필드 채점기에 직접 넣을 수 있지만 사건/생성 의미 판정 annotation이 필요합니다. D08 선택/최초·재시험 동결에 `method=rules`를 연결하는 어댑터와 사람 수정후 비교는 다음 단계입니다. 실제 지명 검토·독립 정답·40건 평가를 수행한 결과가 아닙니다. Windows와 전원 중단 내구성은 미검증이며 POSIX 권한은 WORM이 아닙니다.
 
 ## 검증·남은 작업
 

@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from processing.evaluation.scoring import score_document
 from processing.extraction import rules
-from processing.extraction.validation import ExtractionError, parse_input, parse_output
+from processing.extraction.validation import ExtractionError, parse_output
 from processing.tests.test_scoring import fixture
 
 
@@ -68,6 +68,7 @@ class RulesTest(unittest.TestCase):
     def test_partial_invalid_unpaired_multiple_dates_do_not_invent_dates(self):
         for body in ('공사 11월 7일', '공사 2026-02-30', '공사 2026-11-07, 2026-11-09',
                      '공사 2026-11-07 ~ 11월 9일', '공사 2026-11-09 ~ 2026-11-07',
+                     '공사 2026-11-07~09', '공사 2026-11-07-09',
                      '공사 2026-11-07 ~ 2026-11-08, 추가 2026-11-09'):
             with self.subTest(body=body):
                 occurrence = self.run_rule(body)[0]['items'][0]['occurrences'][0]
@@ -95,6 +96,19 @@ class RulesTest(unittest.TestCase):
                 self.assertEqual(occurrence['time_start']['knowledge'], 'ambiguous')
         occurrence = self.run_rule('공사 23:00 ~ 01:00')[0]['items'][0]['occurrences'][0]
         self.assertEqual(occurrence['end_day_offset']['knowledge'], 'ambiguous')
+
+    def test_all_day_with_unsupported_explicit_clock_does_not_hide_conflict(self):
+        occurrence = self.run_rule('공사 종일 9시~11시')[0]['items'][0]['occurrences'][0]
+        self.assertIsNone(occurrence['all_day']['value'])
+        self.assertEqual(occurrence['time_start']['knowledge'], 'ambiguous')
+
+    def test_real_utf8_output_limit_is_checked_without_invalidating_valid_input(self):
+        self.document['blocks'][0]['text'] = '공사 ' + '😀' * ((8 * 1024 * 1024 - 900) // 4)
+        content = encoded(self.document)
+        self.assertLessEqual(len(content), 8 * 1024 * 1024)
+        raw, error = rules.extract_rules(content, encoded(self.profile))
+        self.assertEqual(error, 'RULE_OUTPUT_LIMIT')
+        self.assertLess(len(raw), 100)
 
     def test_sentence_excerpts_preserve_target_and_exceptions_without_guessing(self):
         item = self.run_rule('공사. 대상: 주변 점포. 예외: 긴급 차량 제외.')[0]['items'][0]

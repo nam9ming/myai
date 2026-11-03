@@ -46,11 +46,11 @@
 
 **Interfaces:** Consumes Task1 functions unchanged. Produces `run_rules(input_path,profile_path,preprocessing_version,root=RULE_ROOT,run_id=None)->dict`, `verify_rules_run(run_id,root=RULE_ROOT)->dict`; CLI `rules-run`/`rules-verify`.
 
-- [ ] Write tests for successful/failed run preservation, same-ID reuse/conflict, deleted source path, offline verify, changed metadata/output/profile, permissions/symlink/extra files, concurrency, failed install, AI-format isolation, actual subprocess stdout/error/exit codes.
-- [ ] Run `/opt/homebrew/bin/python3.13 -m unittest processing.tests.test_rule_runs -v`; Expected: missing rules-run implementation RED.
-- [ ] Implement exact six-file image and safe receipt using existing I/O/rename helpers; wire CLI and Korean guides/status.
-- [ ] Run the same command and full Python suite, `npm run lint`, `npm test`, `npm run build`; Expected: all pass.
-- [ ] Commit `feat: preserve immutable rule runs`.
+- [x] Write tests for successful/failed run preservation, same-ID reuse/conflict, deleted source path, offline verify, changed metadata/output/profile, permissions/symlink/extra files, concurrency, failed install, AI-format isolation, actual subprocess stdout/error/exit codes.
+- [x] Run `/opt/homebrew/bin/python3.13 -m unittest processing.tests.test_rule_runs -v`; Expected: missing rules-run implementation RED.
+- [x] Implement exact six-file image and safe receipt using existing I/O/rename helpers; wire CLI and Korean guides/status.
+- [x] Run the same command and full Python suite, `npm run lint`, `npm test`, `npm run build`; Expected: all pass.
+- [x] Commit `feat: preserve immutable rule runs`.
 
 ## Final integration
 

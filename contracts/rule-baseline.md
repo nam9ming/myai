@@ -21,4 +21,20 @@ known에는 실제 본문의 전체 블록 인용·Unicode code point 범위·�
 
 ## 보관·후속 범위
 
-실행 원본은 별도 `rules-run-v1`이다. AI D05로 등록하거나 모델/토큰/금액을 꾸미지 않는다. 전용 CLI·파일·오류 계약은 실행 보관 구현과 함께 아래에 기술한다. D08 `method=rules` 선택/최초·재시험 연결, 사람 수정값·세 방법 비교 및 실제 gold/40문서 성능은 후속 작업이다.
+실행 원본은 별도 `rules-run-v1`이다. AI D05로 등록하거나 모델/토큰/금액을 꾸미지 않는다. D08 `method=rules` 선택/최초·재시험 연결, 사람 수정값·세 방법 비교 및 실제 gold/40문서 성능은 후속 작업이다.
+
+## CLI·6파일 보관
+
+```sh
+python3.13 -m processing.extraction rules-run \
+  --input INPUT --profile PROFILE --preprocessing-version VERSION [--run-id UUID]
+python3.13 -m processing.extraction rules-verify UUID
+```
+
+각 명령의 `--root` 기본값은 Git 제외 `data/private/rule-runs`다. 저장소 안의 공개 폴더는 root로 사용할 수 없다. UUID는 소문자 정규형이며 전처리 버전은 비어 있지 않은100자 이하 문자열이다.
+
+UUID 디렉터리에는 `input.json`, `profile.json`, `output.json`, `metadata.json`, `identity.json`, `receipt.json`만 있다. 원본 입력/프로필/출력 바이트를 그대로 보관한다. metadata는 rules-metadata-v1·실행/문서ID·data_kind·실행 모드 rules·규칙/프로필/전처리 버전·시작/종료 UTC 시각이다. identity는 rules-run-v1·run_id·4개 payload의 SHA-256/size·recorded_at이다. metadata·identity·receipt는 기존 canonical UTF-8 JSON+LF다.
+
+receipt에는 형식/실행/문서ID·data_kind·버전·입력/프로필/metadata SHA·4파일 hash/size·시각·attempts=1·status(validated/failed)·validation_error·review_required=true를 반환한다. 모델/토큰/비용·원문·절대 경로는 없다. 파일0400/디렉터리0500·정확한 파일 집합·symlink 거부·전체 hash·started_at≤finished_at≤recorded_at·결정적 재계산을 검증한 뒤 macOS/Linux 배타 rename으로 설치한다.
+
+동일 UUID의 입력/프로필 바이트와 전처리 버전이 같으면 원래 시각/원본을 재사용하며 다른 원본은 RULE_RUN_CONFLICT다. 원래 경로가 없어도 재검증한다. 실패 원본을 지우거나 성공으로 덮어쓰지 않는다. stdout은 receipt JSON 한 건, stderr는 고정 오류 코드다. 성공0·추출 실패4·입력2·보관 손상/충돌3·I/O5·내부1이며 손상 검증은 RULE_RUN_INTEGRITY다. POSIX 권한은 관리자 변경·삭제를 막는 WORM이 아니며 Windows/전원 중단 내구성은 미검증이다.
