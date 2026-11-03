@@ -47,4 +47,4 @@ stdout은 ID/hash/data_kind·상태·건수·선언 소요시간 요약 또는 r
 
 ## 현재 범위
 
-`declared_reviewed`/`human_verification=declared_only`는 제공된 선언·참조·형식을 검사했다는 뜻이다. 실제 사람 판독·신원·독립 gold·승인·공개를 인증하지 않는다. 검토 원본 보관은 D06 DB 저장과 별개이며 D08 human_reviewed 채점/재시험·세 방법 비교·개선/악화·선별 평가 연결은 후속 작업이다. 실제40문서 평가·blind holdout도 미완료다. POSIX 권한은 WORM이 아니며 Windows·전원 중단 내구성은 미검증이다.
+`declared_reviewed`/`human_verification=declared_only`는 제공된 선언·참조·형식을 검사했다는 뜻이다. 실제 사람 판독·신원·독립 gold·승인·공개를 인증하지 않는다. 검토 원본 보관은 D06 DB 저장과 별개이며 [D08 평가](extraction-evaluation.md)는 human_reviewed 뷰·최초/재시험·전체 출처 동결과 선언 소요시간을 연결한다. 세 방법의 짝지은 개선/악화·선별 비교와 D06 인계는 후속 작업이다. 실제40문서 평가·blind holdout도 미완료다. POSIX 권한은 WORM이 아니며 Windows·전원 중단 내구성은 미검증이다.
