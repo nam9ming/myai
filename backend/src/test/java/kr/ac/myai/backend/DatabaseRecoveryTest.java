@@ -290,7 +290,7 @@ class DatabaseRecoveryTest {
     private byte[] export(ServletWebServerApplicationContext application, String snapshot, Path directory) throws Exception {
         var result = application.getBean(SnapshotExportService.class).export(UUID.fromString(snapshot), directory);
         Path file = directory.resolve(result.fileName());
-        Files.setPosixFilePermissions(file, PosixFilePermissions.fromString("rw-------"));
+        assertThat(Files.getPosixFilePermissions(file)).isEqualTo(PosixFilePermissions.fromString("rw-------"));
         byte[] bytes = Files.readAllBytes(file);
         assertThat(sha(bytes)).isEqualTo(result.checksum());
         return bytes;

@@ -26,12 +26,12 @@
 ### Task 1: 소유 전용 MySQL dump/restore helper
 
 **Owner/Files:** DB helper worker: `backend/src/test/java/kr/ac/myai/backend/RecoveryDatabase.java`, `RecoveryDatabaseTest.java` 신규만.
-**Interfaces:** package-private `RecoveryDatabase implements AutoCloseable`; `static start(Path privateRoot)`→새 컨테이너; `JdbcTemplate jdbc()`; `String url()/username()/password()/id()`; `void dump(Path newFile)`; `void restore(Path existingDump)`; `close()`→검증한 소유 컨테이너/볼륨·임시 env만 정리. 호출자는 증거에password를 쓰지 않는다. dump는 새 파일에만 설치하고 restore는 schema 비었는지 먼저 검사한다. root는 호출자0700 임시 디렉터리.
+**Interfaces:** package-private `RecoveryDatabase implements AutoCloseable`; `static start(Path privateRoot)`→새 컨테이너; `JdbcTemplate jdbc()`; `String url()/username()/password()/id()`; `void dump(Path newFile)`; `void dumpData(Path newFile)`(동일 옵션+--no-create-info --skip-triggers); `void restore(Path existingDump)`; `close()`→검증한 소유 컨테이너/볼륨·임시 env만 정리. 호출자는 증거에password를 쓰지 않는다. dump는 새 파일에만 설치하고 restore는 schema 비었는지 먼저 검사한다. root는 호출자0700 임시 디렉터리.
 
-- [ ] 먼저 helper contract 경계 시험을 작성하고 부재/잘못된 동작 RED를 기록한다. test-only helper이며 production 변경으로 보고하지 않는다.
-- [ ] 실제 Docker 두 DB에 작은 Unicode/emoji/null 행을 dump→restore하고 전후 같음, 이미 찬 대상 재복원 거부·행 불변을 검증한다. 새 DB의 일부 DDL 뒤 잘못된 SQL 실패를 성공으로 처리하지 않는 별도 시험을 둔다.
-- [ ] 제한시간·파일 redirect·소유 확인·시작 실패 보상/finally 정리·0600 env/proof를 최소 구현한다. 임의 외부 대상 옵션 없음.
-- [ ] `./backend/gradlew -p backend test --tests '*RecoveryDatabaseTest' --no-daemon`를 MYAI_MYSQL_TESTS=true/JAVA_HOME21로 실행, Expected: 소유 시험 모두 PASS/실패·생략0 및 남은 소유 컨테이너0. 부모 커밋 `test: isolate recovery database operations`.
+- [x] 먼저 helper contract 경계 시험을 작성하고 부재/잘못된 동작 RED를 기록한다. test-only helper이며 production 변경으로 보고하지 않는다.
+- [x] 실제 Docker 두 DB에 작은 Unicode/emoji/null 행을 dump→restore하고 전후 같음, 이미 찬 대상 재복원 거부·행 불변을 검증한다. 새 DB의 일부 DDL 뒤 잘못된 SQL 실패를 성공으로 처리하지 않는 별도 시험을 둔다.
+- [x] 제한시간·파일 redirect·소유 확인·시작 실패 보상/finally 정리·0600 env/proof를 최소 구현한다. 임의 외부 대상 옵션 없음.
+- [x] `./backend/gradlew -p backend test --tests '*RecoveryDatabaseTest' --no-daemon`를 MYAI_MYSQL_TESTS=true/JAVA_HOME21로 실행, Expected: 소유 시험 모두 PASS/실패·생략0 및 남은 소유 컨테이너0. 부모 커밋 `test: isolate recovery database operations`.
 
 ### Task 2: 애플리케이션 DB·원본·HTTP 복구 통합
 
@@ -41,7 +41,7 @@
 - [ ] 독립 seed로 D03·성공/실패 D05·handoff D06·source_reviews·공개/head/audit를 채우고 원본/DB/HTTP/snapshot/export 기준값을 저장한다. production 변경 없음; 새 복구 시험의 누락 탐지력은 실제 restore 호출을 뺀 한정 RED 대조군으로 확인하고 원래 시험을 복원한다.
 - [ ] source 앱 종료→DB dump/표준 tar 백업→새 빈 target DB restore→기존 경로 부재/다른 경로의 후속 검증 거부를 확인한다. symlink·SQL 경로 치환 없음.
 - [ ] tar를 같은 실제 절대 경로에 복원하고 모든 bytes/modes/SQL rows/schema/Flyway/code/snapshot을 대조한다. Java/Python 정확 재등록·handoff 재사용으로 private 경로를 검증하고 실제 HTTP config/detail/matches·export를 같은 문맥에서 비교한다.
-- [ ] target 앱 재기동 후 행/seed/응답 보존, fullschema 목록의 source_reviews 포함을 확인한다. proof는 선택 합성 dump/tar/manifests/응답/메타데이터만, 자격증명/전체temp/D09 없음.
+- [ ] 행 전용 SQL은 실제 bytes/SHA를 대조하고 전체 raw SQL/DDL 차이는 원형 그대로 보존한다. target 앱 재기동 후 행/seed/응답 보존, fullschema 목록의 source_reviews 포함을 확인한다. proof는 선택 합성 dump/tar/manifests/응답/메타데이터만, 자격증명/전체temp/D09 없음.
 - [ ] `./backend/gradlew -p backend test --tests '*DatabaseRecoveryTest' --no-daemon`, Expected: PASS/실패·생략0·소유 컨테이너0, private proof 생성. 부모 커밋 `test: verify application recovery`.
 
 ### Task 3: 인계 문서·전체 gate

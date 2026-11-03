@@ -10,8 +10,8 @@
 
 - 테스트 전용 `RecoveryDatabase`는 매번 UUID 이름·소유 라벨·임시 자격증명으로 MySQL8.4.13 컨테이너를 만든다. localhost 임의 포트·전용 `myai_recovery` schema만 사용하고 기존 DB_URL/서버·컨테이너를 받지 않는다.
 - dump/restore/cleanup 전 소유 라벨·이름·ID를 확인한다. 복원 대상 schema의 테이블이 하나라도 있으면 SQL 실행 전 거부한다. 잘못된 SQL은 성공으로 처리하지 않고 부분 대상은 버린다. SQL 전체를 원자적으로 되돌린다고 주장하지 않는다.
-- `mysqldump --single-transaction --no-tablespaces --set-gtid-purged=OFF --hex-blob --default-character-set=utf8mb4 --skip-comments --skip-dump-date --order-by-primary`로 단일 schema를 덤프한다. `--databases`/`--all-databases`·system schema·`--force`는 쓰지 않는다. 계정·권한·binlog/PITR는 별도다.
-- 애플리케이션과 다른 쓰기·DDL을 멈춘 뒤 DB와 선택 원본을 함께 백업한다. single-transaction만으로 DB·파일의 공동 일관성을 보장하지 않는다. 실제 백업 주기·접근자·보존·RPO/RTO는 정하지 않는다.
+- `mysqldump --single-transaction --no-tablespaces --set-gtid-purged=OFF --hex-blob --default-character-set=utf8mb4 --skip-comments --skip-dump-date --order-by-primary`로 단일 schema를 덤프한다. `--databases`/`--all-databases`·system schema·`--force`는 쓰지 않는다. 계정·권한·binlog/PITR는 별도다. 행 전용 비교 dump는 같은 옵션에 --no-create-info --skip-triggers를 더한다.
+- 애플리케이션과 다른 쓰기·DDL을 멈춘 뒤 DB와 선택 원본을 함께 백업한다. single-transaction만으로 DB·파일의 공동 일관성을 보장하지 않는다. 실제 백업 주기·접근자·보존·RPO/RTO는 정하지 않는다. 운영 안내는 행 전용 SQL·유효 컬럼 metadata를 정확 비교하고 전체 raw SQL/diff/hash를 보존하여 모든 제약·index·table 옵션을 사람이 검토하도록 한다. 동등한 charset 표기 외 차이는 중단하며 SQL 원문을 치환하지 않는다.
 - 자격증명은0700 테스트 root의0600 env 파일과 프로세스 환경에서만 쓰고 명령 로그·proof·SQL/파일 백업에 넣지 않는다. stdout/stderr와 stdin은 파일로 연결해 pipe 교착을 피하고 프로세스 제한 시간·자식 정리·자기 컨테이너 보상 정리를 둔다.
 
 ## 원본·검증
