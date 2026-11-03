@@ -26,6 +26,16 @@ class ReviewedImportReaderTest {
     }
 
     @Test
+    void rejectsHumanHandoffProjectionBeforeRevisionImport() throws Exception {
+        assertThat(reader.read(write(), root).events()).hasSize(1);
+        input.put("schema_version", "human-handoff-projection-v1");
+        assertThatThrownBy(() -> reader.read(write(), root)).isInstanceOfSatisfying(ImportException.class, error -> {
+            assertThat(error.code()).isEqualTo("IMPORT_VALIDATION_ERROR");
+            assertThat(error.field()).isEqualTo("schema_version");
+        });
+    }
+
+    @Test
     void rejectsCalendarYearZeroButAcceptsTheFirstSupportedYear() throws Exception {
         var occurrence = (ObjectNode) input.path("events").get(0).path("revision").path("occurrences").get(0);
         occurrence.put("date_start", "0000-01-01").put("date_end", "0000-01-01");

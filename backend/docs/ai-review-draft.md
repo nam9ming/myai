@@ -82,4 +82,8 @@ AI 출처가 있는 기존 사건을 수정할 때는 이전 revision과 바뀐 
 
 반려는 새 rejected/hidden revision을 남긴다. ai_draft의 반려만 evidence_ids=[]를 허용하여 존재하지 않는 인용을 만들지 않게 한다. 일반 검토본의 반려와 모든 승인에는 근거가 필요하다. 반려에는 원본 디렉터리가 필요하지 않으며 기존 초안·AI 원본을 삭제하지 않는다.
 
-실제 모델/API 추출·실자료3건·평가·운영 배포는 후속 작업이다. 합성 시험의 성공을 실제 처리·사람 검토 실적으로 집계하지 않는다.
+실제 추출·D05 등록 현황은 [Python 실행 기록](../../processing/README.md)을 따른다. 실자료 D06 저장·사람 검토·평가·운영 배포는 후속 작업이다. 합성 시험의 성공을 실제 처리·사람 검토 실적으로 집계하지 않는다.
+
+## 동결 사람 수정 원본의 인계 준비
+
+[human-handoff-v1](../../contracts/human-handoff.md)은 수정된 extract-schema 값과 원래 D05를 검증하고 workflow 없는 D06 사실 투영을 별도0400/0500 이미지에 보존한다. status=projection_only·backend_import_supported=false이며 현재 local-import는 투영 schema를 거부한다. raw를 가짜 성공 D05로 재등록하거나 origin=human으로 출처를 지우지 않는다. 다음 Java 연결 단계에서 실제 원문 파일·등록 D05/사람 원본 hash·기존 revision/정확한 변경 기록·승인/공개 재검증을 연결해야 하며 이번 투영을 저장·인계 완료로 표시하지 않는다.
