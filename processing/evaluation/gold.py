@@ -30,7 +30,16 @@ def _header(content):
     _check(unicodedata.normalize('NFC',author.strip()).casefold() != unicodedata.normalize('NFC',reviewer.strip()).casefold())
     _check(all(review[key] is True for key in ('independent_source_reading','cross_reviewed','no_unresolved_disagreements')))
     _check(stamp(review['authored_at'],'$') <= stamp(review['reviewed_at'],'$'))
-    instructions = value['instructions']
+    _instructions(value['instructions'])
+    seen = set()
+    for doc in array(value['documents'],'$.documents','input',1):
+        shape(doc,'document_version_id input_path output anchors',kind='input')
+        version = _id(doc['document_version_id']); _check(version not in seen); seen.add(version)
+        text(doc['input_path'],kind='input'); _check('\x00' not in doc['input_path'])
+    return value
+
+
+def _instructions(instructions):
     shape(instructions,'version normalization_version text synonyms',kind='input')
     _label(instructions['version'],100); text(instructions['text'],kind='input')
     _check(instructions['normalization_version'] == 'gold-exact-v1')
@@ -43,12 +52,6 @@ def _header(content):
             normalized = unicodedata.normalize('NFC',' '.join(spelling.split()))
             key = (synonym['field'],normalized)
             _check(key not in seen); seen.add(key)
-    seen = set()
-    for doc in array(value['documents'],'$.documents','input',1):
-        shape(doc,'document_version_id input_path output anchors',kind='input')
-        version = _id(doc['document_version_id']); _check(version not in seen); seen.add(version)
-        text(doc['input_path'],kind='input'); _check('\x00' not in doc['input_path'])
-    return value
 
 
 def _validate_gold(content, manifest_bytes, sources):

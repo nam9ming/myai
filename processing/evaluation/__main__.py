@@ -10,6 +10,8 @@ from .dataset import validate_manifest
 from .bindings import EXTRACTION_ROOT, check_bindings
 from .gold import check_gold
 from .gold_storage import GOLD_ROOT, freeze_gold, verify_gold
+from .records import EVALUATION_ROOT, evaluate_record
+from .evaluation_storage import freeze_evaluation, verify_evaluation
 from .storage import DEFAULT_ROOT, freeze_dataset, verify_dataset
 
 
@@ -40,6 +42,15 @@ def main():
         else:
             command.add_argument('--input', required=True)
             command.add_argument('--dataset-root', default=DEFAULT_ROOT)
+    for name in ('check-evaluation', 'freeze-evaluation', 'verify-evaluation'):
+        command = commands.add_parser(name)
+        if name != 'check-evaluation':command.add_argument('--root', default=EVALUATION_ROOT)
+        if name == 'verify-evaluation':command.add_argument('evaluation_ref')
+        else:
+            command.add_argument('--input', required=True)
+            command.add_argument('--gold-root', default=GOLD_ROOT)
+            command.add_argument('--run-root', default=EXTRACTION_ROOT)
+            command.add_argument('--initial-root', default=EVALUATION_ROOT)
     try:
         args = parser.parse_args()
         if args.command == 'check':
@@ -54,6 +65,12 @@ def main():
             result = freeze_gold(args.input, args.root, args.dataset_root)
         elif args.command == 'verify-gold':
             result = verify_gold(args.gold_ref, args.root)
+        elif args.command == 'check-evaluation':
+            result = evaluate_record(_read(args.input), args.gold_root, args.run_root, args.initial_root)['result']['summary']
+        elif args.command == 'freeze-evaluation':
+            result = freeze_evaluation(args.input, args.root, args.gold_root, args.run_root, args.initial_root)
+        elif args.command == 'verify-evaluation':
+            result = verify_evaluation(args.evaluation_ref, args.root)
         else:
             result = verify_dataset(args.dataset_ref, args.root)
         sys.stdout.write(json.dumps(result, ensure_ascii=True, separators=(',', ':')) + '\n')

@@ -33,6 +33,7 @@ python3.13 -m venv .venv
 | `evaluation/dataset.py`, `storage.py`, `__main__.py` | D08 문서/사건 연결·분할 검증·비공개 manifest 불변 보관·CLI |
 | `evaluation/bindings.py` | 동결 manifest·실제 입력 바이트·명시 선택한 D05 원본의 읽기 전용 대조 |
 | `evaluation/gold.py`, `gold_storage.py` | 독립 정답 제공자의 선언·근거·사건 anchor 검사와 원본/지침/manifest 별도 동결 |
+| `evaluation/scoring.py`, `records.py`, `evaluation_storage.py` | 8필드 채점·명시한 API 실행 연결·최초/재시험 원본 묶음 동결 |
 
 [계산 연결 계약](../contracts/calculation-bridge.md)을 따릅니다. 지원 규칙은 `rules-v1`이며 미지원 버전을 정상 결과로 바꾸지 않습니다. `dictionary_version`은 선택한 snapshot의 고정 식별자이며 계산 중 새 사전을 읽지 않습니다. 입력 원본 바이트 SHA-256을 반환하며 개인 조건은 로그에 남기지 않습니다.
 
@@ -115,7 +116,27 @@ python3.13 -m processing.evaluation verify-gold GOLD_REF
 
 정답·판정 지침·manifest·각 버전의 입력 원본을 Git 제외 `data/private/evaluation/gold`에 함께 고정합니다. 파일0400·디렉터리0500이며 같은 gold_version의 다른 바이트를 덮어쓰지 않습니다. 원래 경로가 없어도 보관한 입력으로 재검증합니다. 키·AI·네트워크·DB를 사용하지 않습니다.
 
-합성 자료로 도구를 검증했으며 실제3문서의 독립 정답표를 생성·동결하지 않았습니다. 연결 명세/실행 선택 동결·8필드 채점·최초/재시험 결과·규칙 기준선은 후속 작업입니다. 최초 실행 전에 gold를 잠갔는지는 후속 평가가 실행 시각과 대조해야 하며, 사후 금표를 blind 최초 평가로 표시하지 않습니다.
+합성 자료로 도구를 검증했으며 실제3문서의 독립 정답표를 생성·동결하지 않았습니다. 사후에 만든 금표를 최초 평가로 표시할 수 없습니다.
+
+## 8필드 평가·최초/재시험 보관
+
+[extraction-evaluation-v1](../contracts/extraction-evaluation.md)에 따라 독립 gold와 버전마다 명시한 API 실행을 연결합니다. 사람이 사건/일정 대응과 생성 오류 판정을 기록합니다. 원출력은 바꾸지 않고 첫 raw·최종 자동 결과를 함께 채점합니다. null·누락·실패도 gold에 정답이 있으면 분모에 남습니다. 생성 여부의 의미 검토가 남으면 생성률은 N/A입니다.
+
+```sh
+python3.13 -m processing.evaluation check-evaluation \
+  --input data/private/evaluation/selection.json
+python3.13 -m processing.evaluation freeze-evaluation \
+  --input data/private/evaluation/selection.json
+python3.13 -m processing.evaluation verify-evaluation EVALUATION_REF
+```
+
+선택 입력의 키·정책·annotation은 계약 문서에 설명합니다. 기본 gold/run/initial 경로는 각각 `data/private/evaluation/gold`, `data/private/extraction-runs`, `data/private/evaluation/extractions`이며 `--gold-root`, `--run-root`, `--initial-root`로 지정할 수 있습니다. freeze/verify의 평가 보관 위치는 `--root`로 정합니다.
+
+initial은 gold 동결 이후 시작한 실행만 받습니다. retest는 동일 cohort·정규화 지침·방법의 동결 initial을 참조하며 금표/정책 변경·노출 선언·점수 차이를 남깁니다. 새 실행은 initial 동결 이후 시작해야 하고, 금표 수정만 재채점할 때는 기존 실행을 유지할 수 있습니다. 재시험을 최초 성능·새 일반화 증거로 표시하지 않습니다.
+
+보관본은 `selection.json`, 비공개 `result.json`, gold 전체, 선택한 D05 전체, retest의 최초 평가 전체를 포함합니다. 파일0400·디렉터리0500으로 검증한 뒤 배타 설치하며 같은 ID의 다른 입력은 충돌입니다. 원래 경로가 없어도 재검증·같은 입력 재사용이 가능합니다. 최초 평가와 실패 원본을 덮어쓰지 않습니다. 상세 값·근거·검토자·원래 경로는 private 파일에만 두고 stdout에는 요약/상대 artifact 목록만 출력합니다. 성공0·입력2·보관본 손상/충돌3·I/O5·내부 오류1로 종료합니다.
+
+키·AI·네트워크·DB를 사용하지 않는 도구이며 실제40문서 성과를 측정하지 않았습니다. M02 수치는 real/문서 수/비노출 등의 선언과 확인용 정답 분모가 갖춰진 initial에서만 제공하며, 그 자체로 의미 정확성·신원·blind holdout을 인증하지 않습니다. 단순 규칙 기준선·사람 수정값 연결·실제 독립 금표/40건 평가는 후속 작업입니다.
 
 ## 검증·남은 작업
 
