@@ -4,7 +4,8 @@ import java.time.Instant;
 import java.util.List;
 
 public record ReviewedBatch(String schemaVersion, String inputSha256, String dataKind,
-                            List<Document> documents, List<Event> events, String originatingRunId, String draftJson) {
+                            List<Document> documents, List<Event> events, String originatingRunId, String draftJson,
+                            String handoffJson) {
     public ReviewedBatch {
         documents = List.copyOf(documents);
         events = List.copyOf(events);

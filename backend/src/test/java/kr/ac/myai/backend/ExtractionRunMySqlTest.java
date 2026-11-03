@@ -371,7 +371,7 @@ class ExtractionRunMySqlTest {
         var one = review(first, id); var two = review(second, id);
         var documents = new java.util.ArrayList<>(one.documents()); documents.addAll(two.documents());
         var events = new java.util.ArrayList<>(one.events()); events.addAll(two.events());
-        var batch = new kr.ac.myai.backend.importing.ReviewedBatch("reviewed-import-v1", "7".repeat(64), "synthetic", documents, events, null, null);
+        var batch = new kr.ac.myai.backend.importing.ReviewedBatch("reviewed-import-v1", "7".repeat(64), "synthetic", documents, events, null, null, null);
         var before = counts();
         assertThatThrownBy(() -> importer.importBatch(batch, "synthetic-reviewer"))
                 .isInstanceOf(kr.ac.myai.backend.importing.ImportException.class);
