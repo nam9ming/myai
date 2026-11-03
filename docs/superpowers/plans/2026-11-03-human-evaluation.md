@@ -44,11 +44,11 @@
 
 **Interfaces:** Consumes Task1 packet and unchanged freeze_evaluation/verify_evaluation. Produces full human+parent archive replay/retest and Korean usage/status, existing check/freeze/verify-evaluation commands.
 
-- [ ] Test entire source/initial copies, no-original-path/reuse/tamper/modes/symlink, gold correction preserving original, new review after initial/same parent, same review/parent ID conflict, cross-method/retest-chain rejection, native same/conflicting races/failure cleanup, real CLI0/2/3/5 and method default None boundaries.
-- [ ] Run `/opt/homebrew/bin/python3.13 -m unittest processing.tests.test_human_evaluation_storage -v`; Expected: newly exposed edge behavior RED where missing, fix at shared boundary only.
-- [ ] Document exact human selection/policy/view/IDs/declared time/initial/retest/M02/default roots and real-data limitations.
-- [ ] Run target, fullPython, npm lint/test/build and pre-change7method compatibility; Expected: GREEN.
-- [ ] Commit `test: verify frozen human evaluation records`.
+- [x] Test entire source/initial copies, no-original-path/reuse/tamper/modes/symlink, gold correction preserving original, new review after initial/same parent, same review/parent ID conflict, cross-method/retest-chain rejection, native same/conflicting races/failure cleanup, real CLI0/2/3/5 and method default None boundaries.
+- [x] Run `/opt/homebrew/bin/python3.13 -m unittest processing.tests.test_human_evaluation_storage -v`; Expected: newly exposed edge behavior RED where missing, fix at shared boundary only.
+- [x] Document exact human selection/policy/view/IDs/declared time/initial/retest/M02/default roots and real-data limitations.
+- [x] Run target, fullPython, npm lint/test/build and pre-change7method compatibility; Expected: GREEN.
+- [x] Commit `test: verify frozen human evaluation records`.
 
 ## Final integration
 
