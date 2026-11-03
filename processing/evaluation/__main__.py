@@ -12,6 +12,7 @@ from .gold import check_gold
 from .gold_storage import GOLD_ROOT, freeze_gold, verify_gold
 from .records import EVALUATION_ROOT, evaluate_record
 from .evaluation_storage import freeze_evaluation, verify_evaluation
+from .reviews import REVIEW_ROOT, check_review, freeze_review, verify_review
 from .storage import DEFAULT_ROOT, freeze_dataset, verify_dataset
 
 
@@ -51,6 +52,13 @@ def main():
             command.add_argument('--gold-root', default=GOLD_ROOT)
             command.add_argument('--run-root')
             command.add_argument('--initial-root', default=EVALUATION_ROOT)
+    for name in ('check-review', 'freeze-review', 'verify-review'):
+        command = commands.add_parser(name)
+        if name != 'check-review': command.add_argument('--root', default=REVIEW_ROOT)
+        if name == 'verify-review': command.add_argument('review_ref')
+        else:
+            command.add_argument('--input', required=True)
+            command.add_argument('--run-root', default=EXTRACTION_ROOT)
     try:
         args = parser.parse_args()
         if args.command == 'check':
@@ -71,6 +79,12 @@ def main():
             result = freeze_evaluation(args.input, args.root, args.gold_root, args.run_root, args.initial_root)
         elif args.command == 'verify-evaluation':
             result = verify_evaluation(args.evaluation_ref, args.root)
+        elif args.command == 'check-review':
+            result = check_review(_read(args.input), args.run_root)
+        elif args.command == 'freeze-review':
+            result = freeze_review(args.input, args.root, args.run_root)
+        elif args.command == 'verify-review':
+            result = verify_review(args.review_ref, args.root)
         else:
             result = verify_dataset(args.dataset_ref, args.root)
         sys.stdout.write(json.dumps(result, ensure_ascii=True, separators=(',', ':')) + '\n')
