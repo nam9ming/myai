@@ -41,6 +41,6 @@
 **Files:** Create processing/evaluation/gold_storage.py, processing/tests/test_gold_storage.py; Modify processing/evaluation/__main__.py, processing/README.md, processing/TASK.md, contracts/README.md, docs/spec/03_데이터와AI.md.
 **Interfaces:** freeze_gold(input_path,root=GOLD_ROOT,dataset_root=DATASET_ROOT)->dict; verify_gold(gold_ref,root=GOLD_ROOT)->dict; CLI check-gold/freeze-gold/verify-gold.
 
-- [ ] 원본 byte 보존/삭제 후 재검증·재사용/충돌·동시 실행·변조/권한·symlink/추가 파일·I/O 실패/부분 설치·실제 CLI 종료 코드 시험 RED 확인.
-- [ ] 기존 private I/O·배타 rename으로 원본 묶음을 고정하고 검증/CLI/문서를 구현. Expected: 전체 시험 GREEN, 실자료 gold 생성 없음.
+- [x] 원본 byte 보존/삭제 후 재검증·재사용/충돌·동시 실행·변조/권한·symlink/추가 파일·I/O 실패/부분 설치·실제 CLI 종료 코드 시험 RED 확인.
+- [x] 기존 private I/O·배타 rename으로 원본 묶음을 고정하고 검증/CLI/문서를 구현. Expected: 전체 시험 GREEN, 실자료 gold 생성 없음.
 - [ ] 전체 자체 리뷰 및 fresh 전체 리뷰 한 번, 유효 지적 RED→GREEN 수정, PR CI/자동 리뷰 지적0 확인. feat: freeze independent gold archives 커밋과 PR 제출, 승인된 non-main만 병합.

@@ -32,6 +32,7 @@ python3.13 -m venv .venv
 | `extraction/draft.py` | 검증된 원출력→숨김 검토 초안·안정 ID·근거 hash 변환·미상 보존 |
 | `evaluation/dataset.py`, `storage.py`, `__main__.py` | D08 문서/사건 연결·분할 검증·비공개 manifest 불변 보관·CLI |
 | `evaluation/bindings.py` | 동결 manifest·실제 입력 바이트·명시 선택한 D05 원본의 읽기 전용 대조 |
+| `evaluation/gold.py`, `gold_storage.py` | 독립 정답 제공자의 선언·근거·사건 anchor 검사와 원본/지침/manifest 별도 동결 |
 
 [계산 연결 계약](../contracts/calculation-bridge.md)을 따릅니다. 지원 규칙은 `rules-v1`이며 미지원 버전을 정상 결과로 바꾸지 않습니다. `dictionary_version`은 선택한 snapshot의 고정 식별자이며 계산 중 새 사전을 읽지 않습니다. 입력 원본 바이트 SHA-256을 반환하며 개인 조건은 로그에 남기지 않습니다.
 
@@ -100,7 +101,21 @@ python3.13 -m processing.evaluation check-bindings \
   --run-root data/private/extraction-runs
 ```
 
-모든 manifest 버전을 실제 입력 바이트·data_kind·읽기 전용 D05 원본과 대조합니다. 실패 실행도 원본 재검증 대상이고 첫/최종 상태를 구분합니다. 원본·경로를 stdout에 넣거나 검사 중 보관본을 고치지 않습니다. 실제 개발3건의 v1 실패/v2 성공6실행을 이 검사로 대조했습니다. 이는 문서6건·재시도 성공률·품질 평가를 뜻하지 않습니다. 연결 명세 자체의 동결·독립 금표·8필드 채점·최초/재시험 결과·규칙 기준선은 후속 작업입니다.
+모든 manifest 버전을 실제 입력 바이트·data_kind·읽기 전용 D05 원본과 대조합니다. 실패 실행도 원본 재검증 대상이고 첫/최종 상태를 구분합니다. 원본·경로를 stdout에 넣거나 검사 중 보관본을 고치지 않습니다. 실제 개발3건의 v1 실패/v2 성공6실행을 이 검사로 대조했습니다. 이는 문서6건·재시도 성공률·품질 평가를 뜻하지 않습니다.
+
+## 독립 정답표
+
+[dataset-gold-v1](../contracts/gold-archive.md)은 독립 원문 판독·다른 담당자의 교차 검토·사건 anchor·판정 지침·의견 차이 해결 기록을 받습니다. FieldValue/근거의 형식만 재사용하며 실제 AI 결과를 정답으로 복사하지 않습니다. 신원·독립 판독·의미 정확성은 제공자의 선언이며 검사 결과는 `declared_cross_reviewed`입니다.
+
+```sh
+python3.13 -m processing.evaluation check-gold --input data/private/gold.json
+python3.13 -m processing.evaluation freeze-gold --input data/private/gold.json
+python3.13 -m processing.evaluation verify-gold GOLD_REF
+```
+
+정답·판정 지침·manifest·각 버전의 입력 원본을 Git 제외 `data/private/evaluation/gold`에 함께 고정합니다. 파일0400·디렉터리0500이며 같은 gold_version의 다른 바이트를 덮어쓰지 않습니다. 원래 경로가 없어도 보관한 입력으로 재검증합니다. 키·AI·네트워크·DB를 사용하지 않습니다.
+
+합성 자료로 도구를 검증했으며 실제3문서의 독립 정답표를 생성·동결하지 않았습니다. 연결 명세/실행 선택 동결·8필드 채점·최초/재시험 결과·규칙 기준선은 후속 작업입니다. 최초 실행 전에 gold를 잠갔는지는 후속 평가가 실행 시각과 대조해야 하며, 사후 금표를 blind 최초 평가로 표시하지 않습니다.
 
 ## 검증·남은 작업
 

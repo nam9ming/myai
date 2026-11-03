@@ -34,7 +34,7 @@ python3.13 -m processing.evaluation freeze-gold --input data/private/gold.json
 python3.13 -m processing.evaluation verify-gold GOLD_REF
 ```
 
-기본 gold-root는 `data/private/evaluation/gold`; root·dataset-root 지정은 CLI 도움말을 따른다. gold_ref는 gold_version UTF-8의 SHA-256이며 같은 버전의 다른 바이트/원본을 덮어쓰지 않는다. 파일0400·디렉터리0500·전체 hash/파일 목록을 검사하고 완성·검증된 staging만 배타 배치한다. 검토/해결 시각은 고정 시각보다 미래일 수 없다. 같은 원본은 기존 frozen_at/receipt를 재사용한다.
+기본 gold-root는 `data/private/evaluation/gold`; freeze/verify에 `--root`, check/freeze에 `--dataset-root`를 지정할 수 있다. gold_ref는 gold_version UTF-8의 SHA-256이며 같은 버전의 다른 바이트/원본을 덮어쓰지 않는다. 파일0400·디렉터리0500·전체 hash/파일 목록을 검사하고 완성·검증된 staging만 배타 배치한다. 검토/해결 시각은 고정 시각보다 미래일 수 없다. 같은 원본은 기존 frozen_at/receipt를 재사용한다.
 
 stdout은 경로·원문·정답·담당자·판정 지침 없는 요약 JSON, stderr는 고정 코드다. 성공0, 입력2, archive 손상/충돌3, I/O5, 내부1. 키·AI·네트워크·DB를 호출하지 않는다. 기존 macOS/Linux 배타 rename·POSIX 권한 조건과 관리자 비신뢰/WORM 제외를 유지한다.
 

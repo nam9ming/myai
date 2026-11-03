@@ -71,7 +71,7 @@ AI 원출력을 공개 API 응답으로 바로 사용하지 않습니다. 사람
 
 ## 확인
 
-D08 문서 버전·사건 연결·개발/확인 배정의 비공개 검증/보관은 [dataset-manifest-v1](dataset-manifest.md), 실제 입력·D05 원본 대조는 [dataset-bindings-v1](dataset-bindings.md)을 따릅니다. 공개 API나 금표 형식을 바꾸지 않으며 독립 금표·채점·최초/재시험 고정은 후속 작업입니다.
+D08 문서 버전·사건 연결·개발/확인 배정은 [dataset-manifest-v1](dataset-manifest.md), 실제 입력·D05 원본 대조는 [dataset-bindings-v1](dataset-bindings.md), 독립 정답 제공자의 기록·원본 동결은 [dataset-gold-v1](gold-archive.md)을 따릅니다. 공개 API는 바꾸지 않으며 실행 선택 동결·채점·최초/재시험은 후속 작업입니다. 실제 독립 정답표 작성·교차 검토도 아직 수행하지 않았습니다.
 
 Python 표준 라이브러리만 사용합니다.
 

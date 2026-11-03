@@ -13,7 +13,7 @@ from processing.extraction.validation import ExtractionError
 from processing.tests.test_dataset import manifest, uid, REPO
 
 
-class GoldTest(unittest.TestCase):
+class GoldFixture(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(); self.work = Path(self.temp.name).resolve()
         self.addCleanup(self.cleanup)
@@ -54,6 +54,7 @@ class GoldTest(unittest.TestCase):
         if code:self.assertEqual(caught.exception.code,code)
         self.assertNotIn('PRIVATE_',str(caught.exception))
 
+class GoldTest(GoldFixture):
     def test_summary_is_safe_and_does_not_certify_humans(self):
         result=self.check()
         self.assertEqual(result['counts'],dict(documents=1,document_versions=1,slots=1,adjudications=0))
