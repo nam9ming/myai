@@ -415,6 +415,21 @@ class MatchingEvaluationTest(MatchingEvaluationFixture):
         self.assertEqual(set(initial['cases'][0]['initial_metrics']), set(VIEWS))
         self.assertEqual(set(initial['cases'][0]['current_metrics']), set(VIEWS))
 
+    def test_dictionary_only_retest_reports_changed_conditions(self):
+        selected = self.freeze_matching_initial()
+        value = copy.deepcopy(self.matching_selection)
+        value.update(phase='retest', matching_eval_id=uid(2990), initial=selected,
+                     case_version='synthetic-dictionary-corrected-v2')
+        value['dictionary']['entries'][0]['geometry']['coordinates'] = [[128.27, 37.01], [128.271, 37.01]]
+        result = self.matching(value, at='2026-11-03T05:00:00Z')['result']
+        comparison = result['initial_comparison']; case = comparison['cases'][0]
+        self.assertTrue(comparison['dictionary_changed'])
+        self.assertFalse(any(comparison[key] for key in ('cases_changed', 'gold_changed', 'source_changed')))
+        self.assertFalse(case['paired']); self.assertIsNone(case['paired_deltas'])
+        self.assertEqual(case['initial_metrics']['gold_engine']['complete_classification']['correct'], 1)
+        self.assertEqual(case['current_metrics']['gold_engine']['complete_classification']['correct'], 0)
+        self.assertTrue(result['summary']['initial_changed'])
+
     def test_source_retest_phase_and_all_method_warnings_remain_visible(self):
         old = copy.deepcopy(self.references); self.new_evaluations()
         for method, control in self.controls.items():

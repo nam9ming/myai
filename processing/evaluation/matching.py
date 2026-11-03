@@ -382,7 +382,7 @@ def evaluate_matching(content, comparison_root=COMPARISON_ROOT, initial_root=MAT
         cohort_counts=source['cohort_counts'], cohort_shortfall=source['cohort_shortfall'], cohort_distribution=source['cohort_distribution'],
         holdout_status=source['holdout_status'], holdout_warnings=source['holdout_warnings'], methods=method_summary,
         human_review_time=source['human_review_time'], expectations_basis=value['expectations_review']['basis'], warnings=warnings,
-        initial_changed=bool(initial and (initial['cases_changed'] or initial['gold_changed'] or initial['source_changed'])),
+        initial_changed=bool(initial and (initial['dictionary_changed'] or initial['cases_changed'] or initial['gold_changed'] or initial['source_changed'])),
         generalization_claim=False, views={view: _aggregate([case['summary']['views'][view] for case in cases]) for view in VIEWS},
         splits={split: {view: _aggregate([case['summary']['splits'][split][view] for case in cases]) for view in VIEWS} for split in ('dev', 'holdout')})
     result = dict(schema_version='matching-evaluation-result-v1', matching_eval_id=value['matching_eval_id'],
