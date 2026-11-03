@@ -3,6 +3,8 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -200,3 +202,41 @@ class DatasetBindingsTest(unittest.TestCase):
         p = copy.deepcopy(self.packet); p['PRIVATE_EXTRA'] = 'PRIVATE_VALUE'; self.invalid(p)
         content = json.dumps(self.packet).replace('"schema_version":', '"schema_version":"duplicate","schema_version":')
         with self.assertRaises(ExtractionError): bindings.check_bindings(content.encode(),self.dataset_root,self.run_root)
+
+    def cli(self, packet=None):
+        path = self.work/'PRIVATE_BINDINGS.json'; path.write_text(json.dumps(packet or self.packet))
+        return subprocess.run([sys.executable, '-m', 'processing.evaluation', 'check-bindings',
+            '--input',str(path),'--dataset-root',str(self.dataset_root),'--run-root',str(self.run_root)],
+            cwd=ROOT,capture_output=True)
+
+    def test_cli_success_is_one_safe_json_without_writes(self):
+        result = self.cli()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)['counts'], dict(documents=1,document_versions=1,runs=2,
+                                                                 validated_runs=1,failed_runs=1))
+        self.assertEqual(result.stderr, b'')
+        self.assertEqual(len(result.stdout.splitlines()), 1)
+        self.assertNotIn(b'PRIVATE_', result.stdout)
+        self.assertNotIn(str(self.work).encode(), result.stdout)
+
+    def test_cli_bad_input_and_nul_path_have_safe_input_exit(self):
+        for value in ('wrong-schema','nul-path'):
+            packet = copy.deepcopy(self.packet)
+            if value == 'wrong-schema': packet['schema_version'] = 'PRIVATE_INVALID'
+            else: packet['bindings'][0]['input_path'] = str(self.work/'PRIVATE_\x00.json')
+            with self.subTest(value=value):
+                result = self.cli(packet)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertEqual(result.stdout, b'')
+                self.assertNotIn(b'PRIVATE_', result.stderr)
+
+    def test_cli_archive_tamper_is_safe_archive_exit(self):
+        path = self.run_root/self.first['snapshot_ref']/'attempt-1.output'
+        path.chmod(0o600); path.write_bytes(b'PRIVATE_CHANGED'); path.chmod(0o400)
+        result = self.cli()
+        self.assertEqual((result.returncode,result.stdout,result.stderr), (3,b'',b'ARCHIVE_INTEGRITY\n'))
+
+    def test_cli_missing_source_is_safe_io_exit(self):
+        self.input.unlink()
+        result = self.cli()
+        self.assertEqual((result.returncode,result.stdout,result.stderr), (5,b'',b'DATASET_IO_FAILED\n'))

@@ -7,6 +7,7 @@ import sys
 from processing.extraction.archive import _read
 from processing.extraction.validation import ExtractionError
 from .dataset import validate_manifest
+from .bindings import EXTRACTION_ROOT, check_bindings
 from .storage import DEFAULT_ROOT, freeze_dataset, verify_dataset
 
 
@@ -25,12 +26,18 @@ def main():
             command.add_argument('dataset_ref')
         else:
             command.add_argument('--input', required=True)
+    command = commands.add_parser('check-bindings')
+    command.add_argument('--input', required=True)
+    command.add_argument('--dataset-root', default=DEFAULT_ROOT)
+    command.add_argument('--run-root', default=EXTRACTION_ROOT)
     try:
         args = parser.parse_args()
         if args.command == 'check':
             result = validate_manifest(_read(args.input))
         elif args.command == 'freeze':
             result = freeze_dataset(args.input, args.root)
+        elif args.command == 'check-bindings':
+            result = check_bindings(_read(args.input), args.dataset_root, args.run_root)
         else:
             result = verify_dataset(args.dataset_ref, args.root)
         sys.stdout.write(json.dumps(result, ensure_ascii=True, separators=(',', ':')) + '\n')

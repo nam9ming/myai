@@ -45,8 +45,8 @@
 
 **Interfaces:** Task1 `check_bindings` → `check-bindings --input FILE [--dataset-root ROOT] [--run-root ROOT]`.
 
-- [ ] 실제 subprocess의 성공/입력2/보관3/I/O5·경로/본문 비노출 시험 작성·RED 확인.
-- [ ] 기존 CLI 오류 처리에 명령을 추가하고 명세·입출력 예시·제한을 문서화한다.
-- [ ] 실제 개발3건의 v1 실패/v2 성공6개 기존 frozen D05를 연결한 비공개 명세를 생성·검증한다. Expected: 문서3·버전3·실행6·실패3·성공3, 파일/DB/AI 원본 변경 없음. 이것을 gold/채점/재시도 정책 입증으로 표시하지 않는다.
+- [x] 실제 subprocess의 성공/입력2/보관3/I/O5·경로/본문 비노출 시험 작성·RED 확인.
+- [x] 기존 CLI 오류 처리에 명령을 추가하고 명세·입출력 예시·제한을 문서화한다.
+- [x] 실제 개발3건의 v1 실패/v2 성공6개 기존 frozen D05를 연결한 비공개 명세를 생성·검증한다. Expected: 문서3·버전3·실행6·실패3·성공3, 파일/DB/AI 원본 변경 없음. 이것을 gold/채점/재시도 정책 입증으로 표시하지 않는다.
 - [ ] 전체 Python·npm lint/test/build, 전체 자체 리뷰·한 번의 fresh 전체 리뷰·유효 지적 수정 후 PR CI/자동 리뷰 확인. Expected: 유효 미해결0.
 - [ ] `feat: expose dataset binding checks` 커밋 후 PR 제출. main 외 승인된 기준 브랜치만 병합한다.
