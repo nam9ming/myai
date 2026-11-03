@@ -20,6 +20,8 @@ DB는 기존 helper가 만든 UUID/name/owner label의 MySQL8.4.13 두 인스턴
 
 47건의 full/data SQL·전체16테이블 행·schema/Flyway를 저장하고 새 빈 대상에 full SQL을 복원한다. data SQL은 정확 바이트 비교, 모든 열/제약/인덱스/옵션을 대조한다. full DDL의 동등한 utf8mb4 중복 표기만 기존 B08 방식으로 제한적으로 판단하고 원문 diff를 보존한다. 복원 후 기존10개와 신규44 canonical의 정확 재실행·D05 원본 검증에서 행이 늘지 않아야 한다. 원래 자료의 bytes/mode·안정된 경로는 유지한다.
 
+DB가 참조하는 자료 유실에 대비해 원래 선택2개 root와 최종 package-v2만 별도 tar·절대 root/member manifest로 백업한다. 모든 파일 bytes/mode·경계·수량을 원본과 대조한다. 원래 canonical 경로를 삭제·덮어쓰지 않으며 SQL 복원은 그 자원을 그대로 사용한다. 실자료 파일 유실 후 canonical 경로 복원·운영 보존/RPO/RTO를 수행했다고 보고하지 않는다.
+
 공개 snapshot이 없는 source/restore DB에서 실제 public JAR의 health200·config/matches503 `PUBLIC_DATA_NOT_READY`·상세 snapshot 누락422·유효하지만 없는 snapshot404를 확인한다. 공개본 존재 시 hidden 필터·계산 성공을 인증한 것으로 쓰지 않는다. 기존 전체 DB 시험은 보존 대상 DB에 실행하지 않는다.
 
 ## 인계와 한계

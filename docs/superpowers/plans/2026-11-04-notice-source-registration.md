@@ -42,6 +42,7 @@
 - [ ] canonical44 첫 등록·exact replay·다른 source-root 동일 바이트·공백 alias·metadata 충돌·원문 누락을 실행한다. Expected: 첫 delta44/44/1, replay 같은batch/행불변, alias batch만+1, 마지막2개 각각3/2·전체 행불변.
 - [ ] 신규44 D03 전체 metadata/상대raw/운영head·원래3/D05/D06/감사/공개/사전/Flyway를 모든 열로 대조한다. Expected: 문서47/버전47·D056·D06 3/3·공개0, 원본 bytes/mode 불변.
 - [ ] 같은47 DB의 full/data SQL을 새 blank owned DB에 복원하고 기존10+canonical44를 정확 재실행한다. Expected: 전체16표/data SQL/schema/Flyway 동등·행 추가0·D05경로/원본/상태 유지; raw SQL/diff 보존.
+- [ ] 기존 선택2개 root와 final package-v2만 tar·절대 root/member manifest로 백업한다. Expected: 전체 member bytes/mode/path/수량이 원본과 일치; 원본 경로 삭제/덮어쓰기·canonical 파일 유실 복원은 실행하지 않음.
 - [ ] source/restore public JAR에서 health200·config/matches503·상세422/404와 DB 불변을 확인하고 자기 프로세스/DB만 정리한다. Expected: 실제 HTTP가 private 자료를 반환하지 않음, 다른 서비스 ID/상태 불변.
 
 ### Task 3: 전체 리뷰·PR·통합 인계

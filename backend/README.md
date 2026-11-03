@@ -26,6 +26,8 @@ Python OpenAI `run`이 만든 api archive도 같은 `local-extraction`으로 등
 
 실제 개발 공지 3건은 새 전용 MySQL8.4.13에서 D03 문서/버전 3개, 기존 v1 실패 3회·v2 성공 3회와 D06 `ai_draft/draft/hidden` 초안 3개를 실제 JAR로 저장했다. 개발 구역·사전 후보만 연결했으며 지역 소속은 `uncertain`, 검토자·검토 시각·장소 좌표는 null이다. 원문은 `use_review=pending`·`check_result=uncertain`을 유지하며 새 확인·사용권 명령으로 실제3건을 변경하지 않았다. 기준 지점·사전 행을 등록하거나 실제 자료를 승인·공개한 결과는 아니다. 재실행·거부·원본 보존 검증과 남은 작업은 [초안 안내](docs/ai-review-draft.md#실제-개발-자료의-저장-검증)를 따른다.
 
+2026-11-04에는 원래10개 CLI 입력으로 새 V4 전용 DB에 위3건을 재구성한 뒤 신규44건의 D03만 추가해 문서/버전47개를 검증했다. 신규44건은 pending/unchecked·운영 head0/null이며 기존 D05 6회·숨김 D06 3개·공개4테이블0은 그대로다. 실제 JAR28회·HTTP10회로 늦은 충돌 rollback·정확 재실행·배치 hash/상대 경로·새 빈 서버의47건 SQL 복원을 확인했다. 선택3개 자료 root의 tar337항목도 bytes/mode로 대조했다. 과거 V3 SQL의 동일 복구나 새 추출/사람 승인/평가47건은 아니며, 전용 서버는 검증 후 정리했다. [백업·복원 범위](docs/backup-recovery.md#실제-개발-자료47건의-db-검증)를 따른다.
+
 **미구현:** 관리 UI, 운영 배포·실자료 평가. 저장 계층에는 이미 포함된 Spring JDBC를 사용한다. JPA entity/일반 CRUD와 Java 후보 판정 엔진은 추가하지 않았다. 승인·공개·복구·계산 연결·내보내기는 합성 자료와 전용 DB로 시험하며 실제 자료의 사실성·이용권한 검토를 완료한 상태는 아니다.
 
 ## DB 없이 합성 API 실행

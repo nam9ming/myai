@@ -105,7 +105,9 @@ python3.13 -m processing.evaluation verify DATASET_REF
 
 신규44건의 D03 배치·AI 입력·프롬프트를 Git 제외 `data/private/development-notices/2026-11-04-d03-preparation/`에 준비했습니다. 최종 입력은 `current-preparation.json`이 가리키는 `package-v2/`이며, 초기 준비본의 신청 URL 숫자 매개변수 오치환7곳을 수정했습니다. 기존 Java `ReviewedImportReader`로44건을 검증하고 raw/text hash 손상 대조군2건의 거부를 확인했습니다. Python `parse_input`·실제 `prepare` CLI도 각각44건을 통과했으며 원본 SHA·전체 블록·입력/프롬프트 hash를 대조했습니다. NFC/LF 정리와 전화·이메일 고정 패턴18곳 치환을 적용했고, 이용권한은 pending·원문 확인은 unchecked로 유지했습니다.
 
-후보는 미배정 상태이며 신규 AI 호출·DB 등록은 실행하지 않았습니다. 지역·이미지/첨부·이용권한·사건 관계와 패턴 밖 개인정보 검토, 개발20/확인20 분할·독립 정답표·신규 추출/평가가 남아 있습니다. 수신한 DOM·도구 응답과 작성된 ALT는 서버 원본 바이트·본문 완전성·공식 수정 시각을 인증하지 않으며 실제 데이터셋은 dev3/holdout0을 유지합니다.
+신규44건은 기존 개발3건을 원래 CLI 입력으로 재구성한 새 V4 시험 DB에 D03만 추가해 총47문서/버전으로 저장·재실행·SQL 복원을 검증했습니다. 기존 D05 실패3/성공3·숨김 D06 3개는 그대로이며 신규 추출 API·D05/D06은 생성하지 않았습니다. 실제 JAR28회·HTTP10회·전체16테이블/122행과 선택3개 root의 tar337항목을 대조했고 검증 서버는 정리했습니다. [백업·복원 범위](../backend/docs/backup-recovery.md#실제-개발-자료47건의-db-검증)를 따릅니다.
+
+후보는 미배정 상태입니다. 운영 DB 등록·지역·이미지/첨부·이용권한·사건 관계와 패턴 밖 개인정보 검토, 개발20/확인20 분할·독립 정답표·신규 추출/평가가 남아 있습니다. 수신한 DOM·도구 응답과 작성된 ALT는 서버 원본 바이트·본문 완전성·공식 수정 시각을 인증하지 않으며 실제 데이터셋은 dev3/holdout0을 유지합니다.
 
 manifest만으로는 실제 본문이나 정답을 인증하지 않으며 `unexposed_as_declared`도 blind 평가 보증이 아닙니다. 실제 입력·실행 연결은 별도 [dataset-bindings-v1](../contracts/dataset-bindings.md) 명세로 검사합니다.
 
