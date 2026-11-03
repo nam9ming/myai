@@ -13,6 +13,8 @@ from .gold_storage import GOLD_ROOT, freeze_gold, verify_gold
 from .records import EVALUATION_ROOT, evaluate_record
 from .evaluation_storage import freeze_evaluation, verify_evaluation
 from .reviews import REVIEW_ROOT, check_review, freeze_review, verify_review
+from .comparison import COMPARISON_ROOT, compare_evaluations
+from .comparison_storage import freeze_comparison, verify_comparison
 from .storage import DEFAULT_ROOT, freeze_dataset, verify_dataset
 
 
@@ -59,6 +61,13 @@ def main():
         else:
             command.add_argument('--input', required=True)
             command.add_argument('--run-root', default=EXTRACTION_ROOT)
+    for name in ('check-comparison', 'freeze-comparison', 'verify-comparison'):
+        command = commands.add_parser(name)
+        if name != 'check-comparison': command.add_argument('--root', default=COMPARISON_ROOT)
+        if name == 'verify-comparison': command.add_argument('comparison_ref')
+        else:
+            command.add_argument('--input', required=True)
+            command.add_argument('--evaluation-root', default=EVALUATION_ROOT)
     try:
         args = parser.parse_args()
         if args.command == 'check':
@@ -79,6 +88,12 @@ def main():
             result = freeze_evaluation(args.input, args.root, args.gold_root, args.run_root, args.initial_root)
         elif args.command == 'verify-evaluation':
             result = verify_evaluation(args.evaluation_ref, args.root)
+        elif args.command == 'check-comparison':
+            result = compare_evaluations(_read(args.input), args.evaluation_root)['result']['summary']
+        elif args.command == 'freeze-comparison':
+            result = freeze_comparison(args.input, args.root, args.evaluation_root)
+        elif args.command == 'verify-comparison':
+            result = verify_comparison(args.comparison_ref, args.root)
         elif args.command == 'check-review':
             result = check_review(_read(args.input), args.run_root)
         elif args.command == 'freeze-review':

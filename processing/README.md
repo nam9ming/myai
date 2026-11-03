@@ -35,6 +35,7 @@ python3.13 -m venv .venv
 | `evaluation/bindings.py` | 동결 manifest·실제 입력 바이트·명시 선택한 D05 원본의 읽기 전용 대조 |
 | `evaluation/gold.py`, `gold_storage.py` | 독립 정답 제공자의 선언·근거·사건 anchor 검사와 원본/지침/manifest 별도 동결 |
 | `evaluation/scoring.py`, `records.py`, `evaluation_storage.py` | 8필드 채점·명시한 API/규칙/사람 수정 원본 연결·최초/재시험 원본 묶음 동결 |
+| `evaluation/comparison.py`, `comparison_storage.py` | 같은 gold·회차·AI 부모의 세 방법을 짝지어 개선/악화·선언 시간을 집계하고 전체 평가를 동결 |
 | `evaluation/reviews.py` | 사람 수정후 출력·실제 변경 기록/검토 시간 선언·D05 전체의 별도 불변 보관 |
 
 [계산 연결 계약](../contracts/calculation-bridge.md)을 따릅니다. 지원 규칙은 `rules-v1`이며 미지원 버전을 정상 결과로 바꾸지 않습니다. `dictionary_version`은 선택한 snapshot의 고정 식별자이며 계산 중 새 사전을 읽지 않습니다. 입력 원본 바이트 SHA-256을 반환하며 개인 조건은 로그에 남기지 않습니다.
@@ -138,7 +139,19 @@ initial은 gold 동결 이후 시작한 실행만 받습니다. retest는 동일
 
 보관본은 `selection.json`, 비공개 `result.json`, gold 전체, 선택한 D05 전체·규칙6파일 또는 사람 검토 전체(내부 D05 포함), retest의 최초 평가 전체를 포함합니다. 파일0400·디렉터리0500으로 검증한 뒤 배타 설치하며 같은 ID의 다른 입력은 충돌입니다. 원래 경로가 없어도 재검증·같은 입력 재사용이 가능합니다. 최초 평가와 실패 원본을 덮어쓰지 않습니다. 상세 값·근거·검토자·원래 경로는 private 파일에만 두고 stdout에는 요약/상대 artifact 목록만 출력합니다. 성공0·입력2·보관본 손상/충돌3·I/O5·내부 오류1로 종료합니다.
 
-키·AI·네트워크·DB를 사용하지 않는 도구이며 실제40문서 성과를 측정하지 않았습니다. M02 수치는 ai_auto에서 real/문서 수/비노출 등의 선언과 확인용 정답 분모가 갖춰진 initial에만 제공하며, 그 자체로 의미 정확성·신원·blind holdout을 인증하지 않습니다. rules는 관측 점수를 유지하고 M02는 N/A입니다. 사람 수정값은 별도 human_reviewed 뷰로 채점하고 M02는 N/A입니다. review_id와 실제 parent ID/실패·모드를 구분하고 선언 검토 시간을 전체/dev/holdout별로 합산합니다. 세 방법 비교·실제 독립 금표/40건 평가는 후속 작업입니다.
+키·AI·네트워크·DB를 사용하지 않는 도구이며 실제40문서 성과를 측정하지 않았습니다. M02 수치는 ai_auto에서 real/문서 수/비노출 등의 선언과 확인용 정답 분모가 갖춰진 initial에만 제공하며, 그 자체로 의미 정확성·신원·blind holdout을 인증하지 않습니다. rules는 관측 점수를 유지하고 M02는 N/A입니다. 사람 수정값은 별도 human_reviewed 뷰로 채점하고 M02는 N/A입니다. review_id와 실제 parent ID/실패·모드를 구분하고 선언 검토 시간을 전체/dev/holdout별로 합산합니다. 세 방법 비교 도구는 아래 별도 CLI로 연결하며 실제 독립 금표/40건 평가는 후속 작업입니다.
+
+## 세 방법의 짝지은 비교
+
+[extraction-comparison-v1](../contracts/extraction-comparison.md)은 규칙/AI/사람 수정후의 동결 평가를 정확한 receipt로 선택합니다. 같은 gold·입력·평가 회차와 사람 검토의 정확한 AI 부모를 대조하고 gold 슬롯×8필드별 개선/악화/동일 정답/동일 오답을 집계합니다. gold 미상은 분모 밖에 남기고 실패/누락/생성 미확정과 첫 raw/최종 자동의 지표도 보존합니다.
+
+```sh
+python3.13 -m processing.evaluation check-comparison --input data/private/evaluation/comparison.json
+python3.13 -m processing.evaluation freeze-comparison --input data/private/evaluation/comparison.json
+python3.13 -m processing.evaluation verify-comparison COMPARISON_REF
+```
+
+`--evaluation-root` 기본값은 private evaluation/extractions, freeze/verify의 `--root`는 private evaluation/comparisons입니다. 세 평가의 전체 gold/source/initial을0400/0500으로 함께 보관하고 원래 경로 없이 재검증합니다. 같은 ID의 다른 입력은 충돌입니다. stdout에는 summary/receipt만 반환하며 종료0/2/3/5와 기존 CLI 동작을 유지합니다. 검토 시간은 선언 합계이고 실제 노동 감소·독립성·blind holdout 인증은 아닙니다. 키/AI/네트워크/DB를 쓰지 않으며 실제40건 비교·선별 엔진 평가는 미완료입니다.
 
 ## 사람 수정후 추출 원본
 
@@ -152,7 +165,7 @@ python3.13 -m processing.evaluation verify-review "$REVIEW_REF"
 
 검토 JSON의6개 최상위 키·source/changes 형식과 root 옵션은 계약을 따릅니다. 기본 source root는 data/private/extraction-runs, 검토 보관 root는 data/private/evaluation/human-reviews입니다. 원문/수정값·검토자·사유는 비공개 파일에만 두고 stdout은 ID/hash/상태/건수/선언 소요시간만 반환합니다. 성공0/입력2/보관 손상·충돌3/I/O5/내부1입니다.
 
-API/수동·성공/실패 D05의 실제 모드와 원출력을 보존합니다. 실패 source의 새 유효 출력은 before=null의 전체 변경 기록이 필요합니다. 기계 검사는 실제 사람이 판독했다는 증거·독립 정답·승인·공개가 아닙니다. 이 도구는 D06 저장과 별개이며 D08 human_reviewed 채점/최초·재시험은 위 평가 CLI로 연결합니다. 선언 시간은 문서별 합계이며 실제 사람별 순작업 시간이나 재시험의 새 작업시간을 인증하지 않습니다. 세 방법 비교·실제 검토본 전달은 후속 작업입니다. 키·AI·네트워크·DB는 사용하지 않습니다.
+API/수동·성공/실패 D05의 실제 모드와 원출력을 보존합니다. 실패 source의 새 유효 출력은 before=null의 전체 변경 기록이 필요합니다. 기계 검사는 실제 사람이 판독했다는 증거·독립 정답·승인·공개가 아닙니다. 이 도구는 D06 저장과 별개이며 D08 human_reviewed 채점/최초·재시험은 위 평가 CLI로 연결합니다. 선언 시간은 문서별 합계이며 실제 사람별 순작업 시간이나 재시험의 새 작업시간을 인증하지 않습니다. 세 방법 비교는 아래 별도 CLI를 사용하며 실제 검토본 전달은 후속 작업입니다. 키·AI·네트워크·DB는 사용하지 않습니다.
 
 ## 규칙 자동 기준선
 
@@ -172,7 +185,7 @@ python3.13 -m processing.extraction rules-verify RUN_UUID
 
 출력은 기존8필드 채점기와 D08 선택/최초·재시험 동결의 `method=rules`에 연결합니다. 사건/생성 의미 판정 annotation은 사람이 제공하며,1회 실행이므로 first/final annotation이 같아야 합니다. 선택한 모든 실행의 규칙/프로필 버전·SHA가 같아야 하고, policy에는 프로필 검토자·실행 전 고정 시각·development_only/holdout_feedback/unknown 선언을 남깁니다. initial은 development_only만 받으며 holdout_feedback 재시험은 의미 피드백·노출 표시가 필요합니다. 신원·실제 사전 고정의 진실성은 인증하지 않습니다.
 
-위 평가 CLI를 그대로 사용합니다. 보관본은6파일 규칙 원본·gold·initial 전체를 포함하며 원래 경로 없이 재검증합니다. 기존 AI 평가 형식/바이트도 유지합니다. 세 방법의 짝지은 개선/악화 비교는 다음 단계입니다. 실제 지명 검토·독립 정답·40건 평가를 수행한 결과가 아닙니다. Windows와 전원 중단 내구성은 미검증이며 POSIX 권한은 WORM이 아닙니다.
+위 평가 CLI를 그대로 사용합니다. 보관본은6파일 규칙 원본·gold·initial 전체를 포함하며 원래 경로 없이 재검증합니다. 기존 AI 평가 형식/바이트도 유지합니다. 세 방법의 짝지은 개선/악화 비교는 아래 별도 CLI를 사용합니다. 실제 지명 검토·독립 정답·40건 평가를 수행한 결과가 아닙니다. Windows와 전원 중단 내구성은 미검증이며 POSIX 권한은 WORM이 아닙니다.
 
 ## 검증·남은 작업
 

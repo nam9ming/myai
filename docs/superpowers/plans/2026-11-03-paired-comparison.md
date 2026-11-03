@@ -42,11 +42,11 @@
 
 **Interfaces:** Consumes Task1 result/sources and existing _tree/_sealed/_copy/_identity/_rename_exclusive. Produces freeze_comparison(input_path, root=COMPARISON_ROOT, evaluation_root=EVALUATION_ROOT), verify_comparison(comparison_ref,root=COMPARISON_ROOT), and check/freeze/verify-comparison CLI with0/2/3/5.
 
-- [ ] Test full nested sources/initial copy, no-original-path/reuse/conflict, native same/conflict races, tamper/modes/symlink/extra, source-copy mutation/install failure cleanup, actual CLI success/input/archive/I/O and privacy.
-- [ ] Run `/opt/homebrew/bin/python3.13 -m unittest processing.tests.test_paired_comparison_storage -v`; Expected: missing storage/CLI RED.
-- [ ] Implement using house helpers, preserving original source images and existing CLI behavior. Document exact schema/outputs/limits/current real-data status in Korean.
-- [ ] Run both targets, fullPython, npm lint/test/build, legacy compatibility and whole self-review; Expected: GREEN.
-- [ ] Commit `feat: freeze paired comparison evidence`.
+- [x] Test full nested sources/initial copy, no-original-path/reuse/conflict, native same/conflict races, tamper/modes/symlink/extra, source-copy mutation/install failure cleanup, actual CLI success/input/archive/I/O and privacy.
+- [x] Run `/opt/homebrew/bin/python3.13 -m unittest processing.tests.test_paired_comparison_storage -v`; Expected: missing storage/CLI RED.
+- [x] Implement using house helpers, preserving original source images and existing CLI behavior. Document exact schema/outputs/limits/current real-data status in Korean.
+- [x] Run both targets, fullPython, npm lint/test/build, legacy compatibility and whole self-review; Expected: GREEN.
+- [x] Commit `feat: freeze paired comparison evidence`.
 
 ## Final integration
 

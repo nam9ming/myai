@@ -63,7 +63,7 @@ method=rules는 rules-run-v1의 UUID 실행을 선택한다. snapshot_ref도 UUI
 
 프로필 검토자·고정 시각은 제공자의 선언이며 신원·사전 검토·실제 고정을 인증하지 않는다. profile_locked_at은 선택한 모든 실행 시작보다 엄격히 이전인 UTC 시각이다. profile_basis는 development_only/holdout_feedback/unknown 중 하나이며 initial은 development_only만 받는다. holdout_feedback이면 review.semantic_feedback_used=true·exposure_status=exposed가 필요하다. retest의 unknown/holdout_feedback은 RULE_PROFILE_BASIS_UNCLEARED 경고를 남긴다.
 
-규칙은1회 실행이므로 first_annotation과 final_annotation이 같아야 한다. first_raw/final_auto는 같은 실제 output.json을 채점한다. final_auto는 해당 방법의 자동 결과이며 규칙 실패도 정답 있는 분모에 남는다. 규칙 관측 점수는 전체/dev/holdout에 표시하고, AI 목표 M02에는 M02_REQUIRES_AI_AUTO 경고와 N/A를 반환한다. 사람 수정후는 아래 별도 뷰를 사용하며 세 방법의 짝지은 개선/악화 비교는 후속 작업이다.
+규칙은1회 실행이므로 first_annotation과 final_annotation이 같아야 한다. first_raw/final_auto는 같은 실제 output.json을 채점한다. final_auto는 해당 방법의 자동 결과이며 규칙 실패도 정답 있는 분모에 남는다. 규칙 관측 점수는 전체/dev/holdout에 표시하고, AI 목표 M02에는 M02_REQUIRES_AI_AUTO 경고와 N/A를 반환한다. 사람 수정후는 아래 별도 뷰를 사용하며 세 방법의 짝지은 개선/악화 비교는 [별도 계약](extraction-comparison.md)을 따른다.
 
 ## 사람 수정후 뷰
 
@@ -87,7 +87,7 @@ summary.human_review_time은 status=declared_only, review_count, total_duration_
 
 기존 run_id 재사용은 최초 평가가 선택한 receipt SHA와 정확히 같아야 한다. 같은 gold_ref의 다른 gold 원본은 거부하며 금표 수정에는 새 gold_version을 사용한다. 다른 저장 위치에서도 같은 ID를 다른 원본으로 바꿔 재시험 이력을 우회할 수 없다.
 
-키·AI·네트워크·DB를 호출하지 않는다. JSON8MiB·깊이100·중복 키/추가 키/잘못된 Unicode 금지. 선택·결과·독립 gold/입력·선택한 D05 전체·규칙6파일 또는 사람 검토 이미지 전체(내부 D05 포함)·실패 원본과 retest의 initial을 별도0400/0500 묶음으로 보관한다. 같은 extraction_eval_id의 다른 원본을 덮어쓰지 않는다. stdout은 요약 JSON, 상세 정답/출력/근거·검토자·프로필 내용·경로는 private 파일에만 둔다. main 병합·배포·세 방법 비교·D06 인계·실제 평가 수행은 별도다.
+키·AI·네트워크·DB를 호출하지 않는다. JSON8MiB·깊이100·중복 키/추가 키/잘못된 Unicode 금지. 선택·결과·독립 gold/입력·선택한 D05 전체·규칙6파일 또는 사람 검토 이미지 전체(내부 D05 포함)·실패 원본과 retest의 initial을 별도0400/0500 묶음으로 보관한다. 같은 extraction_eval_id의 다른 원본을 덮어쓰지 않는다. stdout은 요약 JSON, 상세 정답/출력/근거·검토자·프로필 내용·경로는 private 파일에만 둔다. 세 방법 비교는 별도 비교 이미지로 보관한다. main 병합·배포·D06 인계·실제 평가 수행은 별도다.
 
 평가 ID의 UTF-8 SHA-256을 evaluation_ref로 사용한다. 기본 저장소는 `data/private/evaluation/extractions`이며 각 묶음에 selection.json(입력 바이트 그대로)·result.json(상세 채점)·identity.json·receipt.json과 `gold/GOLD_REF/`, `runs/SNAPSHOT_REF/`, retest의 `initial/INITIAL_REF/`를 둔다. 하위 묶음의 identity/receipt·실패/부분 응답도 모두 보존한다. root identity의 artifact hash, 정확한 파일/디렉터리 집합·권한, 각 gold/선택 실행/initial 원본, 저장한 evaluated_at을 사용한 재채점 결과를 검사한다. 원래 경로 없이 검사하며 같은 입력 재사용은 원래 시각·바이트를 유지한다. 검증한 staging을 기존 배타 rename으로 설치한다. 관리자에 의한 전체 묶음 교체·삭제를 막는 WORM이나 전원 중단 내구성을 보장하지 않는다.
 
@@ -95,4 +95,4 @@ summary.human_review_time은 status=declared_only, review_count, total_duration_
 
 요약은 전체/개발/확인별 첫 raw·최종 자동의 분모·맞음·실패·누락·중복·추가·생성 수/미확정·필드별 점수, cohort의 유형/특성 분포와 부족분을 제공한다. M02는 method=ai_auto의 확인용 final_auto이며 real 선언·40/20/20 목표·문서당1버전·비노출/그룹 검토 선언·initial·확인용 정답 분모가 갖춰져야 수치를 제공한다. 미달 또는 rules/human_reviewed이면 M02는 N/A이고 관측 점수는 각 view에 남긴다. generalization_claim은 항상 false이며 선언만으로 실제 자료·독립성·일반화 성능을 인증하지 않는다.
 
-사람 방법은 앞의 별도 human_reviewed 뷰와 선언 시간 요약을 사용한다. 실제 독립 금표·사람 검토·40문서/holdout과 세 방법 개선/악화·선별 비교는 아직 수행하지 않았다.
+사람 방법은 앞의 별도 human_reviewed 뷰와 선언 시간 요약을 사용한다. 세 방법 개선/악화 도구는 별도 계약으로 연결하며, 실제 독립 금표·사람 검토·40문서/holdout 및 실제 자료의 세 방법·선별 비교는 아직 수행하지 않았다.
