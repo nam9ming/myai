@@ -126,6 +126,7 @@ def compare_evaluations(content, evaluation_root=EVALUATION_ROOT, *, compared_at
     stamp(compared_at, '$')
     results, sources = _load(value, evaluation_root, compared_at)
     cells, documents = _paired(results)
+    # manifest 경고는 세 방법에 공통이며 방법별 경고는 각 methods.m02.warnings에 보존한다.
     first = results['rules']; cohort = first['summary']
     summary = dict(protocol_version='extraction-comparison-summary-v1', data_kind=cohort['data_kind'], phase=first['phase'],
         scorer_version=first['scorer_version'], pairs=_pairs(cells),

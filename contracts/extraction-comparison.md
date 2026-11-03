@@ -42,6 +42,8 @@ summary.pairs와 summary.splits.dev/holdout은 전체·필드별 total_fields/kn
 
 summary.methods는 각 방법의 primary_view, 첫 raw/최종 자동 또는 사람 views와 splits를 포함한다. 정답 분모·맞음·실패·누락·중복·추가·결합·생성 오류/미확정·비율을 기존 평가와 같은 방식으로 합산한다. 생성 검토가 남으면 생성률 N/A를 유지한다. M02는 원래 AI 자동의 선언상 조건을 유지하고 규칙/사람은 N/A다. 비교 자체가 새 M02 목표나 실제 성능을 인증하지 않는다.
 
+최상위 holdout_warnings는 세 방법에서 같은 manifest의 그룹/노출 경고다. 방법별 노출·재시험·규칙 프로필 basis·사람 검토 basis 경고는 `summary.methods.METHOD.m02.warnings`에 원래 목록 그대로 남긴다. 관측 결과도 이 경고와 함께 해석한다.
+
 human_review_time은 status=declared_only, 문서별 review_count/total_duration_ns 및 dev/holdout 합계다. 겹치는 검토 구간을 사람별 순작업 시간으로 추정하지 않으며 재사용 검토의 기존 시간을 새 재시험 노동으로 세지 않는다. generalization_claim은 항상 false다. 방법별 노출·retest·자료 부족 경고와 원래 cohort 수/분포를 함께 보존한다.
 
 ## 실행·불변 보관

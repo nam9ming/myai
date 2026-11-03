@@ -243,3 +243,24 @@ class PairedComparisonTest(PairedComparisonFixture):
         self.assertEqual((pair['known_fields'], pair['improved'], pair['unchanged_correct']), (16, 10, 6))
         self.assertEqual(second['summary']['cohort_counts']['documents'], 1)
         self.assertEqual(second['summary']['human_review_time']['total_duration_ns'], 1_200_000_000_000)
+
+    def test_method_specific_exposure_retest_and_basis_warnings_are_preserved(self):
+        old = copy.deepcopy(self.references); self.new_evaluations()
+        for method, value in self.controls.items():
+            value.update(phase='retest', initial_ref=old[method]['evaluation_ref'])
+            value['review']['reviewed_at'] = '2020-01-01T07:00:00Z'
+        self.controls['ai_auto']['review'].update(exposure_status='exposed', semantic_feedback_used=True)
+        self.controls['rules']['policy']['profile_basis'] = 'unknown'
+        self.controls['human_reviewed']['documents'][0].update(self.make_human(uid(964), basis='unknown',
+            started='2020-01-01T06:00:00Z', finished='2020-01-01T06:10:00Z', frozen='2020-01-01T06:20:00Z'))
+        self.freeze_methods(hour=8)
+        summary = self.compare(at='2020-01-01T09:00:00Z')['result']['summary']
+        warnings = {method: summary['methods'][method]['m02']['warnings'] for method in self.controls}
+        self.assertIn('EXPOSURE_NOT_CLEARED', warnings['ai_auto'])
+        self.assertIn('RETEST_NOT_INITIAL_GENERALIZATION', warnings['ai_auto'])
+        self.assertIn('RULE_PROFILE_BASIS_UNCLEARED', warnings['rules'])
+        self.assertIn('HUMAN_REVIEW_BASIS_UNCLEARED', warnings['human_reviewed'])
+        for method, selected in self.references.items():
+            original = json.loads((self.evaluation_root / selected['evaluation_ref'] / 'receipt.json').read_bytes())['summary']
+            self.assertEqual(warnings[method], original['m02']['warnings'])
+            self.assertEqual(summary['holdout_warnings'], original['holdout_warnings'])
