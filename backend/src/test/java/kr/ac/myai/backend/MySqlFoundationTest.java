@@ -35,7 +35,7 @@ class MySqlFoundationTest {
         var tables = jdbc.queryForList("SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE()", String.class);
         assertThat(tables).contains("test_points", "place_dictionary", "documents", "document_versions", "source_checks",
                 "extraction_runs", "events", "event_revisions", "review_audits", "snapshots", "snapshot_revisions",
-                "publication_heads", "import_batches");
+                "publication_heads", "import_batches", "source_reviews");
         assertThat(flyway.migrate().migrationsExecuted).isZero();
         assertThat(jdbc.queryForObject("SELECT @@session.time_zone", String.class)).isIn("+00:00", "UTC");
         assertThat(jdbc.queryForObject("SELECT @@session.transaction_isolation", String.class)).isEqualTo("REPEATABLE-READ");

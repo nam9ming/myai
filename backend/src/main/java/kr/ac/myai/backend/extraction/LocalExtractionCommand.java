@@ -30,7 +30,7 @@ public class LocalExtractionCommand implements ApplicationRunner, ExitCodeGenera
     @Override
     public void run(ApplicationArguments args) {
         try {
-            if (context instanceof WebApplicationContext || environment.matchesProfiles("fixture", "public", "local-import", "local-publication", "local-export")) {
+            if (context instanceof WebApplicationContext || environment.matchesProfiles("fixture", "public", "local-import", "local-publication", "local-export", "local-source-review")) {
                 throw new ExtractionException("EXTRACTION_VALIDATION_ERROR", "spring.profiles.active", false);
             }
             String id = required("myai.extraction.run-id");

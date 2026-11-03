@@ -14,6 +14,7 @@ Java 21 / Spring Boot **3.5.16** / Gradle Wrapper **8.14.3** / MySQL **8.4.13**.
 - 요청 검증·공통 오류·32KiB JSON 본문 제한·개발 origin CORS.
 - [DB 설계](../docs/spec/09_DB설계와트랜잭션.md)의 13개 기초 테이블, FK·unique·검토 상태 제약, UTC·낙관적 잠금용 열과 Flyway V1.
 - `local-import` 일회성 명령은 D03/D04/D06 검토 JSON, 원문/본문 hash, Unicode 근거와 참조를 검증한다. Spring JDBC로 원자적으로 저장하며 동일 파일 재입력, append-only revision, 조건부 작업 포인터 갱신과 감사 기록을 지원한다. `draft/needs_review`·`hidden`만 저장한다.
+- `local-source-review`는 같은 D03 버전의 원문 확인·사용권 이력을 V4 `source_reviews`와 기존 `source_checks`에 원자적으로 추가한다. 최초 D03·D05·사람 인계·과거 snapshot을 보존하며 승인·공개는 운영 상태를 별도로 조회한다. [확인·사용권 안내](docs/source-review.md)를 따른다.
 - `local-publication` 일회성 명령은 승인·반려 revision, 읽기 전용 공개 JSON 미리보기, 불변 snapshot 공개·복구를 처리한다. V2 `publication_audits`에 공개 포인터 변경 이력을 남기며 충돌·실패 시 이전 공개본을 보존한다.
 - `local-export`는 이미 공개한 snapshot을 고정 UTF-8/hash 그대로 파일로 내보낸다. 파일 실패는 DB 공개 성공과 분리하고 동일 파일 재실행·충돌 보존을 지원한다. [내보내기 안내](docs/review-publication.md#snapshot-json-내보내기)를 따른다.
 - Python `draft`가 만든 `ai-draft-import-v1`을 숨김 저장한다. 미상 제목·유형을 채우지 않고 직접 승인을 차단하며, 사람 검토 다음 revision은 검토자·시각·기존 AI 출처를 유지해야 한다. [초안 연결 안내](docs/ai-review-draft.md)를 따른다.
@@ -23,7 +24,7 @@ Java 21 / Spring Boot **3.5.16** / Gradle Wrapper **8.14.3** / MySQL **8.4.13**.
 
 Python OpenAI `run`이 만든 api archive도 같은 `local-extraction`으로 등록한다. API 시도의 요청·응답·전송 상태를 함께 freeze·검증하며 Java 공개 프로세스는 AI 키를 읽거나 모델을 호출하지 않는다. [개발용 실행](../processing/README.md#openai-개발용-추출)을 따른다.
 
-실제 개발 공지 3건은 새 전용 MySQL8.4.13에서 D03 문서/버전 3개, 기존 v1 실패 3회·v2 성공 3회와 D06 `ai_draft/draft/hidden` 초안 3개를 실제 JAR로 저장했다. 개발 구역·사전 후보만 연결했으며 지역 소속은 `uncertain`, 검토자·검토 시각·장소 좌표는 null이다. 기준 지점·사전 행을 등록하거나 실제 자료를 승인·공개한 결과는 아니다. 재실행·거부·원본 보존 검증과 남은 작업은 [초안 안내](docs/ai-review-draft.md#실제-개발-자료의-저장-검증)를 따른다.
+실제 개발 공지 3건은 새 전용 MySQL8.4.13에서 D03 문서/버전 3개, 기존 v1 실패 3회·v2 성공 3회와 D06 `ai_draft/draft/hidden` 초안 3개를 실제 JAR로 저장했다. 개발 구역·사전 후보만 연결했으며 지역 소속은 `uncertain`, 검토자·검토 시각·장소 좌표는 null이다. 원문은 `use_review=pending`·`check_result=uncertain`을 유지하며 새 확인·사용권 명령으로 실제3건을 변경하지 않았다. 기준 지점·사전 행을 등록하거나 실제 자료를 승인·공개한 결과는 아니다. 재실행·거부·원본 보존 검증과 남은 작업은 [초안 안내](docs/ai-review-draft.md#실제-개발-자료의-저장-검증)를 따른다.
 
 **미구현:** 관리 UI, 운영 배포·실자료 평가. 저장 계층에는 이미 포함된 Spring JDBC를 사용한다. JPA entity/일반 CRUD와 Java 후보 판정 엔진은 추가하지 않았다. 승인·공개·복구·계산 연결·내보내기는 합성 자료와 전용 DB로 시험하며 실제 자료의 사실성·이용권한 검토를 완료한 상태는 아니다.
 
@@ -71,7 +72,7 @@ read -rs DB_PASSWORD; export DB_PASSWORD; echo
 
 기본 `public` 프로필은 DB 연결·Flyway 적용 후 기동한다. 공개 전 config는 `503 PUBLIC_DATA_NOT_READY`, 공개 후 config·상세는 고정 snapshot을 조회한다. matches는 snapshot·지점을 검증한 뒤 아래 설정의 Python을 호출한다. fixture로 자동 전환하거나 JSON seed를 넣지 않는다.
 
-스키마 생성은 Flyway만 담당하고 JPA는 `ddl-auto=validate`를 사용한다. canonical JSON은 LONGTEXT 원문과 별도 checksum으로 보존한다. ID/hash는 ASCII 대소문자를 구분한다. JDBC session·Hibernate는 UTC를 사용하고 격리 수준은 REPEATABLE READ로 설정한다. 적용된 V1·V2·V3를 수정하지 말고 변경 사항은 후속 migration으로 추가한다. 개발 DB는 `docker compose stop`으로 종료하며 볼륨을 삭제하지 않는다.
+스키마 생성은 Flyway만 담당하고 JPA는 `ddl-auto=validate`를 사용한다. canonical JSON은 LONGTEXT 원문과 별도 checksum으로 보존한다. ID/hash는 ASCII 대소문자를 구분한다. JDBC session·Hibernate는 UTC를 사용하고 격리 수준은 REPEATABLE READ로 설정한다. 적용된 V1·V2·V3·V4를 수정하지 말고 변경 사항은 후속 migration으로 추가한다. 개발 DB는 `docker compose stop`으로 종료하며 볼륨을 삭제하지 않는다.
 
 ## Python 계산 연결
 
@@ -113,6 +114,20 @@ java -jar backend/build/libs/myai-backend-0.1.0.jar \
 
 위 파일은 합성 자료이며 원문·검토 예제는 JAR에 넣지 않는다. 실제 작업본은 `data/private/`에 보관하고 해당 경로를 지정한다. HTTP 서버 없이 실행한 뒤 종료하며 결과 JSON은 stdout, 로그는 stderr에 출력한다. 같은 파일을 재입력하면 같은 batch/revision ID를 반환한다. approved/public은 거부하고 공개 데이터는 변경하지 않는다. 입력 규격, 상태 제한, 종료 코드와 원문 보존 책임은 [상세 안내](docs/reviewed-import.md)를 따른다.
 
+## 같은 원문 버전의 확인·사용권 갱신
+
+먼저 `source-import-v1`으로 D03을 등록한다. 확인·사용권 변경은 기존 metadata를 편집해 재입력하지 않고 별도 `local-source-review`로 기록한다. 다음은 운영 이력0인 합성 문서용이며 [선등록·현재 번호 조회·요청 규격](docs/source-review.md)을 따른다.
+
+```bash
+java -jar backend/build/libs/myai-backend-0.1.0.jar \
+  --spring.profiles.active=local-source-review \
+  --myai.source-review.file=backend/examples/source-review.json \
+  --myai.source-review.source-root=backend/examples \
+  --myai.source-review.actor=synthetic-reviewer
+```
+
+`source-root`는 신규 verified에만 필수다. 같은 ID·입력 바이트의 재실행은 후속 이력·원문 부재에도 최초 결과를 재사용하며 `expected_review_no`를 자동 보충하지 않는다. 권한만 변경하는 요청·실패 확인은 원문 파일 없이 기록할 수 있다. 새 제한은 과거 공개본을 자동 철회하지 않는다. SELECT 전용 preview는 V4 적용 후 `--spring.flyway.enabled=false`로 실행할 수 있으며 source-review 쓰기는 일반 쓰기 계정이 필요하다.
+
 ## 검증·빌드
 
 승인·미리보기·공개·복구 명령은 [검토 승인·공개 안내](docs/review-publication.md)를 따른다. 공개 조회는 snapshot에 고정된 지점·사건을 사용하며 최신 작업 행을 섞지 않는다. 교체된 공개본은409와 현행 ID를 반환하고, 복구하면 이전본을 다시 조회할 수 있다.
@@ -123,7 +138,7 @@ cd backend
 java -jar build/libs/myai-backend-0.1.0.jar --spring.profiles.active=fixture
 ```
 
-일반 `test`도 실제 자식 프로세스·archive 시험에 **Python3.13**이 필요하다. 프로세스와 공개 조회의 검증·오류를 시험하며 DB 없는 fixture API·import·공개 명령 검사도 유지한다. `MySqlFoundationTest`·`ReviewedImportMySqlTest`·`PublicationMySqlTest`·`CalculationMySqlTest`·`ExtractionRunMySqlTest`는 전용 MySQL 테스트 DB와 `MYAI_MYSQL_TESTS=true`일 때 실행한다. 운영·공유 DB에서는 실행하지 않는다. CI는 매 실행 분리된 `myai_test` DB를 준비해 저장·공개·복구·실제 조회와 Python 계산을 검증한다.
+일반 `test`도 실제 자식 프로세스·archive 시험에 **Python3.13**이 필요하다. 프로세스와 공개 조회의 검증·오류를 시험하며 DB 없는 fixture API·import·공개 명령 검사도 유지한다. `MySqlFoundationTest`·`ReviewedImportMySqlTest`·`PublicationMySqlTest`·`CalculationMySqlTest`·`ExtractionRunMySqlTest`·`HumanHandoffMySqlTest`·`SourceReviewMySqlTest`는 전용 MySQL 테스트 DB와 `MYAI_MYSQL_TESTS=true`일 때 실행한다. 운영·공유 DB에서는 실행하지 않는다. CI는 매 실행 분리된 `myai_test` DB를 준비해 저장·공개·복구·실제 조회와 Python 계산을 검증한다.
 
 `MYAI_MYSQL_TESTS=true`일 때는 외부 DB 상태를 캐시하지 않고 매번 시험을 실행한다. 검토 입력·사실 응답 예제와 실제 호출하는 Python 소스·계산 입력 예제도 Gradle 시험 입력에 포함한다.
 

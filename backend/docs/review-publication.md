@@ -31,7 +31,20 @@ java -jar backend/build/libs/myai-backend-0.1.0.jar \
 
 명령은 HTTP 서버 없이 한 번 실행하고 종료한다. 결과 JSON은 stdout, 로그는 stderr에 출력한다. `result`의 `action`, `event_id`, `revision_id`, `snapshot_id`, `checksum`, `head_version` 중 해당 작업에 필요한 값만 채워진다. preview는 `result.preview`에 공개 예정 내용을 반환한다. 이때 ID·생성 시각·checksum은 미리보기용이며 실제 공개 결과와 구분한다. 성공은 종료 코드 `0`, 입력 오류·미등록 ID는 `2`, 버전 충돌은 `3`, DB 접근 실패는 `4`다. 예상하지 못한 오류 또는 Spring/DB 초기 기동 실패는 `1`이며 기동 실패에는 결과 JSON이 없을 수 있다. 오류 응답에는 원문·SQL·비밀값·절대 경로를 담지 않는다.
 
-`local-import`, `local-publication`, `local-export`는 하나씩 활성화한다. 혼합하면 작업을 거부한다. 별도 가입·복잡한 역할 체계는 만들지 않았으며 로컬 실행 권한을 가진 단일 관리자가 운영하는 기존 S10 가정을 따른다. actor는 감사용 팀원 식별자이고 인증 토큰이 아니다.
+preview는 원본·운영 이력을 SELECT와 공유 잠금으로 재확인하며 DB에 기록하지 않는다. 쓰기 계정으로 V4까지 먼저 적용한 DB에서 SELECT 전용 계정을 사용할 때는 Flyway를 비활성화한다. `data/private/preview.json`은 publish 작업본의 action을 preview로 바꾸고 실제 revision/예상 버전을 넣어 준비한다.
+
+```bash
+java -jar backend/build/libs/myai-backend-0.1.0.jar \
+  --spring.profiles.active=local-publication \
+  --spring.flyway.enabled=false \
+  --myai.publication.file=data/private/preview.json \
+  --myai.publication.source-root="$SOURCE_ROOT" \
+  --myai.publication.actor=synthetic-reviewer
+```
+
+원문·D05·사람 인계 보관본의 읽기 권한은 그대로 필요하며 승인·공개 쓰기에는 일반 쓰기 계정을 사용한다. 원문 확인·사용권 갱신 자체는 [local-source-review](source-review.md)로 별도 기록한다.
+
+`local-import`, `local-extraction`, `local-source-review`, `local-publication`, `local-export`는 하나씩 활성화한다. 혼합하면 작업을 거부한다. 별도 가입·복잡한 역할 체계는 만들지 않았으며 로컬 실행 권한을 가진 단일 관리자가 운영하는 기존 S10 가정을 따른다. actor는 감사용 팀원 식별자이고 인증 토큰이 아니다.
 
 ## 명령 파일 규격
 
@@ -53,6 +66,8 @@ ID는 소문자 UUID이며 `evidence_ids`는 저장본에 있는 근거 ID 목�
 
 승인 때 원문/본문 hash, code point 인용, FieldValue·시간·좌표·참조를 다시 검사한다. 원문의 사용권 검토는 allowed여야 하고 성공 확인 기록이 필요하다. 수집·확인·장소 검토·사람 수정 시각은 미래일 수 없다. 날짜·위치 미상, 근거가 있는 빈 목록, null과 소수 정밀도는 보존한다. 인용의 실제 의미·공식성·이용권한 판단은 사람이 수행한다. 이 명령은 외부 URL이나 AI에 접근하지 않는다.
 
+확인·사용권은 최초 D03과 [후속 운영 이력](source-review.md)을 합친 현재 상태로 검사한다. 원본 metadata·D05·사람 인계는 그대로 대조하며 일반 import 입력을 운영 metadata로 바꾸지 않는다. 최신 실패는 과거 성공을 지우지 않고 기존 최신성 판정도 유지한다. 같은 공개의 여러 사건이 같은 문서 버전을 쓰면 같은 조회 상태를 재사용하고, 쓰기 직전 원본·운영 번호/hash를 다시 확인한다.
+
 publish는 승인된 현행 revision의 public intent와 자료 종류·구역·규칙/사전 버전을 확인한다. 승인 후 새 작업 revision이 생겼다면 이전 승인을 그대로 공개할 수 없다. 사건 목록은 빈 배열도 허용하며 이 경우 0건 snapshot을 만든다.
 
 `area`는 `{area_id,name,description}`이다. `points`는 동일 구역의 활성 시험 지점 정확히5개이며 예제의 D01 필드를 모두 포함한다. verified 상태·좌표 근거·검토자/시각·사전 버전이 필요하다. 좌표는 V1 DB 열에 맞춰 소수점 이하 최대7자리로 받으며 조용히 반올림하지 않는다. 새 지점은 version=1, 기존 지점의 변경은 다음 version으로만 허용한다. 같은 버전이면 전체 검토 metadata도 같아야 한다. 과거 snapshot의 지점 정보는 이후 지점 변경으로 바뀌지 않는다.
@@ -62,6 +77,8 @@ publish는 승인된 현행 revision의 public intent와 자료 종류·구역·
 current에서는 case·기준일·reference/cutoff·history_fidelity를 모두 null로 둔다. replay는 등록할 case UUID와 해당 문맥을 모두 지정한다. `knowledge_cutoff <= reference_instant <= 현재시각`이며 reference의 KST 날짜가 anchor_date와 같아야 한다.
 
 verified_snapshot에는 cutoff 이전 수집·성공 확인 기록이 필요하다. reconstructed에서는 당시 수집해 둔 원문을 현재 검토·구조화한 경우처럼 과거 성공 확인이 없는 상태도 표현한다. **두 모드 모두 해당 원문 버전의 collected_at이 cutoff 이하여야 한다.** 게시일만으로 현재 수집본이 당시에도 같은 내용이었다고 단정하지 않는다. cutoff 이후 수집본은 별도 역사 근거 규격을 마련하기 전까지 거부한다.
+
+새 replay도 현재 사용권 allowed를 요구한다. `checks`는 checked_at이 cutoff 이하여야 하며 추가 운영 확인은 서버 recorded_at도 cutoff 이하여야 한다. 나중 입력한 과거 확인을 당시 verified_snapshot의 성공 근거로 소급하지 않는다.
 
 snapshot의 출처에는 당시 cutoff까지의 `checks`·`last_verified_at`과 현재 확인 상태인 `current_*` 필드를 분리해 보존한다. 과거 자료가 당시 확인되지 않았다면 역사상 확인 시각은 null이다. 현재 원문 확인 시각으로 이를 대신하지 않는다. 24시간 경과와 후보 판정은 이후 Python 연결 경로에서 처리한다.
 
@@ -74,6 +91,8 @@ canonical JSON은 UTF-8 원문과 별도 SHA-256으로 저장한다. checksum은
 rollback은 같은 채널에서 실제 공개했던 snapshot인지, canonical checksum과 저장 문맥이 맞는지 확인한다. 원문 파일이나 계산기를 호출하지 않고 공개 포인터와 감사 기록만 바꾼다. DB의 최신 지점 행을 되돌리는 작업이 아니며 복구 시 기준은 snapshot 안에 고정된 지점·사건이다. DB 스키마 복구와도 구분한다.
 
 공개 API의 config·상세는 DB snapshot을 조회한다. matches는 문맥·지점 검증 후 [설정된 Python](../README.md#python-계산-연결)을 호출한다. 관리 UI·운영 서버 배포·실자료 검수는 미완료다. DB 공개 포인터 전환이나 JSON 파일 저장을 운영 서비스 배포 완료로 표현하지 않는다.
+
+나중의 원문 확인·사용권 이력은 이미 공개한 canonical snapshot·export·rollback 바이트에 덧씌우지 않는다. 새 restricted가 과거 공개본을 자동 철회하지 않는다.
 
 공개 포인터가 바뀌면 이전 공개본의 직접 조회는409다. rollback으로 다시 선택한 공개본은 즉시 조회 가능하며, 지점도 해당 snapshot의 고정 값을 사용한다.
 
@@ -111,4 +130,4 @@ java -jar backend/build/libs/myai-backend-0.1.0.jar \
 
 오류 JSON·실행 결과를 운영 기록으로 보관한다. **파일 저장 실패는 이전 DB 공개 성공을 취소하지 않는다.** 실패 시 파일 유무를 추정하지 말고 같은 ID로 재실행한다. 이미 같은 파일이 완성되었다면 재사용한다. 공개 조회의 기준은 계속 DB snapshot이다. 파일 복사·웹 서버 연결·운영 공개 전환은 별도 배포 작업이다.
 
-`local-import`, `local-publication`, `local-export`는 하나씩 실행한다. 혼합 프로필은 각 명령이 작업 전에 거부한다. export의 웹 서버 강제 설정은 서버 시작 전 초기화 단계에서 거부하며 종료2·오류 JSON 한 건을 반환한다. DB·출력 파일은 변경하지 않는다. 잘못된 혼합 실행에서는 각 명령의 오류 JSON이 나올 수 있다.
+`local-import`, `local-extraction`, `local-source-review`, `local-publication`, `local-export`는 하나씩 실행한다. 혼합 프로필은 각 명령이 작업 전에 거부한다. export의 웹 서버 강제 설정은 서버 시작 전 초기화 단계에서 거부하며 종료2·오류 JSON 한 건을 반환한다. DB·출력 파일은 변경하지 않는다. 잘못된 혼합 실행에서는 각 명령의 오류 JSON이 나올 수 있다.

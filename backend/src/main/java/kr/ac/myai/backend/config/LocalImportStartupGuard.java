@@ -9,7 +9,7 @@ public class LocalImportStartupGuard implements ApplicationContextInitializer<Co
     public void initialize(ConfigurableApplicationContext context) {
         var environment = context.getEnvironment();
         if (!environment.matchesProfiles("local-import")) return;
-        if (environment.matchesProfiles("fixture", "public", "local-publication", "local-export", "local-extraction")) throw new ModeException("spring.profiles.active");
+        if (environment.matchesProfiles("fixture", "public", "local-publication", "local-export", "local-extraction", "local-source-review")) throw new ModeException("spring.profiles.active");
         if (context instanceof WebApplicationContext || !environment.getProperty("spring.main.web-application-type", "none").equalsIgnoreCase("none")) {
             throw new ModeException("spring.main.web-application-type");
         }

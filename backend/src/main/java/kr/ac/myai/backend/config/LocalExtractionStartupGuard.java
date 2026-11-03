@@ -9,7 +9,7 @@ public class LocalExtractionStartupGuard implements ApplicationContextInitialize
     public void initialize(ConfigurableApplicationContext context) {
         var environment = context.getEnvironment();
         if (!environment.matchesProfiles("local-extraction")) return;
-        if (environment.matchesProfiles("fixture", "public", "local-import", "local-publication", "local-export")) throw new ModeException("spring.profiles.active");
+        if (environment.matchesProfiles("fixture", "public", "local-import", "local-publication", "local-export", "local-source-review")) throw new ModeException("spring.profiles.active");
         if (context instanceof WebApplicationContext || !environment.getProperty("spring.main.web-application-type", "none").equalsIgnoreCase("none")) {
             throw new ModeException("spring.main.web-application-type");
         }

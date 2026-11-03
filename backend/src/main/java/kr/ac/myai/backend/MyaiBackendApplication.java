@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import kr.ac.myai.backend.config.LocalExportStartupGuard;
 import kr.ac.myai.backend.config.LocalExtractionStartupGuard;
 import kr.ac.myai.backend.config.LocalImportStartupGuard;
+import kr.ac.myai.backend.config.LocalSourceReviewStartupGuard;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.event.ApplicationEnvironmentPreparedEvent;
@@ -23,6 +24,9 @@ public class MyaiBackendApplication {
         var application = new SpringApplication(MyaiBackendApplication.class);
         application.addListeners((ApplicationListener<ApplicationEnvironmentPreparedEvent>) event -> environment.set(event.getEnvironment()));
         try { context = application.run(args); }
+        catch (LocalSourceReviewStartupGuard.ModeException ex) {
+            fail("SOURCE_REVIEW_VALIDATION_ERROR", ex.getMessage(), ex.field(), false, 2); return;
+        }
         catch (LocalImportStartupGuard.ModeException ex) {
             fail("IMPORT_VALIDATION_ERROR", ex.getMessage(), ex.field(), false, 2); return;
         }
@@ -33,8 +37,9 @@ public class MyaiBackendApplication {
             fail("EXTRACTION_VALIDATION_ERROR", ex.getMessage(), ex.field(), false, 2); return;
         }
         catch (RuntimeException ex) {
-            if (environment.get() == null || !environment.get().matchesProfiles("local-import", "local-extraction")) throw ex;
+            if (environment.get() == null || !environment.get().matchesProfiles("local-import", "local-extraction", "local-source-review")) throw ex;
             boolean importing = environment.get().matchesProfiles("local-import");
+            boolean sourceReview = environment.get().matchesProfiles("local-source-review");
             boolean database = false, retryable = false;
             for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
                 if (cause instanceof SQLException sql) {
@@ -43,13 +48,14 @@ public class MyaiBackendApplication {
                     retryable |= connection;
                 }
             }
-            String prefix = importing ? "IMPORT_" : "EXTRACTION_";
+            String prefix = sourceReview ? "SOURCE_REVIEW_" : importing ? "IMPORT_" : "EXTRACTION_";
             fail(prefix + (database ? "DATABASE_UNAVAILABLE" : "INTERNAL_ERROR"),
-                    importing ? "import 명령을 시작하지 못했습니다. DB·실행 설정을 확인해 주세요."
+                    sourceReview ? "원문 검토 명령을 시작하지 못했습니다. DB·실행 설정을 확인해 주세요."
+                            : importing ? "import 명령을 시작하지 못했습니다. DB·실행 설정을 확인해 주세요."
                             : "AI 실행 기록 명령을 시작하지 못했습니다. DB·실행 설정을 확인해 주세요.", null, retryable, database ? 4 : 1);
             return;
         }
-        if (context.getEnvironment().matchesProfiles("local-import", "local-publication", "local-export", "local-extraction")) {
+        if (context.getEnvironment().matchesProfiles("local-import", "local-publication", "local-export", "local-extraction", "local-source-review")) {
             System.exit(SpringApplication.exit(context));
         }
     }

@@ -49,6 +49,8 @@ python3.13 -m venv .venv
 
 Java D05 등록은 [D03/D05 연결 안내](../backend/docs/extraction-run-import.md)를 따른다. 원문을 먼저 등록하고 같은 전체 블록·전처리 버전의 AI 입력을 사용한다.
 
+같은 D03 버전의 원문 확인·사용권 변경은 Java [local-source-review](../backend/docs/source-review.md)로 별도 기록한다. 최초 source JSON·D05·사람 인계 이미지는 유지하며 추출/초안·사람 검토의 전체 원본 대조에 운영 metadata를 끼워 넣지 않는다. 확인만 갱신하려고 AI를 다시 실행하지 않는다. 승인·공개는 현재 권한·확인 이력을 사용하고 replay는 추가 확인의 checked_at과 recorded_at을 모두 cutoff와 대조한다. 이미 공개한 snapshot·계산 입력·export·rollback은 바꾸지 않는다. 이번 합성 검증에서 실제3건의 pending/uncertain 상태·AI 원본·키는 변경하지 않았다.
+
 등록 시 `freeze`가 원래 archive와 분리한 읽기 전용 보관본을 만든다. POSIX 권한·hard link·원자적 디렉터리 rename 지원과 추가 보관 공간이 필요하며 DB는 보관본의 안정된 경로를 참조한다. 파일은0400, 실행 디렉터리는0500이다.
 
 ## AI 수동 원출력 기록
