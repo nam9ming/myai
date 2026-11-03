@@ -39,7 +39,7 @@ public class MyaiBackendApplication {
             for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
                 if (cause instanceof SQLException sql) {
                     boolean connection = sql.getSQLState() != null && sql.getSQLState().startsWith("08");
-                    database |= connection || sql.getErrorCode() == 1045 || sql.getErrorCode() == 1049;
+                    database |= connection || sql.getErrorCode() == 1044 || sql.getErrorCode() == 1045 || sql.getErrorCode() == 1049;
                     retryable |= connection;
                 }
             }

@@ -36,6 +36,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CyclicBarrier;
@@ -557,6 +558,74 @@ class HumanHandoffMySqlTest {
         assertThat(counts()).isEqualTo(before);
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"invented-citation", "uncited", "false-before", "missing-change", "drop-history", "rewrite-history"})
+    void firstHumanHandoffAttachmentRejectsInvalidAuditAndPreservesState(String invalid) throws Exception {
+        var fixture = fixture(false, output -> { });
+        var initial = importHumanOrigin(fixture);
+        var before = counts();
+        conflict(() -> manualUpdate(fixture, initial.revisionIds().getFirst(), next -> attachFirstHandoff(next, fixture), next -> {
+            var records = (com.fasterxml.jackson.databind.node.ArrayNode) next.path("revision").path("human_overrides");
+            switch (invalid) {
+                case "invented-citation" -> ((ObjectNode) records.get(records.size() - 1)).putArray("evidence_ids").add("invented-citation");
+                case "uncited" -> ((ObjectNode) records.get(records.size() - 1)).putArray("evidence_ids");
+                case "false-before" -> ((ObjectNode) records.get(1)).put("before", "fabricated-before");
+                case "missing-change" -> records.remove(records.size() - 1);
+                case "drop-history" -> records.remove(0);
+                case "rewrite-history" -> ((ObjectNode) records.get(0)).put("reason", "rewritten-history");
+                default -> throw new AssertionError(invalid);
+            }
+        }));
+        assertThat(counts()).isEqualTo(before);
+        assertThat(jdbc.queryForObject("SELECT current_review_revision_id FROM events WHERE event_id=?", String.class, fixture.eventId()))
+                .isEqualTo(initial.revisionIds().getFirst());
+    }
+
+    @Test
+    void firstHumanHandoffAttachmentAcceptsActualAuditAndCanBeApproved() throws Exception {
+        var fixture = fixture(false, output -> { });
+        var initial = importHumanOrigin(fixture);
+        var original = payload(initial.revisionIds().getFirst());
+        var result = manualUpdate(fixture, initial.revisionIds().getFirst(), next -> attachFirstHandoff(next, fixture));
+        var current = payload(result.revisionIds().getFirst());
+        assertThat(current.path("revision").path("human_overrides").get(0)).isEqualTo(original.path("revision").path("human_overrides").get(0));
+        assertThat(current.path("human_handoffs")).hasSize(1);
+        var approved = publication.execute(decision(fixture, "approve", 2), root, "synthetic-approver");
+        assertThat(payload(approved.revisionId()).path("revision").path("review_status").asText()).isEqualTo("approved");
+        assertThat(payload(approved.revisionId()).path("revision").path("human_overrides"))
+                .isEqualTo(current.path("revision").path("human_overrides"));
+    }
+
+    private ReviewedImportService.ImportResult importHumanOrigin(Fixture fixture) throws Exception {
+        var envelope = fixture.source().deepCopy(); envelope.put("schema_version", "reviewed-import-v1");
+        envelope.set("evidence", fixture.projection().path("evidence"));
+        ObjectNode event = fixture.projection().path("events").get(0).deepCopy();
+        ObjectNode revision = event.remove("facts").deepCopy();
+        event.put("expected_revision_no", 0);
+        revision.put("revision_id", UUID.randomUUID().toString()).put("revision_no", 1).put("origin", "human")
+                .put("review_status", "needs_review").put("publication_intent", "hidden")
+                .put("reviewer_id", "synthetic-source-reviewer").put("reviewed_at", Instant.now().truncatedTo(ChronoUnit.MICROS).toString());
+        revision.putArray("originating_run_ids");
+        var history = revision.putArray("human_overrides").addObject().put("field_path", "title")
+                .put("before", "합성 과거 제목").put("reason", "합성 외부 검토 선언")
+                .put("reviewer", "synthetic-source-reviewer").put("time", revision.path("reviewed_at").asText());
+        history.set("after", revision.path("title"));
+        var citations = history.putArray("evidence_ids");
+        fixture.projection().path("evidence").forEach(item -> citations.add(item.path("evidence_id")));
+        event.set("revision", revision); envelope.putArray("events").add(event);
+        Path file = Files.writeString(root.resolve(UUID.randomUUID() + "-human.json"), envelope.toString());
+        return importer.importBatch(reader.read(file, root), "synthetic-source-reviewer");
+    }
+
+    private void attachFirstHandoff(ObjectNode payload, Fixture fixture) {
+        var revision = (ObjectNode) payload.path("revision");
+        revision.put("origin", "ai_reviewed").put("title", "합성 수동 수정 제목");
+        revision.putArray("originating_run_ids").add(fixture.run());
+        payload.putArray("human_handoffs").addObject().put("directory", fixture.image().toString())
+                .put("handoff_ref", fixture.request().path("handoff_ref").asText())
+                .put("receipt_sha256", fixture.request().path("receipt_sha256").asText());
+    }
+
     private Fixture fixture(boolean failed, Consumer<ObjectNode> edit) throws Exception {
         var helpers = fixtures();
         var source = helpers.source(); helpers.registerSource(source);
@@ -688,11 +757,16 @@ class HumanHandoffMySqlTest {
     }
 
     private ReviewedImportService.ImportResult manualUpdate(Fixture fixture, String previousId, Consumer<ObjectNode> edit) throws Exception {
+        return manualUpdate(fixture, previousId, edit, next -> { });
+    }
+
+    private ReviewedImportService.ImportResult manualUpdate(Fixture fixture, String previousId, Consumer<ObjectNode> edit,
+                                                            Consumer<ObjectNode> auditEdit) throws Exception {
         JsonNode previous = payload(previousId); ObjectNode next = previous.deepCopy(); edit.accept(next);
         var revision = (ObjectNode) next.path("revision");
         revision.put("revision_id", UUID.randomUUID().toString()).put("revision_no", previous.path("revision").path("revision_no").asLong() + 1)
                 .put("review_status", "needs_review").put("publication_intent", "hidden").put("reviewer_id", "synthetic-editor")
-                .put("reviewed_at", Instant.now().toString());
+                .put("reviewed_at", Instant.now().truncatedTo(ChronoUnit.MICROS).toString());
         var evidenceIds = new java.util.LinkedHashSet<String>();
         for (var p : List.of(previous, next)) p.path("evidence").forEach(e -> evidenceIds.add(e.path("evidence_id").asText()));
         for (String field : ("title types occurrences locations applicability exceptions route_names stop_names directions lifecycle lifecycle_evidence_ids "
@@ -705,6 +779,7 @@ class HumanHandoffMySqlTest {
             record.set("before", before.deepCopy()); record.set("after", after.deepCopy());
             var citations = record.putArray("evidence_ids"); evidenceIds.forEach(citations::add);
         }
+        auditEdit.accept(next);
         var envelope = fixture.source().deepCopy(); envelope.put("schema_version", "reviewed-import-v1");
         envelope.set("evidence", next.path("evidence")); envelope.set("human_handoffs", next.path("human_handoffs"));
         var event = (ObjectNode) next.path("event"); event.put("expected_revision_no", previous.path("revision").path("revision_no").asLong());

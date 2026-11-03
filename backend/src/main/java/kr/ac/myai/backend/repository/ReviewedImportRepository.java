@@ -154,12 +154,13 @@ public class ReviewedImportRepository {
                 require(revision.path("origin").asText().equals("ai_reviewed") && event.reviewerId() != null
                         && event.reviewedAt() != null, "events.revision.reviewer_id");
             }
-            if (action.equals("import") && !previous.path("revision").path("originating_run_ids").isEmpty()) {
+            boolean hadRuns = !previous.path("revision").path("originating_run_ids").isEmpty();
+            if (action.equals("import") && hadRuns) {
                 require(event.originatingRunIds().containsAll(strings(previous.path("revision").path("originating_run_ids")))
                         && event.sourceVersionIds().containsAll(strings(previous.path("revision").path("source_version_ids"))),
                         "events.revision.originating_run_ids");
-                HumanReviewChanges.validate(previous, next, generatedHandoff);
             }
+            if (action.equals("import") && (hadRuns || next.has("human_handoffs"))) HumanReviewChanges.validate(previous, next, generatedHandoff);
             lockVersion = ((Number) state.get("lock_version")).longValue();
         }
         require(lockVersion < Long.MAX_VALUE, "events.lock_version");

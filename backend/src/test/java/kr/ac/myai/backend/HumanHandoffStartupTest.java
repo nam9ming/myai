@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import kr.ac.myai.backend.config.LocalImportStartupGuard;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -23,6 +24,36 @@ import static org.assertj.core.api.Assertions.*;
 class HumanHandoffStartupTest {
     @TempDir Path root;
     final ObjectMapper mapper = new ObjectMapper();
+
+    @ParameterizedTest
+    @ValueSource(strings = {"local-import", "local-extraction"})
+    @EnabledIfEnvironmentVariable(named = "MYAI_MYSQL_TESTS", matches = "true")
+    void databaseAccessDeniedReturnsNonRetryableDatabaseErrorFromActualJar(String profile) throws Exception {
+        String configured = System.getenv("DB_URL");
+        assertThat(configured != null && configured.startsWith("jdbc:mysql://")).isTrue();
+        var address = java.net.URI.create(configured.substring("jdbc:".length()));
+        assertThat(address.getRawUserInfo() == null).isTrue();
+        String unavailable = "myai_forbidden_" + UUID.randomUUID().toString().replace("-", "");
+        String url = "jdbc:mysql://" + address.getRawAuthority() + "/" + unavailable
+                + "?connectTimeout=500&socketTimeout=500&createDatabaseIfNotExist=false";
+        Path stderr = root.resolve("denied.stderr");
+        var process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                "-jar", "build/libs/myai-backend-0.1.0.jar", "--spring.profiles.active=" + profile,
+                "--spring.datasource.url=" + url, "--spring.datasource.hikari.connection-timeout=1000")
+                .redirectError(stderr.toFile()).start();
+        boolean ended = process.waitFor(20, TimeUnit.SECONDS);
+        if (!ended) process.destroyForcibly();
+        assertThat(ended).isTrue();
+        String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        assertThat(java.nio.file.Files.readString(stderr)).contains("1044");
+        assertThat(process.exitValue()).isEqualTo(4);
+        assertThat(stdout.lines().count()).isEqualTo(1);
+        var error = mapper.readTree(stdout).path("error");
+        assertThat(error.path("code").asText()).isEqualTo(profile.equals("local-import") ? "IMPORT_DATABASE_UNAVAILABLE" : "EXTRACTION_DATABASE_UNAVAILABLE");
+        assertThat(error.path("retryable").asBoolean()).isFalse();
+        assertThat(stdout.contains(System.getenv("DB_PASSWORD"))).isFalse();
+        assertThat(stdout.contains(url)).isFalse();
+    }
 
     @Test
     void coldDatabaseFailureReturnsOneSafeImportJsonFromActualJar() throws Exception {
