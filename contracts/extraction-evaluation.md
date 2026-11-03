@@ -46,6 +46,10 @@ gold 비기재/모호 셀에 알려진 값을 넣거나 대응한 미상 occurre
 
 이번 AI 실행 연결은 method=ai_auto와 기존 api D05의 구조 재시도 정책만 지원한다. retry_policy_version=`api-structure-retry-v1`. provider/model_label/prompt_version/schema_version은 선택한 모든 실행과 일치해야 한다. preprocessing_version은 실행별 원본을 보존한다. 모든 gold 버전을 한 번씩, 버전마다 한 D05를 명시한다. 성공 실행을 자동 선택하지 않는다. 첫 raw와 마지막 자동 결과를 모두 기록하고 기본 view는 final_auto다. manual_import를 AI 자동 성능으로 표시하지 않는다.
 
-phase=initial은 initial_ref=null, gold 동결<실행 시작≤종료≤검토≤평가≤보관 시각을 검사하며 의미 정답 피드백 사용을 허용하지 않는다. retest는 같은 cohort/정규화 지침·방법의 동결 initial을 참조한다. gold 자체 수정은 이전/새 버전과 점수 차이를 보존하며 최초 기록을 덮어쓰지 않는다. retest나 노출/불확실 자료는 새 일반화·blind holdout 증거가 아니다. review의 신원/노출 상태도 제공자의 선언이다.
+phase=initial은 initial_ref=null, gold 동결<실행 시작≤종료≤검토≤평가≤보관 시각과 실행 종료≤D05 기록≤평가를 검사하며 의미 정답 피드백 사용을 허용하지 않는다. retest는 같은 cohort 입력/manifest·정규화 지침·방법의 동결 initial을 참조한다. gold 자체 수정은 이전/새 버전과 점수 차이를 보존하며 최초 기록을 덮어쓰지 않는다. 모델/프롬프트 정책 변경은 허용하되 policy_changed로 보고한다. 새 run_id는 initial 동결 이후 시작해야 하며 금표 수정만 재채점할 때는 이전 run_id를 유지할 수 있다. retest를 initial_ref로 다시 참조할 수 없다. retest나 노출/불확실 자료는 새 일반화·blind holdout 증거가 아니다. review의 신원/노출 상태도 제공자의 선언이다.
 
 키·AI·네트워크·DB를 호출하지 않는다. JSON8MiB·깊이100·중복 키/추가 키/잘못된 Unicode 금지. 선택·결과·독립 gold/입력·D05 전체 요청/응답/실패 원본과 retest의 initial을 별도0400/0500 묶음으로 보관한다. 같은 extraction_eval_id의 다른 원본을 덮어쓰지 않는다. stdout은 요약 JSON, 상세 정답/출력/근거·검토자·경로는 private 파일에만 둔다. main 병합·배포·단순 규칙 기준선·사람 수정값 연결·실제 평가 수행은 별도다.
+
+평가 ID의 UTF-8 SHA-256을 evaluation_ref로 사용한다. 기본 저장소는 `data/private/evaluation/extractions`이며 각 묶음에 selection.json(입력 바이트 그대로)·result.json(상세 채점)·identity.json·receipt.json과 `gold/GOLD_REF/`, `runs/SNAPSHOT_REF/`, retest의 `initial/INITIAL_REF/`를 둔다. 하위 묶음의 identity/receipt·실패/부분 응답도 모두 보존한다. root identity의 artifact hash, 정확한 파일/디렉터리 집합·권한, 각 gold/D05/initial 원본, 저장한 evaluated_at을 사용한 재채점 결과를 검사한다. 원래 경로 없이 검사하며 같은 입력 재사용은 원래 시각·바이트를 유지한다. 검증한 staging을 기존 배타 rename으로 설치한다. 관리자에 의한 전체 묶음 교체·삭제를 막는 WORM이나 전원 중단 내구성을 보장하지 않는다.
+
+요약은 전체/개발/확인별 첫 raw·최종 자동의 분모·맞음·실패·누락·중복·추가·생성 수/미확정·필드별 점수, cohort의 유형/특성 분포와 부족분을 제공한다. M02 기본값은 확인용 final_auto이며 real 선언·40/20/20 목표·문서당1버전·비노출/그룹 검토 선언·initial·확인용 정답 분모가 갖춰져야 수치를 제공한다. 미달이면 M02는 N/A이고 관측 점수는 각 view에 남긴다. generalization_claim은 항상 false이며 선언만으로 실제 자료·독립성·일반화 성능을 인증하지 않는다.

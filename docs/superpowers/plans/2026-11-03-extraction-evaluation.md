@@ -41,22 +41,26 @@
 - [x] 기존 FieldValue/근거 검증과 판정 지침을 재사용해 최소 집합/대응/관계 채점 구현. Expected: 대상 시험 GREEN.
 - [x] 전체 Python·npm lint/test/build 성공 후 feat: score eight extraction fields 커밋.
 
-### Task 2: 실행·정답 연결과 최초/재시험
+### Task 2: 실행·정답 연결·최초/재시험·불변 보관·CLI
 
 **Files:** Create processing/evaluation/records.py, processing/tests/test_evaluation_records.py.
 
 **Interfaces:** `evaluate_record(content:bytes,gold_root,run_root,initial_root)->dict` loads verified sources and returns result/artifact sources for storage. Input extraction-evaluation-v1 fixes extraction_eval_id/gold_ref/gold_receipt_sha256/method/phase/initial_ref/review/documents. Each document selects version/run/snapshot_ref/receipt_sha256 and separate first/final annotations. No automatic successful-run selection.
 
-- [ ] 합성 실제 API archive(전송 fake, 실제 키/네트워크 없음)로 raw실패/final성공·문서/버전/hash·api전용·시각·initial/retest/금표 변경·비노출 선언·정답 없는 분모 시험 RED.
-- [ ] 원본 재검증·exact coverage·같은 입력·gold-before-run·phase/오염 기록·view별 전체/분할 요약 구현. Expected: 최초/최종 결과와 실패/누락/중복/생성 수 보존, synthetic은 실제 M02 성과로 표시하지 않음.
-- [ ] 전체 회귀 성공 후 feat: bind extraction evaluation records 커밋.
+- [x] 합성 실제 API archive(전송 fake, 실제 키/네트워크 없음)로 raw실패/final성공·문서/버전/hash·api전용·시각·initial/retest/금표 변경·비노출 선언·정답 없는 분모 시험 RED.
+- [x] 원본 재검증·exact coverage·같은 입력·gold-before-run·phase/오염 기록·view별 전체/분할 요약 구현. Expected: 최초/최종 결과와 실패/누락/중복/생성 수 보존, synthetic은 실제 M02 성과로 표시하지 않음.
+- [x] 전체 회귀 성공 후 feat: bind extraction evaluation records 커밋.
 
-### Task 3: 평가 묶음 불변 보관·CLI
+#### 평가 묶음 불변 보관·CLI (Task 2 통합 검증)
 
 **Files:** Create processing/evaluation/evaluation_storage.py, processing/tests/test_evaluation_storage.py. Modify processing/evaluation/__main__.py, processing/README.md, processing/TASK.md, contracts/README.md, docs/spec/03_데이터와AI.md.
 
 **Interfaces:** `freeze_evaluation(input_path,root,gold_root,run_root,initial_root)->dict`; `verify_evaluation(evaluation_ref,root)->dict`; CLI check-evaluation/freeze-evaluation/verify-evaluation. eval_ref is SHA256(extraction_eval_id UTF-8).
 
-- [ ] 바이트 보존·원래 경로 부재·동일/충돌 동시 실행·재시험의 최초 기록 보존·권한/파일/symlink/손상·I/O cleanup·실제 CLI safe JSON/exit tests RED.
-- [ ] selection·result·gold/선택한 D05 전체 원본·retest의 initial 묶음을 복사·재검증한 뒤 배타 설치. Expected: 원본 불변, 같은 ID 다른 입력 충돌, 재사용은 고정 시각 유지, 무관 파일 보존.
-- [ ] 전체 자체 리뷰·한 번 fresh 전체 리뷰·유효 지적 수정·정확한 head CI/자동 리뷰 지적0 확인 후 feat: freeze extraction evaluations 커밋/PR. develop만 병합, PR20 설명/통합 검증 갱신.
+- [x] 바이트 보존·원래 경로 부재·동일/충돌 동시 실행·재시험의 최초 기록 보존·권한/파일/symlink/손상·I/O cleanup·실제 CLI safe JSON/exit tests RED.
+- [x] selection·result·gold/선택한 D05 전체 원본·retest의 initial 묶음을 복사·재검증한 뒤 배타 설치. Expected: 원본 불변, 같은 ID 다른 입력 충돌, 재사용은 고정 시각 유지, 무관 파일 보존.
+- [x] 전체 자체 리뷰·회귀 성공 후 feat: freeze extraction evaluations 커밋.
+
+## Final integration
+
+- [ ] 한 번 fresh 전체 리뷰·유효 지적 수정·정확한 head CI/자동 리뷰 지적0 확인 후 PR을 develop에만 병합하고 PR20 설명/통합 검증 갱신.
