@@ -7,7 +7,7 @@
 
 ## 시작
 
-공통 초기 구조가 main에 반영되면 main에서 본인 작업 브랜치를 만듭니다. 아직 초기 구조가 검토 중이면 팀장이 알려준 공통 기준 브랜치에서 시작합니다.
+통합 개발 기준은 `develop`, 검수한 배포 기준은 `main`입니다. `develop`에서 본인 작업 브랜치를 만들고 기능 PR의 대상도 `develop`로 지정합니다. `develop → main`은 사람 검토·승인 후 반영하며 자동 배포를 뜻하지 않습니다. 이전 통합 PR #4는 동일 코드의 [PR #20](https://github.com/nam9ming/myai/pull/20)으로 대체했습니다.
 
 ```text
 frontend/design-and-flow   # 이상헌

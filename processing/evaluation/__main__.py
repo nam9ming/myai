@@ -8,6 +8,8 @@ from processing.extraction.archive import _read
 from processing.extraction.validation import ExtractionError
 from .dataset import validate_manifest
 from .bindings import EXTRACTION_ROOT, check_bindings
+from .gold import check_gold
+from .gold_storage import GOLD_ROOT, freeze_gold, verify_gold
 from .storage import DEFAULT_ROOT, freeze_dataset, verify_dataset
 
 
@@ -30,6 +32,14 @@ def main():
     command.add_argument('--input', required=True)
     command.add_argument('--dataset-root', default=DEFAULT_ROOT)
     command.add_argument('--run-root', default=EXTRACTION_ROOT)
+    for name in ('check-gold', 'freeze-gold', 'verify-gold'):
+        command = commands.add_parser(name)
+        if name != 'check-gold': command.add_argument('--root', default=GOLD_ROOT)
+        if name == 'verify-gold':
+            command.add_argument('gold_ref')
+        else:
+            command.add_argument('--input', required=True)
+            command.add_argument('--dataset-root', default=DEFAULT_ROOT)
     try:
         args = parser.parse_args()
         if args.command == 'check':
@@ -38,6 +48,12 @@ def main():
             result = freeze_dataset(args.input, args.root)
         elif args.command == 'check-bindings':
             result = check_bindings(_read(args.input), args.dataset_root, args.run_root)
+        elif args.command == 'check-gold':
+            result = check_gold(_read(args.input), args.dataset_root)
+        elif args.command == 'freeze-gold':
+            result = freeze_gold(args.input, args.root, args.dataset_root)
+        elif args.command == 'verify-gold':
+            result = verify_gold(args.gold_ref, args.root)
         else:
             result = verify_dataset(args.dataset_ref, args.root)
         sys.stdout.write(json.dumps(result, ensure_ascii=True, separators=(',', ':')) + '\n')
