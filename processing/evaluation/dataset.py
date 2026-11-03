@@ -173,13 +173,16 @@ def _parse_manifest(content):
             split = assignments[event['document_ids'][0]]['split']
             if any(assignments[events[s]['document_ids'][0]]['split'] != split for s in event['suspected_duplicate_ids']):
                 warnings.add('SUSPECTED_DUPLICATE_CROSSES_SPLIT')
+    shortfall = dict(documents=40, dev=20, holdout=20)
+    if value['data_kind'] == 'real':
+        shortfall.update(documents=max(0, 40-len(documents)), dev=max(0, 20-splits['dev']['documents']),
+                         holdout=max(0, 20-splits['holdout']['documents']))
     report = dict(protocol_version='dataset-check-v1', status='validated',
                   dataset_ref=hashlib.sha256(version.encode('utf-8')).hexdigest(),
                   manifest_sha256=hashlib.sha256(content).hexdigest(), data_kind=value['data_kind'],
                   counts=dict(documents=len(documents), document_versions=len(versions), events=len(events), groups=len(components)),
                   splits=splits, targets=dict(documents=40, dev=20, holdout=20, data_kind='real'),
-                  shortfall=dict(documents=max(0, 40-len(documents)), dev=max(0,20-splits['dev']['documents']),
-                                 holdout=max(0,20-splits['holdout']['documents'])),
+                  shortfall=shortfall,
                   holdout_status='absent' if not holdout else 'review_required' if warnings else 'unexposed_as_declared',
                   holdout_warnings=sorted(warnings))
     return value, report

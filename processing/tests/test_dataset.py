@@ -38,7 +38,7 @@ class DatasetTest(unittest.TestCase):
         self.assertEqual(report['splits']['dev']['documents'], 3)
         self.assertEqual(report['splits']['holdout']['document_versions'], 1)
         self.assertEqual(report['targets'], dict(documents=40, dev=20, holdout=20, data_kind='real'))
-        self.assertEqual(report['shortfall'], dict(documents=36, dev=17, holdout=19))
+        self.assertEqual(report['shortfall'], dict(documents=40, dev=20, holdout=20))
         self.assertEqual(report['holdout_status'], 'unexposed_as_declared')
         self.assertEqual(report['splits']['dev']['types']['construction'], 2)
         self.assertEqual(report['splits']['dev']['features']['multiple_times'], 1)
@@ -127,13 +127,29 @@ class DatasetTest(unittest.TestCase):
         for assignment in value['split_assignments']: assignment['split'] = 'dev'
         report = self.check(value)
         self.assertEqual(report['holdout_status'], 'absent')
-        self.assertEqual(report['shortfall'], dict(documents=36, dev=16, holdout=20))
+        self.assertEqual(report['shortfall'], dict(documents=40, dev=20, holdout=20))
 
     def test_group_review_older_than_a_relation_requires_review(self):
         value = manifest(); value['grouping_review']['reviewed_at'] = '2026-11-02T00:00:00Z'
         report = self.check(value)
         self.assertEqual(report['holdout_status'], 'review_required')
         self.assertIn('GROUPING_REVIEW_OUTDATED', report['holdout_warnings'])
+
+    def test_real_target_shortfall_never_counts_synthetic_documents(self):
+        value = manifest(); template = value['documents'][0]
+        value['documents'] = [dict(template, document_id=uid(1000+i), official_url=f'https://example.org/count/{i}',
+                                   versions=[dict(document_version_id=uid(3000+i), input_sha256='a'*64)],
+                                   exposure_status='development' if i<20 else 'unexposed') for i in range(40)]
+        value['events'] = []; value['relations'] = []
+        value['split_assignments'] = [dict(value['split_assignments'][0], document_id=uid(1000+i),
+                                            split_group_id=uid(5000+i), split='dev' if i<20 else 'holdout') for i in range(40)]
+        synthetic = self.check(value)
+        self.assertEqual(synthetic['counts']['documents'], 40)
+        self.assertEqual(synthetic['splits']['dev']['documents'], 20)
+        self.assertEqual(synthetic['shortfall'], dict(documents=40, dev=20, holdout=20))
+        value['data_kind'] = 'real'
+        declared_real = self.check(value)
+        self.assertEqual(declared_real['shortfall'], dict(documents=0, dev=0, holdout=0))
 
     def test_unknown_values_empty_lists_bad_times_and_urls_rejected(self):
         for mutate in ('version', 'kind', 'docs', 'versions', 'types', 'tag', 'exposure', 'time', 'partial_review', 'url', 'auth_url'):
