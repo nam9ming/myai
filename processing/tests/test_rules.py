@@ -148,18 +148,34 @@ class RulesTest(unittest.TestCase):
                 occurrence = self.run_rule('공사 약 ' + source)[0]['items'][0]['occurrences'][0]
                 self.assertIsNone(occurrence[field + '_start']['value'])
 
-    def test_long_digit_run_completes_in_bounded_subprocess(self):
-        self.document['blocks'][0]['text'] = '공사 ' + '1' * (2 * 1024 * 1024)
+    def test_qualifier_particles_are_unknown_without_matching_unrelated_words(self):
+        for stem in ('경', '전', '후'):
+            for particle in ('까지', '부터', '에는', '으로', '이면', '쯤', '정도'):
+                for source, field in (('2026-11-07', 'date'), ('10:00~11:00', 'time')):
+                    with self.subTest(stem=stem, particle=particle, field=field):
+                        occurrence = self.run_rule('공사 ' + source + stem + particle)[0]['items'][0]['occurrences'][0]
+                        self.assertIsNone(occurrence[field + '_start']['value'])
+                        self.assertIsNone(occurrence[field + '_end']['value'])
+        for source, field in (('2026-11-07 경기도', 'date'), ('10:00~11:00 전주 현장', 'time'),
+                              ('10:00~11:00 후원 행사', 'time')):
+            with self.subTest(unrelated=source):
+                occurrence = self.run_rule('공사 ' + source)[0]['items'][0]['occurrences'][0]
+                self.assertEqual(occurrence[field + '_start']['knowledge'], 'known')
+
+    def test_large_regex_inputs_complete_in_bounded_subprocess(self):
         script = ('import json,sys; from processing.extraction.rules import extract_rules; '
                   'v=json.load(sys.stdin); raw,error=extract_rules(json.dumps(v[0]).encode(),json.dumps(v[1]).encode()); '
                   'assert error is None; print(len(raw))')
-        try:
-            result = subprocess.run([sys.executable, '-c', script], input=encoded([self.document, self.profile]),
-                capture_output=True, timeout=5, cwd=Path(__file__).resolve().parents[2])
-        except subprocess.TimeoutExpired:
-            self.fail('Long digit run exceeded 5 seconds')
-        self.assertEqual(result.returncode, 0, result.stderr.decode())
-        self.assertGreater(int(result.stdout), 2 * 1024 * 1024)
+        for body in ('공사 ' + '1' * (2 * 1024 * 1024), '공사 ' + '쯤' * 250_000 + 'x 10:00~11:00'):
+            with self.subTest(body_bytes=len(body.encode())):
+                self.document['blocks'][0]['text'] = body
+                try:
+                    result = subprocess.run([sys.executable, '-c', script], input=encoded([self.document, self.profile]),
+                        capture_output=True, timeout=5, cwd=Path(__file__).resolve().parents[2])
+                except subprocess.TimeoutExpired:
+                    self.fail('Rule extraction exceeded 5 seconds')
+                self.assertEqual(result.returncode, 0, result.stderr.decode())
+                self.assertGreater(int(result.stdout), len(body.encode()))
 
     def test_real_utf8_output_limit_is_checked_without_invalidating_valid_input(self):
         self.document['blocks'][0]['text'] = '공사 ' + '😀' * ((8 * 1024 * 1024 - 900) // 4)

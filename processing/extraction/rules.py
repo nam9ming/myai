@@ -14,9 +14,14 @@ RULE_VERSION = 'rule-extract-v1'
 PROFILE_VERSION = 'rule-profile-v1'
 DATE = re.compile(r'(?<![0-9])([0-9]{4})\s*([-./년])\s*([0-9]{1,2})\s*([-./월])\s*([0-9]{1,2})(?:\s*일)?(?![0-9])')
 CLOCK = re.compile(r'(?<![0-9:])([0-9]{1,2}):([0-9]{2})(?::([0-9]{2}))?(?![0-9:])')
-RANGE_MARKER = r'(?:~|～|〜|–|—|-|부터)'
-QUALIFIER = r'(?:이전|이후|전후|이상|이하|이내|미만|초과|무렵|쯤|예정|(?:경|전|후)(?=\s|$|[.,，。]))'
-RANGE = re.compile(r'\s*' + RANGE_MARKER + r'\s*(?:(익일|다음날)\s*)?')
+RANGE_MARKERS = ('~', '～', '〜', '–', '—', '-', '부터')
+QUALIFIERS = ('이전', '이후', '전후', '이상', '이하', '이내', '미만', '초과', '무렵', '쯤', '예정')
+SINGLE_QUALIFIERS = ('경', '전', '후')
+PARTICLES = tuple(sorted(('까지', '부터', '에는', '에도', '에서', '으로', '이라면', '이거나', '이면', '정도',
+                          '에', '의', '로', '은', '는', '도', '만', '을', '를', '과', '와', '이', '쯤'), key=len, reverse=True))
+SUFFIX_BOUNDARIES = RANGE_MARKERS + QUALIFIERS
+PREFIX_BOUNDARIES = SUFFIX_BOUNDARIES + SINGLE_QUALIFIERS + ('약', '대략')
+RANGE = re.compile(r'\s*(?:' + '|'.join(map(re.escape, RANGE_MARKERS)) + r')\s*(?:(익일|다음날)\s*)?')
 LIMIT_FAILURE = b'{"rule_error":"RULE_OUTPUT_LIMIT"}\n', 'RULE_OUTPUT_LIMIT'
 
 
@@ -59,10 +64,35 @@ def parse_profile(content):
 def _uncertain_bounds(body, matches):
     if not matches:
         return False
-    prefix, suffix = body[:matches[0].start()], body[matches[-1].end():]
-    outside = '(?:' + RANGE_MARKER + '|' + QUALIFIER + ')'
-    return (re.search('(?:' + outside + r'|약|대략)\s*$', prefix) is not None
-            or re.match(r'\s*(?:까지\s*)?' + outside, suffix) is not None)
+    end = matches[0].start()
+    while end:
+        if body[end - 1].isspace():
+            end -= 1
+            continue
+        if body.endswith(PREFIX_BOUNDARIES, 0, end):
+            return True
+        particle = next((p for p in PARTICLES if body.endswith(p, 0, end)), None)
+        if particle is None:
+            break
+        end -= len(particle)
+    start = matches[-1].end()
+    while start < len(body):
+        if body[start].isspace():
+            start += 1
+            continue
+        if body.startswith(SUFFIX_BOUNDARIES, start):
+            return True
+        for qualifier in SINGLE_QUALIFIERS:
+            if body.startswith(qualifier, start):
+                following = start + len(qualifier)
+                if (following == len(body) or body[following].isspace() or body[following] in '.,，。'
+                        or body.startswith(PARTICLES, following)):
+                    return True
+        particle = next((p for p in PARTICLES if body.startswith(p, start)), None)
+        if particle is None:
+            break
+        start += len(particle)
+    return False
 
 
 def _dates(body):
