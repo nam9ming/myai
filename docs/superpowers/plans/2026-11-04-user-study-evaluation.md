@@ -44,11 +44,11 @@ shared fixture API: test_study_protocol.py `StudyProtocolFixture(unittest.TestCa
 
 공유시험 fixture `UserStudyFixture(StudyProtocolFixture)`는 self.records(7키), `write_records(value=None)->Path`, `study(value=None, protocol=None, at=STUDY_AT)->packet`, self.protocol_path/self.records_path를 제공한다. `self.protocol`/work를 덮어쓰지 않는다. 실제stdout clock에 맞게 synthetic 날짜는 현재보다과거이며 retention은명시미래로. 부모export/CLI가 이fixture 사용.
 
-- [ ] **RED:** 실제 Task1 private pack+독립 기록fixture로 새API부재 관찰. `python3.13 -B -m unittest discover -s processing/tests -p test_user_study.py -v`.
-- [ ] **GREEN:** spec의 모집표/동의/역할/순서4주기·A/B3문항/두session·타입/nullable/미래/기간일치/비중첩·도움/동일환경/당일확인/촬영/evidence hash를 검증하고 모든 행을 보존한다.
-- [ ] **Metrics RED/GREEN:** M04전체/유형/전문가/pilot,6correct만paired·실패/부분정답 제외사유, 음수/짝수/0명/정확20근접 Fraction, 고정배정/시작/unknown누락incidence·정확도/누락방어 null/false, 범위밖 분리·수동선언/실제reported 재계산·survey분포 시험. 전문가/중단/no_show/withdrawn상세부재를 숨기지 않는다.
-- [ ] **Size/round RED/GREEN:** 입력/결과8MiB·깊이100·행생성중예산, protocol/records version/SHA·증빙/원본hash 드리프트·미동의/만료/별도촬영동의 거부. no autoArchive/DB/API.
-- [ ] **Verify/Commit:** 전체소유시험GREEN, 보고/count/SHA. 부모커밋 `feat: analyze paired user study records`.
+- [x] **RED:** 실제 Task1 private pack+독립 기록fixture로 새API부재 관찰. `python3.13 -B -m unittest discover -s processing/tests -p test_user_study.py -v`.
+- [x] **GREEN:** spec의 모집표/동의/역할/순서4주기·A/B3문항/두session·타입/nullable/미래/기간일치/비중첩·도움/동일환경/당일확인/촬영/evidence hash를 검증하고 모든 행을 보존한다.
+- [x] **Metrics RED/GREEN:** M04전체/유형/전문가/pilot,6correct만paired·실패/부분정답 제외사유, 음수/짝수/0명/정확20근접 Fraction, 고정배정/시작/unknown누락incidence·정확도/누락방어 null/false, 범위밖 분리·수동선언/실제reported 재계산·survey분포 시험. 전문가/중단/no_show/withdrawn상세부재를 숨기지 않는다.
+- [x] **Size/round RED/GREEN:** 입력/결과8MiB·깊이100·행생성중예산, protocol/records version/SHA·증빙/원본hash 드리프트·미동의/만료/별도촬영동의 거부. no autoArchive/DB/API.
+- [x] **Verify/Commit:** 전체소유시험GREEN, 보고/count/SHA. 부모커밋 `feat: analyze paired user study records`.
 
 ### Task 3: private export·CLI·문서·전체 gate
 
