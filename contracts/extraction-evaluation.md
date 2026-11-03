@@ -19,6 +19,8 @@
 
 NFC·연속 공백 축약·미리 승인한 동의어만 텍스트에 적용한다. 가까운 장소·문장 의미를 추측해 동일하게 만들지 않는다. 일정·장소 관계는 공유된 알려진 값의 최소 불일치 관계로 비교한다. 2개 값 관계가 모두 같아도3개 이상 값의 결합이 다르면 관련 필드 오답이다. 단일 값 오류는 무관한 필드에 자동 전파하지 않는다.
 
+이름/주소가 미상이어도 known kind는 장소의 알려진 사실로 분모에 남긴다. 종일 표시와 함께 제공한 clock/offset을 버리지 않는다. clock·명시 종일이 없는 offset/종일 아님 주장만으로 시간 정답 분모를 만들지는 않으며, 부가 주장을 별도 보존해 occurrence별 생성 여부를 검사한다. 알려진 시간 필드의 추가 주장은 의미 검토가 남으면 생성률 N/A이며, 미상 시간에 새 부가 값을 만들면 생성 오류다.
+
 ## 사람이 확정하는 대응·생성 판정
 
 annotation은 strict JSON `score-links-v1`: 정확히 `schema_version`, `item_links`, `generation_reviews`를 갖는다.
@@ -47,6 +49,8 @@ gold 비기재/모호 셀에 알려진 값을 넣거나 대응한 미상 occurre
 이번 AI 실행 연결은 method=ai_auto와 기존 api D05의 구조 재시도 정책만 지원한다. retry_policy_version=`api-structure-retry-v1`. provider/model_label/prompt_version/schema_version은 선택한 모든 실행과 일치해야 한다. preprocessing_version은 실행별 원본을 보존한다. 모든 gold 버전을 한 번씩, 버전마다 한 D05를 명시한다. 성공 실행을 자동 선택하지 않는다. 첫 raw와 마지막 자동 결과를 모두 기록하고 기본 view는 final_auto다. manual_import를 AI 자동 성능으로 표시하지 않는다.
 
 phase=initial은 initial_ref=null, gold 동결<실행 시작≤종료≤검토≤평가≤보관 시각과 실행 종료≤D05 기록≤평가를 검사하며 의미 정답 피드백 사용을 허용하지 않는다. retest는 같은 cohort 입력/manifest·정규화 지침·방법의 동결 initial을 참조한다. gold 자체 수정은 이전/새 버전과 점수 차이를 보존하며 최초 기록을 덮어쓰지 않는다. 모델/프롬프트 정책 변경은 허용하되 policy_changed로 보고한다. 새 run_id는 initial 동결 이후 시작해야 하며 금표 수정만 재채점할 때는 이전 run_id를 유지할 수 있다. retest를 initial_ref로 다시 참조할 수 없다. retest나 노출/불확실 자료는 새 일반화·blind holdout 증거가 아니다. review의 신원/노출 상태도 제공자의 선언이다.
+
+기존 run_id 재사용은 최초 평가가 선택한 receipt SHA와 정확히 같아야 한다. 같은 gold_ref의 다른 gold 원본은 거부하며 금표 수정에는 새 gold_version을 사용한다. 다른 저장 위치에서도 같은 ID를 다른 원본으로 바꿔 재시험 이력을 우회할 수 없다.
 
 키·AI·네트워크·DB를 호출하지 않는다. JSON8MiB·깊이100·중복 키/추가 키/잘못된 Unicode 금지. 선택·결과·독립 gold/입력·D05 전체 요청/응답/실패 원본과 retest의 initial을 별도0400/0500 묶음으로 보관한다. 같은 extraction_eval_id의 다른 원본을 덮어쓰지 않는다. stdout은 요약 JSON, 상세 정답/출력/근거·검토자·경로는 private 파일에만 둔다. main 병합·배포·단순 규칙 기준선·사람 수정값 연결·실제 평가 수행은 별도다.
 

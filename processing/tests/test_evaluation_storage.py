@@ -197,6 +197,25 @@ class EvaluationStorageTest(EvaluationFixture):
         with self.assertRaises(ExtractionError) as caught:self.freeze(value,hour=7)
         self.assertEqual(caught.exception.code,'EVALUATION_COHORT_MISMATCH')
 
+    def test_reused_run_id_cannot_replace_initial_raw_archive(self):
+        initial=self.freeze();self.run_root=self.work/'replacement-runs'
+        replacement=self.make_run(uid(501),prompt_version='prompt-v1')
+        value=copy.deepcopy(self.control);value.update(extraction_eval_id=uid(607),phase='retest',initial_ref=initial['evaluation_ref'])
+        value['policy']['prompt_version']='prompt-v1';value['documents'][0].update(replacement)
+        value['review']['reviewed_at']='2020-01-01T06:00:00Z'
+        with self.assertRaises(ExtractionError) as caught:self.freeze(value,hour=7)
+        self.assertEqual(caught.exception.code,'EVALUATION_RETEST_RUN_MISMATCH')
+
+    def test_retest_same_gold_version_cannot_replace_original_bytes(self):
+        initial=self.freeze();self.gold_root=self.work/'replacement-gold'
+        self.value['documents'][0]['output']['items'][0]['occurrences'][0]['time_end']['value']='15:00'
+        self.gold_receipt=self.make_gold(LaterGoldClock)
+        value=copy.deepcopy(self.control);value.update(extraction_eval_id=uid(608),phase='retest',initial_ref=initial['evaluation_ref'],
+            gold_receipt_sha256=self.gold_receipt_hash())
+        value['review']['reviewed_at']='2020-01-01T06:00:00Z'
+        with self.assertRaises(ExtractionError) as caught:self.freeze(value,hour=7)
+        self.assertEqual(caught.exception.code,'EVALUATION_GOLD_VERSION_CONFLICT')
+
     def test_real_cli_summary_and_exit_codes(self):
         path=self.write_control()
         def cli(*args):return subprocess.run([sys.executable,'-m','processing.evaluation',*map(str,args)],cwd=REPO,capture_output=True)

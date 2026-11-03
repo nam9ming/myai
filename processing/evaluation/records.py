@@ -144,6 +144,8 @@ def _compute(value,gold,runs,initial,evaluated_at,selection_sha256):
         _check(old is not None and old['phase']=='initial' and old['evaluation_ref']==value['initial_ref'],'EVALUATION_INITIAL_REQUIRED')
         _check(old['method']==value['method'] and old['manifest_sha256']==gold_summary['manifest_sha256']
                and old['instructions_sha256']==gold_summary['instructions_sha256'],'EVALUATION_COHORT_MISMATCH')
+        _check(old['gold_ref']!=value['gold_ref'] or old['gold_sha256']==gold_summary['gold_sha256'],
+               'EVALUATION_GOLD_VERSION_CONFLICT')
         _check(stamp(initial['receipt']['frozen_at'],'$')<=reviewed,'EVALUATION_REVIEW_TIME_INVALID')
     versions = {v['document_version_id']:d['document_id'] for d in gold['manifest']['documents'] for v in d['versions']}
     assignments = {a['document_id']:a['split'] for a in gold['manifest']['split_assignments']}
@@ -155,7 +157,10 @@ def _compute(value,gold,runs,initial,evaluated_at,selection_sha256):
         _check(finished<=stamp(run['recorded_at'],'$')<=now,'EVALUATION_RUN_ARCHIVE_TIME_INVALID')
         if value['phase']=='initial':
             _check(stamp(gold['receipt']['frozen_at'],'$')<started,'EVALUATION_GOLD_AFTER_RUN')
-        elif run['run_id'] not in old['run_ids']:
+        elif run['run_id'] in old['run_ids']:
+            _check(any(d['run_id']==run['run_id'] and d['receipt_sha256']==doc['receipt_sha256']
+                       for d in old['documents']),'EVALUATION_RETEST_RUN_MISMATCH')
+        else:
             _check(stamp(initial['receipt']['frozen_at'],'$')<started,'EVALUATION_RETEST_RUN_TIME_INVALID')
         version = doc['document_version_id'];expected = gold['documents'][version]
         event_ids = {a['slot_id']:a['event_id'] for a in expected['anchors']}
@@ -173,7 +178,8 @@ def _compute(value,gold,runs,initial,evaluated_at,selection_sha256):
                 entry.update(document_version_id=version,event_id=event_ids[entry['slot_id']],run_id=run['run_id'])
             scored[view] = result
         documents.append(dict(document_version_id=version,document_id=versions[version],split=assignments[versions[version]],
-            run_id=run['run_id'],attempt_count=len(run['attempts']),metadata_sha256=run['metadata_sha256'],**scored))
+            run_id=run['run_id'],receipt_sha256=doc['receipt_sha256'],attempt_count=len(run['attempts']),
+            metadata_sha256=run['metadata_sha256'],**scored))
     views = {view:_aggregate([d[view]['summary'] for d in documents]) for view in VIEWS}
     splits = {split:{view:_aggregate([d[view]['summary'] for d in documents if d['split']==split]) for view in VIEWS}
               for split in ('dev','holdout')}

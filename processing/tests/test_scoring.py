@@ -140,6 +140,53 @@ class ScoringTest(unittest.TestCase):
         result=self.score(prediction)
         self.assertEqual((result['summary']['correct_fields'],result['summary']['known_fields']),(6,8))
 
+    def test_all_day_cannot_hide_added_clocks_or_end_offset(self):
+        self.source_text('합성 공사는 명시 종일이다. 시각과 익일 여부는 별도로 명시하지 않았다.')
+        occ=self.gold['items'][0]['occurrences'][0]
+        occ.update(time_start=fv(),time_end=fv(),end_day_offset=fv(),all_day=fv(True))
+        for kind,correct,pending in (('clocks',6,2),('offset',7,1)):
+            prediction=copy.deepcopy(self.gold);actual=prediction['items'][0]['occurrences'][0]
+            if kind=='clocks':actual.update(time_start=fv('10:00'),time_end=fv('16:00'),end_day_offset=fv(0))
+            else:actual['end_day_offset']=fv(0)
+            with self.subTest(kind=kind):
+                summary=self.score(prediction)['summary']
+                self.assertEqual((summary['correct_fields'],summary['known_fields']),(correct,8))
+                self.assertEqual(summary['generation_review_pending'],pending)
+                self.assertIsNone(summary['generation_rate_percent'])
+
+    def test_kind_only_location_is_known_and_unknown_kind_generation_is_counted(self):
+        self.source_text('합성 공사는 점 위치에 해당하지만 이름과 주소는 미기재다.')
+        location=self.gold['items'][0]['locations'][0];location.update(name=fv(),address=fv(),kind=fv('point'))
+        self.assertEqual(self.score()['summary']['known_fields'],8)
+        prediction=copy.deepcopy(self.gold);prediction['items'][0]['locations'][0]['kind']=fv('area')
+        result=self.score(prediction)
+        self.assertEqual((result['summary']['correct_fields'],result['summary']['known_fields']),(7,8))
+        self.assertEqual(result['summary']['fields']['locations']['known'],1)
+        self.assertIsNone(result['summary']['generation_rate_percent'])
+        location['kind']=fv()
+        summary=self.score(prediction)['summary']
+        self.assertEqual(summary['known_fields'],7);self.assertEqual(summary['generation_errors'],1)
+
+    def test_offset_only_claim_is_preserved_without_inventing_a_clock_denominator(self):
+        self.source_text('합성 공사의 시각과 종일·익일 여부는 미기재다.')
+        self.gold['items'][0]['occurrences'][0].update(time_start=fv(),time_end=fv(),end_day_offset=fv(),all_day=fv())
+        prediction=copy.deepcopy(self.gold);prediction['items'][0]['occurrences'][0]['end_day_offset']=fv(1)
+        result=self.score(prediction);summary=result['summary']
+        self.assertEqual((summary['correct_fields'],summary['known_fields']),(6,6))
+        self.assertEqual((summary['generation_errors'],summary['generation_rate_percent']),(1,12.5))
+        end=next(r for r in result['field_results'] if r['field']=='time_end')
+        self.assertFalse(end['gold_known']);self.assertTrue(end['output_auxiliary_claims'])
+
+    def test_auxiliary_offset_cannot_move_between_unknown_clock_occurrences(self):
+        self.two_occurrences()
+        first,second=self.gold['items'][0]['occurrences']
+        first.update(time_end=fv(),end_day_offset=fv(1));second.update(time_end=fv(),end_day_offset=fv())
+        prediction=copy.deepcopy(self.gold);a,b=prediction['items'][0]['occurrences']
+        a['end_day_offset'],b['end_day_offset']=b['end_day_offset'],a['end_day_offset']
+        result=self.score(prediction)['summary']
+        self.assertEqual(result['fields']['time_end']['known'],0)
+        self.assertEqual(result['generation_errors'],1)
+
     def test_approved_aliases_and_space_normalization_are_fixed(self):
         prediction=copy.deepcopy(self.gold);prediction['items'][0]['locations'][0]['name']=fv('  가상로   A ')
         self.assertEqual(self.score(prediction)['summary']['correct_fields'],8)

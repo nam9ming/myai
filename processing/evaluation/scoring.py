@@ -30,7 +30,7 @@ def _aliases(instructions):
 
 
 def _projection(item,aliases):
-    fields = {key:dict(provided=False,facts=set(),known_count=0) for key in FIELDS}
+    fields = {key:dict(provided=False,facts=set(),claims=set(),known_count=0) for key in FIELDS}
 
     def normalized(field,value):
         value = _normal(value)
@@ -45,25 +45,33 @@ def _projection(item,aliases):
     locations = {}
     for loc in item['locations']:
         atom = None
-        if any(loc[k]['knowledge']=='known' for k in ('name','address')):
+        if any(loc[k]['knowledge']=='known' for k in ('name','address','kind')):
             atom = tuple((k,normalized('locations',loc[k]['value']) if k!='kind' else loc[k]['value'])
                          for k in ('name','address','kind') if loc[k]['knowledge']=='known')
         locations[loc['local_location_id']] = atom
         add('locations',atom)
-    rows = {}
+    rows,auxiliary = {},{}
     for occ in item['occurrences']:
         row = {}
         for key in ('date_start','date_end'):
             row[key] = ('date',occ[key]['value']) if occ[key]['knowledge']=='known' else None
         for key in ('time_start','time_end'):
-            if occ['all_day']['knowledge']=='known' and occ['all_day']['value'] is True:
-                value = ('all_day',)
-            elif occ[key]['knowledge']=='known':
+            seconds = None
+            claims = set()
+            if occ[key]['knowledge']=='known':
                 parts = [int(v) for v in occ[key]['value'].split(':')]
                 seconds = parts[0]*3600 + parts[1]*60 + (parts[2] if len(parts)==3 else 0)
+                claims.add(('clock',seconds))
+            if occ['all_day']['knowledge']=='known':claims.add(('all_day',occ['all_day']['value']))
+            offset = occ['end_day_offset']['value'] if key=='time_end' and occ['end_day_offset']['knowledge']=='known' else None
+            if offset is not None:claims.add(('end_day_offset',offset))
+            fields[key]['claims'].update(claims);fields[key]['known_count'] += len(claims)
+            auxiliary.setdefault(occ['local_occurrence_id'],{})[key] = claims
+            if occ['all_day']['knowledge']=='known' and occ['all_day']['value'] is True:
+                value = ('all_day',seconds) + ((offset,) if key=='time_end' else ())
+            elif seconds is not None:
                 value = ('clock',seconds)
-                if key=='time_end':
-                    value += (occ['end_day_offset']['value'] if occ['end_day_offset']['knowledge']=='known' else None,)
+                if key=='time_end':value += (offset,)
             else:
                 value = None
             row[key] = value
@@ -83,7 +91,7 @@ def _projection(item,aliases):
             v = value['value']
             v = tuple(sorted({normalized('applicability',x) for x in v})) if type(v) is list else normalized('applicability',v)
             add('applicability',(key,v));facets[key]=v
-    return dict(fields=fields,rows=rows,facets=facets)
+    return dict(fields=fields,rows=rows,facets=facets,auxiliary=auxiliary)
 
 
 def _binding_fields(gold,prediction):
@@ -160,7 +168,7 @@ def score_document(input_bytes,gold_bytes,prediction_bytes,annotation_bytes,inst
     pred_profiles = {i['local_item_id']:_projection(i,aliases) for i in prediction['items']} if prediction is not None else {}
     primary = {link['slot_id']:link for link in links.values() if link['kind']=='match'}
     results,binding_slots = [],0
-    auto_generation = set()
+    auto_generation,auxiliary_review = set(),set()
     for slot,expected in gold_profiles.items():
         link = primary.get(slot)
         local = link['local_item_id'] if link else None
@@ -178,11 +186,19 @@ def score_document(input_bytes,gold_bytes,prediction_bytes,annotation_bytes,inst
                     if row[key] is not None and row[key]!=predicted_value:correct = False if g['provided'] else None
                     if row[key] is None and predicted_value is not None:
                         auto_generation.add((local,key));correct = False if g['provided'] else None
+                    if key in ('time_start','time_end'):
+                        known_claims = expected['auxiliary'][identity][key]
+                        output_claims = actual['auxiliary'].get(paired.get(identity),{}).get(key,set())
+                        if output_claims-known_claims:auxiliary_review.add((local,key))
+                        if not g['provided'] and {c[0] for c in output_claims}-{c[0] for c in known_claims}:
+                            auto_generation.add((local,key))
             if actual and key=='applicability' and actual['facets'].keys()-expected['facets'].keys():
                 auto_generation.add((local,key))
             if p and p['provided'] and not g['provided']:auto_generation.add((local,key))
             results.append(dict(slot_id=slot,local_item_id=local,field=key,gold_known=g['provided'],correct=correct,
                 gold_values=sorted(g['facts'],key=_json),output_values=sorted(p['facts'],key=_json) if p else [],
+                gold_auxiliary_claims=sorted(g['claims'],key=_json),
+                output_auxiliary_claims=sorted(p['claims'],key=_json) if p else [],
                 reason_codes=[] if correct or not g['provided'] else ['MISSING_EVENT' if not actual else
                     'BINDING_MISMATCH' if key in binding else 'VALUE_MISMATCH']))
     generation,pending = [],[]
@@ -191,12 +207,15 @@ def score_document(input_bytes,gold_bytes,prediction_bytes,annotation_bytes,inst
         binding = _binding_fields(expected,actual) if expected else set()
         for key in FIELDS:
             p = actual['fields'][key];g = expected['fields'][key] if expected else None
-            automatic = (local,key) in auto_generation or bool(g is not None and not g['provided'] and p['provided'])
-            needs_review = bool(p['provided'] and (g is None or p['facts']!=g['facts'] or key in binding
+            claimed = p['provided'] or bool(p['claims'])
+            gold_claimed = g is not None and (g['provided'] or bool(g['claims']))
+            automatic = (local,key) in auto_generation or bool(g is not None and not gold_claimed and claimed)
+            needs_review = bool(claimed and (g is None or p['facts']!=g['facts'] or p['claims']-g['claims']
+                or (local,key) in auxiliary_review or key in binding
                 or p['known_count']>g['known_count']))
             review = reviews.get((local,key))
             if review:
-                _check(p['provided'] and not(automatic and review['unsupported'] is False))
+                _check(claimed and not(automatic and review['unsupported'] is False))
             unsupported = automatic or bool(review and review['unsupported'])
             if unsupported:
                 generation.append(dict(local_item_id=local,field=key,
