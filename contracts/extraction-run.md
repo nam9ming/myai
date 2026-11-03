@@ -37,7 +37,7 @@ python3.13 -m processing.extraction verify 71fb66f0-e610-4f9c-8f26-4bb77655ee8c
 
 `run --input FILE --preprocessing-version VERSION [--run-id UUID] [--model MODEL] [--root ROOT]`는 `OPENAI_API_KEY`를 헤더에서만 사용합니다. 모델 선택은 `--model`→`OPENAI_MODEL`→현재 리뷰 기본값 `gpt-6.1-sol` 순서입니다. 개발 키 재사용은 사용자 결정이며 실제 자료의 검토·비식별화 책임을 대신하지 않습니다.
 
-`https://api.openai.com/v1/responses`만 호출하며 리다이렉트를 따라가지 않습니다. [공식 Responses 안내](https://developers.openai.com/api/docs/guides/migrate-to-responses)에 따라 `store=false`, 지시와 원문 입력을 전달합니다. 도구·검색·평가 정답·사용자 조건을 요청하지 않습니다. 매 시도 원문과 prompt-v1 전체 계약을 다시 보내고 구조 오류 피드백은 경로만 전달합니다.
+`https://api.openai.com/v1/responses`만 호출하며 리다이렉트를 따라가지 않습니다. [공식 Responses 안내](https://developers.openai.com/api/docs/guides/migrate-to-responses)에 따라 `store=false`, 지시와 원문 입력을 전달합니다. 도구·검색·평가 정답·사용자 조건을 요청하지 않습니다. 매 시도 원문과 해당 실행의 고정 프롬프트 버전 전체 계약을 다시 보내고 구조 오류 피드백은 경로만 전달합니다.
 
 요청별120초·최대3시도·출력8192토큰입니다. timeout/전송·HTTP408/429/5xx와 구조 오류만1초·2초 간격으로 재시도합니다. 인증/다른4xx/리다이렉트·거절·근거/시간 모순은 중단합니다. 실패도 완료 receipt를 보관하며 종료4입니다. 클라이언트 요청 시작/종료 시각과 공급자가 제공한 모든 시도의 token 사용량만 기록합니다. 어떤 시도라도 사용량이 미상이면 그 합계는 null입니다. 상세 모델 버전·요금·통화는 추정하지 않고 raw 응답의 표시값을 남깁니다.
 
@@ -61,7 +61,7 @@ Java 등록은 `python3.13 -m processing.extraction freeze RUN_ID --root ROOT`�
 
 `--root` 기본값은 Git 제외 `data/private/extraction-runs`입니다. 저장소 안에서는 `data/private/` 아래만 허용하며, 저장소 밖에서는 운영자가 지정한 비공개 디렉터리를 사용합니다. 새 디렉터리는0700, 파일은0600입니다. 기존 상위 디렉터리 권한·백업·공유 여부는 운영자가 관리합니다. 원본은 닫힌 일반 파일이어야 하며 symlink·FIFO는 거부합니다.
 
-실행 폴더 `<run_id>/`에는 `identity.json`, `input.json`, `metadata.json`, `attempt-N.prompt`, `attempt-N.output`, `receipt.json`이 있습니다. identity가 원본 전체의 크기·SHA-256과 실행을 고정합니다. 복사 중 원본 변경은 거부하고, 완성 임시 파일의 배타 hard link로 원본 덮어쓰기를 막습니다. 같은 ID·같은 원본은 재사용하며, 다른 원본은 충돌입니다. 중단 후 동일 원본으로 다시 실행하면 누락 파일을 채웁니다. 완료 receipt는 마지막에 기록합니다. `verify`는 모든 원본 hash·메타데이터·검증 결과를 다시 확인하며, 미완료·손상을 성공으로 바꾸지 않습니다. hash는 우발 손상 검증이며 관리자가 원본과 기록 전체를 바꾸는 공격의 전자서명은 아닙니다.
+실행 폴더 `<run_id>/`에는 `identity.json`, `input.json`, `metadata.json`, `attempt-N.prompt`, `attempt-N.output`, `receipt.json`이 있습니다. identity가 원본 전체의 크기·SHA-256과 실행을 고정합니다. 복사 중 원본 변경은 거부하고, 완성 임시 파일의 배타 hard link로 원본 덮어쓰기를 막습니다. 같은 ID·같은 원본은 재사용하며, 다른 원본은 충돌입니다. 수동 가져오기는 중단 후 동일 원본으로 다시 실행하면 누락 파일을 채웁니다. API 실행은 미완료 ID의 자동 재전송을 거부합니다. 완료 receipt는 마지막에 기록합니다. `verify`는 모든 원본 hash·메타데이터·검증 결과를 다시 확인하며, 미완료·손상을 성공으로 바꾸지 않습니다. hash는 우발 손상 검증이며 관리자가 원본과 기록 전체를 바꾸는 공격의 전자서명은 아닙니다.
 
 stdout은 ID·상태·hash·고정 상대 파일명·안전한 오류 코드/필드 경로를 담은 JSON 한 건입니다. 본문·임의 키 이름·실제 경로는 내보내지 않습니다. 오류 stderr도 고정 코드만 사용합니다.
 
@@ -74,7 +74,7 @@ stdout은 ID·상태·hash·고정 상대 파일명·안전한 오류 코드/필
 | 5 | 파일 I/O 실패 |
 | 1 | 내부 오류 |
 
-Java `local-extraction`은 [D03/D05 연결 안내](../backend/docs/extraction-run-import.md)에 따라 검증된 archive의 성공/실패·nullable metadata 원본을 등록한다. 같은 전체 D03 입력·전처리 버전이 필요하며 원본 경로를 유지한다. 검증 정보가 없는 legacy와 failed는 D06 AI origin으로 사용할 수 없다. import·승인·미리보기·공개 때 archive 원본과 DB 등록 기록을 다시 대조하며 Python 검증 중 DB 트랜잭션을 유지하지 않는다. D06 숨김 초안 변환·저장·사람 검토 다음 revision 연결은 [초안 안내](../backend/docs/ai-review-draft.md)를 따른다. 실제 자료3건/40건·실자료 평가·공개 승인·운영 배포는 후속 작업이다.
+Java `local-extraction`은 [D03/D05 연결 안내](../backend/docs/extraction-run-import.md)에 따라 검증된 archive의 성공/실패·nullable metadata 원본을 등록한다. 같은 전체 D03 입력·전처리 버전이 필요하며 원본 경로를 유지한다. 검증 정보가 없는 legacy와 failed는 D06 AI origin으로 사용할 수 없다. import·승인·미리보기·공개 때 archive 원본과 DB 등록 기록을 다시 대조하며 Python 검증 중 DB 트랜잭션을 유지하지 않는다. D06 숨김 초안 변환·저장·사람 검토 다음 revision 연결은 [초안 안내](../backend/docs/ai-review-draft.md)를 따른다. 개발용 실제3건은 v2 기계 검증과 시험 DB의 D05 등록·비공개 미배정 초안 파일 생성을 확인했다. 실자료 D06 저장·사람 검토·40건 평가·공개 승인·운영 배포는 후속 작업이다.
 
 ## Java의 초안 전체 대조
 
