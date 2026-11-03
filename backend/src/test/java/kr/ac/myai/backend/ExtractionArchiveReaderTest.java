@@ -21,6 +21,51 @@ class ExtractionArchiveReaderTest {
     final String id = "71fb66f0-e610-4f9c-8f26-4bb77655ee8c";
 
     @Test
+    void acceptsApiArchiveWithResponseArtifactsAndMeasuredUsage() throws Exception {
+        Path archive = apiArchive(root, PythonProbe.REPO.resolve("contracts/examples/ai-input.json"), id, "fixture-nfc-v1");
+        var result = reader(PythonProbe.REPO, 10000).read(id, archive);
+        assertThat(result.metadata().path("execution_mode").asText()).isEqualTo("api");
+        assertThat(result.metadata().path("usage_in").asInt()).isEqualTo(17);
+        assertThat(result.metadata().path("usage_out").asInt()).isEqualTo(31);
+        assertThat(result.receipt().path("artifacts").size()).isEqualTo(6);
+        assertThat(result.receipt().path("artifacts").has("attempt-1.response")).isTrue();
+        assertThat(result.status()).isEqualTo("validated");
+    }
+
+    static Path apiArchive(Path work, Path input, String runId, String preprocessing) throws Exception {
+        Files.createDirectories(work);
+        Path archive = work.resolve("api-archive");
+        String script = """
+                import json, sys, hashlib
+                from pathlib import Path
+                from unittest.mock import patch
+                from processing.extraction.api import run_api
+                source, root, run_id, preprocessing = sys.argv[1:]
+                document = json.loads(Path(source).read_bytes())
+                output = json.loads(Path('contracts/examples/ai-extraction.json').read_bytes())
+                output['document_version_id'] = document['document_version_id']
+                block = document['blocks'][0]
+                output['evidence'][0].update(block_id=block['block_id'], quote=block['text'], start_char=0,
+                    end_char=len(block['text']), text_sha256=hashlib.sha256(block['text'].encode()).hexdigest())
+                response = dict(object='response', status='completed', error=None, model='gpt-6.1-sol',
+                    output=[dict(type='message', role='assistant', status='completed',
+                        content=[dict(type='output_text', text=json.dumps(output, ensure_ascii=False))])],
+                    usage=dict(input_tokens=17, output_tokens=31))
+                with patch('processing.extraction.api._exchange', return_value=(200, json.dumps(response).encode(), None, True)):
+                    result = run_api(source, preprocessing, root, run_id)
+                assert result['status'] == 'validated'
+                """;
+        var builder = new ProcessBuilder(PythonProbe.PYTHON, "-c", script, input.toString(), archive.toString(), runId, preprocessing)
+                .directory(PythonProbe.REPO.toFile());
+        builder.environment().put("OPENAI_API_KEY", "TEST_ONLY_OPENAI_KEY");
+        builder.environment().put("OPENAI_MODEL", "gpt-6.1-sol");
+        var process = builder.start();
+        assertThat(process.waitFor(10, TimeUnit.SECONDS)).isTrue();
+        assertThat(process.exitValue()).isZero();
+        return archive;
+    }
+
+    @Test
     void readsActualPythonValidatedArchiveAndPreservesOriginalMetadata() throws Exception {
         Path archive = archive(false);
         var result = reader(PythonProbe.REPO, 10000).read(id, archive);

@@ -17,7 +17,7 @@ class Parser(argparse.ArgumentParser):
 def main():
     parser = Parser(description='AI 추출 입력 준비·수동 원출력 기록·무결성 검증')
     commands = parser.add_subparsers(dest='command', required=True, parser_class=Parser)
-    for name in ('prepare', 'import', 'verify', 'freeze', 'draft', 'check-draft'):
+    for name in ('prepare', 'import', 'verify', 'freeze', 'draft', 'check-draft', 'run'):
         command = commands.add_parser(name)
         command.add_argument('--root', default=DEFAULT_ROOT)
         if name in ('verify', 'freeze', 'draft', 'check-draft'):
@@ -27,6 +27,10 @@ def main():
         if name == 'import':
             command.add_argument('--metadata', required=True)
             command.add_argument('--attempt', nargs=2, action='append', required=True, metavar=('PROMPT', 'OUTPUT'))
+        if name == 'run':
+            command.add_argument('--preprocessing-version', required=True)
+            command.add_argument('--run-id')
+            command.add_argument('--model')
         if name == 'draft':
             for option in ('source', 'output', 'area-id', 'split-group-id', 'dictionary-version'):
                 command.add_argument('--' + option, required=True)
@@ -36,6 +40,9 @@ def main():
             result = prepare(args.input, args.root)
         elif args.command == 'import':
             result = import_run(args.input, args.metadata, args.attempt, args.root)
+        elif args.command == 'run':
+            from .api import run_api
+            result = run_api(args.input, args.preprocessing_version, args.root, args.run_id, args.model)
         elif args.command == 'freeze':
             result = freeze_run(args.run_id, args.root)
         elif args.command == 'draft':
