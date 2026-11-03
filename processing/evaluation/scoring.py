@@ -190,7 +190,7 @@ def score_document(input_bytes,gold_bytes,prediction_bytes,annotation_bytes,inst
                         known_claims = expected['auxiliary'][identity][key]
                         output_claims = actual['auxiliary'].get(paired.get(identity),{}).get(key,set())
                         if output_claims-known_claims:auxiliary_review.add((local,key))
-                        if not g['provided'] and {c[0] for c in output_claims}-{c[0] for c in known_claims}:
+                        if not g['provided'] and output_claims-known_claims:
                             auto_generation.add((local,key))
             if actual and key=='applicability' and actual['facets'].keys()-expected['facets'].keys():
                 auto_generation.add((local,key))

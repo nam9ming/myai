@@ -177,6 +177,18 @@ class ScoringTest(unittest.TestCase):
         end=next(r for r in result['field_results'] if r['field']=='time_end')
         self.assertFalse(end['gold_known']);self.assertTrue(end['output_auxiliary_claims'])
 
+    def test_changed_offset_at_unknown_clock_cannot_be_cleared_by_review(self):
+        self.source_text('합성 공사는 익일 이월이 아니며 시각·종일 여부는 미기재다.')
+        self.gold['items'][0]['occurrences'][0].update(time_start=fv(),time_end=fv(),end_day_offset=fv(0),all_day=fv())
+        self.assertEqual(self.score()['summary']['generation_errors'],0)
+        prediction=copy.deepcopy(self.gold);prediction['items'][0]['occurrences'][0]['end_day_offset']=fv(1)
+        summary=self.score(prediction)['summary']
+        self.assertEqual((summary['correct_fields'],summary['known_fields']),(6,6))
+        self.assertEqual((summary['generation_errors'],summary['generation_rate_percent']),(1,12.5))
+        links=copy.deepcopy(self.links);links['generation_reviews']=[dict(local_item_id='s1',field='time_end',unsupported=False,
+            reason='합성 오판 선언으로 알려진 익일 값을 바꾸는 오류를 상쇄할 수 없음')]
+        with self.assertRaises(ExtractionError):self.score(prediction,links)
+
     def test_auxiliary_offset_cannot_move_between_unknown_clock_occurrences(self):
         self.two_occurrences()
         first,second=self.gold['items'][0]['occurrences']

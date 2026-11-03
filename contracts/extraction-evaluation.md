@@ -21,6 +21,8 @@ NFC·연속 공백 축약·미리 승인한 동의어만 텍스트에 적용한�
 
 이름/주소가 미상이어도 known kind는 장소의 알려진 사실로 분모에 남긴다. 종일 표시와 함께 제공한 clock/offset을 버리지 않는다. clock·명시 종일이 없는 offset/종일 아님 주장만으로 시간 정답 분모를 만들지는 않으며, 부가 주장을 별도 보존해 occurrence별 생성 여부를 검사한다. 알려진 시간 필드의 추가 주장은 의미 검토가 남으면 생성률 N/A이며, 미상 시간에 새 부가 값을 만들면 생성 오류다.
 
+시간 정답 분모 밖에서도 gold의 부가 값과 다른 값(예: offset0→1)은 새 주장으로 생성 오류에 남긴다. unsupported=false 검토로 이를 상쇄할 수 없으며 금표가 잘못됐다면 새 금표 버전으로 재시험한다.
+
 ## 사람이 확정하는 대응·생성 판정
 
 annotation은 strict JSON `score-links-v1`: 정확히 `schema_version`, `item_links`, `generation_reviews`를 갖는다.
