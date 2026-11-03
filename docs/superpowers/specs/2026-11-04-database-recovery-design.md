@@ -20,7 +20,7 @@
 
 DB의 D05 raw_ref·사람 인계 directory는 절대 경로 identity다. 선택한 새 합성 materials root를 표준 tar로 별도 보관하고 파일 bytes·상대경로·POSIX mode를 모두 기록한다. D05 frozen0400/0500·handoff 전체0400/0500을 유지한다. 원본 경로 부재/다른 경로 복원에서는 후속 검증이 거부됨을 확인하고, **같은 실제 절대 경로**에 복원한 뒤 기존 Java/Python reader와 정확 재등록/재import로 검증한다. SQL 문자열 치환·symlink 우회·새 identity 발급은 복구로 세지 않는다.
 
-새 서버에 SQL을 재적재한 뒤 Flyway 이력 포함 schema의 모든 테이블·모든 열/행을 null·Unicode·timestamp·원문 JSON을 보존한 형태로 비교한다. `source_reviews`·부모 운영 번호/hash·실패 D05·canonical snapshot·head/audit도 빠뜨리지 않는다. 같은 조건의 실제 HTTP config/detail/matches와 snapshot export를 재확인한다. 응답의 generated_at·config server_now만 명시적으로 정규화하고 같은 외부 조회조건·snapshot·고정 replay 문맥을 쓴다. 내부 계산 request_id는 매 요청 새 UUID이며 adapter가 각 입력 SHA/응답 ID를 검증한 뒤 public data만 반환하므로 값을 바꾸는 spy/Clock 대체를 넣지 않는다. 재기동 뒤에도 seed/행이 늘지 않아야 한다.
+새 서버에 SQL을 재적재한 뒤 Flyway 이력 포함 schema의 모든 테이블·모든 열/행을 null·Unicode·timestamp·원문 JSON을 보존한 형태로 비교한다. `source_reviews`·부모 운영 번호/hash·실패 D05·canonical snapshot·head/audit도 빠뜨리지 않는다. 같은 조건의 실제 HTTP config/detail/matches와 snapshot export를 재확인한다. 응답의 generated_at·config server_now만 명시적으로 정규화하고 같은 외부 조회조건·snapshot·고정 replay 문맥을 쓴다. 내부 계산 request_id는 매 요청 새 UUID이며 adapter가 각 입력 SHA/응답 ID를 검증한 뒤 public data만 반환하므로 값을 바꾸는 spy/Clock 대체를 넣지 않는다. 재기동 뒤에도 seed/행이 늘지 않아야 한다. SHOW CREATE의 원문은 별도 보존하고, 전체 information_schema.COLUMNS의 실제 charset/collation/type/default 등과 모든 행을 대조한다. 검증된 컬럼 이름·전체 COLUMN_TYPE으로 시작하는 정의에서만 같은 utf8mb4_0900_as_cs의 중복 CHARACTER SET 표기를 비교용으로 제거한다. DEFAULT/CHECK 문자열·다른 타입/정렬·제약은 정규화하지 않는다.
 
 ## 산출물·한계
 
