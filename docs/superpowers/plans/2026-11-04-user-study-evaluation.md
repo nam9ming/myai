@@ -52,14 +52,15 @@ shared fixture API: test_study_protocol.py `StudyProtocolFixture(unittest.TestCa
 
 ### Task 3: private export·CLI·문서·전체 gate
 
-**Owner:** coordinator. Files: processing/evaluation/study_export.py, processing/evaluation/__main__.py, processing/tests/test_user_study_export.py; 문서는 별도docs owner에게 위임(contracts/user-study.md, contracts/README.md, processing/README.md/TASK.md, docs/spec03/05).
+**Owner:** coordinator. Files: processing/evaluation/study_export.py, processing/evaluation/__main__.py, processing/tests/test_user_study_export.py, backend/src/test/java/kr/ac/myai/backend/UserStudyMaterialTest.java; 문서는 별도docs owner에게 위임(contracts/user-study.md, contracts/README.md, processing/README.md/TASK.md, docs/spec03/05).
 
 CLI check-study/export-study의 root 기본STUDY_ROOT, --protocol/--input 필수상대경로. export --output/--format(json|csv) 필수. `export_study(packet, protocol, output, format)->receipt`; validated protocol를 받아현재retention을 다시확인하고 exactbytes export. receipt는 protocol_version/status/format/output_sha256/output_size/summary만(상대filename/participantID 없음). JSON canonical result; CSV 고정열 participant·task rows와 formula escape, free narratives는JSON/원본에보존. 0600/0700·동일bytes재사용·다른bytes/부분파일/권한확대/symlink거부·자기임시파일정리. helper _write/_path공유재사용, 새동결저장소없음.
 
 - [ ] **RED:** CLI/export부재·새API·privateJSON/CSV 실제row/재계산·NFC/타입/permission/충돌/실패/동시/원본불변·기한records선읽기차단을 시험.
 - [ ] **GREEN:** 기존 CLI오류0/2/3/5/1·stdout한JSON/진단값비노출, protocol선검사→records읽기→분석→현재기한재검사→배타privateexport. publicpath/D09자동복제 없음.
 - [ ] docs owner는 실제계약/프로세스·모집/동의/보존·M05분모/경고·선언과검증한계·실제후속을 한국어로 기록하고 static링크/bash검사. 실제자료/성과 생성 없음.
-- [ ] Native 전체 Python + Java/MySQL328기존bridge + Node29/JSON9/lint/build, 실제CLI(합성) check→JSON/CSV→재사용/충돌/만료/누출/원본불변 실행.
+- [ ] 실제 Java SnapshotExportService가 쓴 합성 canonical 파일을 Python protocol reader로 읽는 경계 시험을 추가한다. Publication producer를 복제하지 않고 현재 포맷/문서버전·집계의 실제 호환성을 확인한다.
+- [ ] Native 전체 Python + Java/MySQL기존bridge/새호환시험 + Node29/JSON9/lint/build, 실제CLI(합성) check→JSON/CSV→재사용/충돌/만료/누출/원본불변 실행.
 - [ ] 작성자 전체 리뷰→독립 전체1회→유효지적모두RED→GREEN수정/전체회귀. 정확sourceCI/AI/새사람피드백→develop병합→통합gate/PR20현재기록. main사람.
 - [ ] 모든Ruling/비용·원본proof/checksum·보고를 private evidence보존 후이번소유workspace/container/credential만정리. 전체goal의 실제사람/40문서/배포를 완료로 표시하지 않는다.
 
