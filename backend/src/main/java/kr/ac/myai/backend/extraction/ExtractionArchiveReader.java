@@ -67,13 +67,17 @@ public class ExtractionArchiveReader {
             require(receipt.path("format_version").asText().equals("extraction-archive-v1") && receipt.path("run_id").asText().equals(runId));
             require(receipt.path("document_version_id").asText().matches(UUID));
             require(receipt.path("data_kind").isTextual() && Set.of("synthetic", "real").contains(receipt.path("data_kind").asText()));
-            require(receipt.path("execution_mode").asText().equals("manual_import"));
+            String mode = receipt.path("execution_mode").asText();
+            require(Set.of("manual_import", "api").contains(mode));
             require(receipt.path("status").asText().equals(process.exitCode() == 0 ? "validated" : "failed"));
             require(receipt.path("review_required").isBoolean() && receipt.path("review_required").asBoolean());
             require(receipt.path("attempts").isArray() && receipt.path("attempts").size() >= 1 && receipt.path("attempts").size() <= 3);
             var names = new HashSet<>(Set.of("input.json", "metadata.json"));
             for (int i = 1; i <= receipt.path("attempts").size(); i++) {
                 names.add("attempt-" + i + ".prompt"); names.add("attempt-" + i + ".output");
+                if (mode.equals("api")) {
+                    names.add("attempt-" + i + ".response"); names.add("attempt-" + i + ".exchange");
+                }
             }
             require(keys(receipt.path("artifacts")).equals(names));
             byte[] savedReceipt = read(directory.resolve("receipt.json"));

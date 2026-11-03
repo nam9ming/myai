@@ -437,6 +437,27 @@ class ExtractionRunMySqlTest {
     }
 
     @Test
+    void registersApiRunAndRetainsWireArtifactsBeforePrivateReview() throws Exception {
+        var source = source(); registerSource(source); var before = counts();
+        String id = UUID.randomUUID().toString();
+        Path prepared = archive(source, id, false);
+        Path api = ExtractionArchiveReaderTest.apiArchive(root.resolve("api"), prepared.resolve(id).resolve("input.json"),
+                id, source.path("documents").get(0).path("preprocessing_version").asText());
+        var first = extraction.importRun(id, api, "synthetic-api-registrant");
+        assertThat(first.status()).isEqualTo("validated");
+        assertThat(extraction.importRun(id, api, "synthetic-api-registrant").alreadyRegistered()).isTrue();
+        var row = jdbc.queryForMap("SELECT * FROM extraction_runs WHERE run_id=?", id);
+        assertThat(row.get("execution_mode")).isEqualTo("api");
+        assertThat(row.get("provider")).isEqualTo("openai");
+        assertThat(mapper.readTree((String) row.get("metadata_json")).path("usage_in").asInt()).isEqualTo(17);
+        assertThat(Files.isRegularFile(stored(id).resolve("attempt-1.response"))).isTrue();
+        assertThat(Files.isRegularFile(stored(id).resolve("attempt-1.exchange"))).isTrue();
+        assertThat(counts()).isEqualTo(before);
+        importer.importBatch(review(source, id), "synthetic-reviewer");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM snapshots", Long.class)).isEqualTo(before.get(2));
+    }
+
+    @Test
     void rejectsEverySourceProjectionMismatchAndChangedIdentityWithoutOverwriting() throws Exception {
         var source = source(); registerSource(source);
         for (String field : List.of("title", "published_date", "block_index", "preprocessing_version", "data_kind", "document_version_id")) {

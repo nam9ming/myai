@@ -1,6 +1,6 @@
 # Python AI·계산 작업
 
-현재 구현: C01~C10·calc-v1·Spring 연결과 [추출 계약 검증·수동 원출력 기록](../contracts/extraction-run.md). 실제 모델/API 실행·개발용 실자료3건·실자료의 사람 검토본 전달·정답표 평가는 미완료입니다. D06 숨김 초안 생성·Java 저장과 사람 검토 다음 revision 연결은 [안내](../backend/docs/ai-review-draft.md)를 따른다. D05 DB 등록은 backend의 local-extraction으로 연결했다. 아래 전체 요구를 유지하며 합성 시험을 실제 처리 건수로 세지 않습니다.
+현재 구현: C01~C10·calc-v1·Spring 연결과 [OpenAI API 실행·추출 검증·원본 보관](../contracts/extraction-run.md). 개발 단계는 기존 코드리뷰 OpenAI 키를 사용하며 실제 연결 여부는 실행 receipt로 확인합니다. 공식 공사·행사·교통 공지3건을 개발용으로 수집해 실제 API로 각1회 실행했습니다. 세 건 모두 근거 불일치로 검증 실패했고 원본을 보존했습니다. 검증된 실자료3건·사람 검토본 전달·정답표 평가는 미완료입니다. D06 숨김 초안 생성·Java 저장과 사람 검토 다음 revision 연결은 [안내](../backend/docs/ai-review-draft.md)를 따른다. D05 DB 등록은 backend의 local-extraction으로 연결했다. 아래 전체 요구를 유지하며 합성 시험을 실제 처리 건수로 세지 않습니다.
 
 담당: 김윤기 · 첫 결과: **11/3(화) 오후6시(KST)** · 연구실 시연: **11/4(수), 시각미정**
 

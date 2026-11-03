@@ -30,7 +30,9 @@ def parse_metadata(content, document, attempt_count):
     for key in ('run_id', 'document_version_id'):
         text(value[key], '$.' + key, 'input', UUID)
     require(value['document_version_id'] == document['document_version_id'], '$.document_version_id', 'input')
-    require(value['execution_mode'] == 'manual_import', '$.execution_mode', 'input')
+    require(value['execution_mode'] in ('manual_import', 'api'), '$.execution_mode', 'input')
+    if value['execution_mode'] == 'api':
+        require(value['provider'] == 'openai' and value['model_label'] is not None, '$.provider', 'input')
     require(type(attempt_count) is int and 1 <= attempt_count <= 3 and type(value['attempts']) is int
             and value['attempts'] == attempt_count, '$.attempts', 'input')
     for key in ('prompt_version', 'schema_version', 'preprocessing_version'):

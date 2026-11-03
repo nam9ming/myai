@@ -20,6 +20,8 @@ Java 21 / Spring Boot **3.5.16** / Gradle Wrapper **8.14.3** / MySQL **8.4.13**.
 
 `source-import-v1`은 local-import에서 D03만 먼저 등록한다. `local-extraction`은 Python archive를 검증해 D05 성공/실패·nullable 모델·정밀 metadata/receipt 원본을 불변 등록한다. [D03/D05 연결 안내](docs/extraction-run-import.md)를 따른다. V3는 기존 행을 보존하며 검증 정보 없는 legacy를 D06 origin으로 승격하지 않는다.
 
+Python OpenAI `run`이 만든 api archive도 같은 `local-extraction`으로 등록한다. API 시도의 요청·응답·전송 상태를 함께 freeze·검증하며 Java 공개 프로세스는 AI 키를 읽거나 모델을 호출하지 않는다. [개발용 실행](../processing/README.md#openai-개발용-추출)을 따른다.
+
 **미구현:** 관리 UI, 운영 배포·실자료 평가. 저장 계층에는 이미 포함된 Spring JDBC를 사용한다. JPA entity/일반 CRUD와 Java 후보 판정 엔진은 추가하지 않았다. 승인·공개·복구·계산 연결·내보내기는 합성 자료와 전용 DB로 시험하며 실제 자료의 사실성·이용권한 검토를 완료한 상태는 아니다.
 
 ## DB 없이 합성 API 실행

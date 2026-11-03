@@ -1,6 +1,6 @@
 # D03 선등록·D05 AI 실행 기록 등록
 
-Java21·MySQL8.4.13·Python3.13을 사용한다. 준비된 수동 AI 도구의 원본 기록을 DB에 등록하며 실제 모델 호출·자료 수집·사실성 검토·공개 승인을 수행하지 않는다. 외부 Python 의존성은 없다.
+Java21·MySQL8.4.13·Python3.13을 사용한다. 준비된 수동/API AI 실행의 원본 기록을 DB에 등록한다. 모델 호출은 별도 Python `run` 명령이 담당하며 Java 등록은 자료 수집·사실성 검토·공개 승인을 수행하지 않는다. 외부 Python 의존성은 없다.
 
 ## 원문만 먼저 등록
 
@@ -40,7 +40,9 @@ PY
 python3.13 -m processing.extraction prepare --input data/private/ai-input.json
 ```
 
-실제 제공한 프롬프트·시도별 원출력과 정확한 run_id/document_version_id·도구 표시값·전처리 버전의 metadata를 [Python 기록 계약](../../contracts/extraction-run.md)에 따라 import한다. 미확인 비용·시각을 추정하거나 합성 예제를 실제 실행 실적으로 집계하지 않는다. GitHub 코드 리뷰 키와 로컬 추출 키는 별도다.
+수동 도구는 실제 제공한 프롬프트·시도별 원출력과 정확한 run_id/document_version_id·도구 표시값·전처리 버전의 metadata를 [Python 기록 계약](../../contracts/extraction-run.md)에 따라 import한다. OpenAI API는 같은 입력에 `python3.13 -m processing.extraction run --input data/private/ai-input.json --preprocessing-version VERSION`을 실행한다. VERSION은 D03과 같아야 한다. 개발 단계는 사용자 결정에 따라 코드리뷰와 같은 키를 사용하며 로컬은 환경변수, GitHub는 기존 Secret에서 직접 읽는다. 미확인 비용·상세 모델 버전을 추정하거나 합성 연결을 실제 공지 실적으로 집계하지 않는다.
+
+API archive는 시도별 response/exchange 원본까지 보관·검증하고 `execution_mode=api`로 구분한다. 클라이언트 요청 구간·제공 token만 기록하며 금액은 null이다. 등록 이후의 freeze·원본 재검증·실패/legacy 차단·사람 검토 경계는 수동 실행과 같다.
 
 ## 검증 후 DB 등록
 

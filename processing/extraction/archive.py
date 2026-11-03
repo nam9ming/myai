@@ -173,26 +173,44 @@ def _receipt(directory, identity):
     _archive_check(identity['format_version'] == FORMAT and identity['run_id'] == directory.name)
     count = identity['attempt_count']
     _archive_check(type(count) is int and 1 <= count <= 3)
-    names = ['input.json', 'metadata.json'] + [f'attempt-{i}.{suffix}' for i in range(1, count + 1) for suffix in ('prompt', 'output')]
     artifacts = identity['artifacts']
-    _archive_check(type(artifacts) is dict and set(artifacts) == set(names))
+    _archive_check(type(artifacts) is dict and {'input.json', 'metadata.json'} <= set(artifacts))
     stamp(identity['recorded_at'], '$.recorded_at')
-    contents = {}
-    for name in names:
-        expected = artifacts[name]
+    for expected in artifacts.values():
         shape(expected, 'sha256 size', kind='archive')
         text(expected['sha256'], kind='archive', pattern=HASH)
         _archive_check(type(expected['size']) is int and expected['size'] >= 0)
-        if name.endswith('.prompt'):
-            _archive_check(_fingerprint(directory / name) == expected)
-        else:
-            contents[name] = _read_checked(directory / name, expected)
+    contents = {name: _read_checked(directory / name, artifacts[name]) for name in ('input.json', 'metadata.json')}
     document = parse_input(contents['input.json'])
     metadata = parse_metadata(contents['metadata.json'], document, count)
+    api = metadata['execution_mode'] == 'api'
+    suffixes = ('prompt', 'output', 'response', 'exchange') if api else ('prompt', 'output')
+    names = ['input.json', 'metadata.json'] + [f'attempt-{i}.{suffix}' for i in range(1, count + 1) for suffix in suffixes]
+    _archive_check(set(artifacts) == set(names))
+    for name in names[2:]:
+        if name.endswith('.prompt'):
+            _archive_check(_fingerprint(directory / name) == artifacts[name])
+        else:
+            contents[name] = _read_checked(directory / name, artifacts[name])
     _archive_check(metadata['run_id'] == identity['run_id'] and document['document_version_id'] == identity['document_version_id']
                    and document['data_kind'] == identity['data_kind'])
-    attempts = []
+    attempts, exchanges, usages = [], [], []
     for i in range(1, count + 1):
+        if api:
+            from .api import check_api_attempt, request_bytes
+            previous = attempts[-1] if attempts else None
+            _archive_check(previous is None or previous['retryable'])
+            exchange = decode(contents[f'attempt-{i}.exchange'], 'archive')
+            feedback = previous['error_path'] if previous and previous['failure_kind'] == 'schema' else None
+            request = request_bytes(document, metadata['model_label'], feedback)
+            _archive_check(artifacts[f'attempt-{i}.prompt'] == dict(sha256=hashlib.sha256(request).hexdigest(), size=len(request)))
+            output, result, usage = check_api_attempt(request, contents[f'attempt-{i}.response'],
+                                                      exchange, document, metadata['model_label'], feedback)
+            _archive_check(output == contents[f'attempt-{i}.output'])
+            _archive_check(not exchanges or stamp(exchanges[-1]['finished_at'], '$') <= stamp(exchange['started_at'], '$'))
+            exchanges.append(exchange); usages.append(usage)
+            attempts.append(dict(attempt=i, **result))
+            continue
         try:
             parse_output(contents[f'attempt-{i}.output'], document)
             result = dict(status='validated', error_code=None, error_path=None, failure_kind=None, retryable=False)
@@ -200,13 +218,22 @@ def _receipt(directory, identity):
             result = dict(status='failed', error_code=error.code, error_path=error.path,
                           failure_kind=error.kind, retryable=error.retryable)
         attempts.append(dict(attempt=i, **result))
+    if api:
+        from .api import usage_totals
+        from .prompt import PROMPT_VERSION
+        _archive_check(not attempts[-1]['retryable'] or count == 3)
+        _archive_check(metadata['provider'] == 'openai' and metadata['prompt_version'] == PROMPT_VERSION
+                       and metadata['model_version'] is None and metadata['cost'] is None and metadata['currency'] is None
+                       and metadata['started_at'] == exchanges[0]['started_at']
+                       and metadata['finished_at'] == exchanges[-1]['finished_at']
+                       and (metadata['usage_in'], metadata['usage_out']) == usage_totals(usages))
     return dict(format_version=FORMAT, run_id=identity['run_id'], document_version_id=document['document_version_id'],
-                data_kind=document['data_kind'], execution_mode='manual_import', recorded_at=identity['recorded_at'],
+                data_kind=document['data_kind'], execution_mode=metadata['execution_mode'], recorded_at=identity['recorded_at'],
                 status=attempts[-1]['status'], review_required=True, input_sha256=artifacts['input.json']['sha256'],
                 metadata_sha256=artifacts['metadata.json']['sha256'], artifacts=artifacts, attempts=attempts)
 
 
-def import_run(input_path, metadata_path, attempt_pairs, root=DEFAULT_ROOT):
+def import_run(input_path, metadata_path, attempt_pairs, root=DEFAULT_ROOT, api_artifacts=None):
     pairs = list(attempt_pairs)
     content, metadata_bytes = _read(input_path), _read(metadata_path)
     document = parse_input(content)
@@ -214,6 +241,11 @@ def import_run(input_path, metadata_path, attempt_pairs, root=DEFAULT_ROOT):
     sources = dict([('input.json', Path(input_path)), ('metadata.json', Path(metadata_path))] +
                    [(f'attempt-{i}.{suffix}', Path(path)) for i, pair in enumerate(pairs, 1)
                     for suffix, path in zip(('prompt', 'output'), pair, strict=True)])
+    require((metadata['execution_mode'] == 'api') == (api_artifacts is not None), kind='input')
+    if api_artifacts is not None:
+        require(len(api_artifacts) == len(pairs), kind='input')
+        sources.update((f'attempt-{i}.{suffix}', Path(path)) for i, pair in enumerate(api_artifacts, 1)
+                       for suffix, path in zip(('response', 'exchange'), pair, strict=True))
     fingerprints = {name: _fingerprint(path) for name, path in sources.items()}
     for name, original in [('input.json', content), ('metadata.json', metadata_bytes)]:
         _archive_check(fingerprints[name]['sha256'] == hashlib.sha256(original).hexdigest(), 'ARCHIVE_SOURCE_CHANGED')
