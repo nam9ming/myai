@@ -45,7 +45,7 @@ event 분류는 모든 필수 anchor의 정규 match 및 연결 duplicate가 계
 - candidate 검색 집합 P는 candidate인 match/duplicate의 logicalevent를 한 번, candidate additional은 (version,local_item_id)별 orphan key로 포함한다. 기대 candidate 집합 C와 TP/FP/FN·precision/recall을 계산한다. 분모0은 null. 중복 출력 수·candidate 중복 수는 별도로 남긴다.
 - 이 지표는 retrieval_presence다. candidate+실패는 TP일 수 있지만 event 판정은 partial, candidate+cancelled는 conflict다. candidate 정답이 모든 사건 판정 정답을 의미하지 않는다.
 - complete_classification 정확도와 classification+reason 정확도는 E 전체가 분모다. 미계산/누락/실패/상충도 분모에 남는다. 4분류 confusion에는 별도 미해결 상태 열을 두며 계산 가능한 것만 분모로 삼지 않는다.
-- expected needs_check의 정확 판정·candidate 오확정·누락, expected cancelled의 누락·candidate 오노출을 건수로 보고한다. 후보가0개면 precision null, 기대 후보0이면 recall null이다. 새 백분율 목표·F1은 추가하지 않는다.
+- expected needs_check의 정확 판정·candidate 오확정·누락, expected cancelled의 누락·candidate 오노출을 건수로 보고한다. 여기서 누락은 duplicate를 포함한 모든 linked classified 관측에 기대 상태가 없는 사건 수다. candidate+cancelled 상충은 cancelled 누락0·후보 오노출1이며, 정규 match 누락+cancelled duplicate는 event state가 missing이어도 cancelled 누락0이다. 상태 누락과 후보 오확정/오노출은 중첩될 수 있고 전체 사건의 states·완전 판정 정확도와 구분한다. 후보가0개면 precision null, 기대 후보0이면 recall null이다. 새 백분율 목표·F1은 추가하지 않는다.
 - A 단위는 target_agreement로 명명해 역사 원문 정확도와 구별한다. duplicate는 비교·상충에는 포함하지만 A/E 분모를 늘리지 않는다. additional은 orphan FP/출력 상태로 남긴다.
 - expected↔gold engine(투영/엔진 조사), expected↔각 방법(end-to-end), gold engine↔각 방법(추출 영향)을 분리한다. 양쪽 failure/null을 일치 정답으로 처리하지 않는다. gold consensus 불가도 별도 표시한다.
 - 전체·case·dev/holdout을 같은 고정 집합으로 집계한다. 원래 cohort 부족/노출/retest/방법별 basis·정책·시간 선언과 generalization_claim=false를 보존한다. stdout summary에는 상세 사건ID/기대 설명/검토자/원래 경로를 넣지 않는다.

@@ -38,11 +38,11 @@
 - 실제 item 결과에는 projection_body_sha256와 source_text_sha256(선언값)을 별도로 남긴다. 원본 D03 hash를 재구성한 것으로 표시하지 않는다.
 - matching_projection.CLASSES=(candidate,needs_check,cancelled,excluded), REASONS=명세04의13개 코드, STATES는 위 state 목록.
 
-- [ ] **RED:** 새 모듈·private source 경로 부재, 공개 unchecked/late source 거부 불변, 4분류/미상 제목·유형·시간/빈refs·실패/빈출력, 이름/주소/kind 충돌·별칭 중복·골드 위치 누출, Decimal bounds/bool/형, source 해시/순서/future/cutoff/24h+1ns·replay 불변 시험. Run `python3.13 -B -m unittest discover -s processing/tests -p test_matching_projection.py -v`; Expected missing API/의도한 차이 실패를 관찰.
-- [ ] **GREEN:** 기존 validate 블록·source default 의미를 보존하고 private literal 옵션만 추가한다. 각 방법 자신의 값으로 사전 연결·기존 projector/business_hours/locate/_classify를 사용한다. 내부 projection hash를 실제 D03 hash로 표시하지 않는다.
-- [ ] **Author design-fix RED/GREEN:** 같은 raw item을 match/duplicate/additional 또는 다른 gold slot으로 대응해도7개 계산 결과는 같아야 한다. 사전 entry_id의 구역 상태만 사용하고 occurrence 참조 장소만 집계해 orphan 후보 FP가 정답 대응 유무로 차단되지 않음을 확인한다.
-- [ ] **Verify:** 새 projection + 기존 protocol/engine/intervals/geometry/draft/handoff 관련 시험. Expected 실패/생략0, 원래 공개 입력 허용/거부 그대로, 원본 bytes/dict 불변.
-- [ ] **Commit:** 부모가 `feat: project matching evaluation facts` 영어 제목/본문으로 소유 파일만 커밋.
+- [x] **RED:** 새 모듈·private source 경로 부재, 공개 unchecked/late source 거부 불변, 4분류/미상 제목·유형·시간/빈refs·실패/빈출력, 이름/주소/kind 충돌·별칭 중복·골드 위치 누출, Decimal bounds/bool/형, source 해시/순서/future/cutoff/24h+1ns·replay 불변 시험. Run `python3.13 -B -m unittest discover -s processing/tests -p test_matching_projection.py -v`; Expected missing API/의도한 차이 실패를 관찰.
+- [x] **GREEN:** 기존 validate 블록·source default 의미를 보존하고 private literal 옵션만 추가한다. 각 방법 자신의 값으로 사전 연결·기존 projector/business_hours/locate/_classify를 사용한다. 내부 projection hash를 실제 D03 hash로 표시하지 않는다.
+- [x] **Author design-fix RED/GREEN:** 같은 raw item을 match/duplicate/additional 또는 다른 gold slot으로 대응해도7개 계산 결과는 같아야 한다. 사전 entry_id의 구역 상태만 사용하고 occurrence 참조 장소만 집계해 orphan 후보 FP가 정답 대응 유무로 차단되지 않음을 확인한다.
+- [x] **Verify:** 새 projection + 기존 protocol/engine/intervals/geometry/draft/handoff 관련 시험. Expected 실패/생략0, 원래 공개 입력 허용/거부 그대로, 원본 bytes/dict 불변.
+- [x] **Commit:** 부모가 `feat: project matching evaluation facts` 영어 제목/본문으로 소유 파일만 커밋.
 
 ### Task 2: 원본 연결·고정 분모·6view 평가
 
@@ -56,11 +56,11 @@ result 정확한 최상위 키: `schema_version matching_eval_id matching_ref ma
 case 결과: `case_id observations event_results target_agreement extraction_effects summary`. observations/view에는 모든 A primary 행+모든 duplicate/additional, event_results/view에는 모든 E를 보존한다. view 이름은 gold_engine/rules_first_raw/rules_final_auto/ai_first_raw/ai_final_auto/human_reviewed. primary 행 kind=match|missing|failed, extra kind=duplicate|additional, sourceversion/slot/localitem/event/split·state/class/reasons/disposition를 남긴다.
 summary는 data_kind/phase/source_phase/case_version/matcher_version/case_count/코호트 수·부족·분포·holdout 경고/방법별 노출·정책·initial 경고/선언 시간/generalization_claim=false와 views·splits를 포함한다. 상세 ID/사유/담당자/경로는 summary 밖 private cases에만 둔다. 비율은 정수 분모에서 다시 계산하고 Decimal 사실값을 근사 변환하지 않는다.
 
-- [ ] **RED:** PairedComparisonFixture로 실제 frozen comparison+독립 manual target fixture를 만들고 새 evaluate API 부재를 관찰한다. `python3.13 -B -m unittest discover -s processing/tests -p test_matching_evaluation.py -v` Expected missing module/API.
-- [ ] **Implement:** verify_comparison/checked reads와 기존 records._load_sources를 재사용해 full gold/input/run/annotation을 로드한다. field_results로 예측을 복원하지 않는다. 모든 cohort/E/A와6view를 평가하고 실패·빈 출력·불가·cutoff·중복/추가를 그대로 둔다. 타입/구역 private filter는 새 C코드 없이 구별한다.
-- [ ] **Metrics RED/GREEN:** unique candidate 존재 TP/FP/FN/P/R0null, E 전체분모 완전판정/사유·4분류 confusion+미해결열, needs_check 오확정/누락·취소 누락/후보오노출, A targetagreement, method-vs-gold 비교불가/추가/누락, duplicate상충·누락 primary+candidate duplicate·candidate+실패·old/new문서상충·orphan 후보·빈gold·개발/확인 분할을 시험한다. 원문/선언/금표를 계산으로 덮지 않는다.
-- [ ] **Round/size RED/GREEN:** 비교/receipt/정확 부모/코호트·시간 불일치, retest 최초전체·같은case_version 다른내용 충돌·changedcase의paired차이금지·상태노출경고 유지·행생성중8MiB초과거부를 검증한다. Expected 전체 관련 GREEN, goldengine를 정답으로 사용한 코드 없음.
-- [ ] **Commit:** 부모가 `feat: evaluate matching classifications` 영어 제목/본문으로 커밋.
+- [x] **RED:** PairedComparisonFixture로 실제 frozen comparison+독립 manual target fixture를 만들고 새 evaluate API 부재를 관찰한다. `python3.13 -B -m unittest discover -s processing/tests -p test_matching_evaluation.py -v` Expected missing module/API.
+- [x] **Implement:** verify_comparison/checked reads와 기존 records._load_sources를 재사용해 full gold/input/run/annotation을 로드한다. field_results로 예측을 복원하지 않는다. 모든 cohort/E/A와6view를 평가하고 실패·빈 출력·불가·cutoff·중복/추가를 그대로 둔다. 타입/구역 private filter는 새 C코드 없이 구별한다.
+- [x] **Metrics RED/GREEN:** unique candidate 존재 TP/FP/FN/P/R0null, E 전체분모 완전판정/사유·4분류 confusion+미해결열, needs_check 오확정/누락·취소 누락/후보오노출, A targetagreement, method-vs-gold 비교불가/추가/누락, duplicate상충·누락 primary+candidate duplicate·candidate+실패·old/new문서상충·orphan 후보·빈gold·개발/확인 분할을 시험한다. 원문/선언/금표를 계산으로 덮지 않는다.
+- [x] **Round/size RED/GREEN:** 비교/receipt/정확 부모/코호트·시간 불일치, retest 최초전체·같은case_version 다른내용 충돌·changedcase의paired차이금지·상태노출경고 유지·행생성중8MiB초과거부를 검증한다. Expected 전체 관련 GREEN, goldengine를 정답으로 사용한 코드 없음.
+- [x] **Commit:** 부모가 `feat: evaluate matching classifications` 영어 제목/본문으로 커밋.
 
 ### Task 3: 불변 보관·CLI·문서·전체 gate
 
