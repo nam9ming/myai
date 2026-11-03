@@ -15,6 +15,8 @@ from .evaluation_storage import freeze_evaluation, verify_evaluation
 from .reviews import REVIEW_ROOT, check_review, freeze_review, verify_review
 from .comparison import COMPARISON_ROOT, compare_evaluations
 from .comparison_storage import freeze_comparison, verify_comparison
+from .matching import MATCHING_ROOT, evaluate_matching
+from .matching_storage import freeze_matching, verify_matching
 from .human_handoff import HANDOFF_ROOT, project_handoff
 from .handoff_storage import freeze_handoff, verify_handoff
 from .storage import DEFAULT_ROOT, freeze_dataset, verify_dataset
@@ -70,6 +72,14 @@ def main():
         else:
             command.add_argument('--input', required=True)
             command.add_argument('--evaluation-root', default=EVALUATION_ROOT)
+    for name in ('check-matching', 'freeze-matching', 'verify-matching'):
+        command = commands.add_parser(name)
+        if name != 'check-matching': command.add_argument('--root', default=MATCHING_ROOT)
+        if name == 'verify-matching': command.add_argument('matching_ref')
+        else:
+            command.add_argument('--input', required=True)
+            command.add_argument('--comparison-root', default=COMPARISON_ROOT)
+            command.add_argument('--initial-root', default=MATCHING_ROOT)
     for name in ('check-handoff', 'freeze-handoff', 'verify-handoff'):
         command = commands.add_parser(name)
         if name != 'check-handoff': command.add_argument('--root', default=HANDOFF_ROOT)
@@ -103,6 +113,12 @@ def main():
             result = freeze_comparison(args.input, args.root, args.evaluation_root)
         elif args.command == 'verify-comparison':
             result = verify_comparison(args.comparison_ref, args.root)
+        elif args.command == 'check-matching':
+            result = evaluate_matching(_read(args.input), args.comparison_root, args.initial_root)['result']['summary']
+        elif args.command == 'freeze-matching':
+            result = freeze_matching(args.input, args.root, args.comparison_root, args.initial_root)
+        elif args.command == 'verify-matching':
+            result = verify_matching(args.matching_ref, args.root)
         elif args.command == 'check-handoff':
             result = project_handoff(_read(args.input), args.review_root)['summary']
         elif args.command == 'freeze-handoff':

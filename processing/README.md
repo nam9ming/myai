@@ -36,6 +36,7 @@ python3.13 -m venv .venv
 | `evaluation/gold.py`, `gold_storage.py` | 독립 정답 제공자의 선언·근거·사건 anchor 검사와 원본/지침/manifest 별도 동결 |
 | `evaluation/scoring.py`, `records.py`, `evaluation_storage.py` | 8필드 채점·명시한 API/규칙/사람 수정 원본 연결·최초/재시험 원본 묶음 동결 |
 | `evaluation/comparison.py`, `comparison_storage.py` | 같은 gold·회차·AI 부모의 세 방법을 짝지어 개선/악화·선언 시간을 집계하고 전체 평가를 동결 |
+| `evaluation/matching_projection.py`, `matching.py`, `matching_storage.py` | 독립 수동 기대 분류/사유와6개 뷰를 비교하고 검색 존재·완전 분류·전체 원본을 별도 동결 |
 | `evaluation/human_handoff.py`, `handoff_storage.py` | 사람 수정값의 workflow 없는 D06 사실 투영·원본 전체 인계 이미지, 별도 Java 인계 요청으로 저장 |
 | `evaluation/reviews.py` | 사람 수정후 출력·실제 변경 기록/검토 시간 선언·D05 전체의 별도 불변 보관 |
 
@@ -155,6 +156,22 @@ python3.13 -m processing.evaluation verify-comparison COMPARISON_REF
 ```
 
 `--evaluation-root` 기본값은 private evaluation/extractions, freeze/verify의 `--root`는 private evaluation/comparisons입니다. 세 평가의 전체 gold/source/initial을0400/0500으로 함께 보관하고 원래 경로 없이 재검증합니다. 같은 ID의 다른 입력은 충돌입니다. stdout에는 summary/receipt만 반환하며 종료0/2/3/5와 기존 CLI 동작을 유지합니다. 검토 시간은 선언 합계이고 실제 노동 감소·독립성·blind holdout 인증은 아닙니다. 키/AI/네트워크/DB를 쓰지 않으며 실제40건 비교·선별 엔진 평가는 미완료입니다.
+
+## 매칭 분류·사유 평가
+
+[matching-evaluation-v1](../contracts/matching-evaluation.md)은 동결 extraction-comparison 전체를 정확한 receipt로 선택하고 독립 수동 기대 candidate/needs_check/cancelled/excluded·사유와 gold/규칙 첫·최종/AI 첫·최종/사람 수정후의6개 뷰를 비교합니다. 같은 검토 사전에 각 방법 자신의 알려진 장소를 연결하며 gold의 좌표로 다른 방법의 미상을 채우지 않습니다. 출처 상태·사전·수동 판단은 제공자의 선언이고 D03 본문 대조나 실제 독립 검토 인증이 아닙니다.
+
+구역 검토는 dictionary entry별로 고정하고 occurrence가 실제 참조한 장소만 집계합니다. unused location이나 gold 사건 대응으로 구역을 보완하지 않습니다. match/duplicate/additional annotation은 채점 identity만 정하므로 추가 출력도 자신의 장소·조건으로 candidate가 되어 orphan FP로 집계될 수 있습니다.
+
+```sh
+python3.13 -m processing.evaluation check-matching --input data/private/evaluation/matching-selection.json
+python3.13 -m processing.evaluation freeze-matching --input data/private/evaluation/matching-selection.json
+python3.13 -m processing.evaluation verify-matching MATCHING_REF
+```
+
+입력10키와 context/dictionary/cases/initial의 정확한 필드는 계약을 따릅니다. 모든 cohort 버전·gold 슬롯·실패·빈 출력·중복/추가를 유지하며 최신 선택·사실 병합·버전 비활성 옵션은 없습니다. candidate+실패는 검색 존재 TP일 수 있어도 완전 분류는 partial, 과거 취소+새 후보·상충 duplicate는 conflict입니다. 사건 전체 E와 슬롯 전체 A의 분모를 유지하고 이유를 합치지 않습니다. replay cutoff 당시 미확보는 unavailable이며 excluded가 아닙니다. 유형/구역 필터도 별도 disposition으로 남깁니다.
+
+`--comparison-root` 기본값은 `data/private/evaluation/comparisons`, `--initial-root`와 freeze/verify의 `--root`는 `data/private/evaluation/matching`입니다. matching phase와 source phase는 별도로 보존하며 retest는 matching initial 전체를 참조합니다. 선택 비교·initial 전체를0400/0500으로 복사하고 원래 경로 없이 저장된 시각으로 재계산합니다. 같은 ID의 다른 입력은 충돌이며 check는 summary, freeze/verify는 receipt만 출력합니다. 종료0/2/3/5/1·8MiB/깊이100을 유지하고 새 의존성·키·AI·네트워크·DB를 쓰지 않습니다. 실제 독립 gold·40문서/holdout·사람 검토·D09·main 병합·배포 완료를 뜻하지 않습니다.
 
 ## 사람 수정후 추출 원본
 
