@@ -71,9 +71,9 @@ AI 원출력을 공개 API 응답으로 바로 사용하지 않습니다. 사람
 
 ## 확인
 
-규칙 자동 기준선은 [rule-profile-v1/rules-run-v1](rule-baseline.md)을 따릅니다. 입력·고정 리터럴 프로필·출력을 AI D05와 별도로 보관하고 같은 extract-schema-v1/8필드 채점기를 사용합니다. D08의 규칙 선택/최초·재시험 연결과 사람 수정후 비교는 후속 작업이며 실제 검토 사전·gold·40건 평가를 인증하지 않습니다.
+규칙 자동 기준선은 [rule-profile-v1/rules-run-v1](rule-baseline.md)을 따릅니다. 입력·고정 리터럴 프로필·출력을 AI D05와 별도로 보관하고 같은 extract-schema-v1/8필드 채점기와 D08 규칙 선택/최초·재시험 동결에 연결합니다. 프로필 검토/고정은 선언이며 실제 검토 사전·gold·40건 평가를 인증하지 않습니다. 사람 수정후·세 방법 비교는 후속 작업입니다.
 
-D08 문서 버전·사건 연결·개발/확인 배정은 [dataset-manifest-v1](dataset-manifest.md), 실제 입력·D05 원본 대조는 [dataset-bindings-v1](dataset-bindings.md), 독립 정답 제공자의 기록·원본 동결은 [dataset-gold-v1](gold-archive.md)을 따릅니다. [extraction-evaluation-v1](extraction-evaluation.md)은 API 실행 선택·8필드 채점·최초/재시험 전체 원본을 고정합니다. 공개 API는 바꾸지 않습니다. 실제 독립 정답표 작성·교차 검토·40건 평가와 규칙/사람 수정값 비교는 아직 수행하지 않았습니다.
+D08 문서 버전·사건 연결·개발/확인 배정은 [dataset-manifest-v1](dataset-manifest.md), 실제 입력·D05 원본 대조는 [dataset-bindings-v1](dataset-bindings.md), 독립 정답 제공자의 기록·원본 동결은 [dataset-gold-v1](gold-archive.md)을 따릅니다. [extraction-evaluation-v1](extraction-evaluation.md)은 API/규칙 실행 선택·8필드 채점·최초/재시험 전체 원본을 고정합니다. 공개 API는 바꾸지 않습니다. 실제 독립 정답표 작성·교차 검토·40건 평가와 세 방법 비교는 아직 수행하지 않았습니다.
 
 Python 표준 라이브러리만 사용합니다.
 

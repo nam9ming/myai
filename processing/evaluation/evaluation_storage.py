@@ -92,7 +92,7 @@ def verify_evaluation(evaluation_ref,root=EVALUATION_ROOT):
     return _verify_directory(_root(root,create=False)/evaluation_ref,evaluation_ref)
 
 
-def freeze_evaluation(input_path,root=EVALUATION_ROOT,gold_root=GOLD_ROOT,run_root=RUN_ROOT,initial_root=EVALUATION_ROOT):
+def freeze_evaluation(input_path,root=EVALUATION_ROOT,gold_root=GOLD_ROOT,run_root=None,initial_root=EVALUATION_ROOT):
     content=_read(input_path);value=_header(content)
     reference=hashlib.sha256(value['extraction_eval_id'].encode()).hexdigest()
     fingerprint=dict(sha256=hashlib.sha256(content).hexdigest(),size=len(content))

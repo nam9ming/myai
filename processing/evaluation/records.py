@@ -1,4 +1,4 @@
-"""고정 gold와 명시한 API 실행을 최초 raw·최종 자동 평가로 연결한다."""
+"""고정 gold와 명시한 AI/규칙 실행을 최초 raw·최종 자동 평가로 연결한다."""
 
 from datetime import datetime, timezone
 import hashlib
@@ -6,6 +6,7 @@ import hashlib
 from processing.extraction.archive import (REPO, DEFAULT_ROOT as RUN_ROOT, _fingerprint, _json, _read,
                                             _read_checked, _root, verify_run)
 from processing.extraction.metadata import stamp
+from processing.extraction.rule_runs import RULE_ROOT, verify_rules_run
 from processing.extraction.schema import HASH, UUID
 from processing.extraction.validation import MAX_BYTES, array, decode, require, shape, text
 from .bindings import _frozen
@@ -26,7 +27,7 @@ def _check(condition,code='EVALUATION_INVALID'):
 def _header(content):
     value = decode(content,'input')
     shape(value,'schema_version extraction_eval_id gold_ref gold_receipt_sha256 method phase initial_ref review policy documents',kind='input')
-    _check(value['schema_version']=='extraction-evaluation-v1' and value['method']=='ai_auto')
+    _check(value['schema_version']=='extraction-evaluation-v1' and value['method'] in ('ai_auto','rules'))
     _id(value['extraction_eval_id'])
     for key in ('gold_ref','gold_receipt_sha256'):text(value[key],kind='input',pattern=HASH)
     _check(value['phase'] in ('initial','retest'))
@@ -41,16 +42,28 @@ def _header(content):
     _check(not review['semantic_feedback_used'] or review['exposure_status']=='exposed')
     _check(value['phase']!='initial' or not review['semantic_feedback_used'],'EVALUATION_INITIAL_SEMANTIC_FEEDBACK')
     policy = value['policy']
-    shape(policy,'provider model_label prompt_version schema_version retry_policy_version',kind='input')
-    for field in policy:_label(policy[field],100)
-    _check(policy['provider']=='openai' and policy['schema_version']=='extract-schema-v1'
-           and policy['retry_policy_version']=='api-structure-retry-v1')
+    if value['method']=='ai_auto':
+        shape(policy,'provider model_label prompt_version schema_version retry_policy_version',kind='input')
+        for field in policy:_label(policy[field],100)
+        _check(policy['provider']=='openai' and policy['schema_version']=='extract-schema-v1'
+               and policy['retry_policy_version']=='api-structure-retry-v1')
+    else:
+        shape(policy,'rule_version profile_version profile_sha256 schema_version retry_policy_version '
+                     'profile_reviewed_by profile_locked_at profile_basis',kind='input')
+        for field in policy:_label(policy[field],100)
+        text(policy['profile_sha256'],kind='input',pattern=HASH);stamp(policy['profile_locked_at'],'$')
+        _check(policy['schema_version']=='extract-schema-v1' and policy['retry_policy_version']=='rules-single-pass-v1')
+        _check(policy['profile_basis'] in ('development_only','holdout_feedback','unknown'))
+        _check(value['phase']!='initial' or policy['profile_basis']=='development_only','EVALUATION_RULE_PROFILE_NOT_FIXED')
+        _check(policy['profile_basis']!='holdout_feedback' or review['semantic_feedback_used']
+               and review['exposure_status']=='exposed','EVALUATION_PROFILE_FEEDBACK_CONFLICT')
     seen,runs = set(),set()
     for doc in array(value['documents'],'$.documents','input',1):
         shape(doc,'document_version_id run_id snapshot_ref receipt_sha256 first_annotation final_annotation',kind='input')
         version,run = _id(doc['document_version_id']),_id(doc['run_id'])
         _check(version not in seen and run not in runs,'EVALUATION_COVERAGE_INVALID');seen.add(version);runs.add(run)
-        reference = text(doc['snapshot_ref'],kind='input',pattern=rf'(?:registered/{HASH}/)?{UUID}')
+        pattern = UUID if value['method']=='rules' else rf'(?:registered/{HASH}/)?{UUID}'
+        reference = text(doc['snapshot_ref'],kind='input',pattern=pattern)
         _check(reference.split('/')[-1]==run)
         text(doc['receipt_sha256'],kind='input',pattern=HASH)
         _check(type(doc['first_annotation']) is dict and type(doc['final_annotation']) is dict)
@@ -83,8 +96,12 @@ def _load_sources(value,gold_root,run_root):
     for doc in value['documents']:
         run_id,reference = doc['run_id'],doc['snapshot_ref']
         folder = _root(base/reference,create=False);_check(folder==base/reference)
-        run = verify_run(run_id,folder.parent);_frozen(folder,run)
-        _check(run['execution_mode']=='api','EVALUATION_AUTO_REQUIRES_API')
+        if value['method']=='rules':
+            run = verify_rules_run(run_id,folder.parent)
+            _check(run['execution_mode']=='rules','EVALUATION_RULES_REQUIRES_RULE_RUN')
+        else:
+            run = verify_run(run_id,folder.parent);_frozen(folder,run)
+            _check(run['execution_mode']=='api','EVALUATION_AUTO_REQUIRES_API')
         raw = _read(folder/'receipt.json');digest = hashlib.sha256(raw).hexdigest()
         _check(raw==_json(run) and digest==doc['receipt_sha256'],'EVALUATION_RUN_MISMATCH')
         if reference.startswith('registered/'):_check(reference.split('/')[1]==digest,'EVALUATION_RUN_MISMATCH')
@@ -93,13 +110,21 @@ def _load_sources(value,gold_root,run_root):
         _check(run['document_version_id']==version and run['data_kind']==dataset['data_kind']
                and run_input==inputs[version],'EVALUATION_SOURCE_MISMATCH')
         metadata = decode(_read_checked(folder/'metadata.json',run['artifacts']['metadata.json']),'archive')
-        _check(all(metadata[k]==value['policy'][k] for k in ('provider','model_label','prompt_version','schema_version')),
-               'EVALUATION_POLICY_MISMATCH')
-        count = len(run['attempts'])
+        if value['method']=='rules':
+            _check(all(metadata[k]==value['policy'][k] for k in ('rule_version','profile_version'))
+                   and run['profile_sha256']==value['policy']['profile_sha256'],'EVALUATION_POLICY_MISMATCH')
+            attempts = [dict(attempt=1,status=run['status'],error_code=run['validation_error'])]
+            raw_output = _read_checked(folder/'output.json',run['artifacts']['output.json'])
+            outputs = {view:raw_output for view in VIEWS}
+        else:
+            _check(all(metadata[k]==value['policy'][k] for k in ('provider','model_label','prompt_version','schema_version')),
+                   'EVALUATION_POLICY_MISMATCH')
+            attempts = run['attempts']
+            outputs = {view:_read_checked(folder/f'attempt-{number}.output',run['artifacts'][f'attempt-{number}.output'])
+                       for view,number in (('first_raw',1),('final_auto',len(attempts)))}
+        count = len(attempts)
         if count==1:_check(doc['first_annotation']==doc['final_annotation'],'EVALUATION_SINGLE_ATTEMPT_ANNOTATIONS')
-        outputs = {view:_read_checked(folder/f'attempt-{number}.output',run['artifacts'][f'attempt-{number}.output'])
-                   for view,number in (('first_raw',1),('final_auto',count))}
-        runs.append(dict(document=doc,receipt=run,metadata=metadata,outputs=outputs))
+        runs.append(dict(document=doc,receipt=run,metadata=metadata,outputs=outputs,attempts=attempts))
         sources.update(_collect(folder,[*run['artifacts'],'identity.json','receipt.json'],f'runs/{reference}'))
     return gold,runs,sources
 
@@ -155,6 +180,8 @@ def _compute(value,gold,runs,initial,evaluated_at,selection_sha256):
         started,finished = stamp(metadata['started_at'],'$'),stamp(metadata['finished_at'],'$')
         _check(started<=finished<=reviewed,'EVALUATION_RUN_TIME_INVALID')
         _check(finished<=stamp(run['recorded_at'],'$')<=now,'EVALUATION_RUN_ARCHIVE_TIME_INVALID')
+        if value['method']=='rules':
+            _check(stamp(value['policy']['profile_locked_at'],'$')<started,'EVALUATION_PROFILE_LOCK_TIME_INVALID')
         if value['phase']=='initial':
             _check(stamp(gold['receipt']['frozen_at'],'$')<started,'EVALUATION_GOLD_AFTER_RUN')
         elif run['run_id'] in old['run_ids']:
@@ -171,14 +198,14 @@ def _compute(value,gold,runs,initial,evaluated_at,selection_sha256):
                 require(False,kind='input',code='EVALUATION_ANNOTATION_INVALID')
             result = score_document(gold['inputs'][version],_json(expected['output']),packet['outputs'][view],
                                     annotation_bytes,gold['value']['instructions'])
-            attempt = run['attempts'][0 if view=='first_raw' else -1]
+            attempt = packet['attempts'][0 if view=='first_raw' else -1]
             _check(result['summary']['document_failed']==(attempt['status']=='failed'),'EVALUATION_ATTEMPT_MISMATCH')
             result['source_attempt'] = attempt['attempt'];result['source_error_code'] = attempt['error_code']
             for entry in result['field_results']:
                 entry.update(document_version_id=version,event_id=event_ids[entry['slot_id']],run_id=run['run_id'])
             scored[view] = result
         documents.append(dict(document_version_id=version,document_id=versions[version],split=assignments[versions[version]],
-            run_id=run['run_id'],receipt_sha256=doc['receipt_sha256'],attempt_count=len(run['attempts']),
+            run_id=run['run_id'],receipt_sha256=doc['receipt_sha256'],attempt_count=len(packet['attempts']),
             metadata_sha256=run['metadata_sha256'],**scored))
     views = {view:_aggregate([d[view]['summary'] for d in documents]) for view in VIEWS}
     splits = {split:{view:_aggregate([d[view]['summary'] for d in documents if d['split']==split]) for view in VIEWS}
@@ -192,6 +219,9 @@ def _compute(value,gold,runs,initial,evaluated_at,selection_sha256):
     if value['review']['exposure_status']!='none_declared':warnings.append('EXPOSURE_NOT_CLEARED')
     if value['phase']!='initial':warnings.append('RETEST_NOT_INITIAL_GENERALIZATION')
     if not holdout['known_fields']:warnings.append('NO_KNOWN_HOLDOUT_FIELDS')
+    if value['method']=='rules':
+        warnings.append('M02_REQUIRES_AI_AUTO')
+        if value['policy']['profile_basis']!='development_only':warnings.append('RULE_PROFILE_BASIS_UNCLEARED')
     eligible = not warnings
     comparison = None
     if old:
@@ -221,8 +251,9 @@ def _compute(value,gold,runs,initial,evaluated_at,selection_sha256):
         policy_sha256=policy_hash,run_ids=[d['run_id'] for d in documents],summary=summary,documents=documents)
 
 
-def evaluate_record(content,gold_root=GOLD_ROOT,run_root=RUN_ROOT,initial_root=EVALUATION_ROOT,*,evaluated_at=None):
+def evaluate_record(content,gold_root=GOLD_ROOT,run_root=None,initial_root=EVALUATION_ROOT,*,evaluated_at=None):
     value = _header(content)
+    if run_root is None:run_root = RULE_ROOT if value['method']=='rules' else RUN_ROOT
     gold,runs,sources = _load_sources(value,gold_root,run_root)
     initial = _initial(value['initial_ref'],initial_root) if value['phase']=='retest' else None
     if initial:sources.update(initial['sources'])
