@@ -55,6 +55,8 @@ Java는 저장 전 Python의 동일 변환 함수로 초안 전체를 재구성�
 
 ai_reviewed로 넘긴 뒤의 후속 수정도 기존 originating_run_ids와 source_version_ids를 유지해야 한다. origin을 human으로 바꿔 AI 추적을 지우는 입력은 거부한다. 새 원문·실행을 추가할 수 있지만 기존 참조를 버리지 않으며, 이후 검증에 필요한 예전 실행 보관본도 함께 보존한다.
 
+같은 문서 버전의 원문 확인·사용권 갱신은 [local-source-review](source-review.md)로 기록한다. 초안·사람 검토 import에는 최초 D03을 그대로 넣고 원래 source 파일·D05·사람 인계 이미지를 편집하지 않는다. 승인·preview·publish는 현재 운영 권한·확인 상태를 별도로 검사하므로 pending 원본에도 이후의 allowed/verified 이력을 적용할 수 있다. 확인 이력만 추가해도 ai_draft 직접 승인 차단·사람 수정 다음 revision·근거 검토 조건은 그대로다. 실제3건에는 새 확인·권한 선언을 넣지 않았다.
+
 ## 변경 기록 대조
 
 AI 출처가 있는 기존 사건을 수정할 때는 이전 revision과 바뀐 의미값을 대조한다. 날짜는 Python과 같은1~9999년을 사용하고 공백만 있는 값은 허용하지 않는다. 실제 문자의 앞뒤 공백은 자르지 않는다. 달라진 필드마다 before/after가 실제 전후 값과 같고 reviewer/time이 이번 revision의 reviewer_id/reviewed_at과 같은 기록이 있어야 한다. 수정 이유·근거의 의미는 사람이 확인한다.

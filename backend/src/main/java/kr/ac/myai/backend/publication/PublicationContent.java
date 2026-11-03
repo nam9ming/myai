@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import kr.ac.myai.backend.importing.ReviewedBatch;
 import kr.ac.myai.backend.importing.ReviewedImportReader;
 import kr.ac.myai.backend.repository.PublicationRepository;
+import kr.ac.myai.backend.source.SourceView;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -33,13 +34,14 @@ public class PublicationContent {
         return payload;
     }
 
-    public ReviewedBatch.Event validate(JsonNode payload, List<PublicationRepository.Document> documents, Path root) {
+    public ReviewedBatch.Event validate(JsonNode payload, List<SourceView> documents, Path root) {
         check(root != null, "source_root");
         var envelope = mapper.createObjectNode().put("schema_version", "reviewed-import-v1").put("data_kind", payload.path("data_kind").asText());
         if (payload.has("human_handoffs")) envelope.set("human_handoffs", payload.path("human_handoffs"));
         var sources = envelope.putArray("documents");
-        for (var row : documents) {
-            var metadata = parse(row.metadata()); var document = metadata.path("document");
+        for (var view : documents) {
+            var row = view.original();
+            var metadata = parse(view.effectiveMetadata()); var document = metadata.path("document");
             check(metadata.path("data_kind").equals(payload.path("data_kind")), "data_kind");
             check(document.path("document_id").asText().equals(row.id()) && document.path("document_version_id").asText().equals(row.versionId())
                     && document.path("version_no").asLong() == row.number() && document.path("text_sha256").asText().equals(row.textHash())
@@ -75,7 +77,7 @@ public class PublicationContent {
     }
 
     public PublicationRepository.Snapshot snapshot(PublicationCommand.Publish command, List<PublicationRepository.Revision> revisions,
-                                                   Map<String, PublicationRepository.Document> documents, String id, Instant createdAt) {
+                                                   Map<String, SourceView> documents, String id, Instant createdAt) {
         var result = mapper.createObjectNode().put("schema_version", "snapshot-v1").put("snapshot_id", id).put("created_at", createdAt.toString())
                 .put("data_kind", command.dataKind()).put("mode", command.mode()).put("rules_version", command.rulesVersion()).put("dictionary_version", command.dictionaryVersion())
                 .put("area_id", command.area().areaId().toString()).put("timezone", "Asia/Seoul").put("window_days", 14).put("radius_m", 500);
@@ -113,8 +115,9 @@ public class PublicationContent {
         }
         Set<String> documentIds = new HashSet<>(); List<Instant> verified = new ArrayList<>(); List<Instant> collected = new ArrayList<>();
         var sources = result.putArray("sources");
-        documents.values().stream().sorted(Comparator.comparing(PublicationRepository.Document::versionId)).forEach(row -> {
-            JsonNode doc = parse(row.metadata()).path("document");
+        documents.values().stream().sorted(Comparator.comparing(view -> view.original().versionId())).forEach(view -> {
+            var row = view.original();
+            JsonNode doc = parse(view.effectiveMetadata()).path("document");
             Instant collection = Instant.parse(doc.path("collected_at").asText());
             if (command.mode().equals("replay")) check(!collection.isAfter(command.knowledgeCutoff()), "knowledge_cutoff");
             documentIds.add(row.id()); collected.add(collection);
@@ -126,7 +129,8 @@ public class PublicationContent {
             var checks = source.putArray("checks");
             for (JsonNode check : doc.path("checks")) {
                 Instant at = Instant.parse(check.path("checked_at").asText());
-                if (command.mode().equals("replay") && at.isAfter(command.knowledgeCutoff())) continue;
+                if (command.mode().equals("replay") && (at.isAfter(command.knowledgeCutoff())
+                        || !view.checkVisible(check.path("check_id").asText(), command.knowledgeCutoff()))) continue;
                 checks.add(select(check, "checked_at result text_sha256"));
                 latest = check.path("checked_at").asText(); checkResult = check.path("result").asText();
                 if (checkResult.equals("verified")) success = latest;

@@ -9,6 +9,9 @@ import kr.ac.myai.backend.importing.ReviewedBatch;
 import kr.ac.myai.backend.importing.ReviewedImportReader;
 import kr.ac.myai.backend.repository.PublicationRepository;
 import kr.ac.myai.backend.repository.ReviewedImportRepository;
+import kr.ac.myai.backend.repository.SourceReviewRepository;
+import kr.ac.myai.backend.source.SourceReviewException;
+import kr.ac.myai.backend.source.SourceView;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -36,14 +39,21 @@ public class PublicationService {
     private final PublicationContent content;
     private final ObjectMapper mapper;
     private final TransactionTemplate transaction;
+    private final TransactionTemplate previewTransaction;
     private final ExtractionImportService extractions;
+    private final SourceReviewRepository sourceReviews;
 
     public PublicationService(PublicationRepository repository, ReviewedImportRepository reviews, PublicationContent content,
-                              ObjectMapper mapper, PlatformTransactionManager manager, ExtractionImportService extractions) {
+                              ObjectMapper mapper, PlatformTransactionManager manager, ExtractionImportService extractions,
+                              SourceReviewRepository sourceReviews) {
         this.repository = repository; this.reviews = reviews; this.content = content; this.mapper = mapper;
         this.extractions = extractions;
+        this.sourceReviews = sourceReviews;
         this.transaction = new TransactionTemplate(manager);
         this.transaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        this.previewTransaction = new TransactionTemplate(manager);
+        this.previewTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        this.previewTransaction.setReadOnly(true);
     }
 
     public record Result(String action, String eventId, String revisionId, String snapshotId, String checksum, Long headVersion, JsonNode preview) { }
@@ -54,6 +64,14 @@ public class PublicationService {
             if (command instanceof PublicationCommand.Decision decision) return decide(decision, sourceRoot, actor);
             if (command instanceof PublicationCommand.Publish publish) return publish(publish, sourceRoot, actor);
             return rollback((PublicationCommand.Rollback) command, actor);
+        } catch (SourceReviewException ex) {
+            String suffix = switch (ex.code()) {
+                case "SOURCE_REVIEW_CONFLICT" -> "CONFLICT";
+                case "SOURCE_REVIEW_DATABASE_UNAVAILABLE" -> "DATABASE_UNAVAILABLE";
+                case "SOURCE_REVIEW_VALIDATION_ERROR" -> "VALIDATION_ERROR";
+                default -> "INTERNAL_ERROR";
+            };
+            throw new PublicationException("PUBLICATION_" + suffix, "원문 확인·사용권 검토 상태를 확인해 주세요.", ex.field());
         } catch (ImportException ex) {
             if (ex.code().equals("IMPORT_CONFLICT")) throw new PublicationException("PUBLICATION_CONFLICT", "검토 revision이 변경되었습니다. 최신 상태를 확인해 주세요.", ex.field());
             throw new PublicationException("PUBLICATION_VALIDATION_ERROR", ex.getMessage(), ex.field());
@@ -79,7 +97,7 @@ public class PublicationService {
         content.check(!approve || !rawDraft, "origin");
         content.check(!command.evidenceIds().isEmpty() || !approve && (rawDraft || payload.has("human_handoffs")), "evidence_ids");
         conflict(!original.status().equals(approve ? "approved" : "rejected"), "review_status");
-        var documents = approve ? documents(payload) : List.<PublicationRepository.Document>of();
+        var documents = approve ? documents(payload, new TreeMap<>()) : List.<SourceView>of();
         ObjectNode updated = payload.deepCopy(); var revision = (ObjectNode) updated.path("revision");
         String id = UUID.randomUUID().toString(); Instant now = now();
         revision.put("revision_id", id).put("revision_no", original.number() + 1).put("review_status", approve ? "approved" : "rejected")
@@ -106,19 +124,22 @@ public class PublicationService {
 
     private Result publish(PublicationCommand.Publish command, Path root, String actor) {
         var revisions = command.revisionIds().stream().map(id -> repository.revision(id.toString())).sorted(Comparator.comparing(PublicationRepository.Revision::eventId)).toList();
-        var documents = new TreeMap<String, PublicationRepository.Document>();
+        var documents = new TreeMap<String, SourceView>();
         var events = new ArrayList<ReviewedBatch.Event>();
         for (var revision : revisions) {
             conflict(revision.currentId().equals(revision.id()) && revision.status().equals("approved") && revision.intent().equals("public"), "revision_ids");
-            var payload = content.payload(revision); var sources = documents(payload);
+            var payload = content.payload(revision); var sources = documents(payload, documents);
             // shortcut: 사건별 원문 재검증은 소규모 수동 배치용이며 대량 공개 시 공통 원문 검증을 합친다.
             events.add(content.validate(payload, sources, root));
-            sources.forEach(source -> documents.put(source.versionId(), source));
         }
         var runReferences = extractions.verifyReferences(events);
         String id = UUID.randomUUID().toString(); Instant now = now();
         var snapshot = content.snapshot(command, revisions, documents, id, now);
-        if (command.action().equals("preview")) return new Result("preview", null, null, id, snapshot.checksum(), null, content.parse(snapshot.canonical()));
+        if (command.action().equals("preview")) return previewTransaction.execute(status -> {
+            extractions.checkReferences(runReferences);
+            documents.values().forEach(sourceReviews::lockView);
+            return new Result("preview", null, null, id, snapshot.checksum(), null, content.parse(snapshot.canonical()));
+        });
         String channel = channel(command.mode(), command.caseId());
         return transaction.execute(status -> {
             extractions.checkReferences(runReferences);
@@ -146,11 +167,17 @@ public class PublicationService {
         });
     }
 
-    private List<PublicationRepository.Document> documents(JsonNode payload) {
-        return strings(payload.path("revision").path("source_version_ids")).stream().map(repository::document).sorted(Comparator.comparing(PublicationRepository.Document::versionId)).toList();
+    private List<SourceView> documents(JsonNode payload, Map<String, SourceView> cache) {
+        return strings(payload.path("revision").path("source_version_ids")).stream().sorted()
+                .map(id -> cache.computeIfAbsent(id, key -> sourceReviews.view(repository.document(key)))).toList();
     }
 
-    private void lockDocuments(List<PublicationRepository.Document> documents) { documents.forEach(repository::lockDocument); }
+    private void lockDocuments(List<SourceView> documents) {
+        documents.stream().sorted(Comparator.comparing(view -> view.original().versionId())).forEach(view -> {
+            repository.lockDocument(view.original());
+            sourceReviews.lockView(view);
+        });
+    }
     private Instant now() { return Instant.now().truncatedTo(ChronoUnit.MICROS); }
     private String channel(String mode, UUID caseId) { return mode.equals("current") ? "current" : "replay:" + caseId; }
     private List<String> strings(JsonNode array) { List<String> values = new ArrayList<>(); array.forEach(value -> values.add(value.asText())); return values; }

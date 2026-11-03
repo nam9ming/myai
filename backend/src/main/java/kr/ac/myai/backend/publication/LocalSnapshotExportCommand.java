@@ -30,7 +30,7 @@ public class LocalSnapshotExportCommand implements ApplicationRunner, ExitCodeGe
     @Override
     public void run(ApplicationArguments args) {
         try {
-            if (context instanceof WebApplicationContext || environment.matchesProfiles("local-import", "local-publication", "local-extraction")) {
+            if (context instanceof WebApplicationContext || environment.matchesProfiles("local-import", "local-publication", "local-extraction", "local-source-review")) {
                 throw new PublicationException("EXPORT_VALIDATION_ERROR", "local-export는 HTTP 서버와 다른 로컬 명령 프로필 없이 실행해야 합니다.", "spring.profiles.active");
             }
             String id = required("myai.export.snapshot-id");

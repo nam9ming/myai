@@ -39,7 +39,8 @@ class PublicationContentTest {
         var document = batch.documents().getFirst();
         var row = new PublicationRepository.Document(document.id(), document.versionId(), document.versionNo(),
                 document.textSha256(), document.metadataJson(), document.privateContentRef());
-        var validated = content.validate(payload, List.of(row), root);
+        var view = new kr.ac.myai.backend.source.SourceView(row);
+        var validated = content.validate(payload, List.of(view), root);
         assertThat(mapper.readTree(validated.payloadJson()).path("human_handoffs")).isEqualTo(payload.path("human_handoffs"));
         String json = payload.toString();
         var saved = new PublicationRepository.Revision(validated.revisionId(), validated.id(), validated.revisionNo(),
@@ -49,11 +50,11 @@ class PublicationContentTest {
                 UUID.fromString(payload.path("event").path("area_id").asText()), "합성 지역", "합성 시험"),
                 revision.path("rules_version").asText(), revision.path("dictionary_version").asText(),
                 List.of(UUID.fromString(validated.revisionId())), List.of(), 0L);
-        var snapshot = content.snapshot(command, List.of(saved), Map.of(row.versionId(), row), UUID.randomUUID().toString(),
+        var snapshot = content.snapshot(command, List.of(saved), Map.of(row.versionId(), view), UUID.randomUUID().toString(),
                 Instant.parse("2026-11-03T00:00:00Z"));
         assertThat(snapshot.canonical()).doesNotContain("human_handoffs", "handoff_ref", "receipt_sha256", root.toString(),
                 "reviewer_id", "human_overrides");
         revision.putNull("title");
-        assertThatThrownBy(() -> content.validate(payload, List.of(row), root)).isInstanceOf(ImportException.class);
+        assertThatThrownBy(() -> content.validate(payload, List.of(view), root)).isInstanceOf(ImportException.class);
     }
 }

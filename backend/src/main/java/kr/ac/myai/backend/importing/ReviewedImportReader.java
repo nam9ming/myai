@@ -554,7 +554,7 @@ public class ReviewedImportReader {
         catch (java.time.DateTimeException ex) { throw invalid(key, "마이크로초 이하 정밀도의 UTC 시각이 필요합니다."); }
     }
 
-    private byte[] readBounded(Path file, String path) throws IOException {
+    public byte[] readBounded(Path file, String path) throws IOException {
         check(Files.isRegularFile(file), path);
         try (var input = Files.newInputStream(file)) {
             byte[] bytes = input.readNBytes(LIMIT + 1);

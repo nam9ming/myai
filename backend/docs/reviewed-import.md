@@ -17,7 +17,7 @@ java -jar backend/build/libs/myai-backend-0.1.0.jar \
 
 명령을 한 번 실행한 뒤 종료하며 HTTP 서버·관리 라우터는 등록하지 않는다. 로그는 stderr에, 결과 JSON 한 건은 stdout에 출력한다. 성공 결과의 `result`에는 `import_id`, `revision_ids`, `document_version_ids`, `already_imported`를 담는다. 같은 입력 바이트를 재입력하면 같은 ID 목록과 `already_imported=true`를 반환한다. 이때 감사 기록도 늘리지 않는다.
 
-`local-import`, `local-publication`, `local-export`는 하나씩 실행한다. 혼합 프로필은 검증 실패로 거부하며 import를 수행하지 않는다.
+`local-import`, `local-extraction`, `local-source-review`, `local-publication`, `local-export`는 하나씩 실행한다. 혼합 프로필은 검증 실패로 거부하며 import를 수행하지 않는다.
 
 종료 코드는 `0` 성공/기존 결과, `2` 입력·설정 검증 실패, `3` ID·버전·동시 수정 충돌, `4` DB 접근 실패다. 초기 DB 연결·인증/권한·없는 DB 오류도 안전한 JSON과 `4`로 반환하며 `retryable`을 확인한다. 강제 웹·혼합 프로필은 DB 작업 전에 `2`로 거부한다. 나머지 내부·프로토콜·Spring 초기 기동 오류는 `1`이며, 분류되지 않은 기동 실패는 결과 JSON 없이 stderr에 나타날 수 있다. 오류 결과는 공개 API와 같은 `error`·`request_id` 구조를 사용하며 원문·SQL·비밀번호·절대 경로는 넣지 않는다.
 
@@ -62,6 +62,6 @@ AI 원출력으로 만든 미검토 파일은 별도 ai-draft-import-v1을 사�
 
 파일과 원문을 검증한 뒤 하나의 Spring 서비스 트랜잭션에서 batch·문서·확인 이력·revision·작업 포인터·감사 기록을 저장한다. V1 스키마를 그대로 사용한다. 기존 Spring JDBC의 parameterized SQL과 조건부 포인터 UPDATE로 저장하며 JPA entity/일반 CRUD는 추가하지 않는다.
 
-같은 문서 버전 ID는 metadata까지 같을 때만 재사용하며 내용이 다르면 충돌로 처리한다. 새 문서 버전은 다음 번호로만 추가한다. 기존 버전에 원문 확인 기록을 별도로 덧붙이는 명령은 아직 없으므로 metadata를 바꾼 재입력은 거부한다. 저장에 실패하면 이번 배치 전체를 rollback하고 기존 revision·snapshot·공개 포인터를 보존한다. 같은 파일을 동시에 import하면 먼저 성공한 결과를 함께 반환하며 같은 사건의 revision을 서로 다르게 수정해 동시에 넣으면 한 건만 성공한다.
+같은 문서 버전 ID는 metadata까지 같을 때만 재사용하며 내용이 다르면 충돌로 처리한다. 새 문서 버전은 다음 번호로만 추가한다. 기존 버전의 metadata를 바꾼 재입력은 거부한다. 같은 버전의 확인 시도·사용권 변경은 [local-source-review](source-review.md)로 별도 기록하며, 이 명령이 원래 metadata를 갱신하지 않는다. 운영 이력이 생긴 뒤에도 일반 import와 D05·사람 인계는 원래 D03을 사용한다. 저장에 실패하면 이번 배치 전체를 rollback하고 기존 revision·snapshot·공개 포인터를 보존한다. 같은 파일을 동시에 import하면 먼저 성공한 결과를 함께 반환하며 같은 사건의 revision을 서로 다르게 수정해 동시에 넣으면 한 건만 성공한다.
 
 입력 hash는 JSON 파일의 **원본 바이트**로 계산한다. 공백·배열 순서가 바뀌면 다른 배치로 취급하므로 동일 revision을 새 배치로 다시 넣으면 충돌할 수 있다. 실패 batch는 별도로 영구 저장하지 않고 종료 코드와 오류 JSON으로 알린다. 사용자 조건·평가 기록·AI 원출력은 이 규격에 포함하지 않는다. import 이후의 승인·공개·복구는 [별도 로컬 명령](review-publication.md)으로 실행한다. 공개 API는 [DB snapshot을 조회](public-snapshot-api.md)하며 matches는 [설정된 Python](../README.md#python-계산-연결)으로 계산한다.
