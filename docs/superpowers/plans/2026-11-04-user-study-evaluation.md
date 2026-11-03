@@ -40,7 +40,7 @@ shared fixture API: test_study_protocol.py `StudyProtocolFixture(unittest.TestCa
 
 **Owner:** study worker. Files: processing/evaluation/study.py(신규), processing/tests/test_user_study.py(신규 fixture 포함). Task1/root파일 수정 금지.
 
-**Interfaces:** `evaluate_study(content:bytes, protocol:prepared)->dict`는 `{result,summary}` 반환. result top keys는 spec의11개이며 Decimal rawrecord를 포함할 경우 `_json`에 전달하지 않도록 상세 결과를 원형 bytes와 구별한다. 상세 participants에는 명시 schema로 원기록의 문자열/정수/nullable/리스트와 계산된 `elapsed_ns`를 보존하고 elapsed_seconds의 원래 Decimal은 원입력 bytesSHA/정확한 ns로 보존(숫자근사 금지). 반환 JSON은 일반 str/int/bool/list/dict/null 및 파생 finite float만. `summary.protocol_version='user-study-summary-v1'`. 표적값은 독립 합성 리터럴이다.
+**Interfaces:** `evaluate_study(content:bytes, protocol:prepared)->dict`는 `{result,summary}` 반환. result top keys는 spec의13개(privacy/versions 포함)이며 Decimal rawrecord를 포함할 경우 `_json`에 전달하지 않도록 상세 결과를 원형 bytes와 구별한다. 상세 participants에는 명시 schema로 원기록의 문자열/정수/nullable/리스트와 계산된 `elapsed_ns`를 보존하고 elapsed_seconds의 원래 Decimal은 원입력 bytesSHA/정확한 ns로 보존(숫자근사 금지). session.instruction_seconds→instruction_ns, record.elapsed_seconds→elapsed_ns, task.expected_event_ids 추가; participant.analysis와 summary 공용 키는 spec 그대로. 반환 JSON은 일반 str/int/bool/list/dict/null 및 파생 finite float만. `summary.protocol_version='user-study-summary-v1'`. 표적값은 독립 합성 리터럴이다.
 
 공유시험 fixture `UserStudyFixture(StudyProtocolFixture)`는 self.records(7키), `write_records(value=None)->Path`, `study(value=None, protocol=None, at=STUDY_AT)->packet`, self.protocol_path/self.records_path를 제공한다. `self.protocol`/work를 덮어쓰지 않는다. 실제stdout clock에 맞게 synthetic 날짜는 현재보다과거이며 retention은명시미래로. 부모export/CLI가 이fixture 사용.
 
