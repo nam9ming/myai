@@ -35,6 +35,7 @@ python3.13 -m venv .venv
 | `evaluation/bindings.py` | 동결 manifest·실제 입력 바이트·명시 선택한 D05 원본의 읽기 전용 대조 |
 | `evaluation/gold.py`, `gold_storage.py` | 독립 정답 제공자의 선언·근거·사건 anchor 검사와 원본/지침/manifest 별도 동결 |
 | `evaluation/scoring.py`, `records.py`, `evaluation_storage.py` | 8필드 채점·명시한 API/규칙 실행 연결·최초/재시험 원본 묶음 동결 |
+| `evaluation/reviews.py` | 사람 수정후 출력·실제 변경 기록/검토 시간 선언·D05 전체의 별도 불변 보관 |
 
 [계산 연결 계약](../contracts/calculation-bridge.md)을 따릅니다. 지원 규칙은 `rules-v1`이며 미지원 버전을 정상 결과로 바꾸지 않습니다. `dictionary_version`은 선택한 snapshot의 고정 식별자이며 계산 중 새 사전을 읽지 않습니다. 입력 원본 바이트 SHA-256을 반환하며 개인 조건은 로그에 남기지 않습니다.
 
@@ -138,6 +139,20 @@ initial은 gold 동결 이후 시작한 실행만 받습니다. retest는 동일
 보관본은 `selection.json`, 비공개 `result.json`, gold 전체, 선택한 D05 전체 또는 규칙6파일, retest의 최초 평가 전체를 포함합니다. 파일0400·디렉터리0500으로 검증한 뒤 배타 설치하며 같은 ID의 다른 입력은 충돌입니다. 원래 경로가 없어도 재검증·같은 입력 재사용이 가능합니다. 최초 평가와 실패 원본을 덮어쓰지 않습니다. 상세 값·근거·검토자·원래 경로는 private 파일에만 두고 stdout에는 요약/상대 artifact 목록만 출력합니다. 성공0·입력2·보관본 손상/충돌3·I/O5·내부 오류1로 종료합니다.
 
 키·AI·네트워크·DB를 사용하지 않는 도구이며 실제40문서 성과를 측정하지 않았습니다. M02 수치는 ai_auto에서 real/문서 수/비노출 등의 선언과 확인용 정답 분모가 갖춰진 initial에만 제공하며, 그 자체로 의미 정확성·신원·blind holdout을 인증하지 않습니다. rules는 관측 점수를 유지하고 M02는 N/A입니다. 사람 수정값 연결·세 방법 비교·실제 독립 금표/40건 평가는 후속 작업입니다.
+
+## 사람 수정후 추출 원본
+
+[human-review-v1](../contracts/human-review.md)은 사람이 별도로 작성한 extract-schema-v1 수정값을 frozen D05 전체와 묶어 보관합니다. D06만 역변환해 개별 knowledge를 추측하지 않습니다. 실제 전후 값·JSON 타입·근거·검토자/종료 시각과 맞는 변경 기록이 필요하며 검토 소요시간은 제공한 시각의 차이입니다.
+
+```sh
+python3.13 -m processing.evaluation check-review --input data/private/review.json
+python3.13 -m processing.evaluation freeze-review --input data/private/review.json
+python3.13 -m processing.evaluation verify-review "$REVIEW_REF"
+```
+
+검토 JSON의6개 최상위 키·source/changes 형식과 root 옵션은 계약을 따릅니다. 기본 source root는 data/private/extraction-runs, 검토 보관 root는 data/private/evaluation/human-reviews입니다. 원문/수정값·검토자·사유는 비공개 파일에만 두고 stdout은 ID/hash/상태/건수/선언 소요시간만 반환합니다. 성공0/입력2/보관 손상·충돌3/I/O5/내부1입니다.
+
+API/수동·성공/실패 D05의 실제 모드와 원출력을 보존합니다. 실패 source의 새 유효 출력은 before=null의 전체 변경 기록이 필요합니다. 기계 검사는 실제 사람이 판독했다는 증거·독립 정답·승인·공개가 아닙니다. 이 도구는 D06 저장과 별개이며 D08 human_reviewed 채점/재시험·세 방법 비교·실제 검토본 전달은 후속 작업입니다. 키·AI·네트워크·DB는 사용하지 않습니다.
 
 ## 규칙 자동 기준선
 

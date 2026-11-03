@@ -1,6 +1,6 @@
 # Human Review Archive Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** AI 원본과 사람 수정후 값·실제 변경/검토 시간 선언을 분리 검증·불변 보관한다.
 
@@ -31,11 +31,11 @@
 
 **Interfaces:** Consumes unchanged verify_run/_frozen/parse_output/_copy/_identity/_rename_exclusive/instant_ns; lazy imports existing evaluation_storage._tree to avoid future records dependency cycle. Produces check_review(content,run_root=EXTRACTION_ROOT,*,checked_at=None), freeze_review(input_path,root=REVIEW_ROOT,run_root=EXTRACTION_ROOT), verify_review(review_ref,root=REVIEW_ROOT). Public functions return safe summary/receipt only.
 
-- [ ] Write meaningful tests for unchanged/changed/failed/manual source, exact original bytes and all source files, header/ref/hash/knowledge/evidence, strict actual changes/typed values/no-op/duplicate/overlap, time/basis, immutable replay without sources, corruption/modes/extra/symlinks, conflicts/concurrent/native install failure/source mutation.
-- [ ] Run `/opt/homebrew/bin/python3.13 -m unittest processing.tests.test_human_reviews -v`; Expected: missing module is RED, then each behavior must pass after implementation.
-- [ ] Implement minimal strict review validation and source/image freeze/replay using house helpers; preserve actual original and reviewer/time declarations privately.
-- [ ] Run target and existing evaluation/rule suites; Expected: GREEN, no original artifacts changed.
-- [ ] Commit `feat: preserve human review source archives`.
+- [x] Write meaningful tests for unchanged/changed/failed/manual source, exact original bytes and all source files, header/ref/hash/knowledge/evidence, strict actual changes/typed values/no-op/duplicate/overlap, time/basis, immutable replay without sources, corruption/modes/extra/symlinks, conflicts/concurrent/native install failure/source mutation.
+- [x] Run `/opt/homebrew/bin/python3.13 -m unittest processing.tests.test_human_reviews -v`; Expected: missing module is RED, then each behavior must pass after implementation.
+- [x] Implement minimal strict review validation and source/image freeze/replay using house helpers; preserve actual original and reviewer/time declarations privately.
+- [x] Run target and existing evaluation/rule suites; Expected: GREEN, no original artifacts changed.
+- [x] Commit `feat: preserve human review source archives`.
 
 ### Task 2: CLI·한국어 계약·전체 인계
 
@@ -43,11 +43,11 @@
 
 **Interfaces:** Consumes Task1 public functions and REVIEW_ROOT. Produces CLI check-review/freeze-review/verify-review with existing safe exit conventions; legacy defaults unchanged.
 
-- [ ] Write real subprocess check/freeze/verify/reuse/input2/archive3/IO5 tests with safe stdout/stderr and source deletion replay.
-- [ ] Run `/opt/homebrew/bin/python3.13 -m unittest processing.tests.test_human_review_cli -v`; Expected: unknown command/input2 RED.
-- [ ] Add CLI commands and concise Korean input/examples/limitations; no fabricated human/API/D06/evaluation claims.
-- [ ] Run target, full Python suite, npm lint/test/build and preserved legacy4 byte/frozen initial verifier; Expected: GREEN.
-- [ ] Commit `feat: expose private human review commands`.
+- [x] Write real subprocess check/freeze/verify/reuse/input2/archive3/IO5 tests with safe stdout/stderr and source deletion replay.
+- [x] Run `/opt/homebrew/bin/python3.13 -m unittest processing.tests.test_human_review_cli -v`; Expected: unknown command/input2 RED.
+- [x] Add CLI commands and concise Korean input/examples/limitations; no fabricated human/API/D06/evaluation claims.
+- [x] Run target, full Python suite, npm lint/test/build and preserved legacy4 byte/frozen initial verifier; Expected: GREEN.
+- [x] Commit `feat: expose private human review commands`.
 
 ## Final integration
 
