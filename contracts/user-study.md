@@ -98,7 +98,7 @@ false_positive_ids out_of_scope_ids assistance_notes answer_feedback_given opera
 
 실패/중단 시간은 원래 값으로 남기며0·제한시간으로 대체하지 않는다. 로딩·필터·원문 이동 시간도 포함한다. 범위 밖 발견은 별도로 보고하고 채점 집합에 섞지 않는다. 예외 정답 flag는 명세의 전체 정답 기준을 검사하기 위해 새로 구체화한 필드다.
 
-evidence[]는 정확히 `evidence_id artifact kind participant_id captured_at issue_ids change_refs note`다. 고유 UUID, `kind=screen_capture|deidentified_photo`, participant_id nullable, captured_at≤evaluated_at, 중복 없는 비공개 issue ID/변경 참조 문자열 목록과 설명을 갖는다. participant 연결 시 별도 촬영 동의 버전·시각을 검사한다. null은 참여자 정보 없는 자료라는 선언이다. bytes hash 검사는 사진의 비식별·촬영 사실을 인증하지 않는다. 증빙2개 목표와 실제 검증한 artifact 수는 구별한다.
+evidence[]는 정확히 `evidence_id artifact kind participant_id captured_at issue_ids change_refs note`다. 고유 UUID, `kind=screen_capture|deidentified_photo`, participant_id nullable, captured_at≤evaluated_at, 중복 없는 비공개 issue ID/변경 참조 문자열 목록과 설명을 갖는다. participant 연결 시 별도 촬영 동의 버전·시각을 검사한다. null은 참여자 정보 없는 자료라는 선언이다. bytes hash 검사는 사진의 비식별·촬영 사실을 인증하지 않는다. 증빙2개 목표용 verified_artifacts는 검증된 `(sha256,size)`로 중복 제거하며, 같은 bytes의 다른 경로/ID 기록도 records에는 모두 남긴다. 재인코딩한 같은 장면의 의미상 중복 여부는 판단하지 않는다.
 
 ## 분석·목표 판정
 
@@ -146,6 +146,6 @@ python3.13 -m processing.evaluation export-study \
 
 check는 summary JSON 한 건만 stdout에 출력한다. export의 output/format은 필수이며 JSON은 canonical result, CSV는 고정 열의 participant/task 행이다. CSV는 버전/SHA·역할·배정·결과·시간/정확도/누락·개인 감소율과 participant 행의 deviations 사유 코드를 제공하며 자유 서술은 제외해 JSON/원본에 유지한다. spreadsheet formula 접두는 CSV 표시용 escape하고 원본을 바꾸지 않는다. CSV도 비공개 개인자료다.
 
-export는0600 파일·중간 부모를 포함한 모든 새 output 디렉터리0700으로 배타 생성하며 같은 bytes만 재사용한다(기존0400 허용). 동일 입력의 JSON 재시도는 첫 evaluated_at을 재사용할 수 있으나 원래 protocol/records bytes로 전체 재계산한 canonical result가 기존 bytes와 정확히 같고 현재 기한/권한도 유효해야 한다. 다른 입력·거짓 지표·미래/프로토콜 이전 evaluated_at·부분 파일·symlink·경로 탈출·권한 확대는 거부한다. 원입력의 영구 복사나 동결은 없으며 CSV는 같은 bytes일 때만 재사용한다. 이전 출력을 덮지 않는다. receipt의 정확한 키는 `protocol_version status format output_sha256 output_size summary`이며 상대 filename·participant ID도 포함하지 않는다. stdout은 이 safe receipt 한 건, stderr는 고정 코드다. 성공0·입력2·보관 충돌/손상3·I/O5·내부1로 종료한다.
+export는0600 파일·중간 부모를 포함한 모든 새 output 디렉터리0700으로 배타 생성하며 같은 bytes만 재사용한다(기존0400 허용). CLI는 records 읽기 직전과 summary/receipt 출력 전에도 현재 보존기한을 다시 검사한다. 동일 입력의 JSON 재시도는 첫 evaluated_at을 재사용할 수 있으나 원래 protocol/records bytes로 전체 재계산한 canonical result가 기존 bytes와 정확히 같고 현재 기한/권한도 유효해야 한다. 다른 입력·거짓 지표·미래/프로토콜 이전 evaluated_at·부분 파일·symlink·경로 탈출·권한 확대는 거부한다. 원입력의 영구 복사나 동결은 없으며 CSV는 같은 bytes일 때만 재사용한다. 이전 출력을 덮지 않는다. receipt의 정확한 키는 `protocol_version status format output_sha256 output_size summary`이며 상대 filename·participant ID도 포함하지 않는다. stdout은 이 safe receipt 한 건, stderr는 고정 코드다. 성공0·입력2·보관 충돌/손상3·I/O5·내부1로 종료한다.
 
 자동 원본 복제/영구 보존/삭제 스케줄·공개 endpoint/DB 테이블은 없다. 실제 접근 담당자·보존 종료일·종료처리 기준은 확인 대기이며 값을 임의로 채우지 않는다. 실제 참여자·동의·파일럿·질문/정답·40문서/holdout·D09 결과·서식4/5·M04/M05 성과는 미완료다. main 병합·운영 배포는 별도 사람 작업이다.

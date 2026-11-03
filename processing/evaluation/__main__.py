@@ -17,7 +17,7 @@ from .comparison import COMPARISON_ROOT, compare_evaluations
 from .comparison_storage import freeze_comparison, verify_comparison
 from .matching import MATCHING_ROOT, evaluate_matching
 from .matching_storage import freeze_matching, verify_matching
-from .study_protocol import STUDY_ROOT, _path as study_path, validate_protocol
+from .study_protocol import STUDY_ROOT, _path as study_path, check_retention, validate_protocol
 from .study import evaluate_study
 from .study_export import export_study
 from .human_handoff import HANDOFF_ROOT, project_handoff
@@ -132,8 +132,11 @@ def main():
             result = verify_matching(args.matching_ref, args.root)
         elif args.command in ('check-study', 'export-study'):
             protocol = validate_protocol(_read(study_path(args.root, args.protocol)), args.root)
-            packet = evaluate_study(_read(study_path(protocol['root'], args.input)), protocol)
+            records_path = study_path(protocol['root'], args.input)
+            check_retention(protocol)
+            packet = evaluate_study(_read(records_path), protocol)
             result = packet['summary'] if args.command == 'check-study' else export_study(packet, protocol, args.output, args.format)
+            check_retention(protocol)
         elif args.command == 'check-handoff':
             result = project_handoff(_read(args.input), args.review_root)['summary']
         elif args.command == 'freeze-handoff':

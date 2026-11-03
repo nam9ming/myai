@@ -401,6 +401,16 @@ class UserStudyTest(UserStudyFixture):
         with self.assertRaises(ExtractionError) as caught: study.evaluate_study(b'not-json', prepared)
         self.assertEqual(caught.exception.code, 'STUDY_RETENTION_EXPIRED')
 
+    def test_copied_evidence_keeps_records_without_inflating_artifact_target(self):
+        self.records['evidence'] = [dict(evidence_id=uid(4200 + index),
+            artifact=self.artifact(f'evidence/copy-{index}.txt', b'one synthetic capture'),
+            kind='screen_capture', participant_id=None, captured_at='2026-11-03T02:00:00Z',
+            issue_ids=[], change_refs=[], note='같은 합성 증빙의 복사본') for index in range(2)]
+        summary = self.study()['summary']; evidence = summary['evidence']
+        self.assertEqual((evidence['records'], evidence['verified_artifacts']), (2, 1))
+        self.assertFalse(evidence['meets_2_artifacts_as_declared'])
+        self.assertIn('EVIDENCE_TARGET_SHORTFALL', summary['warnings'])
+
     def test_started_failure_preserves_actual_time_and_nullable_fp_outside_counts(self):
         value = copy.deepcopy(self.records); row = value['participants'][0]['sessions'][0]['records'][0]
         row.update(outcome='technical_failure', ended_at='2026-11-03T01:00:42Z', elapsed_seconds=42,

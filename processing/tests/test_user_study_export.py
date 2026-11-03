@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 from processing.evaluation import study_export as export
 from processing.evaluation import __main__ as cli
+from processing.evaluation import study_protocol
 from processing.extraction.archive import _json
 from processing.extraction.validation import ExtractionError
 from processing.tests.test_dataset import REPO
@@ -189,6 +190,43 @@ class UserStudyExportTest(UserStudyFixture):
         self.assertEqual(second.returncode, 0, second.stderr)
         self.assertEqual(json.loads(second.stdout), json.loads(first.stdout))
         self.assertEqual((self.work / 'retry.json').read_bytes(), raw)
+
+    def test_cli_rechecks_current_retention_before_reading_records(self):
+        self.protocol['privacy']['retention_deadline'] = '2026-11-04'
+        self.records['protocol_sha256'] = hashlib.sha256(self.protocol_bytes()).hexdigest(); self.write_records()
+        real_validate = cli.validate_protocol
+        for command in ('check-study', 'export-study'):
+            args = ['evaluation', command, '--root', str(self.work), '--protocol', 'protocol.json', '--input', 'records.json']
+            if command == 'export-study': args += ['--output', 'expired.json', '--format', 'json']
+            with self.subTest(command=command), patch.object(study_protocol, 'datetime', wraps=datetime) as clock:
+                clock.now.return_value = datetime(2026, 11, 4, 14, 59, 59, tzinfo=timezone.utc)
+                def validated(*args, **kwargs):
+                    prepared = real_validate(*args, **kwargs)
+                    clock.now.return_value = datetime(2026, 11, 4, 15, tzinfo=timezone.utc)
+                    return prepared
+                with patch.object(cli, 'validate_protocol', side_effect=validated), patch.object(cli, '_read', wraps=cli._read) as reader, \
+                        patch.object(sys, 'argv', args), patch.object(sys, 'stdout', io.StringIO()) as stdout, \
+                        patch.object(sys, 'stderr', io.StringIO()) as stderr:
+                    self.assertEqual(cli.main(), 2)
+                    self.assertEqual([call.args[0].name for call in reader.call_args_list], ['protocol.json'])
+                    self.assertEqual(stdout.getvalue(), ''); self.assertEqual(stderr.getvalue(), 'STUDY_RETENTION_EXPIRED\n')
+            self.assertFalse((self.work / 'expired.json').exists())
+
+    def test_check_does_not_emit_summary_if_retention_expires_during_analysis(self):
+        self.protocol['privacy']['retention_deadline'] = '2026-11-04'
+        self.records['protocol_sha256'] = hashlib.sha256(self.protocol_bytes()).hexdigest(); self.write_records()
+        real_evaluate = cli.evaluate_study
+        with patch.object(study_protocol, 'datetime', wraps=datetime) as clock:
+            clock.now.return_value = datetime(2026, 11, 4, 14, 59, 59, tzinfo=timezone.utc)
+            def evaluated(*args):
+                packet = real_evaluate(*args)
+                clock.now.return_value = datetime(2026, 11, 4, 15, tzinfo=timezone.utc)
+                return packet
+            with patch.object(cli, 'evaluate_study', side_effect=evaluated), \
+                    patch.object(sys, 'argv', ['evaluation', 'check-study', '--root', str(self.work), '--protocol', 'protocol.json', '--input', 'records.json']), \
+                    patch.object(sys, 'stdout', io.StringIO()) as stdout, patch.object(sys, 'stderr', io.StringIO()) as stderr:
+                self.assertEqual(cli.main(), 2)
+                self.assertEqual(stdout.getvalue(), ''); self.assertEqual(stderr.getvalue(), 'STUDY_RETENTION_EXPIRED\n')
 
     def test_reuse_recomputes_stored_report_and_rejects_forged_time_or_metrics(self):
         packet = self.study()

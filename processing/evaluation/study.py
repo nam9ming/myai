@@ -276,7 +276,7 @@ def _evidence(entries, participants, prepared):
             participant = participants[identity]; photo = participant['photo_consent']
             _check(photo is not None and stamp_ns(photo['consented_at']) <= at and stamp_ns(participant['consent']['consented_at']) <= at)
         artifact = _artifact(entry['artifact'], prepared['root'])
-        artifacts.add(artifact['path'])
+        artifacts.add((artifact['sha256'], artifact['size']))
     return dict(records=len(ids), verified_artifacts=len(artifacts), target_artifacts=2, meets_2_artifacts_as_declared=len(artifacts) >= 2)
 
 

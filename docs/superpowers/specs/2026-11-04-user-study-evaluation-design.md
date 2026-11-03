@@ -46,6 +46,8 @@ CLI pack root는 기존 `_root`의 private 경로 정책을 따른다(저장소 
 
 `evidence[]`는 정확히 `evidence_id artifact kind participant_id captured_at issue_ids change_refs note`. 고유 UUID, artifact는 위 경로/hash/size, kind screen_capture/deidentified_photo, participant_id nullable, captured_at≤evaluated_at, 나머지는 중복 없는 비공개 ID/참조 문자열 목록·설명이다. participant 연결 때 별도 촬영 동의 버전·시각을 검사한다. null은 참여자 정보 없는 자료라는 선언이다. 모든 bytes hash를 검사하지만 사진 내용/비식별/촬영 사실은 인증하지 않는다. 증빙2개 목표와 실제 검증된 artifact 수를 따로 보고한다.
 
+증빙 목표 수는 검증한 `(sha256,size)`로 중복 제거한다. 다른 경로/ID의 같은 bytes도 기록 수에는 남기며, 재인코딩한 같은 장면의 의미상 중복은 인증하지 않는다.
+
 ## 분석·결과
 
 E/A/D08 점수를 D09 시간으로 재명명하지 않는다. 모든 모집 상태·유형·역할·배정·시작/완료/중단/실패/미시작을 보존한다. phase pilot은 본 평가 인원/M05 성과에 합산하지 않는다. 본 평가 experts도 별도다. M04 목표6·최소3 추진와 실제 모집/참여/정확 완료·상인 인원을 구별한다.
@@ -63,6 +65,8 @@ result는 `user-study-result-v1`이며 정확한 top keys `schema_version study_
 `check-study --root ROOT --protocol protocol.json --input records.json`은 summary JSON 한 건만 stdout에 출력한다. `export-study`는 같은 검증 뒤 `--output reports/result.json|csv --format json|csv`에 private 결과를 배타 생성하고 safe receipt만 출력한다. root 기본은 data/private/evaluation/user-studies. export JSON은 canonical result, CSV는 participant·task 행(고정 열)으로 version/SHA·역할·배정·결과·시간/정확도/누락·개인 감소율을 제공한다. 자유 서술은 CSV에 넣지 않고 JSON/원본에 보존한다. 문자열의 spreadsheet formula 접두는 CSV 표시용 escape하며 원본은 유지한다.
 
 export는0600 파일·0700 새 디렉터리, 같은 bytes만 재사용하고 다른 내용·부분 파일·symlink·경로 탈출·권한 확대를 거부한다. 같은 입력의 JSON 재실행은 원래 evaluated_at으로 전체 결과를 다시 계산해 canonical bytes가 같은 경우만 최초 파일을 재사용한다. 원래 시각은 protocol 고정 이후·검증 시각 horizon 이하여야 하며 현재 보존 기한도 다시 확인한다. 이를 위해 내부 packet은 `{result,summary,records_content}`이며 records_content는 원래 bytes의 메모리 전용 sidecar로 JSON/CSV/stdout에 넣지 않는다. 재사용 파일은 더 제한적인0400도 허용하며 이전 JSON/CSV bytes를 덮지 않는다. summary/receipt도 실제 D09 파생자료이므로 외부 AI·공개 자료에 넣지 않는다. 자동 원본 복제/영구 보존/삭제 스케줄·공개 endpoint/DB 테이블은 없다. 만료 파일과 모든 export의 실제 처리·삭제는 정해진 접근 담당자의 운영 책임이다. 성공0·입력2·보관 충돌/손상3·I/O5·내부1, stderr 고정 코드만 사용한다.
+
+CLI는 records를 읽기 직전과 summary/receipt 출력 전에도 실제 현재 시각의 보존기한을 재검사한다. 최초 protocol 검사 때 유효했다는 사실만으로 이후 읽기·출력을 허용하지 않는다.
 
 ## 검증·완료 조건
 
