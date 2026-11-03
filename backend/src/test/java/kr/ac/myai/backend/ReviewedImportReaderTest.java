@@ -26,6 +26,124 @@ class ReviewedImportReaderTest {
     }
 
     @Test
+    void rejectsCalendarYearZeroButAcceptsTheFirstSupportedYear() throws Exception {
+        var occurrence = (ObjectNode) input.path("events").get(0).path("revision").path("occurrences").get(0);
+        occurrence.put("date_start", "0000-01-01").put("date_end", "0000-01-01");
+        rejected();
+        occurrence.put("date_start", "0001-01-01").put("date_end", "0001-01-01");
+        assertThat(reader.read(write(), root).events()).hasSize(1);
+    }
+
+    @Test
+    void rejectsPythonWhitespaceOnlyValuesWithoutTrimmingRealText() throws Exception {
+        int[] whitespace = {9, 10, 11, 12, 13, 28, 29, 30, 31, 32, 133, 160, 5760, 8192, 8193, 8194,
+                8195, 8196, 8197, 8198, 8199, 8200, 8201, 8202, 8232, 8233, 8239, 8287, 12288};
+        var revision = (ObjectNode) input.path("events").get(0).path("revision");
+        for (int point : whitespace) {
+            revision.put("title", new String(Character.toChars(point)));
+            rejected();
+        }
+        String title = Character.toString(160) + "원문 제목" + Character.toString(8239);
+        revision.put("title", title);
+        var saved = mapper.readTree(reader.read(write(), root).events().getFirst().payloadJson());
+        assertThat(saved.path("revision").path("title").asText()).isEqualTo(title);
+    }
+
+    @Test
+    void rawDraftPreservesDuplicateTextValuesButReviewedAndReferenceIdsStayUnique() throws Exception {
+        rawDraft();
+        var revision = (ObjectNode) input.path("events").get(0).path("revision");
+        for (String name : java.util.List.of("exceptions", "route_names", "stop_names", "directions")) {
+            var field = (ObjectNode) revision.path(name);
+            field.put("knowledge", "known").putNull("reason");
+            field.putArray("value").add("상행").add("상행");
+            field.putArray("evidence_ids").add("body-quote");
+        }
+        assertThat(reader.read(write(), root).events()).hasSize(1);
+        ((ObjectNode) revision.path("directions")).putArray("evidence_ids").add("body-quote").add("body-quote");
+        rejected();
+        ((ObjectNode) revision.path("directions")).putArray("evidence_ids").add("body-quote");
+        input.put("schema_version", "reviewed-import-v1"); input.remove("originating_run_id");
+        revision.put("origin", "ai_reviewed").put("title", "합성 제목"); revision.putArray("types").add("traffic");
+        rejected();
+    }
+
+    @Test
+    void acceptsHiddenAiDraftWithUnknownTitleAndTypesOnlyInItsSchema() throws Exception {
+        rawDraft();
+        var batch = reader.read(write(), root);
+        var revision = mapper.readTree(batch.events().getFirst().payloadJson()).path("revision");
+        assertThat(revision.path("title").isNull()).isTrue();
+        assertThat(revision.path("types").isEmpty()).isTrue();
+        assertThat(batch.events().getFirst().reviewStatus()).isEqualTo("draft");
+        assertThat(batch.events().getFirst().reviewerId()).isNull();
+        input.put("schema_version", "reviewed-import-v1"); rejected();
+    }
+
+    @Test
+    void rawDraftRejectsHumanClaimsGeometryAndStatePromotion() throws Exception {
+        for (String change : java.util.List.of("status", "intent", "reviewer", "geometry", "area", "origin")) {
+            fixtureReset(); rawDraft();
+            var event = (ObjectNode) input.path("events").get(0);
+            var revision = (ObjectNode) event.path("revision");
+            switch (change) {
+                case "status" -> revision.put("review_status", "needs_review");
+                case "intent" -> revision.put("publication_intent", "public");
+                case "reviewer" -> revision.put("reviewer_id", "forged").put("reviewed_at", "2026-11-02T02:00:00Z");
+                case "geometry" -> ((ObjectNode) revision.path("locations").get(0)).set("geometry",
+                        mapper.readTree("{\"type\":\"Point\",\"coordinates\":[127,37]}"));
+                case "area" -> event.put("area_membership", "verified");
+                case "origin" -> revision.put("origin", "ai_reviewed");
+            }
+            rejected();
+        }
+    }
+
+    @Test
+    void rawNoEventFoundKeepsDocumentOnlyAndCannotBecomeReviewedBatch() throws Exception {
+        input.put("schema_version", "ai-draft-import-v1");
+        input.putArray("events"); input.putArray("evidence");
+        rejected();
+        input.put("originating_run_id", "71fb66f0-e610-4f9c-8f26-4bb77655ee8c");
+        assertThat(reader.read(write(), root).events()).isEmpty();
+        input.put("schema_version", "reviewed-import-v1"); rejected();
+    }
+
+    @Test
+    void storedRawAiDraftCannotClaimApproval() throws Exception {
+        rawDraft();
+        var revision = (ObjectNode) input.path("events").get(0).path("revision");
+        revision.put("title", "합성 제목"); revision.putArray("types").add("construction");
+        revision.put("review_status", "approved").put("publication_intent", "public")
+                .put("reviewer_id", "forged").put("reviewed_at", "2026-11-02T02:00:00Z");
+        assertThatThrownBy(() -> reader.validateStored(input, root)).isInstanceOf(ImportException.class);
+    }
+
+    @Test
+    void rawUnknownPreservesContradictoryPartialClocksForHumanReview() throws Exception {
+        rawDraft();
+        var occurrence = (ObjectNode) input.path("events").get(0).path("revision").path("occurrences").get(0);
+        occurrence.putNull("date_start").putNull("date_end").put("time_start", "12:00").put("time_end", "10:00")
+                .put("end_day_offset", 0).put("precision", "unknown").put("knowledge", "ambiguous");
+        assertThat(reader.read(write(), root).events()).hasSize(1);
+    }
+
+    private void rawDraft() {
+        input.put("schema_version", "ai-draft-import-v1");
+        input.put("originating_run_id", "71fb66f0-e610-4f9c-8f26-4bb77655ee8c");
+        var event = (ObjectNode) input.path("events").get(0);
+        event.put("area_membership", "uncertain");
+        var revision = (ObjectNode) event.path("revision");
+        revision.put("origin", "ai_draft").put("review_status", "draft").putNull("reviewer_id")
+                .putNull("reviewed_at").putNull("title");
+        revision.putArray("types");
+        revision.putArray("originating_run_ids").add("71fb66f0-e610-4f9c-8f26-4bb77655ee8c");
+        var location = (ObjectNode) revision.path("locations").get(0);
+        location.put("status", "unknown").put("coverage", "unknown").putNull("geometry")
+                .putNull("source").putNull("checked_by").putNull("checked_at");
+    }
+
+    @Test
     void acceptsExplicitSourceOnlyBatchWithoutInventingEvents() throws Exception {
         input.put("schema_version", "source-import-v1");
         input.putArray("events"); input.putArray("evidence");

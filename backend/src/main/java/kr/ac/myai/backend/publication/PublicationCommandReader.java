@@ -52,6 +52,7 @@ public class PublicationCommandReader {
             if (!errors.isEmpty()) throw invalid(errors.iterator().next().getPropertyPath().toString());
             if (command instanceof PublicationCommand.Decision decision) {
                 check(new HashSet<>(decision.evidenceIds()).size() == decision.evidenceIds().size(), "evidence_ids");
+                check(decision.action().equals("reject") || !decision.evidenceIds().isEmpty(), "evidence_ids");
             } else if (command instanceof PublicationCommand.Publish publish) {
                 context(publish.mode(), publish.caseId() == null);
                 check(new HashSet<>(publish.revisionIds()).size() == publish.revisionIds().size(), "revision_ids");

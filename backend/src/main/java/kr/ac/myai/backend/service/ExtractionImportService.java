@@ -17,6 +17,7 @@ import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @Profile("!fixture")
@@ -68,29 +69,48 @@ public class ExtractionImportService {
     }
 
     public List<Reference> verifyReferences(List<ReviewedBatch.Event> events) {
+        return verifyReferences(events, null, List.of());
+    }
+
+    public List<Reference> verifyReferences(List<ReviewedBatch.Event> events, String batchRun, List<String> batchDocuments) {
         var verified = new LinkedHashMap<String, Reference>();
         for (var event : events) {
             for (String id : event.originatingRunIds()) {
-                var reference = verified.get(id);
-                if (reference == null) {
-                    Path directory;
-                    try { directory = Path.of(repository.referenceDirectory(id)); }
-                    catch (IllegalArgumentException ex) { throw new ExtractionException("EXTRACTION_ARCHIVE_INVALID", null, false); }
-                    if (!directory.isAbsolute() || directory.getFileName() == null || !directory.getFileName().toString().equals(id)) {
-                        throw new ExtractionException("EXTRACTION_ARCHIVE_INVALID", null, false);
-                    }
-                    var run = archives.read(id, directory.getParent());
-                    repository.checkDocument(run);
-                    reference = repository.verifiedReference(run);
-                    verified.put(id, reference);
-                }
-                if (!event.sourceVersionIds().contains(reference.documentVersionId())) {
-                    throw new ExtractionException("EXTRACTION_ARCHIVE_INVALID", null, false);
-                }
+                verifyReference(id, event.sourceVersionIds(), verified);
             }
         }
+        if (batchRun != null) verifyReference(batchRun, batchDocuments, verified);
         return verified.values().stream().sorted(Comparator.comparing(Reference::runId)).toList();
     }
 
+    private void verifyReference(String id, List<String> documents, Map<String, Reference> verified) {
+        var reference = verified.get(id);
+        if (reference == null) {
+            Path directory;
+            try { directory = Path.of(repository.referenceDirectory(id)); }
+            catch (IllegalArgumentException ex) { throw new ExtractionException("EXTRACTION_ARCHIVE_INVALID", null, false); }
+            if (!directory.isAbsolute() || directory.getFileName() == null || !directory.getFileName().toString().equals(id)) {
+                throw new ExtractionException("EXTRACTION_ARCHIVE_INVALID", null, false);
+            }
+            var run = archives.read(id, directory.getParent());
+            repository.checkDocument(run);
+            reference = repository.verifiedReference(run);
+            verified.put(id, reference);
+        }
+        if (!documents.contains(reference.documentVersionId())) {
+            throw new ExtractionException("EXTRACTION_ARCHIVE_INVALID", null, false);
+        }
+    }
+
     public void checkReferences(List<Reference> references) { references.forEach(repository::checkReference); }
+
+    public void verifyDraft(ReviewedBatch batch) {
+        if (batch.originatingRunId() == null) return;
+        try {
+            Path directory = Path.of(repository.referenceDirectory(batch.originatingRunId()));
+            archives.checkDraft(batch.originatingRunId(), directory.getParent(), batch.draftJson());
+        } catch (IllegalArgumentException ex) {
+            throw new ExtractionException("EXTRACTION_ARCHIVE_INVALID", null, false);
+        }
+    }
 }

@@ -106,6 +106,10 @@ class PublicationMySqlTest {
         importBatch(input);
         assertThatThrownBy(() -> publication.execute(decision(input, "approve", 1), root, "synthetic-approver")).isInstanceOf(PublicationException.class);
         Files.delete(root.resolve("synthetic-source.txt"));
+        var empty = (PublicationCommand.Decision) decision(input, "reject", 1);
+        var noEvidence = new PublicationCommand.Decision(empty.schemaVersion(), empty.action(), empty.reason(),
+                empty.eventId(), empty.expectedRevisionNo(), List.of());
+        assertThatThrownBy(() -> publication.execute(noEvidence, null, "synthetic-reviewer")).isInstanceOf(PublicationException.class);
         var rejected = publication.execute(decision(input, "reject", 1), null, "synthetic-reviewer");
         assertThat(jdbc.queryForObject("SELECT review_status FROM event_revisions WHERE revision_id = ?", String.class, rejected.revisionId())).isEqualTo("rejected");
         assertThat(jdbc.queryForObject("SELECT publication_intent FROM event_revisions WHERE revision_id = ?", String.class, rejected.revisionId())).isEqualTo("hidden");

@@ -31,6 +31,15 @@ class PublicationCommandReaderTest {
     }
 
     @Test
+    void permitsEmptyRejectionEvidenceForTheServiceToCheckButNeverForApproval() throws Exception {
+        var command = fixture("approve");
+        command.put("action", "reject"); command.putArray("evidence_ids");
+        assertThat(read(command)).isInstanceOf(PublicationCommand.Decision.class);
+        command.put("action", "approve");
+        assertThatThrownBy(() -> read(command)).isInstanceOf(kr.ac.myai.backend.publication.PublicationException.class);
+    }
+
+    @Test
     void acceptsDecisionAndExactlyFiveVerifiedPoints() throws Exception {
         assertThat(read(fixture("approve"))).isInstanceOf(PublicationCommand.Decision.class);
         var command = (PublicationCommand.Publish) read(fixture("publish"));

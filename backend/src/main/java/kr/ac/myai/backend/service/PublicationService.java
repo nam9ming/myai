@@ -75,6 +75,9 @@ public class PublicationService {
         payload.path("evidence").forEach(item -> knownEvidence.add(item.path("evidence_id").asText()));
         content.check(knownEvidence.containsAll(command.evidenceIds()), "evidence_ids");
         boolean approve = command.action().equals("approve");
+        boolean rawDraft = payload.path("revision").path("origin").asText().equals("ai_draft");
+        content.check(!approve || !rawDraft, "origin");
+        content.check(!command.evidenceIds().isEmpty() || !approve && rawDraft, "evidence_ids");
         conflict(!original.status().equals(approve ? "approved" : "rejected"), "review_status");
         var documents = approve ? documents(payload) : List.<PublicationRepository.Document>of();
         ObjectNode updated = payload.deepCopy(); var revision = (ObjectNode) updated.path("revision");

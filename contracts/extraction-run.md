@@ -52,4 +52,10 @@ stdout은 ID·상태·hash·고정 상대 파일명·안전한 오류 코드/필
 | 5 | 파일 I/O 실패 |
 | 1 | 내부 오류 |
 
-Java `local-extraction`은 [D03/D05 연결 안내](../backend/docs/extraction-run-import.md)에 따라 검증된 archive의 성공/실패·nullable metadata 원본을 등록한다. 같은 전체 D03 입력·전처리 버전이 필요하며 원본 경로를 유지한다. 검증 정보가 없는 legacy와 failed는 D06 AI origin으로 사용할 수 없다. import·승인·미리보기·공개 때 archive 원본과 DB 등록 기록을 다시 대조하며 Python 검증 중 DB 트랜잭션을 유지하지 않는다. D06 자동 초안 변환·실제 모델/API 실행·실자료 평가·공개 승인·운영 배포는 후속 작업이다.
+Java `local-extraction`은 [D03/D05 연결 안내](../backend/docs/extraction-run-import.md)에 따라 검증된 archive의 성공/실패·nullable metadata 원본을 등록한다. 같은 전체 D03 입력·전처리 버전이 필요하며 원본 경로를 유지한다. 검증 정보가 없는 legacy와 failed는 D06 AI origin으로 사용할 수 없다. import·승인·미리보기·공개 때 archive 원본과 DB 등록 기록을 다시 대조하며 Python 검증 중 DB 트랜잭션을 유지하지 않는다. D06 숨김 초안 변환·저장·사람 검토 다음 revision 연결은 [초안 안내](../backend/docs/ai-review-draft.md)를 따른다. 실제 모델/API 실행·실자료 평가·공개 승인·운영 배포는 후속 작업이다.
+
+## Java의 초안 전체 대조
+
+Java local-import는 AI 초안에만 내부 명령 `python3.13 -m processing.extraction check-draft RUN_ID --root ROOT`를 사용한다. stdin은 ai-draft-import-v1 JSON 한 건이며 최대8MiB다. Python은 기존 생성 함수를 재사용해 등록 보관본의 최종 출력에서 기대 초안을 만들고 JSON 키 순서·공백을 제외한 전체 값·ID·근거·연결을 대조한다. 빈 사건도 실제 NO_EVENT_FOUND 출력이어야 하며 raw 파일을 사람 수정본으로 사용하지 않는다.
+
+stdout은 정확히 `protocol_version/status/run_id/input_sha256`의4키다. 버전은 ai-draft-check-v1, 성공 상태는 validated이며 hash는 받은 stdin UTF-8 바이트의 SHA-256이다. Java는 이 ID/hash·응답 형식을 대조한다. 원문·AI 출력·실제 경로는 반환하지 않는다. 불일치2·archive 오류3·파일 오류5·내부 오류1이며 성공0도 사람 승인은 아니다. Java가 DB 트랜잭션 밖에서 제한된 Python 프로세스로 실행하므로 추가 검증 I/O가 발생한다. D03 전체 규격·원문 파일은 Java가 별도로 검증한다.

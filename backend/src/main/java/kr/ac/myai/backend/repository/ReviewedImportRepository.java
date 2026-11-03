@@ -3,7 +3,9 @@ package kr.ac.myai.backend.repository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import kr.ac.myai.backend.importing.ImportException;
+import kr.ac.myai.backend.importing.HumanReviewChanges;
 import kr.ac.myai.backend.importing.ReviewedBatch;
 import kr.ac.myai.backend.service.ReviewedImportService.ImportResult;
 import org.springframework.context.annotation.Profile;
@@ -34,6 +36,7 @@ public class ReviewedImportRepository {
                 (row, index) -> {
                     require(row.getString("status").equals("succeeded"), "import_batches");
                     JsonNode refs = json(row.getString("result_refs_json"));
+                    require(batch.originatingRunId() == null || batch.originatingRunId().equals(refs.path("originating_run_id").textValue()), "import_batches");
                     return new ImportResult(row.getString("import_id"), strings(refs.path("revision_ids")), strings(refs.path("document_version_ids")), true);
                 }, sourceKind(batch), batch.inputSha256(), batch.schemaVersion()).stream().findFirst();
     }
@@ -43,10 +46,17 @@ public class ReviewedImportRepository {
                 id, sourceKind(batch), batch.inputSha256(), batch.schemaVersion());
     }
 
-    private String sourceKind(ReviewedBatch batch) { return batch.schemaVersion().equals("source-import-v1") ? "source" : "reviewed"; }
+    private String sourceKind(ReviewedBatch batch) {
+        return switch (batch.schemaVersion()) {
+            case "source-import-v1" -> "source";
+            case "ai-draft-import-v1" -> "ai_draft";
+            default -> "reviewed";
+        };
+    }
 
-    public void completeBatch(ImportResult result) {
+    public void completeBatch(ImportResult result, String runId) {
         var refs = mapper.createObjectNode();
+        if (runId != null) refs.put("originating_run_id", runId);
         var revisions = refs.putArray("revision_ids");
         result.revisionIds().forEach(revisions::add);
         var documents = refs.putArray("document_version_ids");
@@ -104,7 +114,19 @@ public class ReviewedImportRepository {
             var state = states.getFirst();
             before = (String) state.get("current_review_revision_id");
             require(before != null && state.get("revision_no") != null && ((Number) state.get("revision_no")).longValue() == event.expectedRevisionNo(), "events.expected_revision_no");
-            require(json((String) state.get("payload_json")).path("data_kind").asText().equals(kind), "data_kind");
+            var previous = json((String) state.get("payload_json"));
+            require(previous.path("data_kind").asText().equals(kind), "data_kind");
+            if (action.equals("import") && previous.path("revision").path("origin").asText().equals("ai_draft")) {
+                var revision = json(event.payloadJson()).path("revision");
+                require(revision.path("origin").asText().equals("ai_reviewed") && event.reviewerId() != null
+                        && event.reviewedAt() != null, "events.revision.reviewer_id");
+            }
+            if (action.equals("import") && !previous.path("revision").path("originating_run_ids").isEmpty()) {
+                require(event.originatingRunIds().containsAll(strings(previous.path("revision").path("originating_run_ids")))
+                        && event.sourceVersionIds().containsAll(strings(previous.path("revision").path("source_version_ids"))),
+                        "events.revision.originating_run_ids");
+                HumanReviewChanges.validate(previous, json(event.payloadJson()));
+            }
             lockVersion = ((Number) state.get("lock_version")).longValue();
         }
         require(lockVersion < Long.MAX_VALUE, "events.lock_version");
@@ -118,7 +140,7 @@ public class ReviewedImportRepository {
     }
 
     private JsonNode json(String value) {
-        try { return mapper.readTree(Objects.requireNonNull(value)); }
+        try { return mapper.reader().with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).readTree(Objects.requireNonNull(value)); }
         catch (JsonProcessingException ex) { throw new IllegalStateException("저장된 import JSON을 읽을 수 없습니다."); }
     }
 

@@ -47,7 +47,9 @@ public class ReviewedImportService {
             throw new ImportException("IMPORT_VALIDATION_ERROR", "import 담당자를 128자 이하로 지정해 주세요.", "actor");
         }
         try {
-            var runReferences = extractions.verifyReferences(batch.events());
+            var runReferences = extractions.verifyReferences(batch.events(), batch.originatingRunId(),
+                    batch.documents().stream().map(ReviewedBatch.Document::versionId).toList());
+            extractions.verifyDraft(batch);
             try {
                 return transaction.execute(status -> {
                     extractions.checkReferences(runReferences);
@@ -66,7 +68,7 @@ public class ReviewedImportService {
                     }
                     var result = new ImportResult(importId, batch.events().stream().map(ReviewedBatch.Event::revisionId).toList(),
                             batch.documents().stream().map(ReviewedBatch.Document::versionId).toList(), false);
-                    repository.completeBatch(result);
+                    repository.completeBatch(result, batch.originatingRunId());
                     return result;
                 });
             } catch (DuplicateKeyException ex) {

@@ -105,6 +105,28 @@ public class ExtractionArchiveReader {
         }
     }
 
+    public void checkDraft(String runId, Path root, String draftJson) {
+        validate(runId != null && runId.matches(UUID) && draftJson != null, "run_id");
+        validate(root != null && root.isAbsolute() && !Files.isSymbolicLink(root), "archive_root");
+        byte[] input = draftJson.getBytes(StandardCharsets.UTF_8);
+        validate(input.length <= LIMIT, "events");
+        try {
+            var process = PythonProcess.execute(executable, workdir, List.of("-m", "processing.extraction", "check-draft",
+                    runId, "--root", root.toString()), input, timeout);
+            validate(process.exitCode() == 0, "events");
+            JsonNode packet = json.parseJson(process.stdout());
+            require(keys(packet).equals(Set.of("protocol_version", "status", "run_id", "input_sha256"))
+                    && packet.path("protocol_version").asText().equals("ai-draft-check-v1")
+                    && packet.path("status").asText().equals("validated")
+                    && packet.path("run_id").asText().equals(runId)
+                    && packet.path("input_sha256").asText().equals(ReviewedImportReader.sha256(input)));
+        } catch (PythonProcess.Failure ex) {
+            throw new ExtractionException("EXTRACTION_RUNTIME_UNAVAILABLE", null, ex.retryable());
+        } catch (ImportException ex) {
+            throw new ExtractionException("EXTRACTION_ARCHIVE_INVALID", null, false);
+        }
+    }
+
     private byte[] checked(Path directory, String name, JsonNode receipt) throws IOException {
         byte[] bytes = read(directory.resolve(name));
         JsonNode artifact = receipt.path("artifacts").path(name);

@@ -51,9 +51,11 @@ public class ReviewedImportReader {
     }
 
     private ReviewedBatch batch(JsonNode input, Path sourceRoot, String inputHash, boolean stored) throws IOException {
-            shape(input, "$", "schema_version data_kind documents evidence events");
-            String schema = choice(input, "schema_version", "reviewed-import-v1", "source-import-v1");
+            String schema = choice(input, "schema_version", "reviewed-import-v1", "source-import-v1", "ai-draft-import-v1");
             boolean sourceOnly = schema.equals("source-import-v1");
+            boolean draftImport = schema.equals("ai-draft-import-v1");
+            shape(input, "$", "schema_version data_kind documents evidence events" + (draftImport ? " originating_run_id" : ""));
+            String runId = draftImport ? uuid(input, "originating_run_id") : null;
             String kind = choice(input, "data_kind", "synthetic", "real");
             List<ReviewedBatch.Document> documents = new ArrayList<>();
             Map<String, JsonNode> sources = new HashMap<>();
@@ -67,19 +69,21 @@ public class ReviewedImportReader {
                 check(versions.add(document.id() + ":" + document.versionNo()), "documents.version_no");
                 documents.add(document);
             }
-            Map<String, JsonNode> evidence = evidence(input, sources, !sourceOnly);
+            check(!draftImport || documents.size() == 1, "documents");
+            Map<String, JsonNode> evidence = evidence(input, sources, !sourceOnly && !draftImport);
             check(!sourceOnly || evidence.isEmpty(), "evidence");
             List<ReviewedBatch.Event> events = new ArrayList<>();
             Set<String> eventIds = new HashSet<>();
             Set<String> revisionIds = new HashSet<>();
-            for (JsonNode event : array(input, "events", !sourceOnly)) {
+            for (JsonNode event : array(input, "events", !sourceOnly && !draftImport)) {
                 check(!sourceOnly, "events");
-                var reviewed = event(event, sources, evidence, kind, stored);
+                var reviewed = event(event, sources, evidence, kind, stored, draftImport);
+                check(!draftImport || reviewed.originatingRunIds().equals(List.of(runId)), "events.revision.originating_run_ids");
                 check(eventIds.add(reviewed.id()), "events.event_id");
                 check(revisionIds.add(reviewed.revisionId()), "events.revision.revision_id");
                 events.add(reviewed);
             }
-            return new ReviewedBatch(schema, inputHash, kind, documents, events);
+            return new ReviewedBatch(schema, inputHash, kind, documents, events, runId, draftImport ? input.toString() : null);
     }
 
     public JsonNode readJson(Path file) {
@@ -192,7 +196,7 @@ public class ReviewedImportReader {
         return result;
     }
 
-    private ReviewedBatch.Event event(JsonNode event, Map<String, JsonNode> sources, Map<String, JsonNode> evidence, String kind, boolean stored) {
+    private ReviewedBatch.Event event(JsonNode event, Map<String, JsonNode> sources, Map<String, JsonNode> evidence, String kind, boolean stored, boolean draftImport) {
         shape(event, "events", "event_id area_id area_membership document_links relations suspected_duplicate_ids split_group_id expected_revision_no revision");
         String id = uuid(event, "event_id");
         uuid(event, "area_id");
@@ -203,12 +207,15 @@ public class ReviewedImportReader {
         check(!duplicates.contains(id), "events.suspected_duplicate_ids");
         JsonNode revision = event.path("revision");
         shape(revision, "events.revision", "revision_id event_id revision_no title types occurrences locations applicability exceptions route_names stop_names directions lifecycle lifecycle_evidence_ids human_overrides review_status reviewer_id reviewed_at publication_intent origin source_version_ids originating_run_ids rules_version dictionary_version");
+        String origin = choice(revision, "origin", "human", "ai_reviewed", "ai_draft");
+        boolean rawDraft = origin.equals("ai_draft");
+        check(stored || draftImport == rawDraft, "events.revision.origin");
         check(uuid(revision, "event_id").equals(id), "events.revision.event_id");
         String revisionId = uuid(revision, "revision_id");
         long number = integer(revision, "revision_no", 1, Long.MAX_VALUE);
         check(number == expected + 1, "events.revision.revision_no");
-        text(revision, "title", LIMIT);
-        for (String type : ids(revision, "types", true, false)) check(Set.of("construction", "event", "traffic").contains(type), "events.revision.types");
+        if (rawDraft) nullableText(revision, "title", LIMIT); else text(revision, "title", LIMIT);
+        for (String type : ids(revision, "types", !rawDraft, false)) check(Set.of("construction", "event", "traffic").contains(type), "events.revision.types");
         List<String> sourceIds = ids(revision, "source_version_ids", true, true);
         Set<String> documentIds = new HashSet<>();
         for (String sourceId : sourceIds) {
@@ -223,7 +230,8 @@ public class ReviewedImportReader {
             String documentId = uuid(link, "document_id");
             check(documentIds.contains(documentId) && linked.add(documentId), "events.document_links.document_id");
             choice(link, "role", "original", "correction", "cancellation", "repost");
-            for (String evidenceId : evidenceIds(link, "evidence_ids", allowedEvidence, true)) {
+            check(!rawDraft || link.path("role").asText().equals("original"), "events.document_links.role");
+            for (String evidenceId : evidenceIds(link, "evidence_ids", allowedEvidence, !rawDraft)) {
                 check(sources.get(evidence.get(evidenceId).path("document_version_id").asText()).path("document_id").asText().equals(documentId), "events.document_links.evidence_ids");
             }
         }
@@ -232,15 +240,18 @@ public class ReviewedImportReader {
         Set<String> locations = new HashSet<>();
         for (JsonNode location : array(revision, "locations", true)) {
             location(location, allowedEvidence);
+            if (rawDraft) check(location.path("geometry").isNull() && !location.path("status").asText().equals("verified")
+                    && location.path("coverage").asText().equals("unknown") && location.path("source").isNull()
+                    && location.path("checked_by").isNull() && location.path("checked_at").isNull(), "locations");
             check(locations.add(uuid(location, "location_id")), "events.revision.locations.location_id");
         }
         Set<String> occurrences = new HashSet<>();
         for (JsonNode occurrence : array(revision, "occurrences", true)) {
-            occurrence(occurrence, locations, allowedEvidence);
+            occurrence(occurrence, locations, allowedEvidence, rawDraft);
             check(occurrences.add(uuid(occurrence, "occurrence_id")), "events.revision.occurrences.occurrence_id");
         }
-        for (String name : List.of("applicability", "exceptions")) fieldValue(revision.path(name), allowedEvidence, false);
-        for (String name : List.of("route_names", "stop_names", "directions")) fieldValue(revision.path(name), allowedEvidence, true);
+        for (String name : List.of("applicability", "exceptions")) fieldValue(revision.path(name), allowedEvidence, false, rawDraft);
+        for (String name : List.of("route_names", "stop_names", "directions")) fieldValue(revision.path(name), allowedEvidence, true, rawDraft);
         String lifecycle = choice(revision, "lifecycle", "active", "cancelled", "uncertain");
         evidenceIds(revision, "lifecycle_evidence_ids", allowedEvidence, lifecycle.equals("cancelled"));
         for (JsonNode change : array(revision, "human_overrides", false)) {
@@ -259,8 +270,15 @@ public class ReviewedImportReader {
         check((reviewer == null) == (reviewedAt == null), "events.revision.reviewed_at");
         check(!status.equals("approved") || reviewer != null, "events.revision.reviewer_id");
         List<String> runs = ids(revision, "originating_run_ids", false, true);
-        String origin = choice(revision, "origin", "human", "ai_reviewed");
         check(origin.equals("human") == runs.isEmpty(), "events.revision.originating_run_ids");
+        if (rawDraft) {
+            check((status.equals("draft") || stored && status.equals("rejected")) && intent.equals("hidden"), "events.revision.review_status");
+            check(!status.equals("draft") || reviewer == null, "events.revision.reviewer_id");
+            check(runs.size() == 1 && sourceIds.size() == 1 && revision.path("human_overrides").isEmpty(), "events.revision.originating_run_ids");
+            check(event.path("area_membership").asText().equals("uncertain") && event.path("relations").isEmpty()
+                    && duplicates.isEmpty(), "events");
+            check(stored || expected == 0, "events.expected_revision_no");
+        }
         text(revision, "rules_version", 100);
         text(revision, "dictionary_version", 100);
         ObjectNode payload = mapper.createObjectNode().put("data_kind", kind);
@@ -296,7 +314,7 @@ public class ReviewedImportReader {
         }
     }
 
-    private void occurrence(JsonNode node, Set<String> locations, Set<String> evidence) {
+    private void occurrence(JsonNode node, Set<String> locations, Set<String> evidence, boolean rawDraft) {
         shape(node, "occurrences", "occurrence_id date_start date_end time_start time_end end_day_offset precision recurrence_dates location_ids evidence_ids knowledge normalization_note");
         LocalDate startDate = date(node, "date_start");
         LocalDate endDate = date(node, "date_end");
@@ -317,7 +335,7 @@ public class ReviewedImportReader {
         // 미상 날짜의 부분 시간은 보존하되 완전한 시간 구간의 모순은 거부한다.
         boolean explicitDates = startDate != null && endDate != null && endDate.isAfter(startDate)
                 && node.path("recurrence_dates").isNull();
-        if (start != null && end != null && offset != null && !explicitDates) {
+        if (start != null && end != null && offset != null && !explicitDates && !(rawDraft && precision.equals("unknown"))) {
             long seconds = end.toSecondOfDay() + offset * 86400 - start.toSecondOfDay();
             check(seconds > 0 && seconds <= 86400, "occurrences.time_end");
         }
@@ -334,8 +352,8 @@ public class ReviewedImportReader {
 
     private void location(JsonNode node, Set<String> evidence) {
         shape(node, "locations", "location_id name address kind status geometry coverage source checked_by checked_at evidence_ids");
-        fieldValue(node.path("name"), evidence, false);
-        fieldValue(node.path("address"), evidence, false);
+        fieldValue(node.path("name"), evidence, false, false);
+        fieldValue(node.path("address"), evidence, false, false);
         for (String key : List.of("name", "address")) {
             JsonNode value = node.path(key).path("value");
             check(value.isNull() || value.isTextual(), "locations." + key + ".value");
@@ -371,7 +389,7 @@ public class ReviewedImportReader {
         check(Double.isFinite(longitude) && Double.isFinite(latitude) && longitude >= -180 && longitude <= 180 && latitude >= -90 && latitude <= 90, "locations.geometry.coordinates");
     }
 
-    private void fieldValue(JsonNode field, Set<String> evidence, boolean listOnly) {
+    private void fieldValue(JsonNode field, Set<String> evidence, boolean listOnly, boolean rawDraft) {
         shape(field, "field_value", "value knowledge evidence_ids reason");
         String knowledge = choice(field, "knowledge", "known", "not_stated", "ambiguous", "not_applicable");
         boolean known = knowledge.equals("known");
@@ -379,8 +397,10 @@ public class ReviewedImportReader {
         String reason = nullableText(field, "reason", LIMIT);
         JsonNode value = field.path("value");
         if (!known) check(value.isNull() && reason != null, "field_value.value");
-        else if (listOnly) ids(field, "value", false, false);
-        else if (value.isArray()) ids(field, "value", false, false);
+        else if (listOnly || value.isArray()) {
+            if (rawDraft) for (JsonNode item : array(field, "value", false)) string(item, "field_value.value", LIMIT);
+            else ids(field, "value", false, false);
+        }
         else text(field, "value", LIMIT);
     }
 
@@ -419,8 +439,10 @@ public class ReviewedImportReader {
     private String text(JsonNode node, String key, int max) { return string(node.path(key), key, max); }
 
     private String string(JsonNode value, String path, int max) {
-        check(value.isTextual() && !value.textValue().isBlank() && value.textValue().length() <= max, path);
+        check(value.isTextual() && value.textValue().length() <= max, path);
         String text = value.textValue();
+        // Python str.isspace와 같은 공백 집합을 쓰되 원문은 잘라내지 않는다.
+        check(text.codePoints().anyMatch(c -> !Character.isWhitespace(c) && !Character.isSpaceChar(c) && c != 0x85), path);
         validUnicode(text, path);
         return text;
     }
@@ -476,7 +498,7 @@ public class ReviewedImportReader {
 
     private LocalDate parseDate(JsonNode value, String path) {
         String date = string(value, path, 10);
-        check(date.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}"), path);
+        check(date.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}") && !date.startsWith("0000-"), path);
         try { return LocalDate.parse(date); }
         catch (java.time.DateTimeException ex) { throw invalid(path, "유효한 날짜가 필요합니다."); }
     }
