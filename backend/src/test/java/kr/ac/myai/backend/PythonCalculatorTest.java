@@ -189,6 +189,9 @@ class PythonCalculatorTest {
         try (var files = java.nio.file.Files.list(probe)) {
             assertThat(files.anyMatch(p -> p.getFileName().toString().startsWith("pid-"))).isTrue();
         }
-        assertThat(PythonProbe.processes(probe)).allMatch(p -> !p.isAlive());
+        for (var process : PythonProbe.processes(probe)) {
+            process.onExit().get(3, java.util.concurrent.TimeUnit.SECONDS);
+            assertThat(process.isAlive()).isFalse();
+        }
     }
 }
