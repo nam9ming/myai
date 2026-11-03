@@ -44,11 +44,11 @@
 
 **Interfaces:** Consumes Task1 projection/summary/sources and house _tree/_sealed/_copy/_identity/_rename_exclusive. Produces freeze_handoff(input_path,root=HANDOFF_ROOT,review_root=REVIEW_ROOT), verify_handoff(handoff_ref,root=HANDOFF_ROOT), check/freeze/verify-handoff with0/2/3/5. Frozen replay uses directory/review and original projected_at.
 
-- [ ] Test full review/parent image copy, no-original-path/reuse/conflict, native races, nested tamper/modes/symlink/extra, copy change/partial destination/install failure cleanup, real CLI0/2/3/5/privacy and current Java rejecting unsupported projection format.
-- [ ] Run `/opt/homebrew/bin/python3.13 -m unittest processing.tests.test_human_handoff_storage -v`; Expected: missing storage/CLI RED.
-- [ ] Implement with house helpers and document exact selection/projection/receipt/context/limits·Java next-stage boundary in Korean.
-- [ ] Run targets/fullPython/npm lint/test/build, legacy helpers and whole self-review; Expected: GREEN.
-- [ ] Commit `feat: freeze human handoff provenance`.
+- [x] Test full review/parent image copy, no-original-path/reuse/conflict, native races, nested tamper/modes/symlink/extra, copy change/partial destination/install failure cleanup, real CLI0/2/3/5/privacy and current Java rejecting unsupported projection format.
+- [x] Run `/opt/homebrew/bin/python3.13 -m unittest processing.tests.test_human_handoff_storage -v`; Expected: missing storage/CLI RED.
+- [x] Implement with house helpers and document exact selection/projection/receipt/context/limits·Java next-stage boundary in Korean.
+- [x] Run targets/fullPython/npm lint/test/build, legacy helpers and whole self-review; Expected: GREEN.
+- [x] Commit `feat: freeze human handoff provenance`.
 
 ## Final integration
 

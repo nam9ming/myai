@@ -36,6 +36,7 @@ python3.13 -m venv .venv
 | `evaluation/gold.py`, `gold_storage.py` | 독립 정답 제공자의 선언·근거·사건 anchor 검사와 원본/지침/manifest 별도 동결 |
 | `evaluation/scoring.py`, `records.py`, `evaluation_storage.py` | 8필드 채점·명시한 API/규칙/사람 수정 원본 연결·최초/재시험 원본 묶음 동결 |
 | `evaluation/comparison.py`, `comparison_storage.py` | 같은 gold·회차·AI 부모의 세 방법을 짝지어 개선/악화·선언 시간을 집계하고 전체 평가를 동결 |
+| `evaluation/human_handoff.py`, `handoff_storage.py` | 사람 수정값의 workflow 없는 D06 사실 투영·원본 전체 인계 이미지, Java 저장 연결은 후속 |
 | `evaluation/reviews.py` | 사람 수정후 출력·실제 변경 기록/검토 시간 선언·D05 전체의 별도 불변 보관 |
 
 [계산 연결 계약](../contracts/calculation-bridge.md)을 따릅니다. 지원 규칙은 `rules-v1`이며 미지원 버전을 정상 결과로 바꾸지 않습니다. `dictionary_version`은 선택한 snapshot의 고정 식별자이며 계산 중 새 사전을 읽지 않습니다. 입력 원본 바이트 SHA-256을 반환하며 개인 조건은 로그에 남기지 않습니다.
@@ -166,6 +167,18 @@ python3.13 -m processing.evaluation verify-review "$REVIEW_REF"
 검토 JSON의6개 최상위 키·source/changes 형식과 root 옵션은 계약을 따릅니다. 기본 source root는 data/private/extraction-runs, 검토 보관 root는 data/private/evaluation/human-reviews입니다. 원문/수정값·검토자·사유는 비공개 파일에만 두고 stdout은 ID/hash/상태/건수/선언 소요시간만 반환합니다. 성공0/입력2/보관 손상·충돌3/I/O5/내부1입니다.
 
 API/수동·성공/실패 D05의 실제 모드와 원출력을 보존합니다. 실패 source의 새 유효 출력은 before=null의 전체 변경 기록이 필요합니다. 기계 검사는 실제 사람이 판독했다는 증거·독립 정답·승인·공개가 아닙니다. 이 도구는 D06 저장과 별개이며 D08 human_reviewed 채점/최초·재시험은 위 평가 CLI로 연결합니다. 선언 시간은 문서별 합계이며 실제 사람별 순작업 시간이나 재시험의 새 작업시간을 인증하지 않습니다. 세 방법 비교는 아래 별도 CLI를 사용하며 실제 검토본 전달은 후속 작업입니다. 키·AI·네트워크·DB는 사용하지 않습니다.
+
+## 사람 수정값의 D06 사실 투영
+
+[human-handoff-v1](../contracts/human-handoff.md)은 frozen human-review의 수정값을 기존 시간/장소/근거 규칙으로 투영하고 부모 D05 전체와 별도 보관합니다. 실패 부모도 실패 상태를 유지하며 미상·중복·빈 사건과 원래 변경 기록을 보존합니다. 실제 DB revision/승인/변경 기록은 만들지 않습니다.
+
+```sh
+python3.13 -m processing.evaluation check-handoff --input data/private/evaluation/handoff.json
+python3.13 -m processing.evaluation freeze-handoff --input data/private/evaluation/handoff.json
+python3.13 -m processing.evaluation verify-handoff HANDOFF_REF
+```
+
+`--review-root` 기본값은 private evaluation/human-reviews, freeze/verify의 `--root`는 private evaluation/handoffs입니다. summary는 projection_only·backend_import_supported=false·review_required=true이며 기존 Java local-import 입력이 아닙니다. 원문 asset 파일은 별도로 보존하고 다음 Java 단계에서 source-root·원본 hash/권한·실제 revision/출처를 대조해야 합니다. 원래 경로 없는 재검증·동시/충돌·0400/0500·종료0/2/3/5를 지원하며 키·AI·외부 네트워크·DB는 사용하지 않습니다.
 
 ## 규칙 자동 기준선
 

@@ -15,6 +15,8 @@ from .evaluation_storage import freeze_evaluation, verify_evaluation
 from .reviews import REVIEW_ROOT, check_review, freeze_review, verify_review
 from .comparison import COMPARISON_ROOT, compare_evaluations
 from .comparison_storage import freeze_comparison, verify_comparison
+from .human_handoff import HANDOFF_ROOT, project_handoff
+from .handoff_storage import freeze_handoff, verify_handoff
 from .storage import DEFAULT_ROOT, freeze_dataset, verify_dataset
 
 
@@ -68,6 +70,13 @@ def main():
         else:
             command.add_argument('--input', required=True)
             command.add_argument('--evaluation-root', default=EVALUATION_ROOT)
+    for name in ('check-handoff', 'freeze-handoff', 'verify-handoff'):
+        command = commands.add_parser(name)
+        if name != 'check-handoff': command.add_argument('--root', default=HANDOFF_ROOT)
+        if name == 'verify-handoff': command.add_argument('handoff_ref')
+        else:
+            command.add_argument('--input', required=True)
+            command.add_argument('--review-root', default=REVIEW_ROOT)
     try:
         args = parser.parse_args()
         if args.command == 'check':
@@ -94,6 +103,12 @@ def main():
             result = freeze_comparison(args.input, args.root, args.evaluation_root)
         elif args.command == 'verify-comparison':
             result = verify_comparison(args.comparison_ref, args.root)
+        elif args.command == 'check-handoff':
+            result = project_handoff(_read(args.input), args.review_root)['summary']
+        elif args.command == 'freeze-handoff':
+            result = freeze_handoff(args.input, args.root, args.review_root)
+        elif args.command == 'verify-handoff':
+            result = verify_handoff(args.handoff_ref, args.root)
         elif args.command == 'check-review':
             result = check_review(_read(args.input), args.run_root)
         elif args.command == 'freeze-review':

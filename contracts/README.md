@@ -83,4 +83,4 @@ python contracts/validate_examples.py
 
 이 검사는 JSON 예제 사이 ID·상태·counts·기간·근거 인용의 연결을 확인합니다. 앱 구현 시험, 공식자료 정확도나 AI 성능 평가를 대신하지 않습니다. AI 계약의 상세 경계는 `python3.13 -m unittest discover -s processing/tests -v`로 함께 검증합니다.
 
-사람 수정후 평가의 원본은 [human-review-v1](human-review.md)로 별도 보관합니다. 실제 전후 변경·검토 시간 선언과 frozen D05 전체를 대조하며 원출력을 덮어쓰지 않습니다. D06 역변환·독립 gold·사람 신원 인증으로 취급하지 않으며 [D08 채점/최초·재시험](extraction-evaluation.md)은 별도 human_reviewed 뷰와 선언 시간 요약을 제공합니다. 세 방법 비교 도구는 [별도 계약](extraction-comparison.md)을 따르며 실제 검토본의 D06 인계는 후속 작업입니다.
+사람 수정후 평가의 원본은 [human-review-v1](human-review.md)로 별도 보관합니다. 실제 전후 변경·검토 시간 선언과 frozen D05 전체를 대조하며 원출력을 덮어쓰지 않습니다. D06 역변환·독립 gold·사람 신원 인증으로 취급하지 않으며 [D08 채점/최초·재시험](extraction-evaluation.md)은 별도 human_reviewed 뷰와 선언 시간 요약을 제공합니다. 세 방법 비교는 [별도 계약](extraction-comparison.md)을 따릅니다. [D06 사실 투영·인계 이미지](human-handoff.md)는 사람/부모 원본을 보존하며 현재 Java import는 지원하지 않습니다. 실제 검토본의 D06 저장·revision 연결은 후속 작업입니다.
