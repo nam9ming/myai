@@ -44,6 +44,31 @@ class PromptMetadataTest(unittest.TestCase):
         changed = copy.deepcopy(self.document); changed['data_kind'] = 'real'
         self.assertEqual(prompt, render_prompt(changed))
 
+    def test_v1_bytes_remain_fixed_when_api_prompt_changes(self):
+        self.assertEqual(hashlib.sha256(render_prompt(self.document)).hexdigest(),
+                         '93eddcb3554dca8fc9a10091db672946edef1e5742161fd159b3f7bb311af734')
+
+    def test_v2_binds_each_block_to_hash_and_unicode_length(self):
+        doc = copy.deepcopy(self.document)
+        doc['blocks'] = [dict(block_id='b1', page=None, text='한😀e\u0301\n둘'),
+                         dict(block_id='b2', page=1, text='다른 블록')]
+        prompt = render_prompt(doc, 'prompt-v2')
+        packet = json.loads(prompt)
+        self.assertEqual(packet['prompt_version'], 'prompt-v2')
+        self.assertEqual(packet['source']['blocks'], doc['blocks'])
+        self.assertEqual(packet['block_metadata'], {
+            b['block_id']: dict(text_sha256=hashlib.sha256(b['text'].encode()).hexdigest(), length=len(b['text']))
+            for b in doc['blocks']})
+        self.assertEqual(packet['block_metadata']['b1']['length'], 6)
+        self.assertIn('block_metadata', packet['instructions'])
+        changed = copy.deepcopy(doc); changed['data_kind'] = 'real'
+        self.assertEqual(prompt, render_prompt(changed, 'prompt-v2'))
+        self.assertEqual(render_prompt(self.document), render_prompt(self.document, 'prompt-v1'))
+
+    def test_unknown_prompt_version_fails_closed(self):
+        with self.assertRaises(ExtractionError):
+            render_prompt(self.document, 'prompt-v99')
+
     def test_null_labels_need_reasons_and_fixture_artifact_matches(self):
         body = metadata()
         parsed = parse_metadata(json.dumps(body).encode(), self.document, 1)

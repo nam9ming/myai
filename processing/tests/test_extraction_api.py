@@ -99,6 +99,37 @@ class ApiTest(unittest.TestCase):
             self.assertEqual(file.stat().st_mode & 0o777, 0o600)
         self.assertNotIn(str(self.work), json.dumps(result))
 
+    def test_new_api_request_uses_v2_and_metadata_cannot_select_another_version(self):
+        result, calls = self.run_api([(200, response(), None, True)])
+        folder = self.root / RUN
+        metadata = json.loads((folder / 'metadata.json').read_bytes())
+        self.assertEqual((calls, metadata['prompt_version']), (1, 'prompt-v2'))
+        request = json.loads((folder / 'attempt-1.prompt').read_bytes())
+        self.assertEqual(json.loads(request['input'])['prompt_version'], 'prompt-v2')
+        self.assertIn('block_metadata', request['instructions'])
+        pairs = [(folder / 'attempt-1.prompt', folder / 'attempt-1.output')]
+        extras = [(folder / 'attempt-1.response', folder / 'attempt-1.exchange')]
+        for version in ('prompt-v1', 'prompt-v99'):
+            metadata['prompt_version'] = version
+            path = self.work / (version + '.metadata.json'); path.write_text(json.dumps(metadata))
+            with self.subTest(version=version), self.assertRaises(ExtractionError):
+                import_run(folder / 'input.json', path, pairs, self.work / version, extras)
+        self.assertEqual(result, verify_run(RUN, self.root))
+
+    def test_completed_v1_api_archive_verifies_and_reuses_without_key_or_network(self):
+        with patch('processing.extraction.api.API_PROMPT_VERSION', 'prompt-v1'):
+            original, calls = self.run_api([(200, response(), None, True)])
+        folder = self.root / RUN
+        metadata = json.loads((folder / 'metadata.json').read_bytes())
+        self.assertEqual((calls, metadata['prompt_version']), (1, 'prompt-v1'))
+        self.assertEqual(json.loads(json.loads((folder / 'attempt-1.prompt').read_bytes())['input'])['prompt_version'],
+                         'prompt-v1')
+        self.assertEqual(original, verify_run(RUN, self.root))
+        self.assertEqual(original, freeze_run(RUN, self.root)['receipt'])
+        with patch.dict(os.environ, {}, clear=True):
+            reused, calls = self.run_api([], model='gpt-6.1-sol')
+        self.assertEqual((original, 0), (reused, calls))
+
     def test_schema_retry_keeps_original_input_and_only_error_path_feedback(self):
         result, calls = self.run_api([(200, response('not json'), None, True), (200, response(), None, True)])
         self.assertEqual((calls, result['status']), (2, 'validated'))

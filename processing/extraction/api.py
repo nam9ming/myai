@@ -10,7 +10,7 @@ import uuid
 
 from . import archive
 from .metadata import stamp
-from .prompt import INSTRUCTIONS, PROMPT_VERSION, render_prompt
+from .prompt import API_PROMPT_VERSION, instructions, render_prompt
 from .schema import SCHEMA_VERSION, UUID
 from .validation import MAX_BYTES, ExtractionError, decode, parse_input, parse_output, require, shape, text
 
@@ -18,11 +18,12 @@ REQUEST_TIMEOUT = 120
 DEFAULT_MODEL = 'gpt-6.1-sol'
 
 
-def request_bytes(document, model, error_path=None):
-    instructions = INSTRUCTIONS
+def request_bytes(document, model, error_path=None, prompt_version=API_PROMPT_VERSION):
+    system = instructions(prompt_version)
     if error_path is not None:
-        instructions += '\n직전 구조 오류 경로만 참고하여 같은 원문을 다시 추출한다: ' + error_path
-    return archive._json(dict(model=model, instructions=instructions, input=render_prompt(document).decode('utf-8'),
+        system += '\n직전 구조 오류 경로만 참고하여 같은 원문을 다시 추출한다: ' + error_path
+    return archive._json(dict(model=model, instructions=system,
+                              input=render_prompt(document, prompt_version).decode('utf-8'),
                               max_output_tokens=8192, store=False))
 
 
@@ -64,8 +65,8 @@ def _failure(code, retryable, kind='transport', path=None):
     return dict(status='failed', error_code=code, error_path=path, failure_kind=kind, retryable=retryable)
 
 
-def check_api_attempt(request, response, exchange, document, model, error_path=None):
-    archive._archive_check(request == request_bytes(document, model, error_path))
+def check_api_attempt(request, response, exchange, document, model, error_path=None, prompt_version=API_PROMPT_VERSION):
+    archive._archive_check(request == request_bytes(document, model, error_path, prompt_version))
     shape(exchange, 'http_status transport_error response_complete started_at finished_at', kind='archive')
     archive._archive_check(stamp(exchange['started_at'], '$.started_at') <= stamp(exchange['finished_at'], '$.finished_at'))
     status, error, complete = [exchange[k] for k in ('http_status', 'transport_error', 'response_complete')]
@@ -172,7 +173,7 @@ def run_api(input_path, preprocessing_version, root=archive.DEFAULT_ROOT, run_id
     previous = None
     for number in range(1, 4):
         feedback = previous['error_path'] if previous and previous['failure_kind'] == 'schema' else None
-        request = request_bytes(document, model, feedback)
+        request = request_bytes(document, model, feedback, API_PROMPT_VERSION)
         prompt = directory / f'attempt-{number}.prompt'
         archive._write(prompt, request)
         started = _now()
@@ -182,7 +183,8 @@ def run_api(input_path, preprocessing_version, root=archive.DEFAULT_ROOT, run_id
         raw, info = directory / f'attempt-{number}.response', directory / f'attempt-{number}.exchange'
         archive._write(raw, response)
         archive._write(info, archive._json(exchange))
-        output, previous, usage = check_api_attempt(request, response, exchange, document, model, feedback)
+        output, previous, usage = check_api_attempt(request, response, exchange, document, model, feedback,
+                                                   API_PROMPT_VERSION)
         target = directory / f'attempt-{number}.output'
         archive._write(target, output)
         pairs.append((prompt, target)); api_artifacts.append((raw, info))
@@ -195,7 +197,7 @@ def run_api(input_path, preprocessing_version, root=archive.DEFAULT_ROOT, run_id
     metadata = dict(run_id=run_id, document_version_id=document['document_version_id'], execution_mode='api',
                     attempts=len(pairs), provider='openai', model_label=model, model_version=None,
                     unavailable_reasons=dict(model_version='공급자의 상세 모델 버전을 확인하지 못함'),
-                    prompt_version=PROMPT_VERSION, schema_version=SCHEMA_VERSION, preprocessing_version=preprocessing_version,
+                    prompt_version=API_PROMPT_VERSION, schema_version=SCHEMA_VERSION, preprocessing_version=preprocessing_version,
                     started_at=exchanges[0]['started_at'], finished_at=exchanges[-1]['finished_at'],
                     usage_in=usage_in, usage_out=usage_out, cost=None, currency=None)
     archive._write(directory / 'metadata.json', archive._json(metadata))

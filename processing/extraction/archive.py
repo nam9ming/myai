@@ -202,10 +202,11 @@ def _receipt(directory, identity):
             _archive_check(previous is None or previous['retryable'])
             exchange = decode(contents[f'attempt-{i}.exchange'], 'archive')
             feedback = previous['error_path'] if previous and previous['failure_kind'] == 'schema' else None
-            request = request_bytes(document, metadata['model_label'], feedback)
+            request = request_bytes(document, metadata['model_label'], feedback, metadata['prompt_version'])
             _archive_check(artifacts[f'attempt-{i}.prompt'] == dict(sha256=hashlib.sha256(request).hexdigest(), size=len(request)))
             output, result, usage = check_api_attempt(request, contents[f'attempt-{i}.response'],
-                                                      exchange, document, metadata['model_label'], feedback)
+                                                      exchange, document, metadata['model_label'], feedback,
+                                                      metadata['prompt_version'])
             _archive_check(output == contents[f'attempt-{i}.output'])
             _archive_check(not exchanges or stamp(exchanges[-1]['finished_at'], '$') <= stamp(exchange['started_at'], '$'))
             exchanges.append(exchange); usages.append(usage)
@@ -220,9 +221,8 @@ def _receipt(directory, identity):
         attempts.append(dict(attempt=i, **result))
     if api:
         from .api import usage_totals
-        from .prompt import PROMPT_VERSION
         _archive_check(not attempts[-1]['retryable'] or count == 3)
-        _archive_check(metadata['provider'] == 'openai' and metadata['prompt_version'] == PROMPT_VERSION
+        _archive_check(metadata['provider'] == 'openai'
                        and metadata['model_version'] is None and metadata['cost'] is None and metadata['currency'] is None
                        and metadata['started_at'] == exchanges[0]['started_at']
                        and metadata['finished_at'] == exchanges[-1]['finished_at']

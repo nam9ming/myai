@@ -65,7 +65,7 @@ I03은 [계산·API 명세](../docs/spec/04_계산규칙과기술설계.md)에 �
 
 [ai-extraction.json](examples/ai-extraction.json)은 `extract-schema-v1` 형식의 **가상 추출 원출력**입니다. 같은 폴더의 [ai-input.json](examples/ai-input.json)에 대응합니다.
 
-기계 검증 스키마는 [AI 입력](schemas/ai-input-v1.json)과 [추출 출력](schemas/extract-schema-v1.json)입니다. Python의 추가 참조/근거 검증·고정 프롬프트·비공개 수동 기록은 [실행 기록 계약](extraction-run.md)을 따릅니다. Java D05 등록은 [연결 안내](../backend/docs/extraction-run-import.md)를 따르고 실제 모델 호출은 후속 작업이며, 원출력 검증 성공을 사실 검토나 공개 승인으로 사용하지 않습니다.
+기계 검증 스키마는 [AI 입력](schemas/ai-input-v1.json)과 [추출 출력](schemas/extract-schema-v1.json)입니다. Python의 추가 참조/근거 검증·버전 고정 프롬프트·OpenAI 실행·비공개 원본 기록은 [실행 기록 계약](extraction-run.md)을 따릅니다. Java D05 등록은 [연결 안내](../backend/docs/extraction-run-import.md), 개발용 실제3건의 처리 상태는 [Python 안내](../processing/README.md)를 따릅니다. 원출력 검증 성공을 사실 검토나 공개 승인으로 사용하지 않습니다.
 
 AI 원출력을 공개 API 응답으로 바로 사용하지 않습니다. 사람의 원문 대조·수정·장소 검토·시간 정규화·상태 관계 확정을 거쳐 backend가 관리하는 공개 데이터로 변환합니다. 바뀐 값과 이유·근거·입력/출력 버전은 분리 보존합니다. 예제에 사람 검토가 완료됐다는 실제 실적은 없습니다.
 
