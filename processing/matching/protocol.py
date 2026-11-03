@@ -124,7 +124,7 @@ def _hours(weekly):
             check(0 < duration <= 1440 and lo != hi)
 
 
-def _source(source, context, now, cutoff):
+def _source(source, context, now, cutoff, *, evaluation=False):
     shape(source, 'document_id document_version_id publisher official_url title official_number published_date collected_at text_sha256 last_verified_at latest_check_attempt_at check_result current_last_verified_at current_latest_check_attempt_at current_check_result checks')
     for key in ('document_id', 'document_version_id'):
         text(source[key], UUID)
@@ -138,7 +138,7 @@ def _source(source, context, now, cutoff):
           and re.search(r'[\s\x00-\x1f\x7f]', source['official_url']) is None)
     text(source['text_sha256'], HASH)
     collected = stamp(source['collected_at'])
-    check(collected <= (cutoff if cutoff is not None else now))
+    check(collected <= (now if evaluation is True or cutoff is None else cutoff))
     previous = verified = None
     result = 'unchecked'
     for attempt in array(source['checks']):
@@ -153,7 +153,7 @@ def _source(source, context, now, cutoff):
         previous = at
     check(stamp(source['last_verified_at'], True) == verified
           and stamp(source['latest_check_attempt_at'], True) == previous and source['check_result'] == result)
-    check(verified is not None or context['history_fidelity'] == 'reconstructed')
+    check(evaluation is True or verified is not None or context['history_fidelity'] == 'reconstructed')
     current_verified = stamp(source['current_last_verified_at'], True)
     current_latest = stamp(source['current_latest_check_attempt_at'], True)
     current_result = choice(source['current_check_result'], RESULTS)
@@ -164,6 +164,7 @@ def _source(source, context, now, cutoff):
     check(verified is None or current_verified is not None and verified <= current_verified)
     if context['mode'] == 'current':
         check((current_verified, current_latest, current_result) == (verified, previous, result))
+    return collected
 
 
 def _location(location, evidence):
@@ -278,14 +279,7 @@ def _event(event, sources):
         stamp(relation['created_at'])
 
 
-def validate(payload):
-    shape(payload, 'protocol_version request_id snapshot_id snapshot_checksum context point query events source_versions')
-    check(payload['protocol_version'] == 'calc-v1')
-    text(payload['request_id'])
-    check(len(payload['request_id']) <= 128)
-    text(payload['snapshot_id'], UUID)
-    text(payload['snapshot_checksum'], HASH)
-    c = payload['context']
+def validate_scenario(c, point, q, snapshot_id=None):
     shape(c, 'mode case_id server_now anchor_date reference_instant knowledge_cutoff history_fidelity data_kind window_days radius_m rules_version dictionary_version')
     mode = choice(c['mode'], ('current', 'replay'))
     choice(c['data_kind'], ('synthetic', 'real'))
@@ -305,18 +299,28 @@ def validate(payload):
         choice(c['history_fidelity'], ('verified_snapshot', 'reconstructed'))
         reference, cutoff = stamp(c['reference_instant']), stamp(c['knowledge_cutoff'])
         check(cutoff <= reference <= now and datetime.fromisoformat(c['reference_instant']).astimezone(KST).date() == anchor)
-    point = payload['point']
     shape(point, 'point_id longitude latitude')
     text(point['point_id'], UUID)
     _coordinate([point['longitude'], point['latitude']])
-    q = payload['query']
     shape(q, 'point_id weekly_hours mode case_id types snapshot_id selection sort')
     check(q['point_id'] == point['point_id'] and q['mode'] == mode and q['case_id'] == c['case_id']
-          and q['snapshot_id'] in (None, payload['snapshot_id']))
+          and q['snapshot_id'] in (None, snapshot_id))
     check(ids(q['types']) <= set(TYPES))
     choice(q['selection'], ('candidate', 'needs_check', 'cancelled'))
     choice(q['sort'], ('start', 'distance'))
     _hours(q['weekly_hours'])
+    return now, cutoff
+
+
+def validate(payload):
+    shape(payload, 'protocol_version request_id snapshot_id snapshot_checksum context point query events source_versions')
+    check(payload['protocol_version'] == 'calc-v1')
+    text(payload['request_id'])
+    check(len(payload['request_id']) <= 128)
+    text(payload['snapshot_id'], UUID)
+    text(payload['snapshot_checksum'], HASH)
+    c = payload['context']
+    now, cutoff = validate_scenario(c, payload['point'], payload['query'], payload['snapshot_id'])
     sources = {}
     for source in array(payload['source_versions']):
         _source(source, c, now, cutoff)

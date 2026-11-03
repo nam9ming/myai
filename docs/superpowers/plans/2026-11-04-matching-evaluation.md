@@ -32,7 +32,7 @@
 - protocol.validate_scenario(context,point,query,snapshot_id=None)->(now:int ns,cutoff:int ns|None); protocol._source(source,context,now,cutoff,*,evaluation=False)->collected:int ns. 공개 호출 default는 기존 그대로.
 - matching_projection.validate_dictionary(value,evaluated_at)->검증/계산용 사전 dict.
 - matching_projection.prepare_case(case,cohort,dictionary,*,data_kind,evaluated_at)->계산용 case dict. cohort는 version->{document_id,official_url,split,split_group_id,input:parsed AIinput,input_sha256,anchors:{slot:event_id},gold_output}.
-- prepared case의 공용 조회 키는 case_id/context/point/query/source_versions(버전별 dict)/source_availability(버전별 bool)/area_memberships(사건별 status)다. 그 외 runtime helper 값은 Task1 내부다. cutoff 미확보 버전은 primary state도 unavailable로 남기되 document_failed/빈 출력 사실은 별도로 보존한다.
+- prepared case의 공용 조회 키는 case_id/context/point/query/source_versions(버전별 dict)/source_availability(버전별 bool)/area_memberships(사전 entry_id별 status)다. 그 외 runtime helper 값은 Task1 내부다. cutoff 미확보 버전은 primary state도 unavailable로 남기되 document_failed/빈 출력 사실은 별도로 보존한다.
 - matching_projection.classify_output(output:validated extract dict|None,annotation:score-links dict,document:cohort entry,case:prepared dict,dictionary:validated dict,*,projection_id:UUID)->dict local_item_id→{state,classification,reason_codes,disposition,projection_limitations}. None은 실패이며 None 반환. 빈 유효 출력은 {}. 문서 version은 document.input.document_version_id.
 - 반환 state는 classified/not_computable/unavailable. classified.classification은4값, 나머지는null; reason_codes는 sorted list 또는null. disposition engine/type_filter/area_filter/type_unknown/not_available_at_cutoff. projection_limitations에는 해석하지 않은 known recurrence 등 정규화 제한만(공개 C코드와 분리).
 - 실제 item 결과에는 projection_body_sha256와 source_text_sha256(선언값)을 별도로 남긴다. 원본 D03 hash를 재구성한 것으로 표시하지 않는다.
@@ -40,6 +40,7 @@
 
 - [ ] **RED:** 새 모듈·private source 경로 부재, 공개 unchecked/late source 거부 불변, 4분류/미상 제목·유형·시간/빈refs·실패/빈출력, 이름/주소/kind 충돌·별칭 중복·골드 위치 누출, Decimal bounds/bool/형, source 해시/순서/future/cutoff/24h+1ns·replay 불변 시험. Run `python3.13 -B -m unittest discover -s processing/tests -p test_matching_projection.py -v`; Expected missing API/의도한 차이 실패를 관찰.
 - [ ] **GREEN:** 기존 validate 블록·source default 의미를 보존하고 private literal 옵션만 추가한다. 각 방법 자신의 값으로 사전 연결·기존 projector/business_hours/locate/_classify를 사용한다. 내부 projection hash를 실제 D03 hash로 표시하지 않는다.
+- [ ] **Author design-fix RED/GREEN:** 같은 raw item을 match/duplicate/additional 또는 다른 gold slot으로 대응해도7개 계산 결과는 같아야 한다. 사전 entry_id의 구역 상태만 사용하고 occurrence 참조 장소만 집계해 orphan 후보 FP가 정답 대응 유무로 차단되지 않음을 확인한다.
 - [ ] **Verify:** 새 projection + 기존 protocol/engine/intervals/geometry/draft/handoff 관련 시험. Expected 실패/생략0, 원래 공개 입력 허용/거부 그대로, 원본 bytes/dict 불변.
 - [ ] **Commit:** 부모가 `feat: project matching evaluation facts` 영어 제목/본문으로 소유 파일만 커밋.
 
