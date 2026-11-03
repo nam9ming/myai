@@ -189,6 +189,29 @@ class ScoringTest(unittest.TestCase):
             reason='합성 오판 선언으로 알려진 익일 값을 바꾸는 오류를 상쇄할 수 없음')]
         with self.assertRaises(ExtractionError):self.score(prediction,links)
 
+    def test_unmapped_offset_change_cannot_bypass_automatic_generation(self):
+        self.source_text('합성 공사는 익일 이월이 아니며 시각·종일 여부는 미기재다.')
+        self.gold['items'][0]['occurrences'][0].update(time_start=fv(),time_end=fv(),end_day_offset=fv(0),all_day=fv())
+        prediction=copy.deepcopy(self.gold);prediction['items'][0]['occurrences'][0]['end_day_offset']=fv(1)
+        for kind in ('match','duplicate'):
+            links=copy.deepcopy(self.links);links['item_links'][0].update(kind=kind,occurrence_links=[])
+            with self.subTest(kind=kind):
+                summary=self.score(prediction,links)['summary']
+                self.assertEqual(summary['fields']['time_end']['known'],0)
+                self.assertEqual(summary['generation_errors'],1)
+                links['generation_reviews']=[dict(local_item_id='s1',field='time_end',unsupported=False,reason='합성 우회 선언')]
+                with self.assertRaises(ExtractionError):self.score(prediction,links)
+
+    def test_unmapped_existing_claims_need_review_without_automatic_best_matching(self):
+        links=copy.deepcopy(self.links);links['item_links'][0]['occurrence_links']=[]
+        summary=self.score(links=links)['summary']
+        self.assertEqual((summary['correct_fields'],summary['known_fields']),(3,8))
+        self.assertEqual(summary['generation_review_pending'],5);self.assertIsNone(summary['generation_rate_percent'])
+        links['generation_reviews']=[dict(local_item_id='s1',field=key,unsupported=False,reason='원문 값은 맞으나 대응 누락')
+            for key in ('date_start','date_end','time_start','time_end','locations')]
+        reviewed=self.score(links=links)['summary']
+        self.assertEqual(reviewed['correct_fields'],3);self.assertEqual(reviewed['generation_rate_percent'],0)
+
     def test_auxiliary_offset_cannot_move_between_unknown_clock_occurrences(self):
         self.two_occurrences()
         first,second=self.gold['items'][0]['occurrences']

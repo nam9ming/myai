@@ -187,6 +187,11 @@ def score_document(input_bytes,gold_bytes,prediction_bytes,annotation_bytes,inst
         binding = _binding_fields(expected,actual) if actual else set()
         binding_slots += bool(binding)
         paired = {p['gold_occurrence_id']:p['local_occurrence_id'] for p in link['occurrence_links']} if link else {}
+        if actual:
+            for identity in actual['rows'].keys()-set(paired.values()):
+                for key in BOUND:
+                    if actual['rows'][identity][key] is not None or actual['auxiliary'][identity].get(key):
+                        correspondence_review.add((local,key))
         for key in FIELDS:
             g = expected['fields'][key];p = actual['fields'][key] if actual else None
             correct = bool(p and p['provided'] and g['facts']==p['facts'] and key not in binding) if g['provided'] else None
@@ -224,7 +229,8 @@ def score_document(input_bytes,gold_bytes,prediction_bytes,annotation_bytes,inst
             p = actual['fields'][key];g = expected['fields'][key] if expected else None
             claimed = p['provided'] or bool(p['claims'])
             gold_claimed = g is not None and (g['provided'] or bool(g['claims']))
-            automatic = (local,key) in auto_generation or bool(g is not None and not gold_claimed and claimed)
+            automatic = (local,key) in auto_generation or bool(g is not None and
+                (not gold_claimed and claimed or not g['provided'] and p['claims']-g['claims']))
             needs_review = bool(claimed and (g is None or
                 (_new_locations(g['facts'],p['facts']) if key=='locations' else p['claims']-g['claims'])
                 or (local,key) in correspondence_review or key in binding
