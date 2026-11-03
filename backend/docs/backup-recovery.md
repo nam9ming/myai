@@ -253,6 +253,16 @@ java -jar backend/build/libs/myai-backend-0.1.0.jar --spring.profiles.active=pub
 
 선택 원본은 기존 [D05 검증/정확 재등록](extraction-run-import.md)·[사람 인계 정확 재사용](human-handoff-import.md) 경로로 다시 검사한다. 공개 snapshot 조회만 정상이어도 원본 소비 준비 완료는 아니다. 앱을 정지·재기동한 뒤에도 행/seed가 늘지 않고 같은 DB·API·export 결과인지 확인한다. 실제 사용권·자료 승인·운영 서버/프록시·계정/권한 재설정은 별도 사람 작업이다.
 
+## 실제 개발 자료47건의 DB 검증
+
+2026-11-04 새 전용 MySQL8.4.13/V4에서 기존10개 CLI 입력으로 D03 3건·D05 실패3/성공3·숨김 D06 3건을 재구성한 뒤 신규44건의 D03만 추가했다. 과거 실제3건 SQL은 V3 data-only·positional INSERT이므로 수정·주입하지 않았으며, 과거 batch ID·등록 시각까지 동일한 복원으로 세지 않는다.
+
+실제 JAR28회로 초회 이전의 늦은 UUID 충돌 전체 rollback·canonical44 등록·exact/다른 root 재실행·공백 alias의 새 batch·metadata 충돌/원문 누락 거부를 확인했다. 전체16테이블/122행의 full/data SQL을 새 빈 서버에 복원하고 기존10개+canonical44를 정확 재실행했다. data SQL bytes와 전체 행/schema/Flyway가 같고 full SQL의 동등한 charset 표시 차이만 제한적으로 대조했으며 두 원문·diff를 보존했다. 공백 alias는 문서/버전 증가 없이 source batch1개만 추가한 실제 대조군이다.
+
+원래 선택2개 root와 final package-v2만 tar로 백업해307파일/30디렉터리의 member bytes/mode/path를 대조했다. 원래 canonical 경로는 삭제·덮어쓰지 않았다. **이번 SQL 복원은 그대로 유지한 같은 경로의 자료를 사용했으며 실자료 파일 유실 후 canonical 경로 복원 시험은 아니다.** 실제 public JAR의 HTTP10회는 빈 공개 snapshot에서 health200·config/matches503·상세422/404 경계를 확인했다. 공개본 존재 시 hidden 필터·계산 성공이나 사람 승인 실적으로 세지 않는다.
+
+증거·SQL·tar·입력 연결·소유권 가드40개 시험은 Git 제외 `data/private/evaluation/evidence/notice-source-registration-2026-11-04/`에 보관한다. 원래199항목과 준비575파일·기존 D05/D06·pending/미확정 상태·공개4테이블0을 유지했고, 시험 서버·자격증명을 정리하며 다른 연구실 서비스는 변경하지 않았다. 운영 서버 복구·backup 접근/보존/RPO/RTO·PITR·40문서 평가·사람 승인/공개·main/배포는 별도다.
+
 ## 격리된 합성 복구 시험
 
 Docker·Java21·Python3.13·표준 tar가 필요하다. 아래 두 시험은 **자기 MySQL 서버를 새로 만들며 기존 DB_URL을 대상으로 삼지 않는다**. 새 테스트의 최종 실행 결과는 관련 PR의 실제 검증 기록을 따른다.
