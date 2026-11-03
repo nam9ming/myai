@@ -119,6 +119,43 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(result, verify_run(RUN, self.root))
         self.assertEqual(len(result['artifacts']), 14)
 
+    def test_escaped_surrogate_response_retries_and_finishes_failed_receipt(self):
+        for number, (value, code) in enumerate((('\ud800', 'API_RESPONSE_INVALID'),
+                                               ('{"bad":"\\ud800"}', 'JSON_INVALID'))):
+            self.root = self.work / f'surrogate-{number}'
+            packet = json.loads(response())
+            packet['output'][0]['content'][0]['text'] = value
+            raw = json.dumps(packet).encode()
+            result, calls = self.run_api([(200, raw, None, True)] * 3)
+            self.assertEqual((calls, result['status']), (3, 'failed'))
+            self.assertTrue(all(a['error_code'] == code for a in result['attempts']))
+            self.assertEqual(result, verify_run(RUN, self.root))
+            self.assertEqual((self.root / RUN / 'attempt-3.response').read_bytes(), raw)
+
+    def test_content_filter_stops_but_token_limit_can_retry(self):
+        blocked = response(status='incomplete', incomplete_details=dict(reason='content_filter'))
+        result, calls = self.run_api([(200, blocked, None, True)] * 3)
+        self.assertEqual((calls, result['status']), (1, 'failed'))
+        self.assertEqual(result['attempts'][0]['failure_kind'], 'review')
+        self.assertFalse(result['attempts'][0]['retryable'])
+        self.root = self.work / 'token-limit'
+        limited = response(status='incomplete', incomplete_details=dict(reason='max_output_tokens'))
+        result, calls = self.run_api([(200, limited, None, True), (200, response(), None, True)])
+        self.assertEqual((calls, result['status']), (2, 'validated'))
+
+    def test_api_retryable_failure_cannot_be_finalized_before_policy_is_exhausted(self):
+        self.run_api([(200, response('{}'), None, True)] * 3)
+        folder = self.root / RUN
+        for count in (1, 2):
+            metadata = json.loads((folder / 'metadata.json').read_bytes())
+            exchange = json.loads((folder / f'attempt-{count}.exchange').read_bytes())
+            metadata.update(attempts=count, finished_at=exchange['finished_at'], usage_in=17 * count, usage_out=31 * count)
+            file = self.work / f'partial-{count}.json'; file.write_text(json.dumps(metadata))
+            pairs = [(folder / f'attempt-{i}.prompt', folder / f'attempt-{i}.output') for i in range(1, count + 1)]
+            extra = [(folder / f'attempt-{i}.response', folder / f'attempt-{i}.exchange') for i in range(1, count + 1)]
+            with self.subTest(count=count), self.assertRaises(ExtractionError):
+                import_run(folder / 'input.json', file, pairs, self.work / f'partial-root-{count}', extra)
+
     def test_evidence_failure_is_not_retried_or_repaired(self):
         output = json.loads((REPO / 'contracts/examples/ai-extraction.json').read_bytes())
         output['evidence'][0]['quote'] = 'PRIVATE_BAD_QUOTE'

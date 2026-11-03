@@ -94,6 +94,9 @@ def check_api_attempt(request, response, exchange, document, model, error_path=N
         usage = tuple(v if type(v) is int and v >= 0 else None for v in
                       (measured.get('input_tokens'), measured.get('output_tokens')))
     if packet.get('status') != 'completed':
+        details = packet.get('incomplete_details')
+        if type(details) is dict and details.get('reason') == 'content_filter':
+            return b'', _failure('API_REFUSAL', False, 'review'), usage
         return b'', _failure('API_RESPONSE_INCOMPLETE', True), usage
     if (packet.get('object') != 'response' or packet.get('error') is not None
             or type(packet.get('model')) is not str or not packet['model'].strip()
@@ -115,6 +118,7 @@ def check_api_attempt(request, response, exchange, document, model, error_path=N
             parts.append(part['text'])
     if not parts:
         return b'', _failure('API_RESPONSE_INVALID', True), usage
+    # decode가 모든 문자열의 UTF-8 표현 가능 여부를 이미 검사했다.
     output = '\n'.join(parts).encode('utf-8')
     try:
         parse_output(output, document)

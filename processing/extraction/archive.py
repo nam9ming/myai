@@ -221,6 +221,7 @@ def _receipt(directory, identity):
     if api:
         from .api import usage_totals
         from .prompt import PROMPT_VERSION
+        _archive_check(not attempts[-1]['retryable'] or count == 3)
         _archive_check(metadata['provider'] == 'openai' and metadata['prompt_version'] == PROMPT_VERSION
                        and metadata['model_version'] is None and metadata['cost'] is None and metadata['currency'] is None
                        and metadata['started_at'] == exchanges[0]['started_at']
