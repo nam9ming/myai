@@ -75,14 +75,25 @@ class HumanReviewChangesTest {
     }
 
     @Test
-    void malformedAndNanosecondNewAuditTimesProduceImportConflict() {
+    void malformedNewAuditTimesProduceImportConflict() {
         var before = payload(); var after = payload(); after.withObject("revision").put("title", "사람 수정");
         var change = record(after, "title", "AI 초안", "사람 수정");
         change.put("time", "invalid");
         assertThatThrownBy(() -> HumanReviewChanges.validate(before, after)).isInstanceOf(ImportException.class);
-        after.withObject("revision").put("reviewed_at", "2026-11-02T02:00:00.123456789Z");
-        change.put("time", "2026-11-02T02:00:00.123456789Z");
+        after.withObject("revision").put("reviewed_at", "invalid");
+        change.put("time", "2026-11-02T02:00:00Z");
         assertThatThrownBy(() -> HumanReviewChanges.validate(before, after)).isInstanceOf(ImportException.class);
+    }
+
+    @Test
+    void preservesExistingInstantParsingForMatchingNanoAndOffsetTimes() {
+        String utc = "2026-11-02T01:00:00Z", offset = "2026-11-02T10:00:00+09:00", nano = "2026-11-02T01:00:00.123456789Z";
+        for (var pair : java.util.List.of(java.util.List.of(nano, nano), java.util.List.of(utc, offset), java.util.List.of(offset, utc))) {
+            var before = payload(); var after = before.deepCopy();
+            after.withObject("revision").put("title", "사람 수정").put("reviewed_at", pair.get(0));
+            record(after, "title", "AI 초안", "사람 수정").put("time", pair.get(1));
+            assertThatCode(() -> HumanReviewChanges.validate(before, after)).doesNotThrowAnyException();
+        }
     }
 
     @Test

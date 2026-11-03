@@ -99,7 +99,7 @@ public final class HumanReviewChanges {
     }
 
     private static Instant instant(JsonNode value) {
-        if (!value.isTextual() || !value.asText().matches("[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?Z")) return null;
+        if (!value.isTextual()) return null;
         try { return Instant.parse(value.asText()); }
         catch (java.time.DateTimeException ex) { return null; }
     }

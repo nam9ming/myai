@@ -445,6 +445,28 @@ class ReviewedImportReaderTest {
         rejected();
     }
 
+    @Test
+    void retainsPreHandoffUtcMicrosecondInputLimits() throws Exception {
+        var original = input.deepCopy();
+        assertThat(reader.read(write(), root).events()).hasSize(1);
+        for (String stamp : java.util.List.of("2026-11-02T01:00:00.123456789Z", "2026-11-02T10:00:00+09:00")) {
+            for (String field : java.util.List.of("reviewed_at", "override_time")) {
+                input = original.deepCopy();
+                var revision = (ObjectNode) input.path("events").get(0).path("revision");
+                revision.put("reviewer_id", "synthetic-reviewer").put("reviewed_at", "2026-11-02T01:00:00Z");
+                if (field.equals("reviewed_at")) revision.put("reviewed_at", stamp);
+                else {
+                    var record = revision.putArray("human_overrides").addObject().put("field_path", "title").put("before", "old")
+                            .put("reason", "합성 시각 규격 검증").put("reviewer", "synthetic-reviewer").put("time", stamp);
+                    record.set("after", revision.path("title"));
+                    record.putArray("evidence_ids").add(input.path("evidence").get(0).path("evidence_id"));
+                }
+                assertThatThrownBy(() -> reader.read(write(), root)).isInstanceOfSatisfying(ImportException.class,
+                        error -> assertThat(error.field()).isEqualTo(field.equals("reviewed_at") ? "reviewed_at" : "time"));
+            }
+        }
+    }
+
     private Path write() throws Exception {
         return Files.writeString(root.resolve("batch.json"), input.toString());
     }
