@@ -30,7 +30,7 @@
 
 **Interfaces:** `validate_protocol(content:bytes, root=STUDY_ROOT, *, evaluated_at=None)->dict`; STUDY_ROOT=REPO/data/private/evaluation/user-studies. 반환 공용 키 `protocol root evaluated_at evaluated_ns deadline_ns protocol_sha256 time_limit_ns sources events tasks task_sets`이며 protocol은 검증된 원형(Decimal 유지), sources는 version→document 선언, events는 snapshot eventID 집합, tasks는 taskID→item, task_sets는 A/B→set. `duration_ns(value, *, positive=True)->int`, `stamp_ns(value)->int`, `day_kst(ns)->str`, `check_retention(prepared, *, evaluated_at=None)` 제공. `_artifact(value,root)->{path:Path,sha256,size}`는 spec의 canonical 상대경로·ancestors/symlink·regular·전체hash를 확인하며 추가 복사 없음. parent export에서 공통 경로 검사 함수 `_path(root,value)->Path` 재사용(존재하지 않는 최종output도 검증, ancestors검사). 기존helper에 새public 옵션을 넣지 않는다.
 
-shared fixture API: test_study_protocol.py `StudyProtocolFixture(unittest.TestCase)`는 self.work(OS임시 root), self.protocol(12키), self.protocol_bytes(), self.prepare(protocol=None,at=STUDY_AT) 제공. `STUDY_AT='2026-11-04T03:00:00Z'`. snapshot.created_at=2026-11-02T23:00:00Z, declared_frozen_at=2026-11-03T00:00:00Z, pilot/confirmed그이전, retention_deadline=2026-12-31, source 체크=2026-11-03T00:30:00Z, 참가 동의=00:45Z, task times=01:00Z 이후로 고정해 실제현재CLI에도 미래 기록이 되지 않게 한다. 원래 source/doc/event/동의/참여는 synthetic뿐이며 실제 사실이라 주장하지 않는다. snapshot은 기존 CalculationFixtures/공개 producer 구조에서 최소 합성27키 구성, 실제 rawbytesSHA 사용한다.
+shared fixture API: test_study_protocol.py `StudyProtocolFixture(unittest.TestCase)`는 self.work(OS임시 root), self.protocol(12키), self.protocol_bytes(), self.prepare(protocol=None,at=STUDY_AT) 제공. `STUDY_AT='2026-11-04T03:00:00Z'`. snapshot.created_at=2026-11-02T23:00:00Z, declared_frozen_at=2026-11-03T00:00:00Z, pilot/confirmed그이전, 합성 fixture의 명시적 retention_deadline=9999-12-31(실제 보존정책의 기본값 아님), source 체크=2026-11-03T00:30:00Z, 참가 동의=00:45Z, task times=01:00Z 이후로 고정해 실제현재CLI에도 미래 기록이 되지 않게 한다. 만료 시험은 별도로 2026년 기한을 지정한다. 원래 source/doc/event/동의/참여는 synthetic뿐이며 실제 사실이라 주장하지 않는다. snapshot은 기존 CalculationFixtures/공개 producer 구조에서 최소 합성27키 구성, 실제 rawbytesSHA 사용한다.
 
 - [x] **RED:** 새API부재 + 정확키/타입/UUID/버전·기한KST경계/나노초·파일럿선언·자료누락/중복/같은doc여러versions·기대사건/과제3종·hash변경/탈출/ancestor symlink/상대root alias 시험. `python3.13 -B -m unittest discover -s processing/tests -p test_study_protocol.py -v`, 의도한 실패 관찰.
 - [x] **GREEN:** 기존 JSON/label/UUID/stamp+instant_ns/archive root/fingerprint/read_checked 재사용, protocol 원형불변·검사한 bytesSHA 유지·필수 시간/정책 없음은 거부. snapshot선택identity/집합만 확인하고 공개gate를복제하지 않는다.
@@ -56,10 +56,10 @@ shared fixture API: test_study_protocol.py `StudyProtocolFixture(unittest.TestCa
 
 CLI check-study/export-study의 root 기본STUDY_ROOT, --protocol/--input 필수상대경로. export --output/--format(json|csv) 필수. `export_study(packet, protocol, output, format)->receipt`; validated protocol를 받아현재retention을 다시확인하고 exactbytes export. receipt는 protocol_version/status/format/output_sha256/output_size/summary만(상대filename/participantID 없음). JSON canonical result; CSV 고정열 participant·task rows와 formula escape, free narratives는JSON/원본에보존. 0600/0700·동일bytes재사용·다른bytes/부분파일/권한확대/symlink거부·자기임시파일정리. helper _write/_path공유재사용, 새동결저장소없음.
 
-- [ ] **RED:** CLI/export부재·새API·privateJSON/CSV 실제row/재계산·NFC/타입/permission/충돌/실패/동시/원본불변·기한records선읽기차단을 시험.
-- [ ] **GREEN:** 기존 CLI오류0/2/3/5/1·stdout한JSON/진단값비노출, protocol선검사→records읽기→분석→현재기한재검사→배타privateexport. publicpath/D09자동복제 없음.
-- [ ] docs owner는 실제계약/프로세스·모집/동의/보존·M05분모/경고·선언과검증한계·실제후속을 한국어로 기록하고 static링크/bash검사. 실제자료/성과 생성 없음.
-- [ ] 실제 Java SnapshotExportService가 쓴 합성 canonical 파일을 Python protocol reader로 읽는 경계 시험을 추가한다. Publication producer를 복제하지 않고 현재 포맷/문서버전·집계의 실제 호환성을 확인한다.
+- [x] **RED:** CLI/export부재·새API·privateJSON/CSV 실제row/재계산·NFC/타입/permission/충돌/실패/동시/원본불변·기한records선읽기차단을 시험.
+- [x] **GREEN:** 기존 CLI오류0/2/3/5/1·stdout한JSON/진단값비노출, protocol선검사→records읽기→분석→현재기한재검사→배타privateexport. publicpath/D09자동복제 없음.
+- [x] docs owner는 실제계약/프로세스·모집/동의/보존·M05분모/경고·선언과검증한계·실제후속을 한국어로 기록하고 static링크/bash검사. 실제자료/성과 생성 없음.
+- [x] 실제 Java SnapshotExportService가 쓴 합성 canonical 파일을 Python protocol reader로 읽는 경계 시험을 추가한다. Publication producer를 복제하지 않고 현재 포맷/문서버전·집계의 실제 호환성을 확인한다.
 - [ ] Native 전체 Python + Java/MySQL기존bridge/새호환시험 + Node29/JSON9/lint/build, 실제CLI(합성) check→JSON/CSV→재사용/충돌/만료/누출/원본불변 실행.
 - [ ] 작성자 전체 리뷰→독립 전체1회→유효지적모두RED→GREEN수정/전체회귀. 정확sourceCI/AI/새사람피드백→develop병합→통합gate/PR20현재기록. main사람.
 - [ ] 모든Ruling/비용·원본proof/checksum·보고를 private evidence보존 후이번소유workspace/container/credential만정리. 전체goal의 실제사람/40문서/배포를 완료로 표시하지 않는다.

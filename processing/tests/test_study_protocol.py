@@ -1,4 +1,5 @@
 import copy
+from datetime import datetime, timezone
 from decimal import Decimal
 import hashlib
 import importlib
@@ -6,6 +7,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from processing.extraction.validation import ExtractionError
 from support import payload
@@ -63,7 +65,7 @@ class StudyProtocolFixture(unittest.TestCase):
             pilot_review=dict(completed_at='2026-11-02T22:00:00Z', reviewer='합성 파일럿 검토자',
                 excluded_participant_ids=[uid(900)], note='실제 파일럿 아님'),
             privacy=dict(consent_version='synthetic-consent-v1', photo_consent_version='synthetic-photo-v1',
-                access_owner='합성 접근 담당자', retention_deadline='2026-12-31',
+                access_owner='합성 접근 담당자', retention_deadline='9999-12-31',
                 post_study_processing='합성 운영 선언; 실제 정책 아님', confirmed_at='2026-11-02T21:00:00Z'),
             source_set=dict(documents=[document], board_document_version_ids=[self.source['document_version_id']],
                 prototype_document_version_ids=[self.source['document_version_id']],
@@ -159,6 +161,7 @@ class StudyProtocolTest(StudyProtocolFixture):
         self.assertEqual(self.prepare()['protocol']['privacy']['post_study_processing'], '합성\n운영 처리 선언')
 
     def test_retention_includes_entire_kst_day_but_not_next_midnight(self):
+        self.protocol['privacy']['retention_deadline'] = '2026-12-31'
         self.prepare(at='2026-12-31T14:59:59.999999999Z')
         self.invalid(at='2026-12-31T15:00:00Z')
         self.protocol['privacy']['retention_deadline'] = '2026-02-30'; self.invalid()
@@ -171,11 +174,26 @@ class StudyProtocolTest(StudyProtocolFixture):
         self.invalid(at='9999-12-31T15:00:00Z')
 
     def test_expiration_is_checked_before_material_files_are_read(self):
+        self.protocol['privacy']['retention_deadline'] = '2026-12-31'
         (self.work / 'materials/snapshot.json').unlink()
         self.assertIsNotNone(protocol_module, 'study_protocol API is missing')
         with self.assertRaises(ExtractionError) as caught:
             self.prepare(at='2026-12-31T15:00:00Z')
         self.assertEqual(caught.exception.code, 'STUDY_RETENTION_EXPIRED')
+
+    def test_synthetic_fixture_survives_future_clock_but_explicit_expiry_is_enforced(self):
+        self.assertIsNotNone(protocol_module, 'study_protocol API is missing')
+        class FutureClock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return datetime(2027, 1, 1, tzinfo=timezone.utc)
+        with patch.object(protocol_module, 'datetime', FutureClock):
+            prepared = protocol_module.validate_protocol(self.protocol_bytes(), self.work)
+            self.assertEqual(prepared['evaluated_at'], '2027-01-01T00:00:00Z')
+            expired = copy.deepcopy(self.protocol); expired['privacy']['retention_deadline'] = '2026-12-31'
+            with self.assertRaises(ExtractionError) as caught:
+                protocol_module.validate_protocol(self.raw(expired), self.work)
+            self.assertEqual(caught.exception.code, 'STUDY_RETENTION_EXPIRED')
 
     def test_nanosecond_duration_rejects_rounding_bool_and_nonfinite_values(self):
         self.assertIsNotNone(protocol_module, 'study_protocol API is missing')

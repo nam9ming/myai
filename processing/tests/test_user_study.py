@@ -391,6 +391,8 @@ class UserStudyTest(UserStudyFixture):
         self.assertFalse(evidence['meets_2_artifacts_as_declared'])
 
     def test_source_drift_after_prepare_and_expiration_before_records_decode_are_rejected(self):
+        self.protocol['privacy']['retention_deadline'] = '2026-12-31'
+        self.records['protocol_sha256'] = hashlib.sha256(self.protocol_bytes()).hexdigest()
         prepared = self.prepare()
         source = self.work / self.protocol['source_set']['documents'][0]['artifact']['path']
         source.write_bytes(b'changed after prepare')

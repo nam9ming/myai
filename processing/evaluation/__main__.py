@@ -17,6 +17,9 @@ from .comparison import COMPARISON_ROOT, compare_evaluations
 from .comparison_storage import freeze_comparison, verify_comparison
 from .matching import MATCHING_ROOT, evaluate_matching
 from .matching_storage import freeze_matching, verify_matching
+from .study_protocol import STUDY_ROOT, _path as study_path, validate_protocol
+from .study import evaluate_study
+from .study_export import export_study
 from .human_handoff import HANDOFF_ROOT, project_handoff
 from .handoff_storage import freeze_handoff, verify_handoff
 from .storage import DEFAULT_ROOT, freeze_dataset, verify_dataset
@@ -87,6 +90,14 @@ def main():
         else:
             command.add_argument('--input', required=True)
             command.add_argument('--review-root', default=REVIEW_ROOT)
+    for name in ('check-study', 'export-study'):
+        command = commands.add_parser(name)
+        command.add_argument('--root', default=STUDY_ROOT)
+        command.add_argument('--protocol', required=True)
+        command.add_argument('--input', required=True)
+        if name == 'export-study':
+            command.add_argument('--output', required=True)
+            command.add_argument('--format', choices=('json', 'csv'), required=True)
     try:
         args = parser.parse_args()
         if args.command == 'check':
@@ -119,6 +130,10 @@ def main():
             result = freeze_matching(args.input, args.root, args.comparison_root, args.initial_root)
         elif args.command == 'verify-matching':
             result = verify_matching(args.matching_ref, args.root)
+        elif args.command in ('check-study', 'export-study'):
+            protocol = validate_protocol(_read(study_path(args.root, args.protocol)), args.root)
+            packet = evaluate_study(_read(study_path(protocol['root'], args.input)), protocol)
+            result = packet['summary'] if args.command == 'check-study' else export_study(packet, protocol, args.output, args.format)
         elif args.command == 'check-handoff':
             result = project_handoff(_read(args.input), args.review_root)['summary']
         elif args.command == 'freeze-handoff':

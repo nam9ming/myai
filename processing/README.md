@@ -37,6 +37,7 @@ python3.13 -m venv .venv
 | `evaluation/scoring.py`, `records.py`, `evaluation_storage.py` | 8필드 채점·명시한 API/규칙/사람 수정 원본 연결·최초/재시험 원본 묶음 동결 |
 | `evaluation/comparison.py`, `comparison_storage.py` | 같은 gold·회차·AI 부모의 세 방법을 짝지어 개선/악화·선언 시간을 집계하고 전체 평가를 동결 |
 | `evaluation/matching_projection.py`, `matching.py`, `matching_storage.py` | 독립 수동 기대 분류/사유와6개 뷰를 비교하고 검색 존재·완전 분류·전체 원본을 별도 동결 |
+| `evaluation/study_protocol.py`, `study.py`, `study_export.py` | D09 private 프로토콜/기록·동의/기한·전체 분모를 검사하고 M04/M05·JSON/CSV를 명시 내보내기 |
 | `evaluation/human_handoff.py`, `handoff_storage.py` | 사람 수정값의 workflow 없는 D06 사실 투영·원본 전체 인계 이미지, 별도 Java 인계 요청으로 저장 |
 | `evaluation/reviews.py` | 사람 수정후 출력·실제 변경 기록/검토 시간 선언·D05 전체의 별도 불변 보관 |
 
@@ -172,6 +173,24 @@ python3.13 -m processing.evaluation verify-matching MATCHING_REF
 입력10키와 context/dictionary/cases/initial의 정확한 필드는 계약을 따릅니다. 모든 cohort 버전·gold 슬롯·실패·빈 출력·중복/추가를 유지하며 최신 선택·사실 병합·버전 비활성 옵션은 없습니다. candidate+실패는 검색 존재 TP일 수 있어도 완전 분류는 partial, 과거 취소+새 후보·상충 duplicate는 conflict입니다. 사건 전체 E와 슬롯 전체 A의 분모를 유지하고 이유를 합치지 않습니다. replay cutoff 당시 미확보는 unavailable이며 excluded가 아닙니다. 유형/구역 필터도 별도 disposition으로 남깁니다.
 
 `--comparison-root` 기본값은 `data/private/evaluation/comparisons`, `--initial-root`와 freeze/verify의 `--root`는 `data/private/evaluation/matching`입니다. matching phase와 source phase는 별도로 보존하며 retest는 matching initial 전체를 참조합니다. 선택 비교·initial 전체를0400/0500으로 복사하고 원래 경로 없이 저장된 시각으로 재계산합니다. 같은 ID의 다른 입력은 충돌이며 check는 summary, freeze/verify는 receipt만 출력합니다. 종료0/2/3/5/1·8MiB/깊이100을 유지하고 새 의존성·키·AI·네트워크·DB를 쓰지 않습니다. 실제 독립 gold·40문서/holdout·사람 검토·D09·main 병합·배포 완료를 뜻하지 않습니다.
+
+## 사용자 비교 평가 기록·분석
+
+[user-study 계약](../contracts/user-study.md)은 protocol12키·records7키·result13키로 D09 자료/버전·동의·배정·전체 시작/실패/미시작과 M04/M05를 다룹니다. D08의 사람 수정후 추출과 별개이며 실제 참여자·동의·파일럿·과제·결과를 생성하지 않습니다. 실제 접근 담당자·보존 종료일·종료처리 기준은 확인이 필요하며 기본 보존기간·제한시간은 없습니다(300초는 제안값).
+
+```sh
+python3.13 -m processing.evaluation check-study --protocol protocol.json --input records.json
+python3.13 -m processing.evaluation export-study --protocol protocol.json --input records.json --output reports/result.json --format json
+python3.13 -m processing.evaluation export-study --protocol protocol.json --input records.json --output reports/result.csv --format csv
+```
+
+root 기본값은 `data/private/evaluation/user-studies`이며 protocol/input/output은 모두 root 상대경로입니다. group/other 권한 없는 root와 canonical 경로를 검사하고 기한의 다음 KST 자정부터 records를 읽기 전에 거부합니다. raw artifact hash·선택 snapshot identity/집합을 대조하며 전체 Java 공개 승인·원문 진실성을 인증하지 않습니다. JSON/CSV는 명시한0600 파일/0700 새 디렉터리에만 내보내고 원본/증빙을 자동 복제하거나 삭제하지 않습니다. 실제 기한 내 원본 유지·모든 export 처리는 접근 담당자의 책임입니다.
+
+새 output의 중간 부모까지0700으로 생성하며9999-12-31 기한도 같은 KST 경계를 지원합니다. 동일 입력 JSON 재시도는 일시적 원입력 bytes로 전체 재계산·canonical bytes 대조와 현재 기한/권한 검사를 통과한 뒤 첫 evaluated_at을 재사용합니다. 원입력의 별도 영구 복사는 없고 CSV는 같은 bytes만 재사용합니다. protocol_version만100자 제한이며 다른 제어 label/버전/환경에 임의100/128자 상한을 추가하지 않습니다.
+
+안내시간·로딩 포함·정답 피드백/조작 대행·원문 변경 여부는 명시 null을 허용합니다. unknown은 ns=null·사유를 보존하며0/false나 동일 null로 바꾸지 않고 primary 제외·전체 비교 미확인으로 남깁니다. 동의/privacy·필수 버전·환경은 strict 그대로입니다. CSV participant 행의 deviations 열에도 사유를 남깁니다.4순서 배정 수의 불균형은3명·6명에서도 경고하지만 새 eligibility gate나 순서 변경은 아닙니다.
+
+6문항 모두 정답·비교 조건 준수 user만 기본 M05 쌍이며 전문가/파일럿은 분리합니다. no_show/withdrawn은 상세 시작 기록도 보존하지만 기본 쌍에서 제외하고 전체 비교를 미확인으로 남깁니다. 나노초/Fraction으로 음수·짝수 중앙값·20% 경계를 계산하고 unknown 누락은0으로 바꾸지 않습니다. 정확도/누락 악화면 개선 false, 전체 비교 미확인이면 null입니다. 모집 enum·배정 주기 확장·예외 bool·누락 incidence 분모 등 새 기술 선택은 계약에 구별했습니다. check는 ID/시각/경로/메모 없는 summary, export는 safe receipt만 stdout JSON 한 건이며 종료0/2/3/5/1입니다. summary/receipt도 비공개 D09 파생자료이며 작은 집계가 익명성 인증이나 실제 결과의 공개/외부 AI 전송 허용을 뜻하지 않습니다. 새 의존성·AI·네트워크·DB·공개 endpoint는 없습니다. 실제40건·모집/동의/실증·D09 성과·main 병합/배포 완료를 뜻하지 않습니다.
 
 ## 사람 수정후 추출 원본
 
