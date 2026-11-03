@@ -68,10 +68,10 @@ summary는 data_kind/phase/source_phase/case_version/matcher_version/case_count/
 
 **Interfaces:** `_verify_directory(directory,reference,*,initial_only=False)->receipt`; verify_matching(matching_ref,root=MATCHING_ROOT); freeze_matching(input_path,root=MATCHING_ROOT,comparison_root=COMPARISON_ROOT,initial_root=MATCHING_ROOT). archive format matching-evaluation-archive-v1, identity 키 `format_version matching_ref artifacts recorded_at`. receipt 키는 format_version/status/matching_ref/frozen_at/artifacts/summary. result 재계산은 저장된 evaluated_at, retest 최초는 directory/initial, source comparison은 directory/comparisons에서 수행한다.
 
-- [ ] **RED:** 실제 comparison/expectation fixture로 freeze/verify/CLI API 부재를 관찰한다. Expected missing module/command.
-- [ ] **GREEN:** 기존 comparison_storage와 같은 checked copy·원본 bytes·identity/receipt·0400/0500·staging 전체 verify·exclusive rename·동일입력 재사용·충돌 보존·자기임시폴더 정리. retest 초기 이미지 전체를 보관한다.
-- [ ] **Boundary RED/GREEN:** 원래 root 제거 후 verify/reuse, concurrent same/different input, raw큰실패원본/원자복사중변경, hash재작성거짓result, symlink/추가/누락/권한확대, partial destination, CLI0/2/3/5/1·한JSON/비노출·입출력8MiB 경계를 시험한다.
-- [ ] 한국어 계약/README/TASK·D08·인수 설명을 실제 구현에 맞춘다. 실제 사람/gold/40문서/배포를 미완료로 유지한다. 기존 공개 계약 변경 없음.
+- [x] **RED:** 실제 comparison/expectation fixture로 freeze/verify/CLI API 부재를 관찰한다. Expected missing module/command.
+- [x] **GREEN:** 기존 comparison_storage와 같은 checked copy·원본 bytes·identity/receipt·0400/0500·staging 전체 verify·exclusive rename·동일입력 재사용·충돌 보존·자기임시폴더 정리. retest 초기 이미지 전체를 보관한다.
+- [x] **Boundary RED/GREEN:** 원래 root 제거 후 verify/reuse, concurrent same/different input, raw큰실패원본/원자복사중변경, hash재작성거짓result, symlink/추가/누락/권한확대, partial destination, CLI0/2/3/5/1·한JSON/비노출·입출력8MiB 경계를 시험한다.
+- [x] 한국어 계약/README/TASK·D08·인수 설명을 실제 구현에 맞춘다. 실제 사람/gold/40문서/배포를 미완료로 유지한다. 기존 공개 계약 변경 없음.
 - [ ] Native 전체 Python·Node/JSON/lint/build·Java/MySQL bridge와 실제 eval CLI→freeze→원본경로제거→verify·retest·거부 매트릭스를 실행한다. 실제 데이터/키 없이 합성만 사용한다.
 - [ ] 전체 자체 리뷰·fresh전체1회, 유효 지적 모두 수정/재검증. source head CI·자동/새사람피드백0→develop 병합·통합 gate. main은 사람.
 - [ ] 모든 Ruling/비용·최종보고·proof/checksum을 private evidence로 보존한 뒤 이번 소유 workspace/container/credential만 정리한다. 기존 archive/실자료/다른 작업은 보존한다.

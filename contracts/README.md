@@ -75,6 +75,8 @@ AI 원출력을 공개 API 응답으로 바로 사용하지 않습니다. 사람
 
 D08 문서 버전·사건 연결·개발/확인 배정은 [dataset-manifest-v1](dataset-manifest.md), 실제 입력·D05 원본 대조는 [dataset-bindings-v1](dataset-bindings.md), 독립 정답 제공자의 기록·원본 동결은 [dataset-gold-v1](gold-archive.md)을 따릅니다. [extraction-evaluation-v1](extraction-evaluation.md)은 API/규칙/사람 수정 원본 선택·8필드 채점·최초/재시험 전체 원본을 고정합니다. 공개 API는 바꾸지 않습니다. 실제 독립 정답표 작성·교차 검토·40건 평가와 실제 자료의 세 방법 비교는 아직 수행하지 않았습니다.
 
+[matching-evaluation-v1](matching-evaluation.md)은 같은 동결 비교 원본의 gold/규칙/AI/사람6개 뷰를 독립 수동 기대 분류·사유와 비교합니다. 모든 문서·버전·실패·누락·중복/추가를 보존하고 candidate 검색 존재 P/R과 모든 관측이 일치한 완전 분류를 구별합니다. cutoff 미확보·상충을 제외나 성공으로 바꾸지 않으며 matching 자체의 최초/재시험과 전체 원본을 별도로 동결합니다. 원래 공개 계약·M02·실제40건 목표는 유지합니다.
+
 Python 표준 라이브러리만 사용합니다.
 
 ```text
