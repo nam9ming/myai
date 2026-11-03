@@ -103,7 +103,9 @@ python3.13 -m processing.evaluation verify DATASET_REF
 
 2026-11-04 공식 사이트에서 후보49개를 관찰하고 게시판·게시ID로 대조해 고유 게시물48개를 정리했습니다. 본문 수신47개에는 기존 개발3건이 포함되며, 나머지1개는 가입 안내만 반환돼 검색전용으로 남겼습니다. 조회 시각·수신 표현·hash·URL 별칭·재공지 관계 후보는 Git 제외 `data/private/evaluation/intake/official-notices-2026-11-04/`에 보관했습니다. `intake-index.json`과 `review-list.csv`로 목록을 확인하며 원래 제목·수신 내용은 JSON을 기준으로 합니다.
 
-후보는 미배정 상태입니다. 지역·첨부·이용권한·사건 관계 검토, D03 입력 정리와 등록, 개발20/확인20 분할·독립 정답표·신규 추출/평가가 남아 있습니다. 수신한 DOM·도구 응답은 서버 원본 바이트나 공식 수정 시각을 인증하지 않으며 실제 데이터셋은 dev3/holdout0을 유지합니다.
+신규44건의 D03 배치·AI 입력·프롬프트를 Git 제외 `data/private/development-notices/2026-11-04-d03-preparation/`에 준비했습니다. 기존 Java `ReviewedImportReader`로44건을 검증하고 raw/text hash 손상 대조군2건의 거부를 확인했습니다. Python `parse_input`·실제 `prepare` CLI도 각각44건을 통과했으며 원본 SHA·전체 블록·입력/프롬프트 hash를 대조했습니다. NFC/LF 정리와 전화·이메일 고정 패턴25곳 치환을 적용했고, 이용권한은 pending·원문 확인은 unchecked로 유지했습니다.
+
+후보는 미배정 상태이며 신규 AI 호출·DB 등록은 실행하지 않았습니다. 지역·이미지/첨부·이용권한·사건 관계와 패턴 밖 개인정보 검토, 개발20/확인20 분할·독립 정답표·신규 추출/평가가 남아 있습니다. 수신한 DOM·도구 응답과 작성된 ALT는 서버 원본 바이트·본문 완전성·공식 수정 시각을 인증하지 않으며 실제 데이터셋은 dev3/holdout0을 유지합니다.
 
 manifest만으로는 실제 본문이나 정답을 인증하지 않으며 `unexposed_as_declared`도 blind 평가 보증이 아닙니다. 실제 입력·실행 연결은 별도 [dataset-bindings-v1](../contracts/dataset-bindings.md) 명세로 검사합니다.
 

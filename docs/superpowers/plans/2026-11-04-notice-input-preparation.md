@@ -24,7 +24,7 @@
 
 ### Task 1: 본문 선정·공통 변환
 
-**Files/Owner:** private 새 root의 `selections/direct.json`(13개), `html.json`(13개), `markdown.json`(18개)은 각 worker. 부모 `prepare_inputs.py`, `test_prepare_inputs.py`, `package/` 산출물.
+**Files/Owner:** private 새 root의 `selections/direct.json`(13개)·`html.json`(13개)은 한 HTML worker, `markdown.json`(18개)은 별도 worker. 부모 `prepare_inputs.py`, `test_prepare_inputs.py`, `package/` 산출물. Java worker는 Task2의 Reader 실행기만 준비한다.
 **Interfaces:** 선정 JSON은 `records` 배열; 각 항목 `identity,evidence_path,evidence_sha256,source_field,selection_method,selected_text,selected_text_sha256,flags,notes`. 부모만 NFC/LF·고정 연락처 치환·블록·D03/AI 파일을 생성한다.
 
 - [ ] 선정은 실제 본문13/13/18을 정확한 증거 경로·hash·선정 범위에 연결. 추가/미확인 의미값 생성 금지, 보류도 대상에 포함.
