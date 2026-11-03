@@ -2,7 +2,7 @@
 
 구현한 기능과 실행 명령, 미완료 범위는 [README](README.md)에 기록합니다. 합성 API·초기 스키마·비공개 검토본 import와 로컬 승인·미리보기·공개·복구·snapshot JSON 내보내기를 구현했습니다. 공개 API는 DB snapshot을 조회하며 matches를 실제 Python 계산에 연결했습니다. [import 규격](docs/reviewed-import.md)·[승인·공개·내보내기 안내](docs/review-publication.md)·[공개 조회 안내](docs/public-snapshot-api.md)와 README의 Python 설정을 따릅니다.
 
-D03 선등록·D05 archive 검증/등록·D06 실행 참조는 [연결 안내](docs/extraction-run-import.md)를 따른다. Python OpenAI 개발용 실행의 api archive도 같은 경로로 등록하며 Java가 직접 AI를 호출하지 않는다. D06 숨김 초안과 검토 승격은 [초안 안내](docs/ai-review-draft.md)를 따른다. 실자료 추출·평가·배포는 후속 작업이다.
+D03 선등록·D05 archive 검증/등록·D06 실행 참조는 [연결 안내](docs/extraction-run-import.md)를 따른다. Python OpenAI 개발용 실행의 api archive도 같은 경로로 등록하며 Java가 직접 AI를 호출하지 않는다. D06 숨김 초안과 검토 승격은 [초안 안내](docs/ai-review-draft.md)를 따른다. 개발용 실제3건은 기계 검증·전용 시험 DB의 D05 등록까지 확인했으며, 실자료 D06 저장·사람 검토·평가·배포는 후속 작업이다.
 
 담당: 강명묵 · 기술 결정: Spring Boot·MySQL · 첫 결과: **11/3(화) 오후6시(KST)** · 연구실 시연: **11/4(수), 시각미정**
 
