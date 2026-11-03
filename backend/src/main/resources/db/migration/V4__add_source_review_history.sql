@@ -1,3 +1,11 @@
+ALTER TABLE document_versions
+    ADD COLUMN source_review_no BIGINT NOT NULL DEFAULT 0,
+    ADD COLUMN source_review_sha256 CHAR(64) CHARACTER SET ascii COLLATE ascii_bin,
+    ADD CONSTRAINT ck_source_review_head CHECK (
+        (source_review_no = 0 AND source_review_sha256 IS NULL)
+        OR (source_review_no > 0 AND source_review_sha256 IS NOT NULL)
+    );
+
 CREATE TABLE source_reviews (
     review_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
     document_version_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,

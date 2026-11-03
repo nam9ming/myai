@@ -94,6 +94,8 @@ public class SourceReviewRepository {
         }
         jdbc.update("INSERT INTO source_reviews(review_id, document_version_id, review_no, input_sha256, record_json, record_sha256) VALUES (?, ?, ?, ?, ?, ?)",
                 next.reviewId(), next.documentVersionId(), next.reviewNo(), next.inputSha256(), next.recordJson(), next.recordSha256());
+        require(jdbc.update("UPDATE document_versions SET source_review_no=?, source_review_sha256=? WHERE document_version_id=?",
+                next.reviewNo(), next.recordSha256(), original.versionId()) == 1, "source_reviews");
         return result(next, false);
     }
 
@@ -128,6 +130,8 @@ public class SourceReviewRepository {
 
     private SourceView checkedView(PublicationRepository.Document original, List<Stored> records, String lock) {
         var view = state.view(original, records);
+        require(Boolean.TRUE.equals(jdbc.queryForObject("SELECT source_review_no, source_review_sha256 FROM document_versions WHERE document_version_id=?" + lock,
+                (row, index) -> row.getLong(1) == view.reviewNo() && Objects.equals(row.getString(2), view.reviewSha256()), original.versionId())), "source_reviews");
         var expected = expectedChecks(view);
         var actual = jdbc.query("SELECT check_id, document_version_id, checked_at, result, last_success_ref, note FROM source_checks WHERE document_version_id = ? ORDER BY check_id" + lock,
                 (row, index) -> new CheckRow(row.getString(1), row.getString(2), row.getTimestamp(3).toInstant(), row.getString(4), row.getString(5), row.getString(6)), original.versionId());

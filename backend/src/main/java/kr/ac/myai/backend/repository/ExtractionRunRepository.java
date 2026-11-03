@@ -17,6 +17,7 @@ import java.util.Optional;
 @Repository
 @Profile("!fixture")
 public class ExtractionRunRepository {
+    private static final String DOCUMENT = "SELECT document_version_id, document_id, version_no, text_sha256, metadata_json, private_content_ref FROM document_versions WHERE document_version_id=?";
     private final JdbcTemplate jdbc;
     private final ReviewedImportReader json;
 
@@ -96,7 +97,7 @@ public class ExtractionRunRepository {
         require(projection.path("documents").isArray() && projection.path("documents").size() == 1);
         var document = projection.path("documents").get(0);
         require(document.path("document_version_id").asText().equals(run.documentVersionId()));
-        var documents = jdbc.queryForList("SELECT * FROM document_versions WHERE document_version_id=?", run.documentVersionId());
+        var documents = jdbc.queryForList(DOCUMENT, run.documentVersionId());
         require(documents.size() == 1);
         var row = documents.getFirst();
         var expected = JsonNodeFactory.instance.objectNode().put("data_kind", run.dataKind());
@@ -113,7 +114,7 @@ public class ExtractionRunRepository {
         var rows = jdbc.queryForList("SELECT * FROM extraction_runs WHERE run_id=? FOR SHARE", reference.runId());
         require(rows.size() == 1 && rowHash(rows.getFirst()).equals(reference.rowSha256()));
         if (reference.documentRowSha256() != null) {
-            var documents = jdbc.queryForList("SELECT * FROM document_versions WHERE document_version_id=? FOR SHARE", reference.documentVersionId());
+            var documents = jdbc.queryForList(DOCUMENT + " FOR SHARE", reference.documentVersionId());
             require(documents.size() == 1 && rowHash(documents.getFirst()).equals(reference.documentRowSha256()));
         }
     }

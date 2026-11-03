@@ -14,7 +14,7 @@ Java 21 / Spring Boot **3.5.16** / Gradle Wrapper **8.14.3** / MySQL **8.4.13**.
 - 요청 검증·공통 오류·32KiB JSON 본문 제한·개발 origin CORS.
 - [DB 설계](../docs/spec/09_DB설계와트랜잭션.md)의 13개 기초 테이블, FK·unique·검토 상태 제약, UTC·낙관적 잠금용 열과 Flyway V1.
 - `local-import` 일회성 명령은 D03/D04/D06 검토 JSON, 원문/본문 hash, Unicode 근거와 참조를 검증한다. Spring JDBC로 원자적으로 저장하며 동일 파일 재입력, append-only revision, 조건부 작업 포인터 갱신과 감사 기록을 지원한다. `draft/needs_review`·`hidden`만 저장한다.
-- `local-source-review`는 같은 D03 버전의 원문 확인·사용권 이력을 V4 `source_reviews`와 기존 `source_checks`에 원자적으로 추가한다. 최초 D03·D05·사람 인계·과거 snapshot을 보존하며 승인·공개는 운영 상태를 별도로 조회한다. [확인·사용권 안내](docs/source-review.md)를 따른다.
+- `local-source-review`는 같은 D03 버전의 원문 확인·사용권 이력을 V4 `source_reviews`와 기존 `source_checks`에 추가하고 부모 document_versions의 운영 번호·해시 두 열을 같은 트랜잭션으로 갱신한다. 원본 D03 6필드·D05·사람 인계·과거 snapshot은 보존하며, 마지막 이력과 부모의 운영 두 열을 대조해 권한만 바꾼 끝 기록의 유실도 충돌로 처리한다. 승인·공개는 검증한 운영 상태를 별도로 조회한다. [확인·사용권 안내](docs/source-review.md)를 따른다.
 - `local-publication` 일회성 명령은 승인·반려 revision, 읽기 전용 공개 JSON 미리보기, 불변 snapshot 공개·복구를 처리한다. V2 `publication_audits`에 공개 포인터 변경 이력을 남기며 충돌·실패 시 이전 공개본을 보존한다.
 - `local-export`는 이미 공개한 snapshot을 고정 UTF-8/hash 그대로 파일로 내보낸다. 파일 실패는 DB 공개 성공과 분리하고 동일 파일 재실행·충돌 보존을 지원한다. [내보내기 안내](docs/review-publication.md#snapshot-json-내보내기)를 따른다.
 - Python `draft`가 만든 `ai-draft-import-v1`을 숨김 저장한다. 미상 제목·유형을 채우지 않고 직접 승인을 차단하며, 사람 검토 다음 revision은 검토자·시각·기존 AI 출처를 유지해야 한다. [초안 연결 안내](docs/ai-review-draft.md)를 따른다.
@@ -125,6 +125,8 @@ java -jar backend/build/libs/myai-backend-0.1.0.jar \
   --myai.source-review.source-root=backend/examples \
   --myai.source-review.actor=synthetic-reviewer
 ```
+
+V4의 부모 운영 두 열은 `source_review_no=0`/`source_review_sha256=null`에서 시작한다. 별도 head 테이블 없이 이력 끝과 대조하며 새 기록·check·부모 갱신은 함께 commit/rollback한다. 원본6필드 불변과 새 운영 열의 변경을 구분하고, 관리자 변조나 부모·이력을 함께 되돌리는 전체 DB 복원까지 탐지한다고 보증하지 않는다.
 
 `source-root`는 신규 verified에만 필수다. 같은 ID·입력 바이트의 재실행은 후속 이력·원문 부재에도 최초 결과를 재사용하며 `expected_review_no`를 자동 보충하지 않는다. 권한만 변경하는 요청·실패 확인은 원문 파일 없이 기록할 수 있다. 새 제한은 과거 공개본을 자동 철회하지 않는다. SELECT 전용 preview는 V4 적용 후 `--spring.flyway.enabled=false`로 실행할 수 있으며 source-review 쓰기는 일반 쓰기 계정이 필요하다.
 

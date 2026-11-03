@@ -8,6 +8,7 @@ import kr.ac.myai.backend.publication.PublicationCommand;
 import kr.ac.myai.backend.publication.PublicationCommandReader;
 import kr.ac.myai.backend.publication.PublicationException;
 import kr.ac.myai.backend.repository.PublicationRepository;
+import kr.ac.myai.backend.repository.ExtractionRunRepository;
 import kr.ac.myai.backend.repository.SourceReviewRepository;
 import kr.ac.myai.backend.service.ExtractionImportService;
 import kr.ac.myai.backend.service.HumanHandoffImportService;
@@ -26,6 +27,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -74,6 +76,7 @@ class SourceReviewMySqlTest {
     @Autowired JdbcTemplate jdbc;
     @MockitoSpyBean SourceReviewRepository sourceReviews;
     @MockitoSpyBean SourceReviewState sourceState;
+    @MockitoSpyBean ExtractionRunRepository extractionRuns;
     @TempDir Path root;
     final ObjectMapper mapper = new ObjectMapper();
     final List<String> ownedCases = new ArrayList<>();
@@ -293,18 +296,74 @@ class SourceReviewMySqlTest {
         assertThat(reviews.review(file, null, "synthetic-replayer").alreadyRecorded()).isTrue();
     }
 
-    @Test
-    void lateSqlInsertFailureRollsBackBothReviewAndCheck() throws Exception {
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1})
+    void missingRightsOnlyTailBlocksReadReplayAppendAndNewPublication(int preceding) throws Exception {
+        var input = fixtures.human(false); importInput(input);
+        var original = documents.document(version(input));
+        var approved = publication.execute(decision(event(input), "approve", 1), root, "synthetic-approver");
+        if (preceding == 1) review(request(input, 0, null, "allowed", "합성 추가 사용권 선언"), null, "synthetic-first");
+        Path file = write(request(input, preceding, null, "restricted", "합성 사용 제한"));
+        var restricted = reviews.review(file, null, "synthetic-rights-reviewer");
+        var before = view(input); long checks = checkCount(input);
+        var row = jdbc.queryForMap("SELECT * FROM source_reviews WHERE review_id=?", restricted.reviewId());
+        jdbc.update("DELETE FROM source_reviews WHERE review_id=?", restricted.reviewId());
+        try {
+            assertThat(checkCount(input)).isEqualTo(checks);
+            assertThat(documents.document(version(input))).isEqualTo(original);
+            assertThatThrownBy(() -> view(input)).isInstanceOf(SourceReviewException.class);
+            assertThatThrownBy(() -> new TransactionTemplate(manager).execute(status -> {
+                sourceReviews.lockView(before); return null;
+            })).isInstanceOf(SourceReviewException.class);
+            assertThatThrownBy(() -> reviews.review(file, null, "synthetic-replay")).isInstanceOf(SourceReviewException.class);
+            assertThatThrownBy(() -> review(request(input, preceding, null, "allowed", "합성 새 요청"), null, "synthetic-new"))
+                    .isInstanceOf(SourceReviewException.class);
+            var publish = publish(input, List.of(approved.revisionId()));
+            publish.put("action", "preview");
+            publicationError("PUBLICATION_CONFLICT", () -> publication.execute(command(publish), root, "synthetic-publisher"));
+            publish.put("action", "publish");
+            publicationError("PUBLICATION_CONFLICT", () -> publication.execute(command(publish), root, "synthetic-publisher"));
+            publication.execute(decision(event(input), "reject", 2), null, "synthetic-reviewer");
+            publicationError("PUBLICATION_CONFLICT", () -> publication.execute(decision(event(input), "approve", 3), root, "synthetic-approver"));
+            assertThat(reviewCount(input)).isEqualTo(preceding);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM snapshots WHERE case_id=?", Long.class, publish.path("case_id").asText())).isZero();
+        } finally {
+            jdbc.update("INSERT INTO source_reviews(review_id,document_version_id,review_no,input_sha256,record_json,record_sha256) VALUES (?,?,?,?,?,?)",
+                    row.get("review_id"), row.get("document_version_id"), row.get("review_no"), row.get("input_sha256"), row.get("record_json"), row.get("record_sha256"));
+        }
+        assertThat(view(input).reviewNo()).isEqualTo(preceding + 1);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"source_reviews", "document_versions"})
+    void lateSqlInsertOrAnchorFailureRollsBackReviewCheckAndAnchor(String table) throws Exception {
         var source = fixtures.source(true); fixtures.register(source); var original = documents.document(version(source));
         String constraint = "source_review_test_" + UUID.randomUUID().toString().replace("-", "");
-        jdbc.execute("ALTER TABLE source_reviews ADD CONSTRAINT " + constraint + " CHECK(document_version_id <> '" + version(source) + "')");
+        jdbc.execute("ALTER TABLE " + table + " ADD CONSTRAINT " + constraint + " CHECK(document_version_id <> '" + version(source) + "'"
+                + (table.equals("document_versions") ? " OR source_review_no=0" : "") + ")");
         try {
             assertThatThrownBy(() -> review(request(source, 0, "verified", "allowed", "합성 권한"), root, "synthetic-reviewer"))
                     .isInstanceOf(SourceReviewException.class).hasMessageNotContaining(constraint).hasMessageNotContaining(version(source));
             assertThat(reviewCount(source)).isZero(); assertThat(checkCount(source)).isZero();
             assertThat(documents.document(version(source))).isEqualTo(original);
-        } finally { jdbc.execute("ALTER TABLE source_reviews DROP CHECK " + constraint); }
+            assertThat(view(source).reviewNo()).isZero(); assertThat(view(source).reviewSha256()).isNull();
+        } finally { jdbc.execute("ALTER TABLE " + table + " DROP CHECK " + constraint); }
         assertThat(review(request(source, 0, "verified", "allowed", "합성 권한"), root, "synthetic-reviewer").reviewNo()).isEqualTo(1);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"source_review_no=source_review_no+1", "source_review_sha256=REPEAT('0',64)"})
+    void changedParentAnchorRejectsOtherwiseCompleteHistory(String alteration) throws Exception {
+        var source = fixtures.source(false); fixtures.register(source);
+        var first = review(request(source, 0, null, "restricted", "합성 사용 제한"), null, "synthetic-reviewer");
+        try {
+            jdbc.update("UPDATE document_versions SET " + alteration + " WHERE document_version_id=?", version(source));
+            assertThatThrownBy(() -> view(source)).isInstanceOf(SourceReviewException.class);
+        } finally {
+            jdbc.update("UPDATE document_versions SET source_review_no=?,source_review_sha256=? WHERE document_version_id=?",
+                    first.reviewNo(), first.recordSha256(), version(source));
+        }
+        assertThat(view(source).reviewSha256()).isEqualTo(first.recordSha256());
     }
 
     @Test
@@ -314,11 +373,15 @@ class SourceReviewMySqlTest {
         extraction.importRun(run, archive, "synthetic-registrant");
         var handoff = fixtures.handoff(source, run, archive);
         var imported = handoffs.importFile(handoff.file(), root, handoff.directory(), "synthetic-handoff-importer");
+        var reference = ArgumentCaptor.forClass(ExtractionRunRepository.Reference.class);
+        verify(extractionRuns, atLeastOnce()).checkReference(reference.capture());
+        assertThat(reference.getValue().documentRowSha256()).isNotNull();
         var original = documents.document(version(source)); var runBefore = runRow(run);
         var filesBefore = fileHashes(archive); var handoffBefore = fileHashes(handoff.image());
         var rights = review(request(source, 0, null, "allowed", "합성 운영 사용권 보완"), null, "synthetic-rights-reviewer");
         review(request(source, 1, "unreachable", "allowed", "합성 확인 실패 뒤 유지"), null, "synthetic-check-reviewer");
         assertThat(rights.reviewNo()).isEqualTo(1); assertThat(view(source).reviewNo()).isEqualTo(2);
+        new TransactionTemplate(manager).execute(status -> { extractionRuns.checkReference(reference.getValue()); return null; });
         assertThat(extraction.importRun(run, archive, "synthetic-replay").alreadyRegistered()).isTrue();
         var replay = handoffs.importFile(handoff.file(), root, handoff.directory(), "synthetic-replay");
         assertThat(replay.alreadyImported()).isTrue(); assertThat(replay.revisionIds()).isEqualTo(imported.revisionIds());

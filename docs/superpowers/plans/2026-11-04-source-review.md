@@ -2,14 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 같은 D03 버전의 확인·사용권 이력을 원본/D05 변경 없이 추가하고 승인/공개/과거재현 검증에 연결한다.
-**Architecture:** V4 append-only source_reviews+기존 source_checks. immutable PublicationRepository.Document와 effective SourceView 분리, 부모 D03 잠금·locking current read로 CAS/공개 경합 검사.
+**Goal:** 같은 D03 버전의 확인·사용권 이력을 원본6필드/D05 변경 없이 추가하고 승인/공개/과거재현 검증에 연결한다.
+**Architecture:** V4 append-only source_reviews+기존 source_checks와 부모 document_versions의 운영 끝 번호/hash 두 열. immutable PublicationRepository.Document와 effective SourceView 분리, 부모 D03 잠금·locking current read로 CAS/공개 경합 검사.
 **Tech Stack:** Java21·Spring Boot3.5.16·MySQL8.4.13·Python3.13 stdlib·기존 JDBC/Jackson/JUnit.
 **Spec:** docs/superpowers/specs/2026-11-04-source-review-design.md
 
 ## Global Constraints
 
-- 원본 D03 metadata/body/private_ref·동결 D05/사람 인계·과거 revision/snapshot·user .gitignore/AGENTS/다른 작업 보존.
+- 원본 D03 6필드·metadata/body/private_ref·동결 D05/사람 인계·과거 revision/snapshot·user .gitignore/AGENTS/다른 작업 보존. 부모의 새 SQL 운영 두 열은 정상 append에서 변경하며 원본 DTO/fingerprint와 분리.
 - 실제 자료 verified/allowed·실제 사람/정답·AI/API/키·기존 DB/서비스·main 배포 변경 금지.
 - 새 의존성·HTTP 관리 API·계산 엔진·V1~V3 수정 없음. 영어 Conventional Commits, 문서/PR/주석 한국어.
 - 파일/Python I/O 트랜잭션 밖, 명시 expectedNo/CAS·same-ID exact bytes 재사용, Unicode/정밀 시각·8MiB 안전 경계 유지.
@@ -52,14 +52,14 @@
 **Interfaces:**
 - SourceReviewService.review(Path file,Path sourceRoot|null,String actor) → Result(reviewId:String,documentVersionId:String,reviewNo:long,recordSha256:String,alreadyRecorded:boolean).
 - SourceReviewRepository.view(PublicationRepository.Document)→SourceView; lockView(SourceView) 원본 FOR SHARE+전체 운영 locking current read 대조, SELECT 전용도 지원.
-- Repository/service 내부 append 시 document_versions FOR UPDATE→전체 source_reviews locking current read→동일id/bytes 재실행→명시CAS→source_checks+source_reviews INSERT. new head table 없음. 세부 private helper는 담당자가 정하되 부모 문서/공개 caller 인터페이스를 바꾸지 않는다.
-- view는 원본/운영기록/source_checks를 짧은 읽기전용 RR에서 같은 snapshot으로 대조한다. lockView는 FOR SHARE 현재읽기만 사용하고 baseline+운영SQL 전체 일치를 검사한다. source_checks의 원래prefix/새운영check 저장열을 모두 대조한다.
+- Repository/service 내부 append 시 document_versions FOR UPDATE→전체 source_reviews locking current read→동일id/bytes 재실행→명시CAS→source_checks+source_reviews INSERT. 같은 트랜잭션에서 부모 source_review_no/source_review_sha256 UPDATE. 별도 head table 없음. 세부 private helper는 담당자가 정하되 부모 문서/공개 caller 인터페이스를 바꾸지 않는다.
+- view는 원본/부모 운영 두 열/운영기록/source_checks를 짧은 읽기전용 RR에서 같은 snapshot으로 대조하고 전체 이력의 끝 번호/hash가 부모와 같아야 한다. lockView는 FOR SHARE 현재읽기만 사용하고 baseline+운영SQL+부모 끝 번호/hash 전체 일치를 검사한다. source_checks의 원래prefix/새운영check 저장열을 모두 대조한다.
 
 - [ ] DB test worker가 실제 missing service/schema RED를 먼저 관찰한 후 repository/service 구현을 시작한다.
-- [ ] V4 새 테이블/unique/FK/JSON_VALID를 추가한다. 기존 document/source_checks/D05 값은 초기 migration으로 재작성하지 않는다.
+- [ ] V4 새 테이블/unique/FK/JSON_VALID와 부모 source_review_no BIGINT NOT NULL DEFAULT 0/source_review_sha256 nullable CHAR(64), 0/null 또는 양수/non-null pair CHECK를 추가한다. 기존 원본6필드/source_checks/D05 값은 재작성하지 않고 기존·신규 문서 운영 초기값은0/null이다.
 - [ ] 서비스는 기존 PublicationRepository.Document 원본을 확보한다. verified 확인만 source-root와 기존 source-import/validateStored 검증으로 실제 원문/hash를 트랜잭션 밖에서 대조한다. 실패/권한제한은 원문 없어도 기록한다.
-- [ ] 동일ID/hash를 CAS/verified 파일I/O보다 먼저 재사용하고 최초actor/시각 유지. 신규verified만 원문 검증한다. 다른ID stale expected/기존ID 다른바이트 충돌, 새 check/권한 결정 원자성·전체기록 및 source_checks 대응 검증·안전한 오류를 구현한다.
-- [ ] 실제 격리8.4.13에서 초기0/후속/rights-only/원문없음·정확재실행/동시동일/상충·변조/실패rollback·새check의직전성공·원본/D05/Handoff 보존·안전한 오류 시험 GREEN. 기존 DB 시험도 유지한다.
+- [ ] 동일ID/hash를 CAS/verified 파일I/O보다 먼저 재사용하고 최초actor/시각 유지. 신규verified만 원문 검증한다. 다른ID stale expected/기존ID 다른바이트 충돌, 새 check/권한 결정/부모 끝 번호·hash 원자성·전체기록 및 source_checks/부모 대응 검증·안전한 오류를 구현한다.
+- [ ] 실제 격리8.4.13에서 초기0/후속/rights-only/원문없음·정확재실행/동시동일/상충·변조/실패rollback·새check의직전성공·원본6필드/D05/Handoff 보존·마지막 권한 기록 유실 충돌·부모 갱신 실패 전체rollback·안전한 오류 시험 GREEN. 기존 DB 시험도 유지한다.
 
 ### Task 3: 승인·공개·CLI·전체 검증
 
@@ -72,6 +72,12 @@
 - [ ] backend/README/TASK·실행 규격/합성 예제·관련 D03/DB 설계/계약과 processing 안내의 기존제한을 실제 구현과 일치시킨다.
 - [ ] 전체 native Java/실제MySQL/Python·Node/JSON/lint/build, 전체 자체 리뷰→fresh전체1회→유효 지적 모두 RED/GREEN/전체 회귀. 정확 source CI/AI/새사람리뷰→develop 병합·통합 검증, main은 사람.
 - [ ] ledger 모든 판단/비용·검증/보고를 private evidence로 보존하고 이번 container/credential/workspace만 정리한다.
+
+## Final-review I1 보완
+
+최종 전체 리뷰에서 check 없는 마지막 source_reviews 권한 제한 행이 유실되면 체인 내부 검증만으로 이전 allowed 상태가 복원되는 결함을 발견했고 실제 RED2로 재현했다. 아직 병합하지 않은 V4에 부모 document_versions의 운영 끝 번호/hash 두 열을 추가해 전체 체인의 끝과 독립 대조한다. 새 기록/check INSERT와 부모 갱신을 같은 트랜잭션으로 묶고 일반 RR·locking current read·정확 재실행·승인/preview/publish 모두 이 대조를 거친다. 기존 Document6필드·metadata·D05는 그대로이며 원본 보존 증거는 SELECT * 대신 원래6열과 원본 이미지로 비교한다.
+
+이 보완은 신뢰하는 저장 경계의 일부 유실·불일치를 감지하며 관리자에 의한 부모/전체 이력 동시 변조나 DB 전체 과거 복원을 막는 WORM·외부 서명은 아니다. 수정 후 전체 회귀와 실제 JAR 재검증 결과는 별도로 기록하며 보완 전323/34 수치를 새 완료 수치로 사용하지 않는다.
 
 ## Plan Self-Review
 
