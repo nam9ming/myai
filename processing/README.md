@@ -30,6 +30,7 @@ python3.13 -m venv .venv
 | `extraction/archive.py`, `__main__.py` | 비공개 준비/수동 가져오기/무결성 검증·실패 원출력 보존 |
 | `extraction/api.py` | 고정 OpenAI Responses API·최대3시도·요청/응답/전송 상태 보관·오프라인 재검증 |
 | `extraction/draft.py` | 검증된 원출력→숨김 검토 초안·안정 ID·근거 hash 변환·미상 보존 |
+| `evaluation/dataset.py`, `storage.py`, `__main__.py` | D08 문서/사건 연결·분할 검증·비공개 manifest 불변 보관·CLI |
 
 [계산 연결 계약](../contracts/calculation-bridge.md)을 따릅니다. 지원 규칙은 `rules-v1`이며 미지원 버전을 정상 결과로 바꾸지 않습니다. `dictionary_version`은 선택한 snapshot의 고정 식별자이며 계산 중 새 사전을 읽지 않습니다. 입력 원본 바이트 SHA-256을 반환하며 개인 조건은 로그에 남기지 않습니다.
 
@@ -76,6 +77,20 @@ python3.13 -m processing.extraction run \
 같은 `--run-id UUID`의 완료 실행은 입력·모델·전처리 버전이 일치하면 키 없이 재사용합니다. 동시 실행·중단한 실행은 자동 재전송하지 않습니다. 원본을 확인한 뒤 새 실행 ID로 재시도하며 이전 디렉터리는 남깁니다. 실행 기록은 기존 Java `local-extraction`→숨김 초안 경로로 등록합니다.
 
 같은 저장소 PR에 `run-openai-extraction` 라벨을 **적용하는 이벤트**만 실제 합성 API 시험을 실행합니다. 일반 push/synchronize는 유료 추출을 실행하지 않습니다. 라벨을 다시 적용하거나 실패 작업을 재실행하면 새 호출이 발생합니다. 기존 `OPENAI_API_KEY`·리뷰 모델을 직접 사용하며 합성 원본 artifact는3일 보관합니다. 실제 공지는 이 workflow에 넣지 않습니다.
+
+## D08 데이터셋·분할
+
+문서 버전·입력 hash, 사건/문서 관계, 개발/확인 배정을 [manifest 계약](../contracts/dataset-manifest.md)으로 검증합니다. 공유 문서·정정/재게시 연결이 분할을 가르면 거부하고, 같은 문서의 복수 버전은 문서1개로 셉니다. 의심 중복은 자동 병합하지 않습니다. 노출·그룹 검토 경고와 실제40/개발20/확인20 대비 부족분을 함께 반환합니다.
+
+```sh
+python3.13 -m processing.evaluation check --input processing/examples/dataset-manifest.json
+python3.13 -m processing.evaluation freeze --input data/private/dataset.json
+python3.13 -m processing.evaluation verify DATASET_REF
+```
+
+예제는 합성4문서/5버전입니다. 실제 개발용3건은 dev만 배정한 비공개 manifest로 check/freeze/verify를 확인했으며 holdout은0건입니다. 같은 dataset_version의 다른 바이트는 충돌이고 기존 원본을 덮어쓰지 않습니다. 기본 root는 `data/private/evaluation/datasets`, 보관본 파일0400·디렉터리0500입니다. 키·AI·네트워크·DB를 사용하지 않습니다.
+
+이 단계는 manifest의 선언된 관계·버전 참조를 고정합니다. 실제 입력 hash 대조·정답의 독립성/정확성·비노출 여부를 인증하지 않으며 `unexposed_as_declared`도 blind 평가 보증이 아닙니다. 실제 개발3건의 입력 hash는 작성자가 별도로 기존 D05 receipt와 대조했습니다. 금표 동결·실행 연결·8필드 채점·최초/재시험 결과·규칙 기준선은 후속 작업입니다.
 
 ## 검증·남은 작업
 
