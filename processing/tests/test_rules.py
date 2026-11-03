@@ -135,6 +135,19 @@ class RulesTest(unittest.TestCase):
                 self.assertIsNone(occurrence['time_end']['value'])
                 self.assertEqual(occurrence['time_end']['knowledge'], 'ambiguous')
 
+    def test_qualified_endpoints_are_unknown_for_dates_and_clocks(self):
+        for qualifier in ('이전', '이후', '전후', '이상', '이하', '이내', '미만', '초과', '무렵', '쯤', '경', '전', '후', '예정'):
+            for source, field in (('2026-11-07부터 2026-11-08', 'date'), ('10:00~11:00', 'time')):
+                with self.subTest(source=source, qualifier=qualifier):
+                    occurrence = self.run_rule(f'공사 {source} {qualifier}')[0]['items'][0]['occurrences'][0]
+                    for key in (field + '_start', field + '_end'):
+                        self.assertIsNone(occurrence[key]['value'])
+                        self.assertEqual(occurrence[key]['knowledge'], 'ambiguous')
+        for source, field in (('2026-11-07', 'date'), ('10:00~11:00', 'time')):
+            with self.subTest(prefix=source):
+                occurrence = self.run_rule('공사 약 ' + source)[0]['items'][0]['occurrences'][0]
+                self.assertIsNone(occurrence[field + '_start']['value'])
+
     def test_long_digit_run_completes_in_bounded_subprocess(self):
         self.document['blocks'][0]['text'] = '공사 ' + '1' * (2 * 1024 * 1024)
         script = ('import json,sys; from processing.extraction.rules import extract_rules; '

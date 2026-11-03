@@ -14,7 +14,9 @@ RULE_VERSION = 'rule-extract-v1'
 PROFILE_VERSION = 'rule-profile-v1'
 DATE = re.compile(r'(?<![0-9])([0-9]{4})\s*([-./년])\s*([0-9]{1,2})\s*([-./월])\s*([0-9]{1,2})(?:\s*일)?(?![0-9])')
 CLOCK = re.compile(r'(?<![0-9:])([0-9]{1,2}):([0-9]{2})(?::([0-9]{2}))?(?![0-9:])')
-RANGE = re.compile(r'\s*(?:~|～|〜|–|—|-|부터)\s*(?:(익일|다음날)\s*)?')
+RANGE_MARKER = r'(?:~|～|〜|–|—|-|부터)'
+QUALIFIER = r'(?:이전|이후|전후|이상|이하|이내|미만|초과|무렵|쯤|예정|(?:경|전|후)(?=\s|$|[.,，。]))'
+RANGE = re.compile(r'\s*' + RANGE_MARKER + r'\s*(?:(익일|다음날)\s*)?')
 LIMIT_FAILURE = b'{"rule_error":"RULE_OUTPUT_LIMIT"}\n', 'RULE_OUTPUT_LIMIT'
 
 
@@ -54,14 +56,20 @@ def parse_profile(content):
     return value
 
 
+def _uncertain_bounds(body, matches):
+    if not matches:
+        return False
+    prefix, suffix = body[:matches[0].start()], body[matches[-1].end():]
+    outside = '(?:' + RANGE_MARKER + '|' + QUALIFIER + ')'
+    return (re.search('(?:' + outside + r'|약|대략)\s*$', prefix) is not None
+            or re.match(r'\s*(?:까지\s*)?' + outside, suffix) is not None)
+
+
 def _dates(body):
     matches = list(islice(DATE.finditer(body), 3))
     remaining = DATE.sub(' ', body)
     partial = re.search(r'[0-9]{1,2}\s*(?:월|일)|[0-9]{1,2}[./-][0-9]{1,2}', remaining)
-    if matches and re.match(r'\s*(?:까지\s*)?(?:~|～|〜|–|—|-|부터)', body[matches[-1].end():]):
-        partial = True
-    if len(matches) == 1 and (re.match(r'\s*(?:이후|이전|까지)', body[matches[0].end():])
-                              or re.search(r'(?:~|～|〜|–|—|-|부터)\s*$', body[:matches[0].start()])):
+    if _uncertain_bounds(body, matches) or len(matches) == 1 and re.match(r'\s*까지', body[matches[0].end():]):
         partial = True
     unknown = 'ambiguous' if matches or partial else 'not_stated'
     if partial or not 1 <= len(matches) <= 2:
@@ -87,8 +95,7 @@ def _clocks(body, distinct_dates):
     remainder = CLOCK.sub(' ', body)
     unsupported = re.search(r'(?<![0-9])[0-9]+\s*(?:시|:)|오전|오후|(?<![A-Za-z])(?:AM|PM|A\.M\.|P\.M\.)(?![A-Za-z])',
                             remainder, re.IGNORECASE) is not None
-    if matches and (re.match(r'\s*(?:까지\s*)?(?:~|～|〜|–|—|-|부터)', body[matches[-1].end():])
-                    or re.search(r'(?:~|～|〜|–|—|-|부터)\s*$', body[:matches[0].start()])):
+    if _uncertain_bounds(body, matches):
         unsupported = True
     if all_day and not matches and not clock_text and not unsupported:
         return None, None, None, True, 'not_stated'
