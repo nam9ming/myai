@@ -58,7 +58,10 @@ def _dates(body):
     matches = list(islice(DATE.finditer(body), 3))
     remaining = DATE.sub(' ', body)
     partial = re.search(r'[0-9]{1,2}\s*(?:월|일)|[0-9]{1,2}[./-][0-9]{1,2}', remaining)
-    if matches and re.match(r'\s*(?:~|～|〜|–|—|-|부터)\s*[0-9]', body[matches[-1].end():]):
+    if matches and re.match(r'\s*(?:~|～|〜|–|—|-|부터)', body[matches[-1].end():]):
+        partial = True
+    if len(matches) == 1 and (re.match(r'\s*(?:이후|이전|까지)', body[matches[0].end():])
+                              or re.search(r'(?:~|～|〜|–|—|-|부터)\s*$', body[:matches[0].start()])):
         partial = True
     unknown = 'ambiguous' if matches or partial else 'not_stated'
     if partial or not 1 <= len(matches) <= 2:
@@ -81,10 +84,13 @@ def _clocks(body, distinct_dates):
     matches = list(islice(CLOCK.finditer(body), 3))
     all_day = re.search(r'종일', body) is not None
     clock_text = re.search(r'[0-9]+\s*(?:시|:)', body) is not None
-    if all_day and not matches and not clock_text:
+    remainder = CLOCK.sub(' ', body)
+    unsupported = re.search(r'[0-9]+\s*(?:시|:)|오전|오후|(?<![A-Za-z])(?:AM|PM|A\.M\.|P\.M\.)(?![A-Za-z])',
+                            remainder, re.IGNORECASE) is not None
+    if all_day and not matches and not clock_text and not unsupported:
         return None, None, None, True, 'not_stated'
-    unknown = 'ambiguous' if matches or clock_text else 'not_stated'
-    if len(matches) != 2 or all_day:
+    unknown = 'ambiguous' if matches or clock_text or unsupported else 'not_stated'
+    if len(matches) != 2 or all_day or unsupported:
         return None, None, None, None, unknown
     separator = RANGE.fullmatch(body[matches[0].end():matches[1].start()])
     values, seconds = [], []
@@ -156,8 +162,9 @@ def extract_rules(input_bytes, profile_bytes):
     start, end, knowledge = _dates(body)
     occurrence.update(date_start=fv(start, knowledge), date_end=fv(end, knowledge))
     lo, hi, offset, all_day, knowledge = _clocks(body, start is not None and end != start)
-    occurrence.update(time_start=fv(lo, knowledge), time_end=fv(hi, knowledge), all_day=fv(all_day),
-                      end_day_offset=fv(offset, 'ambiguous' if lo is not None and offset is None else 'not_stated'))
+    auxiliary_knowledge = 'ambiguous' if knowledge == 'ambiguous' or lo is not None and offset is None else 'not_stated'
+    occurrence.update(time_start=fv(lo, knowledge), time_end=fv(hi, knowledge), all_day=fv(all_day, auxiliary_knowledge),
+                      end_day_offset=fv(offset, auxiliary_knowledge))
     for place in profile['places']:
         if any(token in body for token in [place['name'], *place['aliases']]):
             key = f'rule-location-{len(item["locations"]) + 1}'

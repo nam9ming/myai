@@ -54,5 +54,5 @@
 
 ## Final integration
 
-- [ ] Whole-branch self-review, one fresh independent review, valid finding RED→GREEN fixes and full regression; unresolved0 before PR to develop.
+- [x] Whole-branch self-review, one fresh independent review, valid finding RED→GREEN fixes and full regression; unresolved0 before PR to develop.
 - [ ] Exact-head CI/AI review and arriving human reviews; fix valid findings until0, merge only into develop when green, report concrete evidence/limitations and proceed to D08 adapters.

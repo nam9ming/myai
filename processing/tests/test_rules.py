@@ -100,7 +100,27 @@ class RulesTest(unittest.TestCase):
     def test_all_day_with_unsupported_explicit_clock_does_not_hide_conflict(self):
         occurrence = self.run_rule('공사 종일 9시~11시')[0]['items'][0]['occurrences'][0]
         self.assertIsNone(occurrence['all_day']['value'])
+        self.assertEqual(occurrence['all_day']['knowledge'], 'ambiguous')
+        self.assertEqual(occurrence['end_day_offset']['knowledge'], 'ambiguous')
         self.assertEqual(occurrence['time_start']['knowledge'], 'ambiguous')
+
+    def test_mixed_clock_formats_and_meridiem_do_not_confirm_partial_interval(self):
+        for body in ('공사 10:00~11:00, 추가 13시~14시', '공사 오후 10:00~11:00',
+                     '공사 10:00~11:00 PM', '공사 10:00~11:00, 추가 13:0~14:0'):
+            with self.subTest(body=body):
+                occurrence = self.run_rule(body)[0]['items'][0]['occurrences'][0]
+                for key in ('time_start', 'time_end', 'end_day_offset', 'all_day'):
+                    self.assertIsNone(occurrence[key]['value'])
+                self.assertEqual(occurrence['time_start']['knowledge'], 'ambiguous')
+
+    def test_open_date_ranges_do_not_invent_an_end_or_start_date(self):
+        for body in ('공사 2026-11-07부터 추후 공지 시까지', '공사 2026-11-07~',
+                     '공사 2026-11-07 이후', '공사 2026-11-07까지', '공사 미정~2026-11-07'):
+            with self.subTest(body=body):
+                occurrence = self.run_rule(body)[0]['items'][0]['occurrences'][0]
+                self.assertIsNone(occurrence['date_start']['value'])
+                self.assertIsNone(occurrence['date_end']['value'])
+                self.assertEqual(occurrence['date_end']['knowledge'], 'ambiguous')
 
     def test_real_utf8_output_limit_is_checked_without_invalidating_valid_input(self):
         self.document['blocks'][0]['text'] = '공사 ' + '😀' * ((8 * 1024 * 1024 - 900) // 4)
