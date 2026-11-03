@@ -31,6 +31,7 @@ python3.13 -m venv .venv
 | `extraction/api.py` | 고정 OpenAI Responses API·최대3시도·요청/응답/전송 상태 보관·오프라인 재검증 |
 | `extraction/draft.py` | 검증된 원출력→숨김 검토 초안·안정 ID·근거 hash 변환·미상 보존 |
 | `evaluation/dataset.py`, `storage.py`, `__main__.py` | D08 문서/사건 연결·분할 검증·비공개 manifest 불변 보관·CLI |
+| `evaluation/bindings.py` | 동결 manifest·실제 입력 바이트·명시 선택한 D05 원본의 읽기 전용 대조 |
 
 [계산 연결 계약](../contracts/calculation-bridge.md)을 따릅니다. 지원 규칙은 `rules-v1`이며 미지원 버전을 정상 결과로 바꾸지 않습니다. `dictionary_version`은 선택한 snapshot의 고정 식별자이며 계산 중 새 사전을 읽지 않습니다. 입력 원본 바이트 SHA-256을 반환하며 개인 조건은 로그에 남기지 않습니다.
 
@@ -90,7 +91,16 @@ python3.13 -m processing.evaluation verify DATASET_REF
 
 예제는 합성4문서/5버전입니다. 실제 개발용3건은 dev만 배정한 비공개 manifest로 check/freeze/verify를 확인했으며 holdout은0건입니다. 같은 dataset_version의 다른 바이트는 충돌이고 기존 원본을 덮어쓰지 않습니다. 기본 root는 `data/private/evaluation/datasets`, 보관본 파일0400·디렉터리0500입니다. 키·AI·네트워크·DB를 사용하지 않습니다.
 
-이 단계는 manifest의 선언된 관계·버전 참조를 고정합니다. 실제 입력 hash 대조·정답의 독립성/정확성·비노출 여부를 인증하지 않으며 `unexposed_as_declared`도 blind 평가 보증이 아닙니다. 실제 개발3건의 입력 hash는 작성자가 별도로 기존 D05 receipt와 대조했습니다. 금표 동결·실행 연결·8필드 채점·최초/재시험 결과·규칙 기준선은 후속 작업입니다.
+manifest만으로는 실제 본문이나 정답을 인증하지 않으며 `unexposed_as_declared`도 blind 평가 보증이 아닙니다. 실제 입력·실행 연결은 별도 [dataset-bindings-v1](../contracts/dataset-bindings.md) 명세로 검사합니다.
+
+```sh
+python3.13 -m processing.evaluation check-bindings \
+  --input data/private/evaluation/bindings.json \
+  --dataset-root data/private/evaluation/datasets \
+  --run-root data/private/extraction-runs
+```
+
+모든 manifest 버전을 실제 입력 바이트·data_kind·읽기 전용 D05 원본과 대조합니다. 실패 실행도 원본 재검증 대상이고 첫/최종 상태를 구분합니다. 원본·경로를 stdout에 넣거나 검사 중 보관본을 고치지 않습니다. 실제 개발3건의 v1 실패/v2 성공6실행을 이 검사로 대조했습니다. 이는 문서6건·재시도 성공률·품질 평가를 뜻하지 않습니다. 연결 명세 자체의 동결·독립 금표·8필드 채점·최초/재시험 결과·규칙 기준선은 후속 작업입니다.
 
 ## 검증·남은 작업
 
