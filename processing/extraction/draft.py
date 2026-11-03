@@ -1,4 +1,4 @@
-"""검증된 원출력을 승인 불가능한 비공개 검토 초안으로 변환한다."""
+"""검증된 추출값의 D06 사실 투영과 AI 비공개 검토 초안을 만든다."""
 
 import hashlib
 import json
@@ -10,7 +10,7 @@ from .schema import UUID
 from .validation import MAX_BYTES, array, decode, parse_input, parse_output, require, shape, text
 
 
-def _project_draft(run_id, source, area_id, split_group_id, dictionary_version, root):
+def _context(run_id, source, area_id, split_group_id, dictionary_version):
     for value in (run_id, area_id, split_group_id):
         text(value, kind='input', pattern=UUID)
     text(dictionary_version, kind='input')
@@ -24,13 +24,10 @@ def _project_draft(run_id, source, area_id, split_group_id, dictionary_version, 
           'version_no raw_asset_path raw_sha256 cleaned_text text_sha256 block_index redaction_log preprocessing_version '
           'use_review use_note collection_method latest_check_attempt_at last_verified_at check_result checks', kind='input')
     text(doc['document_id'], kind='input', pattern=UUID)
-    packet = freeze_run(run_id, root)
-    receipt = packet['receipt']
-    require(receipt['status'] == 'validated', kind='input', code='DRAFT_REQUIRES_VALIDATED')
-    directory = _root(root, create=False) / packet['snapshot_ref']
-    artifacts = receipt['artifacts']
-    document = parse_input(_read_checked(directory / 'input.json', artifacts['input.json']))
-    metadata = decode(_read_checked(directory / 'metadata.json', artifacts['metadata.json']), 'input')
+    return doc
+
+
+def _source(source, doc, document, metadata):
     projection = dict(data_kind=source['data_kind'], document_version_id=doc['document_version_id'],
                       title=doc['title'], published_date=doc['published_date'], blocks=doc['block_index'])
     require(projection == document and doc['preprocessing_version'] == metadata['preprocessing_version'],
@@ -38,8 +35,25 @@ def _project_draft(run_id, source, area_id, split_group_id, dictionary_version, 
     cleaned = text(doc['cleaned_text'], kind='input')
     require(hashlib.sha256(cleaned.encode('utf-8')).hexdigest() == doc['text_sha256']
             and all(block['text'] in cleaned for block in document['blocks']), kind='input', code='DRAFT_SOURCE_MISMATCH')
+
+
+def _project_draft(run_id, source, area_id, split_group_id, dictionary_version, root):
+    doc = _context(run_id, source, area_id, split_group_id, dictionary_version)
+    packet = freeze_run(run_id, root)
+    receipt = packet['receipt']
+    require(receipt['status'] == 'validated', kind='input', code='DRAFT_REQUIRES_VALIDATED')
+    directory = _root(root, create=False) / packet['snapshot_ref']
+    artifacts = receipt['artifacts']
+    document = parse_input(_read_checked(directory / 'input.json', artifacts['input.json']))
+    metadata = decode(_read_checked(directory / 'metadata.json', artifacts['metadata.json']), 'input')
+    _source(source, doc, document, metadata)
     last = f"attempt-{len(receipt['attempts'])}.output"
     extracted = parse_output(_read_checked(directory / last, artifacts[last]), document)
+    return _project_output(run_id, source, extracted, area_id, split_group_id, dictionary_version)
+
+
+def _project_output(run_id, source, extracted, area_id, split_group_id, dictionary_version, *, label='AI'):
+    doc = source['documents'][0]
     namespace = uuid.UUID(run_id)
 
     def identity(kind, local):
@@ -81,7 +95,7 @@ def _project_draft(run_id, source, area_id, split_group_id, dictionary_version, 
                     precision = 'date_only'
             refs = [identity('location', ref) for ref in occ['location_refs']]
             if not refs:
-                unknown = dict(value=None, knowledge='not_stated', evidence_ids=[], reason='AI 장소 대응 미상')
+                unknown = dict(value=None, knowledge='not_stated', evidence_ids=[], reason=label + ' 장소 대응 미상')
                 location_id = identity('unbound-location', occ['local_occurrence_id'])
                 locations.append(dict(location_id=location_id, name=unknown, address=unknown, kind='unknown',
                                       status='unknown', geometry=None, coverage='unknown', source=None,
@@ -95,7 +109,8 @@ def _project_draft(run_id, source, area_id, split_group_id, dictionary_version, 
                                     precision=precision, recurrence_dates=None, location_ids=refs,
                                     evidence_ids=citations(temporal.values()),
                                     knowledge='known' if precision != 'unknown' else knowledge,
-                                    normalization_note='AI 초안; 사람 정규화 검토 필요: ' + _json(temporal).decode().rstrip()))
+                                    normalization_note=('AI 초안; 사람 정규화 검토 필요: ' if label == 'AI' else
+                                                        label + '; 정규화 검토 필요: ') + _json(temporal).decode().rstrip()))
         revision = dict(revision_id=identity('revision', item['local_item_id']), event_id=event_id, revision_no=1,
                         title=item['title']['value'], types=item['types']['value'] or [], occurrences=occurrences,
                         locations=locations, lifecycle=item['lifecycle']['value'] or 'uncertain',
