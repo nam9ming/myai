@@ -46,11 +46,11 @@
 
 **Interfaces:** Consumes Task1 evaluate_record packets unchanged. Produces method-aware default source root for freeze/check and existing embedded source paths for verify; existing schema/CLI names/exit codes unchanged.
 
-- [ ] Write freeze/verify tests for full6-file source copy, original path removal, unchanged AI archives, retest policy/gold/source identity, cross-method initial rejection, collision/concurrency/corruption, and actual CLI stdout/error/exit codes.
-- [ ] Run `/opt/homebrew/bin/python3.13 -m unittest processing.tests.test_rule_evaluation_storage -v`; Expected: default routing/new source behavior RED.
-- [ ] Implement method-aware defaults and Korean contract/usage/status; keep stored source mode rules and no fabricated AI provenance.
-- [ ] Run both new test modules, full Python suite, npm lint/test/build, old compatibility fixture; Expected: all pass.
-- [ ] Commit `feat: freeze rule evaluation provenance`.
+- [x] Write freeze/verify tests for full6-file source copy, original path removal, unchanged AI archives, retest policy/gold/source identity, cross-method initial rejection, collision/concurrency/corruption, and actual CLI stdout/error/exit codes.
+- [x] Run `/opt/homebrew/bin/python3.13 -m unittest processing.tests.test_rule_evaluation_storage -v`; Expected: default routing/new source behavior RED.
+- [x] Implement method-aware defaults and Korean contract/usage/status; keep stored source mode rules and no fabricated AI provenance.
+- [x] Run both new test modules, full Python suite, npm lint/test/build, old compatibility fixture; Expected: all pass.
+- [x] Commit `feat: freeze rule evaluation provenance`.
 
 ## Final integration
 

@@ -34,7 +34,7 @@ python3.13 -m venv .venv
 | `evaluation/dataset.py`, `storage.py`, `__main__.py` | D08 문서/사건 연결·분할 검증·비공개 manifest 불변 보관·CLI |
 | `evaluation/bindings.py` | 동결 manifest·실제 입력 바이트·명시 선택한 D05 원본의 읽기 전용 대조 |
 | `evaluation/gold.py`, `gold_storage.py` | 독립 정답 제공자의 선언·근거·사건 anchor 검사와 원본/지침/manifest 별도 동결 |
-| `evaluation/scoring.py`, `records.py`, `evaluation_storage.py` | 8필드 채점·명시한 API 실행 연결·최초/재시험 원본 묶음 동결 |
+| `evaluation/scoring.py`, `records.py`, `evaluation_storage.py` | 8필드 채점·명시한 API/규칙 실행 연결·최초/재시험 원본 묶음 동결 |
 
 [계산 연결 계약](../contracts/calculation-bridge.md)을 따릅니다. 지원 규칙은 `rules-v1`이며 미지원 버전을 정상 결과로 바꾸지 않습니다. `dictionary_version`은 선택한 snapshot의 고정 식별자이며 계산 중 새 사전을 읽지 않습니다. 입력 원본 바이트 SHA-256을 반환하며 개인 조건은 로그에 남기지 않습니다.
 
@@ -121,7 +121,7 @@ python3.13 -m processing.evaluation verify-gold GOLD_REF
 
 ## 8필드 평가·최초/재시험 보관
 
-[extraction-evaluation-v1](../contracts/extraction-evaluation.md)에 따라 독립 gold와 버전마다 명시한 API 실행을 연결합니다. 사람이 사건/일정 대응과 생성 오류 판정을 기록합니다. 원출력은 바꾸지 않고 첫 raw·최종 자동 결과를 함께 채점합니다. null·누락·실패도 gold에 정답이 있으면 분모에 남습니다. 생성 여부의 의미 검토가 남으면 생성률은 N/A입니다.
+[extraction-evaluation-v1](../contracts/extraction-evaluation.md)에 따라 독립 gold와 버전마다 명시한 API 또는 규칙 실행을 연결합니다. 사람이 사건/일정 대응과 생성 오류 판정을 기록합니다. 원출력은 바꾸지 않고 첫 raw·최종 자동 결과를 함께 채점합니다. null·누락·실패도 gold에 정답이 있으면 분모에 남습니다. 생성 여부의 의미 검토가 남으면 생성률은 N/A입니다.
 
 ```sh
 python3.13 -m processing.evaluation check-evaluation \
@@ -131,13 +131,13 @@ python3.13 -m processing.evaluation freeze-evaluation \
 python3.13 -m processing.evaluation verify-evaluation EVALUATION_REF
 ```
 
-선택 입력의 키·정책·annotation은 계약 문서에 설명합니다. 기본 gold/run/initial 경로는 각각 `data/private/evaluation/gold`, `data/private/extraction-runs`, `data/private/evaluation/extractions`이며 `--gold-root`, `--run-root`, `--initial-root`로 지정할 수 있습니다. freeze/verify의 평가 보관 위치는 `--root`로 정합니다.
+선택 입력의 키·정책·annotation은 계약 문서에 설명합니다. 기본 gold/initial 경로는 `data/private/evaluation/gold`, `data/private/evaluation/extractions`입니다. run은 method=ai_auto이면 `data/private/extraction-runs`, rules이면 `data/private/rule-runs`입니다. `--gold-root`, `--run-root`, `--initial-root`로 지정할 수 있으며 명시한 경로가 우선합니다. freeze/verify의 평가 보관 위치는 `--root`로 정합니다.
 
 initial은 gold 동결 이후 시작한 실행만 받습니다. retest는 동일 cohort·정규화 지침·방법의 동결 initial을 참조하며 금표/정책 변경·노출 선언·점수 차이를 남깁니다. 새 실행은 initial 동결 이후 시작해야 하고, 금표 수정만 재채점할 때는 기존 실행을 유지할 수 있습니다. 재시험을 최초 성능·새 일반화 증거로 표시하지 않습니다.
 
 보관본은 `selection.json`, 비공개 `result.json`, gold 전체, 선택한 D05 전체, retest의 최초 평가 전체를 포함합니다. 파일0400·디렉터리0500으로 검증한 뒤 배타 설치하며 같은 ID의 다른 입력은 충돌입니다. 원래 경로가 없어도 재검증·같은 입력 재사용이 가능합니다. 최초 평가와 실패 원본을 덮어쓰지 않습니다. 상세 값·근거·검토자·원래 경로는 private 파일에만 두고 stdout에는 요약/상대 artifact 목록만 출력합니다. 성공0·입력2·보관본 손상/충돌3·I/O5·내부 오류1로 종료합니다.
 
-키·AI·네트워크·DB를 사용하지 않는 도구이며 실제40문서 성과를 측정하지 않았습니다. M02 수치는 real/문서 수/비노출 등의 선언과 확인용 정답 분모가 갖춰진 initial에서만 제공하며, 그 자체로 의미 정확성·신원·blind holdout을 인증하지 않습니다. 규칙 실행기는 아래와 같고 D08 규칙/사람 수정값 연결·실제 독립 금표/40건 평가는 후속 작업입니다.
+키·AI·네트워크·DB를 사용하지 않는 도구이며 실제40문서 성과를 측정하지 않았습니다. M02 수치는 ai_auto에서 real/문서 수/비노출 등의 선언과 확인용 정답 분모가 갖춰진 initial에만 제공하며, 그 자체로 의미 정확성·신원·blind holdout을 인증하지 않습니다. rules는 관측 점수를 유지하고 M02는 N/A입니다. 사람 수정값 연결·세 방법 비교·실제 독립 금표/40건 평가는 후속 작업입니다.
 
 ## 규칙 자동 기준선
 
@@ -155,7 +155,9 @@ python3.13 -m processing.extraction rules-verify RUN_UUID
 
 문서당 사건/일정1건의 약한 기준선이며 복수/미지원 날짜·시간은 미상으로 남깁니다. 원문에 없는 연도/주소/좌표를 채우지 않고 알려진 빈 예외와 미기재를 구별합니다. 출력8MiB 또는 대상/예외 각각256문장 초과는 실패 원본과 RULE_OUTPUT_LIMIT으로 보존합니다. stdout은 원문·경로 없는 receipt이며 성공0·실행 실패4·입력2·보관 손상/충돌3·I/O5·내부1입니다. 키·AI·네트워크·DB를 사용하지 않습니다.
 
-출력은 기존8필드 채점기에 직접 넣을 수 있지만 사건/생성 의미 판정 annotation이 필요합니다. D08 선택/최초·재시험 동결에 `method=rules`를 연결하는 어댑터와 사람 수정후 비교는 다음 단계입니다. 실제 지명 검토·독립 정답·40건 평가를 수행한 결과가 아닙니다. Windows와 전원 중단 내구성은 미검증이며 POSIX 권한은 WORM이 아닙니다.
+출력은 기존8필드 채점기와 D08 선택/최초·재시험 동결의 `method=rules`에 연결합니다. 사건/생성 의미 판정 annotation은 사람이 제공하며,1회 실행이므로 first/final annotation이 같아야 합니다. 선택한 모든 실행의 규칙/프로필 버전·SHA가 같아야 하고, policy에는 프로필 검토자·실행 전 고정 시각·development_only/holdout_feedback/unknown 선언을 남깁니다. initial은 development_only만 받으며 holdout_feedback 재시험은 의미 피드백·노출 표시가 필요합니다. 신원·실제 사전 고정의 진실성은 인증하지 않습니다.
+
+위 평가 CLI를 그대로 사용합니다. 보관본은6파일 규칙 원본·gold·initial 전체를 포함하며 원래 경로 없이 재검증합니다. 기존 AI 평가 형식/바이트도 유지합니다. 사람 수정후·세 방법 비교는 다음 단계입니다. 실제 지명 검토·독립 정답·40건 평가를 수행한 결과가 아닙니다. Windows와 전원 중단 내구성은 미검증이며 POSIX 권한은 WORM이 아닙니다.
 
 ## 검증·남은 작업
 

@@ -49,7 +49,7 @@ def main():
         else:
             command.add_argument('--input', required=True)
             command.add_argument('--gold-root', default=GOLD_ROOT)
-            command.add_argument('--run-root', default=EXTRACTION_ROOT)
+            command.add_argument('--run-root')
             command.add_argument('--initial-root', default=EVALUATION_ROOT)
     try:
         args = parser.parse_args()
