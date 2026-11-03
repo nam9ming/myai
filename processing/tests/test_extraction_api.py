@@ -143,6 +143,19 @@ class ApiTest(unittest.TestCase):
         result, calls = self.run_api([(200, limited, None, True), (200, response(), None, True)])
         self.assertEqual((calls, result['status']), (2, 'validated'))
 
+    def test_incomplete_text_is_preserved_in_response_without_validated_output(self):
+        packet = json.loads(response('{"schema_version":', status='incomplete',
+                                     incomplete_details=dict(reason='max_output_tokens')))
+        packet['output'][0]['status'] = 'incomplete'
+        raw = json.dumps(packet).encode()
+        result, calls = self.run_api([(200, raw, None, True)] * 3)
+        self.assertEqual((calls, result['status']), (3, 'failed'))
+        for number in range(1, 4):
+            self.assertEqual((self.root / RUN / f'attempt-{number}.response').read_bytes(), raw)
+            self.assertEqual((self.root / RUN / f'attempt-{number}.output').read_bytes(), b'')
+        self.assertEqual(result, verify_run(RUN, self.root))
+        self.assertEqual(freeze_run(RUN, self.root)['receipt'], result)
+
     def test_api_retryable_failure_cannot_be_finalized_before_policy_is_exhausted(self):
         self.run_api([(200, response('{}'), None, True)] * 3)
         folder = self.root / RUN
