@@ -1,6 +1,9 @@
 import copy
 import hashlib
 import json
+from pathlib import Path
+import subprocess
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -115,12 +118,35 @@ class RulesTest(unittest.TestCase):
 
     def test_open_date_ranges_do_not_invent_an_end_or_start_date(self):
         for body in ('공사 2026-11-07부터 추후 공지 시까지', '공사 2026-11-07~',
-                     '공사 2026-11-07 이후', '공사 2026-11-07까지', '공사 미정~2026-11-07'):
+                     '공사 2026-11-07 이후', '공사 2026-11-07까지', '공사 미정~2026-11-07',
+                     '공사 2026-11-07~2026-11-08까지~'):
             with self.subTest(body=body):
                 occurrence = self.run_rule(body)[0]['items'][0]['occurrences'][0]
                 self.assertIsNone(occurrence['date_start']['value'])
                 self.assertIsNone(occurrence['date_end']['value'])
                 self.assertEqual(occurrence['date_end']['knowledge'], 'ambiguous')
+
+    def test_open_clock_range_before_or_after_pair_is_ambiguous(self):
+        for body in ('공사 10:00~11:00~', '공사 10:00~11:00부터 미정', '공사 ~10:00~11:00',
+                     '공사 10:00~11:00까지~'):
+            with self.subTest(body=body):
+                occurrence = self.run_rule(body)[0]['items'][0]['occurrences'][0]
+                self.assertIsNone(occurrence['time_start']['value'])
+                self.assertIsNone(occurrence['time_end']['value'])
+                self.assertEqual(occurrence['time_end']['knowledge'], 'ambiguous')
+
+    def test_long_digit_run_completes_in_bounded_subprocess(self):
+        self.document['blocks'][0]['text'] = '공사 ' + '1' * (2 * 1024 * 1024)
+        script = ('import json,sys; from processing.extraction.rules import extract_rules; '
+                  'v=json.load(sys.stdin); raw,error=extract_rules(json.dumps(v[0]).encode(),json.dumps(v[1]).encode()); '
+                  'assert error is None; print(len(raw))')
+        try:
+            result = subprocess.run([sys.executable, '-c', script], input=encoded([self.document, self.profile]),
+                capture_output=True, timeout=5, cwd=Path(__file__).resolve().parents[2])
+        except subprocess.TimeoutExpired:
+            self.fail('Long digit run exceeded 5 seconds')
+        self.assertEqual(result.returncode, 0, result.stderr.decode())
+        self.assertGreater(int(result.stdout), 2 * 1024 * 1024)
 
     def test_real_utf8_output_limit_is_checked_without_invalidating_valid_input(self):
         self.document['blocks'][0]['text'] = '공사 ' + '😀' * ((8 * 1024 * 1024 - 900) // 4)

@@ -58,7 +58,7 @@ def _dates(body):
     matches = list(islice(DATE.finditer(body), 3))
     remaining = DATE.sub(' ', body)
     partial = re.search(r'[0-9]{1,2}\s*(?:월|일)|[0-9]{1,2}[./-][0-9]{1,2}', remaining)
-    if matches and re.match(r'\s*(?:~|～|〜|–|—|-|부터)', body[matches[-1].end():]):
+    if matches and re.match(r'\s*(?:까지\s*)?(?:~|～|〜|–|—|-|부터)', body[matches[-1].end():]):
         partial = True
     if len(matches) == 1 and (re.match(r'\s*(?:이후|이전|까지)', body[matches[0].end():])
                               or re.search(r'(?:~|～|〜|–|—|-|부터)\s*$', body[:matches[0].start()])):
@@ -83,10 +83,13 @@ def _dates(body):
 def _clocks(body, distinct_dates):
     matches = list(islice(CLOCK.finditer(body), 3))
     all_day = re.search(r'종일', body) is not None
-    clock_text = re.search(r'[0-9]+\s*(?:시|:)', body) is not None
+    clock_text = re.search(r'(?<![0-9])[0-9]+\s*(?:시|:)', body) is not None
     remainder = CLOCK.sub(' ', body)
-    unsupported = re.search(r'[0-9]+\s*(?:시|:)|오전|오후|(?<![A-Za-z])(?:AM|PM|A\.M\.|P\.M\.)(?![A-Za-z])',
+    unsupported = re.search(r'(?<![0-9])[0-9]+\s*(?:시|:)|오전|오후|(?<![A-Za-z])(?:AM|PM|A\.M\.|P\.M\.)(?![A-Za-z])',
                             remainder, re.IGNORECASE) is not None
+    if matches and (re.match(r'\s*(?:까지\s*)?(?:~|～|〜|–|—|-|부터)', body[matches[-1].end():])
+                    or re.search(r'(?:~|～|〜|–|—|-|부터)\s*$', body[:matches[0].start()])):
+        unsupported = True
     if all_day and not matches and not clock_text and not unsupported:
         return None, None, None, True, 'not_stated'
     unknown = 'ambiguous' if matches or clock_text or unsupported else 'not_stated'
