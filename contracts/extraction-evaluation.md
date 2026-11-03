@@ -63,13 +63,13 @@ method=rules는 rules-run-v1의 UUID 실행을 선택한다. snapshot_ref도 UUI
 
 규칙은1회 실행이므로 first_annotation과 final_annotation이 같아야 한다. first_raw/final_auto는 같은 실제 output.json을 채점한다. final_auto는 해당 방법의 자동 결과이며 규칙 실패도 정답 있는 분모에 남는다. 규칙 관측 점수는 전체/dev/holdout에 표시하고, AI 목표 M02에는 M02_REQUIRES_AI_AUTO 경고와 N/A를 반환한다. 사람 수정후 비교는 후속 작업이다.
 
-phase=initial은 initial_ref=null, gold 동결<실행 시작≤종료≤검토≤평가≤보관 시각과 실행 종료≤D05 기록≤평가를 검사하며 의미 정답 피드백 사용을 허용하지 않는다. retest는 같은 cohort 입력/manifest·정규화 지침·방법의 동결 initial을 참조한다. gold 자체 수정은 이전/새 버전과 점수 차이를 보존하며 최초 기록을 덮어쓰지 않는다. 모델/프롬프트 정책 변경은 허용하되 policy_changed로 보고한다. 새 run_id는 initial 동결 이후 시작해야 하며 금표 수정만 재채점할 때는 이전 run_id를 유지할 수 있다. retest를 initial_ref로 다시 참조할 수 없다. retest나 노출/불확실 자료는 새 일반화·blind holdout 증거가 아니다. review의 신원/노출 상태도 제공자의 선언이다.
+phase=initial은 initial_ref=null, gold 동결<실행 시작≤종료≤검토≤평가≤보관 시각과 실행 종료≤원본 기록≤평가를 검사하며 의미 정답 피드백 사용을 허용하지 않는다. retest는 같은 cohort 입력/manifest·정규화 지침·방법의 동결 initial을 참조한다. gold 자체 수정은 이전/새 버전과 점수 차이를 보존하며 최초 기록을 덮어쓰지 않는다. 모델/프롬프트 정책 변경은 허용하되 policy_changed로 보고한다. 새 run_id는 initial 동결 이후 시작해야 하며 금표 수정만 재채점할 때는 이전 run_id를 유지할 수 있다. retest를 initial_ref로 다시 참조할 수 없다. retest나 노출/불확실 자료는 새 일반화·blind holdout 증거가 아니다. review의 신원/노출 상태도 제공자의 선언이다.
 
 기존 run_id 재사용은 최초 평가가 선택한 receipt SHA와 정확히 같아야 한다. 같은 gold_ref의 다른 gold 원본은 거부하며 금표 수정에는 새 gold_version을 사용한다. 다른 저장 위치에서도 같은 ID를 다른 원본으로 바꿔 재시험 이력을 우회할 수 없다.
 
 키·AI·네트워크·DB를 호출하지 않는다. JSON8MiB·깊이100·중복 키/추가 키/잘못된 Unicode 금지. 선택·결과·독립 gold/입력·선택한 D05 전체 또는 규칙6파일·실패 원본과 retest의 initial을 별도0400/0500 묶음으로 보관한다. 같은 extraction_eval_id의 다른 원본을 덮어쓰지 않는다. stdout은 요약 JSON, 상세 정답/출력/근거·검토자·프로필 내용·경로는 private 파일에만 둔다. main 병합·배포·사람 수정값 연결·실제 평가 수행은 별도다.
 
-평가 ID의 UTF-8 SHA-256을 evaluation_ref로 사용한다. 기본 저장소는 `data/private/evaluation/extractions`이며 각 묶음에 selection.json(입력 바이트 그대로)·result.json(상세 채점)·identity.json·receipt.json과 `gold/GOLD_REF/`, `runs/SNAPSHOT_REF/`, retest의 `initial/INITIAL_REF/`를 둔다. 하위 묶음의 identity/receipt·실패/부분 응답도 모두 보존한다. root identity의 artifact hash, 정확한 파일/디렉터리 집합·권한, 각 gold/D05/initial 원본, 저장한 evaluated_at을 사용한 재채점 결과를 검사한다. 원래 경로 없이 검사하며 같은 입력 재사용은 원래 시각·바이트를 유지한다. 검증한 staging을 기존 배타 rename으로 설치한다. 관리자에 의한 전체 묶음 교체·삭제를 막는 WORM이나 전원 중단 내구성을 보장하지 않는다.
+평가 ID의 UTF-8 SHA-256을 evaluation_ref로 사용한다. 기본 저장소는 `data/private/evaluation/extractions`이며 각 묶음에 selection.json(입력 바이트 그대로)·result.json(상세 채점)·identity.json·receipt.json과 `gold/GOLD_REF/`, `runs/SNAPSHOT_REF/`, retest의 `initial/INITIAL_REF/`를 둔다. 하위 묶음의 identity/receipt·실패/부분 응답도 모두 보존한다. root identity의 artifact hash, 정확한 파일/디렉터리 집합·권한, 각 gold/선택 실행/initial 원본, 저장한 evaluated_at을 사용한 재채점 결과를 검사한다. 원래 경로 없이 검사하며 같은 입력 재사용은 원래 시각·바이트를 유지한다. 검증한 staging을 기존 배타 rename으로 설치한다. 관리자에 의한 전체 묶음 교체·삭제를 막는 WORM이나 전원 중단 내구성을 보장하지 않는다.
 
 평가 명령의 기본 run root는 ai_auto이면 `data/private/extraction-runs`, rules이면 `data/private/rule-runs`다. 명시한 `--run-root`가 우선하며 verify는 보관한 runs 경로를 사용한다. check-bindings의 D05 전용 기본 경로는 그대로다. 기존 AI 선택·결과·동결본 형식과 재계산 바이트를 유지한다.
 

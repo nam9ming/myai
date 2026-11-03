@@ -54,5 +54,5 @@
 
 ## Final integration
 
-- [ ] Whole-branch self-review, one fresh independent review; valid findings reproduced/fixed and whole regression green, unresolved0 before PR to develop.
+- [x] Whole-branch self-review, one fresh independent review; valid findings reproduced/fixed and whole regression green, unresolved0 before PR to develop.
 - [ ] Exact-head CI/AI/arriving human review loop until valid unresolved0; authorized develop merge, integration verification, evidence/limitations report, next full-goal stage.
