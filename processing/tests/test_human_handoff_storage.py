@@ -61,6 +61,21 @@ class HumanHandoffStorageTest(HumanHandoffFixture):
         self.assertEqual(storage.verify_handoff(receipt['handoff_ref'], self.handoff_root), receipt)
         self.assertEqual(self.snapshot(self.handoff_root), before)
 
+    def test_noncanonical_identity_whitespace_and_key_order_are_integrity_errors(self):
+        receipt = self.freeze(); ref = receipt['handoff_ref']; original = self.handoff_root / ref
+        for case in ('whitespace', 'key-order'):
+            root = self.work / ('identity-' + case); image = root / ref; shutil.copytree(original, image)
+            target = image / 'identity.json'; raw = target.read_bytes()
+            if case == 'whitespace': changed = raw + b' '
+            else:
+                value = json.loads(raw)
+                changed = (json.dumps(dict(reversed(list(value.items()))), ensure_ascii=False, separators=(',', ':')) + '\n').encode()
+            self.assertNotEqual(changed, raw)
+            target.chmod(0o600); target.write_bytes(changed); target.chmod(0o400)
+            with self.subTest(case=case):
+                with self.assertRaises(ExtractionError) as caught: storage.verify_handoff(ref, root)
+                self.assertEqual((caught.exception.kind, caught.exception.code), ('archive', 'HANDOFF_INTEGRITY'))
+
     def test_native_same_and_conflicting_requests_install_exclusively(self):
         one = self.write_request(name='one.json'); changed = copy.deepcopy(self.request); changed['area_id'] = uid(990)
         two = self.write_request(changed, 'two.json')

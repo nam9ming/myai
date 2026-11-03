@@ -190,3 +190,12 @@ class HumanHandoffTest(HumanHandoffFixture):
         with patch.object(draft, 'MAX_BYTES', 1):
             with self.assertRaises(ExtractionError) as caught: self.project()
         self.assertEqual(caught.exception.code, 'DRAFT_OUTPUT_TOO_LARGE')
+
+    def test_supplied_d03_full_text_remains_pending_backend_validation(self):
+        value = copy.deepcopy(self.request); doc = value['source']['documents'][0]
+        doc['cleaned_text'] += '\n공급 D03의 별도 본문 문장'
+        doc['text_sha256'] = hashlib.sha256(doc['cleaned_text'].encode()).hexdigest()
+        packet = self.project(value)
+        self.assertEqual(packet['projection']['documents'][0], doc)
+        self.assertFalse(packet['summary']['backend_import_supported'])
+        self.assertEqual(packet['summary']['status'], 'projection_only')

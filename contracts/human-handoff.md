@@ -16,7 +16,7 @@ human-handoff-v1은 아래8개 키만 받는다. source에는 D03 문서1개·�
 | area_id / split_group_id | 명시한 UUID; 지역을 확정했다는 뜻은 아님 |
 | dictionary_version | 100자 이하, 제어문자 없는 명시 버전 |
 
-review 이미지와 내부 D05 전체를 재검증하고 실제 receipt hash를 대조한다. source의 data_kind·문서 버전·제목·게시일·전체 블록·전처리와 cleaned_text/hash가 부모 입력과 같아야 한다. 부모는 api/manual_import·validated/failed의 실제 상태를 보존한다. 실패를 성공 D05로 다시 등록하지 않는다. projected_at은 review frozen_at 이후여야 한다.
+review 이미지와 내부 D05 전체를 재검증하고 실제 receipt hash를 대조한다. source의 data_kind·문서 버전·제목·게시일·전체 블록은 부모 입력, 전처리는 부모 metadata와 같아야 한다. 제공한 cleaned_text는 자체 text_sha256과 부모 블록 포함 여부를 검사한다. 등록 D03의 전체 본문/hash 연결은 다음 Java 단계에서 대조한다. 부모는 api/manual_import·validated/failed의 실제 상태를 보존한다. 실패를 성공 D05로 다시 등록하지 않는다. projected_at은 review frozen_at 이후여야 한다.
 
 D03의 원문 asset 파일은 이 이미지에 포함하지 않는다. raw_asset_path/hash 등 metadata는 source에 보존하며 원문 파일·이용권한·전체 D03 검증은 별도 source-root를 사용하는 Java 연결 단계가 맡는다. 투영 성공을 DB 저장 가능 판정으로 사용하지 않는다.
 

@@ -32,9 +32,10 @@ def _verify_directory(directory, reference):
     try:
         _check(_sealed(directory, 0o500, stat.S_ISDIR))
         _check(all(_sealed(directory / name, 0o400, stat.S_ISREG) for name in ('identity.json', 'receipt.json')))
-        identity = decode(_read(directory / 'identity.json'), 'archive')
+        identity_bytes = _read(directory / 'identity.json'); identity = decode(identity_bytes, 'archive')
         shape(identity, 'format_version handoff_ref artifacts recorded_at', kind='archive')
         _check(identity['format_version'] == FORMAT and identity['handoff_ref'] == reference)
+        _check(_json(identity) == identity_bytes)
         artifacts = identity['artifacts']
         _check(type(artifacts) is dict and {'selection.json', 'projection.json'} <= set(artifacts))
         _tree(directory, artifacts)
@@ -49,7 +50,7 @@ def _verify_directory(directory, reference):
             'selection.json': artifacts['selection.json'], 'projection.json': artifacts['projection.json']})
         expected = _receipt(identity, packet['summary'])
         _check(_read(directory / 'receipt.json') == _json(expected))
-    except (ExtractionError, FileNotFoundError, NotADirectoryError):
+    except (ExtractionError, FileNotFoundError, NotADirectoryError, TypeError):
         raise ExtractionError('HANDOFF_INTEGRITY', kind='archive') from None
     return expected
 

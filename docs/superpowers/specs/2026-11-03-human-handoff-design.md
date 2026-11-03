@@ -10,7 +10,7 @@ TASK의 사람 수정본→공통 D06 인계를 두 검증 가능한 단계로 �
 
 ## 선택과 투영
 
-입력 human-handoff-v1은 schema_version, handoff_id(UUID), review_ref, review_receipt_sha256, source(source-import-v1 객체), area_id, split_group_id, dictionary_version만 받는다. 정확한 frozen review receipt/전체 이미지·실제 부모 D05를 재검증한다. source의 data_kind/문서버전/제목/게시일/블록·전처리와 cleaned_text hash는 부모 입력과 같아야 한다. D03 원문 파일·이용권한 등 전체 백엔드 검증은 다음 연결 단계가 맡는다.
+입력 human-handoff-v1은 schema_version, handoff_id(UUID), review_ref, review_receipt_sha256, source(source-import-v1 객체), area_id, split_group_id, dictionary_version만 받는다. 정확한 frozen review receipt/전체 이미지·실제 부모 D05를 재검증한다. source의 data_kind/문서버전/제목/게시일/블록은 부모 입력, 전처리는 부모 metadata와 같아야 한다. 제공한 cleaned_text는 자체 text_sha256과 부모 블록 포함 여부를 검사한다. 등록 D03의 전체 본문/hash·원문 파일·이용권한 등 전체 백엔드 연결 검증은 다음 단계가 맡는다.
 
 부모가 api/manual_import·validated/failed인 실제 상태를 그대로 보존한다. 사람 수정 output.json으로 기존 D06 시간/장소/근거·UUID5 규칙을 적용하고 원출력은 바꾸지 않는다. 정상·부분 미상·중복·빈 사건·반복/명시 초·장소 대응 미상도 보존한다. event/location/occurrence/evidence UUID는 부모 run namespace를 유지한다.
 
