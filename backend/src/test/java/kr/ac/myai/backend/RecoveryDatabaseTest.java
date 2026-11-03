@@ -7,7 +7,9 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -39,6 +41,13 @@ class RecoveryDatabaseTest {
                 for (var file : credentials)
                     assertThat(Files.getPosixFilePermissions(file)).isEqualTo(PosixFilePermissions.fromString("rw-------"));
             }
+            Path dataBefore = root.resolve("data-before.sql");
+            source.dumpData(dataBefore);
+            byte[] data = Files.readAllBytes(dataBefore);
+            assertThat(Files.readString(dataBefore)).contains("INSERT INTO `recovery_probe`").doesNotContain("CREATE TABLE", source.password(), target.password());
+            assertThat(Files.getPosixFilePermissions(dataBefore)).isEqualTo(PosixFilePermissions.fromString("rw-------"));
+            assertThatThrownBy(() -> source.dumpData(dataBefore)).isInstanceOf(IllegalArgumentException.class);
+            assertThat(Files.readAllBytes(dataBefore)).isEqualTo(data);
             source.dump(dump);
             assertThat(Files.getPosixFilePermissions(dump)).isEqualTo(PosixFilePermissions.fromString("rw-------"));
             assertThat(Files.readString(dump)).doesNotContain(source.password(), target.password());
@@ -46,6 +55,14 @@ class RecoveryDatabaseTest {
             assertThatThrownBy(() -> source.dump(dump)).isInstanceOf(IllegalArgumentException.class);
             assertThat(Files.readAllBytes(dump)).isEqualTo(original);
             target.restore(dump);
+            Path dataAfter = root.resolve("data-after.sql");
+            target.dumpData(dataAfter);
+            assertThat(Files.readAllBytes(dataAfter)).isEqualTo(data);
+            assertThat(Files.getPosixFilePermissions(dataAfter)).isEqualTo(PosixFilePermissions.fromString("rw-------"));
+            assertThatThrownBy(() -> target.dumpData(dataAfter)).isInstanceOf(IllegalArgumentException.class);
+            assertThat(Files.readAllBytes(dataAfter)).isEqualTo(data);
+            System.out.println("recovery data-before SHA-256=" + HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(data)));
+            System.out.println("recovery data-after SHA-256=" + HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(dataAfter))));
             assertThat(target.jdbc().queryForList("SELECT * FROM recovery_probe ORDER BY id")).isEqualTo(before);
             assertThatThrownBy(() -> target.restore(dump)).isInstanceOf(IllegalStateException.class).hasMessageContaining("empty");
             assertThat(target.jdbc().queryForList("SELECT * FROM recovery_probe ORDER BY id")).isEqualTo(before);
@@ -83,10 +100,12 @@ class RecoveryDatabaseTest {
             docker("rename", target.id(), "myai-recovery-renamed-" + UUID.randomUUID());
             try {
                 assertThatThrownBy(() -> target.dump(root.resolve("refused.sql"))).isInstanceOf(IllegalStateException.class).hasMessageContaining("ownership");
+                assertThatThrownBy(() -> target.dumpData(root.resolve("refused-data.sql"))).isInstanceOf(IllegalStateException.class).hasMessageContaining("ownership");
                 assertThatThrownBy(() -> target.restore(dump)).isInstanceOf(IllegalStateException.class).hasMessageContaining("ownership");
                 assertThatThrownBy(target::close).isInstanceOf(IllegalStateException.class).hasMessageContaining("ownership");
                 assertThat(docker("container", "ls", "--all", "--no-trunc", "--filter", "id=" + target.id(), "--format", "{{.ID}}")).isEqualTo(target.id());
                 assertThat(root.resolve("refused.sql")).doesNotExist();
+                assertThat(root.resolve("refused-data.sql")).doesNotExist();
             } finally {
                 docker("rename", target.id(), original);
             }

@@ -10,6 +10,8 @@ D03 선등록·D05 archive 검증/등록·D06 실행 참조는 [연결 안내](d
 
 담당: 강명묵 · 기술 결정: Spring Boot·MySQL · 첫 결과: **11/3(화) 오후6시(KST)** · 연구실 시연: **11/4(수), 시각미정**
 
+B08의 환경·기동/정지·DB와 선택 원본 백업·새 빈 DB/같은 실제 경로 복원은 [인계 안내](docs/backup-recovery.md)를 따른다. 독립 Docker/MySQL·표준 tar 합성 시험의 실행 결과는 관련 PR 검증 기록으로 확인하며, 복원 DB에 기존 전체 DB 시험을 실행하지 않는다. 실제 운영 정책·백업 접근/보존·서버 경로·계정/grants·PITR·실자료/40문서/D09·main 병합/배포는 별도 후속 작업이다.
+
 - Java21·Spring Boot3.5.x·Gradle Wrapper 프로젝트와 MySQL8.4 LTS 연결을 구성합니다. 실제 패치/Wrapper 버전을 고정합니다.
 - GET `/api/v1/config`, POST `/api/v1/matches`, GET `/api/v1/events/{id}`를 공통 계약대로 구현합니다. 예제 응답으로 Flutter와 첫 연결을 진행합니다.
 - [DB 설계](../docs/spec/09_DB설계와트랜잭션.md)의 문서·추출·검토 revision·snapshot을 분리하고 Flyway 마이그레이션을 작성합니다.

@@ -93,7 +93,10 @@ final class RecoveryDatabase implements AutoCloseable {
         throw new IllegalStateException("Recovery database readiness timed out");
     }
 
-    void dump(Path newFile) {
+    void dump(Path newFile) { dump(newFile, false); }
+    void dumpData(Path newFile) { dump(newFile, true); }
+
+    private void dump(Path newFile, boolean dataOnly) {
         verifyOwner();
         Path target = newFile.toAbsolutePath().normalize();
         privateDirectory(target.getParent());
@@ -102,7 +105,7 @@ final class RecoveryDatabase implements AutoCloseable {
             Path partial = privateFile(target.getParent(), ".recovery-dump-", ".partial");
             command(List.of("docker", "exec", id, "sh", "-c", "MYSQL_PWD=\"$MYSQL_ROOT_PASSWORD\" exec mysqldump --user=root"
                     + " --single-transaction --no-tablespaces --set-gtid-purged=OFF --hex-blob --default-character-set=utf8mb4"
-                    + " --skip-comments --skip-dump-date --order-by-primary " + SCHEMA), null, partial, Duration.ofMinutes(2));
+                    + " --skip-comments --skip-dump-date --order-by-primary" + (dataOnly ? " --no-create-info --skip-triggers " : " ") + SCHEMA), null, partial, Duration.ofMinutes(2));
             // 같은 디렉터리 hard link는 기존 파일을 덮지 않고 완성본 이름을 원자적으로 만든다.
             Files.createLink(target, partial);
             Files.delete(partial);

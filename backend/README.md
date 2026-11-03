@@ -74,6 +74,8 @@ read -rs DB_PASSWORD; export DB_PASSWORD; echo
 
 스키마 생성은 Flyway만 담당하고 JPA는 `ddl-auto=validate`를 사용한다. canonical JSON은 LONGTEXT 원문과 별도 checksum으로 보존한다. ID/hash는 ASCII 대소문자를 구분한다. JDBC session·Hibernate는 UTC를 사용하고 격리 수준은 REPEATABLE READ로 설정한다. 적용된 V1·V2·V3·V4를 수정하지 말고 변경 사항은 후속 migration으로 추가한다. 개발 DB는 `docker compose stop`으로 종료하며 볼륨을 삭제하지 않는다.
 
+B08의 DB·선택 원본 백업과 새 빈 전용 DB 복원·기동 인계는 [백업·복원 안내](docs/backup-recovery.md)를 따른다. 공개 포인터 rollback과 구별하며, 기존 전체 DB 시험은 자료를 삭제하므로 복원 DB에 실행하지 않는다. 안내의 독립 Recovery 시험과 실제 운영 복구·배포를 구별한다.
+
 ## Python 계산 연결
 
 Python3.13과 같은 배포 버전의 `processing/` 소스가 필요하다. JAR에 Python을 포함하지 않으므로 서버에도 소스를 배치한다. DB 환경변수를 설정한 터미널에서 **저장소 루트 기준**으로 실행한다.
