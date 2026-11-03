@@ -32,15 +32,15 @@
 
 shared fixture API: test_study_protocol.py `StudyProtocolFixture(unittest.TestCase)`는 self.work(OS임시 root), self.protocol(12키), self.protocol_bytes(), self.prepare(protocol=None,at=STUDY_AT) 제공. `STUDY_AT='2026-11-04T03:00:00Z'`. snapshot.created_at=2026-11-02T23:00:00Z, declared_frozen_at=2026-11-03T00:00:00Z, pilot/confirmed그이전, retention_deadline=2026-12-31, source 체크=2026-11-03T00:30:00Z, 참가 동의=00:45Z, task times=01:00Z 이후로 고정해 실제현재CLI에도 미래 기록이 되지 않게 한다. 원래 source/doc/event/동의/참여는 synthetic뿐이며 실제 사실이라 주장하지 않는다. snapshot은 기존 CalculationFixtures/공개 producer 구조에서 최소 합성27키 구성, 실제 rawbytesSHA 사용한다.
 
-- [ ] **RED:** 새API부재 + 정확키/타입/UUID/버전·기한KST경계/나노초·파일럿선언·자료누락/중복/같은doc여러versions·기대사건/과제3종·hash변경/탈출/ancestor symlink/상대root alias 시험. `python3.13 -B -m unittest discover -s processing/tests -p test_study_protocol.py -v`, 의도한 실패 관찰.
-- [ ] **GREEN:** 기존 JSON/label/UUID/stamp+instant_ns/archive root/fingerprint/read_checked 재사용, protocol 원형불변·검사한 bytesSHA 유지·필수 시간/정책 없음은 거부. snapshot선택identity/집합만 확인하고 공개gate를복제하지 않는다.
-- [ ] **Verify:** 자신의 전체 모듈과 기존 extraction_validation/dataset 관련 경계. SHA·RED/GREEN/count 보고, 부모가 소유파일 커밋 `feat: validate user study protocols`.
+- [x] **RED:** 새API부재 + 정확키/타입/UUID/버전·기한KST경계/나노초·파일럿선언·자료누락/중복/같은doc여러versions·기대사건/과제3종·hash변경/탈출/ancestor symlink/상대root alias 시험. `python3.13 -B -m unittest discover -s processing/tests -p test_study_protocol.py -v`, 의도한 실패 관찰.
+- [x] **GREEN:** 기존 JSON/label/UUID/stamp+instant_ns/archive root/fingerprint/read_checked 재사용, protocol 원형불변·검사한 bytesSHA 유지·필수 시간/정책 없음은 거부. snapshot선택identity/집합만 확인하고 공개gate를복제하지 않는다.
+- [x] **Verify:** 자신의 전체 모듈과 기존 extraction_validation/dataset 관련 경계. SHA·RED/GREEN/count 보고, 부모가 소유파일 커밋 `feat: validate user study protocols`.
 
 ### Task 2: D09 기록·전체 분모·M05 분석
 
 **Owner:** study worker. Files: processing/evaluation/study.py(신규), processing/tests/test_user_study.py(신규 fixture 포함). Task1/root파일 수정 금지.
 
-**Interfaces:** `evaluate_study(content:bytes, protocol:prepared)->dict`는 `{result,summary}` 반환. result top keys는 spec의13개(privacy/versions 포함)이며 Decimal rawrecord를 포함할 경우 `_json`에 전달하지 않도록 상세 결과를 원형 bytes와 구별한다. 상세 participants에는 명시 schema로 원기록의 문자열/정수/nullable/리스트와 계산된 `elapsed_ns`를 보존하고 elapsed_seconds의 원래 Decimal은 원입력 bytesSHA/정확한 ns로 보존(숫자근사 금지). session.instruction_seconds→instruction_ns, record.elapsed_seconds→elapsed_ns, task.expected_event_ids 추가; participant.analysis와 summary 공용 키는 spec 그대로. 반환 JSON은 일반 str/int/bool/list/dict/null 및 파생 finite float만. `summary.protocol_version='user-study-summary-v1'`. 표적값은 독립 합성 리터럴이다.
+**Interfaces:** `evaluate_study(content:bytes, protocol:prepared)->dict`는 `{result,summary,records_content}` 반환. records_content는 원래 bytes의 메모리 전용 sidecar이며 저장/공개하지 않는다. result top keys는 spec의13개(privacy/versions 포함)이며 Decimal rawrecord를 포함할 경우 `_json`에 전달하지 않도록 상세 결과를 원형 bytes와 구별한다. 상세 participants에는 명시 schema로 원기록의 문자열/정수/nullable/리스트와 계산된 `elapsed_ns`를 보존하고 elapsed_seconds의 원래 Decimal은 원입력 bytesSHA/정확한 ns로 보존(숫자근사 금지). session.instruction_seconds→instruction_ns, record.elapsed_seconds→elapsed_ns, task.expected_event_ids 추가; participant.analysis와 summary 공용 키는 spec 그대로. 반환 JSON은 일반 str/int/bool/list/dict/null 및 파생 finite float만. `summary.protocol_version='user-study-summary-v1'`. 표적값은 독립 합성 리터럴이다.
 
 공유시험 fixture `UserStudyFixture(StudyProtocolFixture)`는 self.records(7키), `write_records(value=None)->Path`, `study(value=None, protocol=None, at=STUDY_AT)->packet`, self.protocol_path/self.records_path를 제공한다. `self.protocol`/work를 덮어쓰지 않는다. 실제stdout clock에 맞게 synthetic 날짜는 현재보다과거이며 retention은명시미래로. 부모export/CLI가 이fixture 사용.
 
