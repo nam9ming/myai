@@ -1,1 +1,1 @@
-org.springframework.context.ApplicationContextInitializer=kr.ac.myai.backend.config.LocalExportStartupGuard,kr.ac.myai.backend.config.LocalExtractionStartupGuard
+org.springframework.context.ApplicationContextInitializer=kr.ac.myai.backend.config.LocalImportStartupGuard,kr.ac.myai.backend.config.LocalExportStartupGuard,kr.ac.myai.backend.config.LocalExtractionStartupGuard

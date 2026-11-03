@@ -74,7 +74,7 @@ stdout은 ID·상태·hash·고정 상대 파일명·안전한 오류 코드/필
 | 5 | 파일 I/O 실패 |
 | 1 | 내부 오류 |
 
-Java `local-extraction`은 [D03/D05 연결 안내](../backend/docs/extraction-run-import.md)에 따라 검증된 archive의 성공/실패·nullable metadata 원본을 등록한다. 같은 전체 D03 입력·전처리 버전이 필요하며 원본 경로를 유지한다. 검증 정보가 없는 legacy와 failed는 D06 AI origin으로 사용할 수 없다. import·승인·미리보기·공개 때 archive 원본과 DB 등록 기록을 다시 대조하며 Python 검증 중 DB 트랜잭션을 유지하지 않는다. D06 숨김 초안 변환·저장·사람 검토 다음 revision 연결은 [초안 안내](../backend/docs/ai-review-draft.md)를 따른다. 개발용 실제3건은 v2 기계 검증과 시험 DB의 D05 등록·비공개 미배정 초안 파일 생성을 확인했다. 실자료 D06 저장·사람 검토·40건 평가·공개 승인·운영 배포는 후속 작업이다.
+Java `local-extraction`은 [D03/D05 연결 안내](../backend/docs/extraction-run-import.md)에 따라 검증된 archive의 성공/실패·nullable metadata 원본을 등록한다. 같은 전체 D03 입력·전처리 버전이 필요하며 원본 경로를 유지한다. 일반 D06 AI 경로는 검증 정보가 없는 legacy와 failed를 거부한다. failed는 별도 [사람 수정본 인계](../backend/docs/human-handoff-import.md)의 전체 증거·사건 연결을 검증한 경우만 제한적으로 허용하며 실제 상태는 바꾸지 않는다. import·승인·미리보기·공개 때 archive 원본과 DB 등록 기록을 다시 대조하며 Python 검증 중 DB 트랜잭션을 유지하지 않는다. D06 숨김 초안 변환·저장·사람 검토 다음 revision 연결은 [초안 안내](../backend/docs/ai-review-draft.md)를 따른다. 개발용 실제3건은 v2 기계 검증과 시험 DB의 D05 등록·비공개 미배정 초안 파일 생성을 확인했다. 실자료 D06 저장·사람 검토·40건 평가·공개 승인·운영 배포는 후속 작업이다.
 
 ## Java의 초안 전체 대조
 

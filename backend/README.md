@@ -1,4 +1,4 @@
-# 백엔드 기초
+# 백엔드 실행·데이터 관리
 
 Java 21 / Spring Boot **3.5.16** / Gradle Wrapper **8.14.3** / MySQL **8.4.13**.
 `cwmp`, `debate-bff`의 Gradle·controller/service/DTO 분리·생성자 주입·예외 처리·CORS 패턴을 참고했다.
@@ -17,6 +17,7 @@ Java 21 / Spring Boot **3.5.16** / Gradle Wrapper **8.14.3** / MySQL **8.4.13**.
 - `local-publication` 일회성 명령은 승인·반려 revision, 읽기 전용 공개 JSON 미리보기, 불변 snapshot 공개·복구를 처리한다. V2 `publication_audits`에 공개 포인터 변경 이력을 남기며 충돌·실패 시 이전 공개본을 보존한다.
 - `local-export`는 이미 공개한 snapshot을 고정 UTF-8/hash 그대로 파일로 내보낸다. 파일 실패는 DB 공개 성공과 분리하고 동일 파일 재실행·충돌 보존을 지원한다. [내보내기 안내](docs/review-publication.md#snapshot-json-내보내기)를 따른다.
 - Python `draft`가 만든 `ai-draft-import-v1`을 숨김 저장한다. 미상 제목·유형을 채우지 않고 직접 승인을 차단하며, 사람 검토 다음 revision은 검토자·시각·기존 AI 출처를 유지해야 한다. [초안 연결 안내](docs/ai-review-draft.md)를 따른다.
+- `human-handoff-import-v1`은 동결한 사람 수정 이미지를 비공개 D06에 연결한다. 전체 출처·실패 부모·과거 수정 기록을 보존하고 기존 사람 보정과 충돌하면 중단한다. [사람 수정본 인계](docs/human-handoff-import.md)를 따른다.
 
 `source-import-v1`은 local-import에서 D03만 먼저 등록한다. `local-extraction`은 Python archive를 검증해 D05 성공/실패·nullable 모델·정밀 metadata/receipt 원본을 불변 등록한다. [D03/D05 연결 안내](docs/extraction-run-import.md)를 따른다. V3는 기존 행을 보존하며 검증 정보 없는 legacy를 D06 origin으로 승격하지 않는다.
 

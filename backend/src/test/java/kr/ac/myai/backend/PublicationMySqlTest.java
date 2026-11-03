@@ -289,13 +289,11 @@ class PublicationMySqlTest {
         }
         var unimported = fresh();
         Path importFile = Files.writeString(root.resolve("import.json"), unimported.toString());
-        try (var context = new SpringApplicationBuilder(MyaiBackendApplication.class).profiles("local-import", "local-publication")
+        assertThatThrownBy(() -> new SpringApplicationBuilder(MyaiBackendApplication.class).profiles("local-import", "local-publication")
                 .run("--myai.import.file=" + importFile, "--myai.import.source-root=" + root, "--myai.import.actor=synthetic-importer",
-                        "--myai.publication.file=" + file, "--myai.publication.source-root=" + root, "--myai.publication.actor=synthetic-approver")) {
-            assertThat(context.getBean(LocalImportCommand.class).getExitCode()).isEqualTo(2);
-            assertThat(context.getBean(LocalPublicationCommand.class).getExitCode()).isEqualTo(2);
-            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM events WHERE event_id = ?", Long.class, unimported.path("events").get(0).path("event_id").asText())).isZero();
-        }
+                        "--myai.publication.file=" + file, "--myai.publication.source-root=" + root, "--myai.publication.actor=synthetic-approver"))
+                .isInstanceOf(kr.ac.myai.backend.config.LocalImportStartupGuard.ModeException.class);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM events WHERE event_id = ?", Long.class, unimported.path("events").get(0).path("event_id").asText())).isZero();
     }
 
     @Test
@@ -382,10 +380,14 @@ class PublicationMySqlTest {
         Path importFile = Files.writeString(root.resolve("import.json"), input.toString());
         Path publicationFile = Files.writeString(root.resolve("decision.json"), decision.toString());
         var before = exportDatabaseState(); Path directory = Files.createDirectory(root.resolve("exports"));
-        try (var context = new SpringApplicationBuilder(MyaiBackendApplication.class).profiles("local-export", profile).run(
+        var application = new SpringApplicationBuilder(MyaiBackendApplication.class).profiles("local-export", profile);
+        String[] arguments = {
                 "--myai.export.snapshot-id=" + UUID.randomUUID(), "--myai.export.directory=" + directory,
                 "--myai.import.file=" + importFile, "--myai.import.source-root=" + root, "--myai.import.actor=synthetic-importer",
-                "--myai.publication.file=" + publicationFile, "--myai.publication.source-root=" + root, "--myai.publication.actor=synthetic-reviewer")) {
+                "--myai.publication.file=" + publicationFile, "--myai.publication.source-root=" + root, "--myai.publication.actor=synthetic-reviewer"};
+        if (profile.equals("local-import")) {
+            assertThatThrownBy(() -> application.run(arguments)).isInstanceOf(kr.ac.myai.backend.config.LocalImportStartupGuard.ModeException.class);
+        } else try (var context = application.run(arguments)) {
             assertThat(context).isNotInstanceOf(WebApplicationContext.class);
             assertThat(context.getBean(LocalSnapshotExportCommand.class).getExitCode()).isEqualTo(2);
             int writerExit = profile.equals("local-import") ? context.getBean(LocalImportCommand.class).getExitCode() : context.getBean(LocalPublicationCommand.class).getExitCode();

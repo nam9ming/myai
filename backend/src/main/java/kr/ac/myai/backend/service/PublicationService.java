@@ -77,7 +77,7 @@ public class PublicationService {
         boolean approve = command.action().equals("approve");
         boolean rawDraft = payload.path("revision").path("origin").asText().equals("ai_draft");
         content.check(!approve || !rawDraft, "origin");
-        content.check(!command.evidenceIds().isEmpty() || !approve && rawDraft, "evidence_ids");
+        content.check(!command.evidenceIds().isEmpty() || !approve && (rawDraft || payload.has("human_handoffs")), "evidence_ids");
         conflict(!original.status().equals(approve ? "approved" : "rejected"), "review_status");
         var documents = approve ? documents(payload) : List.<PublicationRepository.Document>of();
         ObjectNode updated = payload.deepCopy(); var revision = (ObjectNode) updated.path("revision");

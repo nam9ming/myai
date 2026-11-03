@@ -3,6 +3,7 @@ package kr.ac.myai.backend.repository;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import kr.ac.myai.backend.extraction.ExtractionException;
 import kr.ac.myai.backend.extraction.VerifiedExtraction;
+import kr.ac.myai.backend.handoff.VerifiedHandoff;
 import kr.ac.myai.backend.importing.ReviewedImportReader;
 import kr.ac.myai.backend.service.ExtractionImportService.Result;
 import org.springframework.context.annotation.Profile;
@@ -54,7 +55,11 @@ public class ExtractionRunRepository {
         require(row.get("attempts") instanceof Number count && count.intValue() == run.attempts());
     }
 
-    public record Reference(String runId, String documentVersionId, String rowSha256) { }
+    public record Reference(String runId, String documentVersionId, String rowSha256, String documentRowSha256) {
+        public Reference(String runId, String documentVersionId, String rowSha256) {
+            this(runId, documentVersionId, rowSha256, null);
+        }
+    }
 
     public String referenceDirectory(String id) {
         var paths = jdbc.query("SELECT raw_ref FROM extraction_runs WHERE run_id=? AND status='validated' AND schema_version='extract-schema-v1' AND metadata_sha256 IS NOT NULL AND receipt_sha256 IS NOT NULL",
@@ -70,9 +75,47 @@ public class ExtractionRunRepository {
         return new Reference(run.runId(), run.documentVersionId(), rowHash(rows.getFirst()));
     }
 
+    public String handoffParentDirectory(String id, VerifiedHandoff handoff) {
+        require(id.equals(handoff.projection().path("parent").path("run_id").asText()));
+        var paths = jdbc.query("SELECT raw_ref FROM extraction_runs WHERE run_id=? AND status IN ('validated','failed') AND schema_version='extract-schema-v1' AND metadata_sha256 IS NOT NULL AND receipt_sha256 IS NOT NULL",
+                (row, index) -> row.getString(1), id);
+        require(paths.size() == 1 && paths.getFirst() != null);
+        return paths.getFirst();
+    }
+
+    public Reference verifiedHandoffParent(VerifiedExtraction run, VerifiedHandoff handoff) {
+        var projection = handoff.projection();
+        var parent = projection.path("parent");
+        require(run.runId().equals(parent.path("run_id").asText()) && run.status().equals(parent.path("status").asText())
+                && run.nullable("execution_mode").equals(parent.path("execution_mode").asText())
+                && run.receiptSha256().equals(parent.path("receipt_sha256").asText())
+                && run.dataKind().equals(projection.path("data_kind").asText()));
+        var rows = jdbc.queryForList("SELECT * FROM extraction_runs WHERE run_id=?", run.runId());
+        require(rows.size() == 1);
+        requireSame(run, rows.getFirst());
+        require(projection.path("documents").isArray() && projection.path("documents").size() == 1);
+        var document = projection.path("documents").get(0);
+        require(document.path("document_version_id").asText().equals(run.documentVersionId()));
+        var documents = jdbc.queryForList("SELECT * FROM document_versions WHERE document_version_id=?", run.documentVersionId());
+        require(documents.size() == 1);
+        var row = documents.getFirst();
+        var expected = JsonNodeFactory.instance.objectNode().put("data_kind", run.dataKind());
+        expected.set("document", document);
+        require(expected.equals(json.parseJson(((String) row.get("metadata_json")).getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+                && document.path("document_id").asText().equals(row.get("document_id"))
+                && document.path("version_no").asLong() == ((Number) row.get("version_no")).longValue()
+                && document.path("text_sha256").asText().equals(row.get("text_sha256"))
+                && document.path("raw_asset_path").asText().equals(row.get("private_content_ref")));
+        return new Reference(run.runId(), run.documentVersionId(), rowHash(rows.getFirst()), rowHash(row));
+    }
+
     public void checkReference(Reference reference) {
         var rows = jdbc.queryForList("SELECT * FROM extraction_runs WHERE run_id=? FOR SHARE", reference.runId());
         require(rows.size() == 1 && rowHash(rows.getFirst()).equals(reference.rowSha256()));
+        if (reference.documentRowSha256() != null) {
+            var documents = jdbc.queryForList("SELECT * FROM document_versions WHERE document_version_id=? FOR SHARE", reference.documentVersionId());
+            require(documents.size() == 1 && rowHash(documents.getFirst()).equals(reference.documentRowSha256()));
+        }
     }
 
     private String rowHash(java.util.Map<String, Object> row) {

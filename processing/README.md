@@ -36,7 +36,7 @@ python3.13 -m venv .venv
 | `evaluation/gold.py`, `gold_storage.py` | 독립 정답 제공자의 선언·근거·사건 anchor 검사와 원본/지침/manifest 별도 동결 |
 | `evaluation/scoring.py`, `records.py`, `evaluation_storage.py` | 8필드 채점·명시한 API/규칙/사람 수정 원본 연결·최초/재시험 원본 묶음 동결 |
 | `evaluation/comparison.py`, `comparison_storage.py` | 같은 gold·회차·AI 부모의 세 방법을 짝지어 개선/악화·선언 시간을 집계하고 전체 평가를 동결 |
-| `evaluation/human_handoff.py`, `handoff_storage.py` | 사람 수정값의 workflow 없는 D06 사실 투영·원본 전체 인계 이미지, Java 저장 연결은 후속 |
+| `evaluation/human_handoff.py`, `handoff_storage.py` | 사람 수정값의 workflow 없는 D06 사실 투영·원본 전체 인계 이미지, 별도 Java 인계 요청으로 저장 |
 | `evaluation/reviews.py` | 사람 수정후 출력·실제 변경 기록/검토 시간 선언·D05 전체의 별도 불변 보관 |
 
 [계산 연결 계약](../contracts/calculation-bridge.md)을 따릅니다. 지원 규칙은 `rules-v1`이며 미지원 버전을 정상 결과로 바꾸지 않습니다. `dictionary_version`은 선택한 snapshot의 고정 식별자이며 계산 중 새 사전을 읽지 않습니다. 입력 원본 바이트 SHA-256을 반환하며 개인 조건은 로그에 남기지 않습니다.
@@ -178,7 +178,7 @@ python3.13 -m processing.evaluation freeze-handoff --input data/private/evaluati
 python3.13 -m processing.evaluation verify-handoff HANDOFF_REF
 ```
 
-`--review-root` 기본값은 private evaluation/human-reviews, freeze/verify의 `--root`는 private evaluation/handoffs입니다. summary는 projection_only·backend_import_supported=false·review_required=true이며 기존 Java local-import 입력이 아닙니다. 원문 asset 파일은 별도로 보존하고 다음 Java 단계에서 source-root·원본 hash/권한·실제 revision/출처를 대조해야 합니다. 원래 경로 없는 재검증·동시/충돌·0400/0500·종료0/2/3/5를 지원하며 키·AI·외부 네트워크·DB는 사용하지 않습니다.
+`--review-root` 기본값은 private evaluation/human-reviews, freeze/verify의 `--root`는 private evaluation/handoffs입니다. summary는 projection_only·backend_import_supported=false·review_required=true이며 투영 JSON을 직접 Java에 넣지 않습니다. 별도 [Java 인계 요청](../backend/docs/human-handoff-import.md)으로 전체 이미지·source-root의 원문 asset/hash·등록 D03/D05·명시 revision을 대조합니다. 원래 경로 없는 재검증·동시/충돌·0400/0500·종료0/2/3/5를 지원하며 키·AI·외부 네트워크·DB는 사용하지 않습니다.
 
 ## 규칙 자동 기준선
 

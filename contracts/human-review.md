@@ -47,8 +47,8 @@ stdout은 ID/hash/data_kind·상태·건수·선언 소요시간 요약 또는 r
 
 ## 현재 범위
 
-`declared_reviewed`/`human_verification=declared_only`는 제공된 선언·참조·형식을 검사했다는 뜻이다. 실제 사람 판독·신원·독립 gold·승인·공개를 인증하지 않는다. 검토 원본 보관은 D06 DB 저장과 별개이며 [D08 평가](extraction-evaluation.md)는 human_reviewed 뷰·최초/재시험·전체 출처 동결과 선언 소요시간을 연결한다. 세 방법의 짝지은 개선/악화·선별 비교와 D06 인계는 후속 작업이다. 실제40문서 평가·blind holdout도 미완료다. POSIX 권한은 WORM이 아니며 Windows·전원 중단 내구성은 미검증이다.
+`declared_reviewed`/`human_verification=declared_only`는 제공된 선언·참조·형식을 검사했다는 뜻이다. 실제 사람 판독·신원·독립 gold·승인·공개를 인증하지 않는다. 검토 원본 보관은 D06 DB 저장과 별개이며 [D08 평가](extraction-evaluation.md)는 human_reviewed 뷰·최초/재시험·전체 출처 동결과 선언 소요시간을 연결한다. 세 방법의 짝지은 개선/악화 비교와 [Java D06 인계](../backend/docs/human-handoff-import.md)를 연결했으며 실제 선별 성능은 후속 검증이다. 실제40문서 평가·blind holdout도 미완료다. POSIX 권한은 WORM이 아니며 Windows·전원 중단 내구성은 미검증이다.
 
 ## D06 사실 투영·인계 이미지
 
-[human-handoff-v1](human-handoff.md)은 이 원본의 정확한 receipt·입력·부모 D05와 D03 source metadata를 대조해 workflow 없는 D06 사실을 투영합니다. 실제 수정 기록/knowledge·실패 원본 전체를 함께 보관합니다. 투영 성공은 실제 D06 저장·승인 성공이 아니며 현재 Java reader는 이 새 schema를 거부합니다. source 원문 파일 검증·실제 revision CAS·D06 변경 기록·승인/공개 재검증은 다음 Java 연결 단계에 남습니다.
+[human-handoff-v1](human-handoff.md)은 이 원본의 정확한 receipt·입력·부모 D05와 D03 source metadata를 대조해 workflow 없는 D06 사실을 투영합니다. 실제 수정 기록/knowledge·실패 원본 전체를 함께 보관합니다. 투영 성공은 실제 D06 저장·승인 성공이 아니며 현재 Java reader는 이 새 schema를 거부합니다. source 원문 파일 검증·실제 revision CAS·D06 변경 기록·승인/공개 재검증은 별도 [Java 인계 요청](../backend/docs/human-handoff-import.md)이 담당합니다.
