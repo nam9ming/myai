@@ -112,4 +112,18 @@ TXT/JSON/PDF의 재현3건 실패를 확인한 뒤, 실제 보관 블록과 결�
 
 Task4의 로컬 구현·검증 완료와 아래 전체 단계 완료를 구별한다.
 
-- [ ] 부모 전체 자체 리뷰→유효 minor 포함 수정·재검증→새 문맥 전체 코드 리뷰1회→PR→정확 head CI/AI/새 피드백→비main 병합·통합 검증→비공개 증거 동결을 완료한다. main은 병합하지 않는다.
+- [x] 부모 전체 자체 리뷰→유효 minor 포함 수정·재검증→새 문맥 전체 코드 리뷰1회→PR→정확 head CI/AI/새 피드백→비main 병합·통합 검증→비공개 증거 동결을 완료한다. main은 병합하지 않는다.
+
+## 단계 종료 기록
+
+[PR #46](https://github.com/nam9ming/myai/pull/46)을2026-11-04 20:44:47 UTC에 develop `35d9d0d`로 일반 병합했다. source `92e6cca`·source CI checkout `62e337b`·develop·통합 checkout `6d03444`의 전체 tree는 `957c56a769a1da5580ae7ff26b954c32848407f3`로 같다.
+
+[source CI41907020552](https://github.com/nam9ming/myai/actions/runs/41907020552)는 Python630/348.276초·Java689/실패0·빌드6분52초, [통합 CI41909525956](https://github.com/nam9ming/myai/actions/runs/41909525956)는 Python630/319.525초·Java689/실패·skip0·빌드6분42초를 확인했다. 양쪽 모두 Node34·계약9·린트401·Poppler24.02.0·정적/JAR 산출물2개 보관까지 성공했다.
+
+source 자동 AI는 앞60000/276745 UTF16자 부분 검토·원문0이다. 통합 AI는 누적3486596바이트/3148363 UTF16자 중 앞60000자 부분 검토·원문1이며, 기존 extraction-smoke의 PR-head/시크릿 신뢰 정책 지적을 그대로 보존했다. workflow bytes는 base와 같은 SHA `3c26a7e8740ad34cb97c97155b03cc8bb22cbb94d5158e44a6ad545189ead124`다. label은 비용 선택이며 격리 장치가 아니고 신뢰 범위 변경에는 소유자의 secret/environment 정책 결정이 필요하다. 상세 판단·기존 감사 cutoff는 [PR #20](https://github.com/nam9ming/myai/pull/20)에 기록했다. 새 키 노출 감사·회전·유출 시험을 수행한 결과로 표시하지 않는다.
+
+독립 전체 리뷰의 Important2/Minor1과 이후 source AI1건은 재현/회귀로 수정했다. 현재 단계의 코드 지적 미해결0·보류 minor0이며 마지막 source/통합 사람 리뷰·inline thread0을 확인했다. PR46본문2640자·PR20본문49980자의 정확 readback을 대조했다.
+
+비공개 증거638항목(581파일·57디렉터리)을0400/0500으로 동결하고 전체 hash·파일 집합·권한을 검증했다. manifest SHA256은 `b3dfb5457aeb8c242014ee075b913f2ba95559c8af42c97fb239cd2a0a5bcdfd`다. 이전28건·이번30건의 판단/비용58건을 작성 순서로 인계했고, 다음 단계 자체 도구를 복사·대조한 뒤 이 단계의 자체 scratch만 정리했다. 사용자의 .gitignore·두 AGENTS와 기존 서비스6개는 보존했다.
+
+이번 단계의 실제 추출 API 호출은0이며 사람/금표/40문서/90%·D09·UI·운영/기기 인수는 남아 있다. main은 병합하지 않았다. 다음 Java/Python 단계는 [AI 결과 파일 업로드](2026-11-05-extraction-result-upload.md)다.
