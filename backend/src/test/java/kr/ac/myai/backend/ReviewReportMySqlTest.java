@@ -12,6 +12,8 @@ import kr.ac.myai.backend.service.*;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -36,6 +38,7 @@ class ReviewReportMySqlTest {
     @Autowired PublicationService publication;
     @Autowired PublicationCommandReader commands;
     @Autowired HumanHandoffImportService handoffs;
+    @Autowired SourceReviewService sourceReviews;
     @Autowired JdbcTemplate jdbc;
     @TempDir Path root;
     final ObjectMapper mapper = new ObjectMapper();
@@ -129,6 +132,58 @@ class ReviewReportMySqlTest {
         assertThat(report.path("capture").path("validation_same_snapshot").asBoolean(true)).isFalse();
         assertThat(report.path("preview").path("status").asText()).isEqualTo("not_requested");
         assertThat(report.path("events")).isEmpty(); assertThat(report.path("extractions")).isEmpty();
+        assertThat(database()).isEqualTo(before); assertThat(files()).isEqualTo(files);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void twentyMiBRawAssetIsFullyEmbeddedAsTextOrBase64WithoutWrites(boolean binary) throws Exception {
+        var source = fixtures.source(true);
+        byte[] bytes = new byte[20 * 1024 * 1024]; Arrays.fill(bytes, binary ? (byte) 0xff : (byte) 'x');
+        Files.write(root.resolve("synthetic-source.txt"), bytes);
+        SourceReviewFixtures.document(source).put("raw_sha256", ReviewedImportReader.sha256(bytes));
+        fixtures.register(source); var before = database(); var files = files();
+        var document = reports.build(UUID.fromString(SourceReviewFixtures.version(source)), root, null).path("documents").get(0);
+        var raw = document.path("raw_asset");
+        assertThat(document.path("validation").path("status").asText()).isEqualTo("valid");
+        assertThat(raw.path("validation").path("status").asText()).isEqualTo("valid");
+        assertThat(raw.path("size").asInt()).isEqualTo(20 * 1024 * 1024);
+        assertThat(raw.path("encoding").asText()).isEqualTo(binary ? "base64" : "utf-8");
+        byte[] embedded = binary ? Base64.getDecoder().decode(raw.path("base64").asText())
+                : raw.path("text").asText().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(embedded).isEqualTo(bytes);
+        assertThat(database()).isEqualTo(before); assertThat(files()).isEqualTo(files);
+    }
+
+    @Test
+    void largerRawAssetSurvivesSourceReviewApprovalPreviewPublicationAndReport() throws Exception {
+        var input = fixtures.human(true);
+        byte[] bytes = new byte[8 * 1024 * 1024 + 1]; Arrays.fill(bytes, (byte) 'x');
+        Files.write(root.resolve("synthetic-source.txt"), bytes);
+        var document = SourceReviewFixtures.document(input); document.put("raw_sha256", ReviewedImportReader.sha256(bytes));
+        importInput(input);
+        var review = mapper.createObjectNode().put("schema_version", "source-review-v1").put("review_id", UUID.randomUUID().toString())
+                .put("document_version_id", SourceReviewFixtures.version(input)).put("expected_review_no", 0)
+                .put("expected_text_sha256", document.path("text_sha256").asText())
+                .put("use_review", "allowed").put("use_note", "합성 원문 크기 경계 시험").put("reason", "합성 확인·권한 결정");
+        review.putObject("check").put("checked_at", "2026-11-02T02:00:00Z").put("result", "verified")
+                .put("text_sha256", document.path("text_sha256").asText()).put("note", "합성 원문 확인 시험");
+        assertThat(sourceReviews.review(write(review), root, "synthetic-source-reviewer").reviewNo()).isEqualTo(1);
+        var approved = approve(input, 1);
+        var request = publish(input, approved.revisionId()); request.put("action", "preview");
+        Path preview = write(request); var beforePreview = database();
+        var previewReport = reports.build(UUID.fromString(SourceReviewFixtures.version(input)), root, preview);
+        assertThat(previewReport.path("preview").path("status").asText()).isEqualTo("valid");
+        assertThat(database()).isEqualTo(beforePreview);
+        request.put("action", "publish");
+        var published = publication.execute(commands.read(write(request)), root, "synthetic-publisher");
+        var before = database(); var files = files();
+        var report = reports.build(UUID.fromString(SourceReviewFixtures.version(input)), root, null);
+        var savedDocument = report.path("documents").get(0);
+        assertThat(savedDocument.path("original").path("use_review").asText()).isEqualTo("pending");
+        assertThat(savedDocument.path("source_reviews")).hasSize(1);
+        assertThat(savedDocument.path("raw_asset").path("text").asText().getBytes(java.nio.charset.StandardCharsets.UTF_8)).isEqualTo(bytes);
+        assertThat(report.path("publication").path("memberships").get(0).path("snapshot_id").asText()).isEqualTo(published.snapshotId());
         assertThat(database()).isEqualTo(before); assertThat(files()).isEqualTo(files);
     }
 
@@ -488,10 +543,40 @@ class ReviewReportMySqlTest {
     @Test
     void oversizedSourceFailsInsteadOfReturningTruncatedText() throws Exception {
         var source = fixtures.source(true); fixtures.register(source);
-        byte[] bytes = new byte[8 * 1024 * 1024 + 1]; Arrays.fill(bytes, (byte) 'x');
-        Files.write(root.resolve("synthetic-source.txt"), bytes); var before = database(); var files = files();
+        byte[] bytes = new byte[20 * 1024 * 1024 + 1]; Arrays.fill(bytes, (byte) 'x');
+        Files.write(root.resolve("synthetic-source.txt"), bytes);
+        var metadata = (ObjectNode) mapper.readTree(jdbc.queryForObject("SELECT metadata_json FROM document_versions WHERE document_version_id=?",
+                String.class, SourceReviewFixtures.version(source)));
+        ((ObjectNode) metadata.path("document")).put("raw_sha256", ReviewedImportReader.sha256(bytes));
+        jdbc.update("UPDATE document_versions SET metadata_json=? WHERE document_version_id=?", metadata.toString(), SourceReviewFixtures.version(source));
+        var before = database(); var files = files();
         assertThatThrownBy(() -> reports.build(UUID.fromString(SourceReviewFixtures.version(source)), root, null))
                 .isInstanceOfSatisfying(PublicationException.class, e -> assertThat(e.code()).isEqualTo("REPORT_TOO_LARGE"));
+        assertThat(database()).isEqualTo(before); assertThat(files()).isEqualTo(files);
+    }
+
+    @Test
+    void individuallyAllowedRawAssetsStillRejectReportAboveSixtyFourMiBWithoutWrites() throws Exception {
+        var first = fixtures.human(false);
+        byte[] bytes = new byte[20 * 1024 * 1024]; Arrays.fill(bytes, (byte) 0xff);
+        Files.write(root.resolve("synthetic-source.txt"), bytes);
+        SourceReviewFixtures.document(first).put("raw_sha256", ReviewedImportReader.sha256(bytes));
+        importInput(first);
+        for (int revision = 2; revision <= 3; revision++) {
+            var next = (ObjectNode) mapper.readTree(first.toString()
+                    .replace(SourceReviewFixtures.document(first).path("document_id").asText(), UUID.randomUUID().toString())
+                    .replace(SourceReviewFixtures.version(first), UUID.randomUUID().toString()));
+            for (var check : SourceReviewFixtures.document(next).path("checks")) ((ObjectNode) check).put("check_id", UUID.randomUUID().toString());
+            ((ObjectNode) next.path("events").get(0)).put("expected_revision_no", revision - 1);
+            ((ObjectNode) next.path("events").get(0).path("revision")).put("revision_id", UUID.randomUUID().toString()).put("revision_no", revision);
+            importInput(next);
+        }
+        var before = database(); var files = files();
+        assertThatThrownBy(() -> reports.build(UUID.fromString(SourceReviewFixtures.version(first)), root, null))
+                .isInstanceOfSatisfying(PublicationException.class, error -> {
+                    assertThat(error.code()).isEqualTo("REPORT_TOO_LARGE");
+                    assertThat(error.field()).isEqualTo("report");
+                });
         assertThat(database()).isEqualTo(before); assertThat(files()).isEqualTo(files);
     }
 

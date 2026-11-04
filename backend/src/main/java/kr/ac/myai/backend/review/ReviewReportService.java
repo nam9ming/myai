@@ -101,7 +101,7 @@ public class ReviewReportService {
                 String name = original.path("raw_asset_path").textValue();
                 check(name != null, "raw_asset_path"); Path relative = Path.of(name);
                 check(!relative.isAbsolute() && relative.normalize().equals(relative) && !relative.startsWith(".."), "raw_asset_path");
-                byte[] bytes = read(root.resolve(relative), root);
+                byte[] bytes = read(root.resolve(relative), root, ReviewedImportReader.RAW_ASSET_LIMIT);
                 check(ReviewedImportReader.sha256(bytes).equals(original.path("raw_sha256").asText()), "raw_sha256");
                 raw.setAll(encoded(bytes)); return null;
             }));
@@ -137,7 +137,7 @@ public class ReviewReportService {
                     JsonNode artifact = run.receipt().path("artifacts").path(name);
                     var item = mapper.createObjectNode(); artifacts.set(name, item);
                     item.set("validation", inspect(() -> {
-                        byte[] bytes = read(path.resolve(name), path);
+                        byte[] bytes = read(path.resolve(name), path, ARTIFACT_LIMIT);
                         check(artifact.path("size").isIntegralNumber() && bytes.length == artifact.path("size").asLong()
                                 && ReviewedImportReader.sha256(bytes).equals(artifact.path("sha256").asText()), "artifacts");
                         item.setAll(encoded(bytes)); budget.add(item); return null;
@@ -375,15 +375,15 @@ public class ReviewReportService {
         catch (IOException ex) { throw error("REPORT_FILE_UNAVAILABLE", "source_root"); }
     }
 
-    private byte[] read(Path file, Path root) {
+    private byte[] read(Path file, Path root, int limit) {
         try {
             check(file.isAbsolute() && file.normalize().equals(file) && file.startsWith(root) && root.toRealPath().equals(root), "artifact_path");
             Path current = root;
             for (Path part : root.relativize(file)) { current = current.resolve(part); check(!Files.isSymbolicLink(current), "artifact_path"); }
             var before = Files.readAttributes(file, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS); check(before.isRegularFile(), "artifact_path");
             try (var stream = Files.newInputStream(file, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
-                byte[] bytes = stream.readNBytes(ARTIFACT_LIMIT + 1);
-                if (bytes.length > ARTIFACT_LIMIT) throw error("REPORT_TOO_LARGE", "artifact");
+                byte[] bytes = stream.readNBytes(limit + 1);
+                if (bytes.length > limit) throw error("REPORT_TOO_LARGE", "artifact");
                 var after = Files.readAttributes(file, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
                 check(after.isRegularFile() && Objects.equals(before.fileKey(), after.fileKey()) && before.size() == after.size() && before.lastModifiedTime().equals(after.lastModifiedTime()), "artifact_path");
                 return bytes;
