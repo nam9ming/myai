@@ -46,9 +46,10 @@ public class LocalApiStartupGuard implements ApplicationContextInitializer<Confi
             String field = "spring.servlet.multipart." + flag;
             if (!"true".equalsIgnoreCase(environment.getProperty(field))) throw new ModeException(field);
         }
-        multipartSize(environment, "max-file-size", 20L * 1024 * 1024, 20L * 1024 * 1024);
-        multipartSize(environment, "max-request-size", 21L * 1024 * 1024, 21L * 1024 * 1024);
-        multipartSize(environment, "file-size-threshold", 21L * 1024 * 1024, Integer.MAX_VALUE);
+        size(environment, "spring.servlet.multipart.max-file-size", 20L * 1024 * 1024, 20L * 1024 * 1024);
+        size(environment, "spring.servlet.multipart.max-request-size", 21L * 1024 * 1024, 21L * 1024 * 1024);
+        size(environment, "spring.servlet.multipart.file-size-threshold", 21L * 1024 * 1024, Integer.MAX_VALUE);
+        size(environment, "server.tomcat.max-http-form-post-size", 21L * 1024 * 1024, 21L * 1024 * 1024);
         var system = environment.getPropertySources().get(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME);
         for (String suffix : List.of("TOKEN", "ACTOR", "SOURCE_ROOT", "EXTRACTION_ROOT", "HANDOFF_ROOT", "REQUEST_ROOT")) {
             String name = "MYAI_LOCAL_API_" + suffix;
@@ -76,8 +77,7 @@ public class LocalApiStartupGuard implements ApplicationContextInitializer<Confi
         }
     }
 
-    private void multipartSize(ConfigurableEnvironment environment, String name, long minimum, long maximum) {
-        String field = "spring.servlet.multipart." + name;
+    private void size(ConfigurableEnvironment environment, String field, long minimum, long maximum) {
         try {
             long bytes = DataSize.parse(environment.getProperty(field, "")).toBytes();
             if (bytes < minimum || bytes > maximum) throw new ModeException(field);

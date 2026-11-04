@@ -44,6 +44,7 @@ import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -547,12 +548,21 @@ class LocalManagementMySqlTest {
 
     private Map<String, List<Map<String, String>>> database() {
         var result = new LinkedHashMap<String, List<Map<String, String>>>();
+        var valueOrder = Comparator.nullsFirst(Comparator.<String>naturalOrder());
         for (String table : List.of("test_points", "place_dictionary", "documents", "document_versions", "source_checks", "extraction_runs",
                 "events", "event_revisions", "review_audits", "snapshots", "snapshot_revisions", "publication_heads", "import_batches", "publication_audits", "source_reviews")) {
             var rows = new ArrayList<Map<String, String>>();
-            for (var row : jdbc.queryForList("SELECT * FROM " + table + " ORDER BY 1,2")) {
+            // 큰 JSON 행을 MySQL 정렬 버퍼에 싣지 않고 전체 값을 Java에서 정렬한다.
+            for (var row : jdbc.queryForList("SELECT * FROM " + table)) {
                 var values = new LinkedHashMap<String, String>(); row.forEach((key, value) -> values.put(key, value == null ? null : value.toString())); rows.add(values);
             }
+            rows.sort((left, right) -> {
+                for (String column : left.keySet()) {
+                    int compared = valueOrder.compare(left.get(column), right.get(column));
+                    if (compared != 0) return compared;
+                }
+                return 0;
+            });
             result.put(table, rows);
         }
         return result;

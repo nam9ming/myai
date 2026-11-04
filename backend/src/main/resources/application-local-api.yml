@@ -10,6 +10,8 @@ spring:
       file-size-threshold: 21MB
       resolve-lazily: true
 server:
+  tomcat:
+    max-http-form-post-size: 21MB
   address: 127.0.0.1
   port: ${MYAI_LOCAL_API_PORT:8081}
   forward-headers-strategy: NONE

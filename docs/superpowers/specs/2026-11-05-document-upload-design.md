@@ -41,7 +41,7 @@ PDF 실행 파일 경로는 서버 설정으로만 받는다. 설치된 Poppler�
 
 ## 파일 보관·재실행·DB
 
-인증·Origin/Host 검사는 multipart parsing 전에 기존 필터가 수행한다. multipart는 전역 off·local-api에서만 on이며 파일20MiB/전체21MiB 실제 수신 한도를 적용한다. 기동 때 enabled/lazy parsing·정확한20/21MiB 한도·threshold21MiB 이상/int 범위를 검사해 잘못된 override를 DB/웹 기동 전에 거부한다. threshold를 전체 한도 이상으로 두어 servlet이 private 원문을 공용 임시 디렉터리에 쓰지 않게 한다. metadata64KiB·정확한 part 수·MIME/charset은 별도 검사한다. 인증 실패·unknown metadata·초과 파일은 원문/DB 쓰기0이다. lazy parser가 감싼 크기 예외도413이며 일반 malformed multipart422와 구별한다.
+인증·Origin/Host 검사는 multipart parsing 전에 기존 필터가 수행한다. multipart는 전역 off·local-api에서만 on이며 파일20MiB/전체21MiB 실제 수신 한도를 적용한다. 기동 때 enabled/lazy parsing·정확한20/21MiB 한도·Tomcat form-post21MiB·threshold21MiB 이상/int 범위를 검사해 잘못된 override를 DB/웹 기동 전에 거부한다. threshold를 전체 한도 이상으로 두어 servlet이 private 원문을 공용 임시 디렉터리에 쓰지 않게 한다. metadata64KiB·정확한 part 수·MIME/charset은 별도 검사하며 metadata는 실제 part 읽기부터64KiB로 제한한다. 인증 실패·unknown metadata·초과 파일은 원문/DB 쓰기0이다. lazy parser가 감싼 크기 예외도413이며 일반 malformed multipart422와 구별한다.
 
 원문은 source root 아래 고정 `uploads/<raw_sha256>.<format>`로 배타 설치한다. 요청 metadata·생성 source-import JSON·AI입력·정책/파일 hash를 담은 receipt는 request root의 업로드 전용 하위 디렉터리에 버전ID로 보관한다. 운영자가 관리하는 private root만 사용하고 링크·경로 이탈·기존 다른 내용·권한 충돌은 거부한다. 디렉터리0700/파일0600, 실패 시 기존 파일을 덮어쓰지 않는다.
 

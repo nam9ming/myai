@@ -316,7 +316,30 @@ class SourceUploadMySqlTest {
     private byte[] bytes(String value) { return value.getBytes(StandardCharsets.UTF_8); }
     private String sha(byte[] value) throws Exception { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value)); }
     private Map<String, Long> counts(List<String> tables) { var result = new TreeMap<String, Long>(); for (String table : tables) result.put(table, jdbc.queryForObject("SELECT COUNT(*) FROM " + table, Long.class)); return result; }
-    private JsonNode database() { var out = json.createObjectNode(); for (String table : jdbc.queryForList("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' ORDER BY TABLE_NAME", String.class)) { var rows = out.putArray(table); for (var row : jdbc.queryForList("SELECT * FROM `" + table + "` ORDER BY 1,2")) { var value = rows.addObject(); row.forEach((key, entry) -> value.put(key, entry == null ? null : entry.toString())); } } return out; }
+    private JsonNode database() {
+        var out = json.createObjectNode();
+        var valueOrder = Comparator.nullsFirst(Comparator.<String>naturalOrder());
+        for (String table : jdbc.queryForList("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' ORDER BY TABLE_NAME", String.class)) {
+            var rows = new ArrayList<ObjectNode>();
+            // 큰 JSON 행을 MySQL 정렬 버퍼에 싣지 않고 전체 값을 Java에서 정렬한다.
+            for (var row : jdbc.queryForList("SELECT * FROM `" + table + "`")) {
+                var value = json.createObjectNode();
+                row.forEach((key, entry) -> value.put(key, entry == null ? null : entry.toString()));
+                rows.add(value);
+            }
+            rows.sort((left, right) -> {
+                var columns = left.fieldNames();
+                while (columns.hasNext()) {
+                    String column = columns.next();
+                    int compared = valueOrder.compare(left.path(column).textValue(), right.path(column).textValue());
+                    if (compared != 0) return compared;
+                }
+                return 0;
+            });
+            out.putArray(table).addAll(rows);
+        }
+        return out;
+    }
     private Map<String, String> files() throws Exception { var result = new TreeMap<String, String>(); fileTree(sources).forEach((name, hash) -> result.put("sources/" + name, hash)); fileTree(requests).forEach((name, hash) -> result.put("requests/" + name, hash)); return result; }
     private Map<String, String> fileTree(Path root) throws Exception { var result = new TreeMap<String, String>(); try (var files = Files.walk(root)) { for (Path path : files.toList()) result.put(root.relativize(path).toString(), PosixFilePermissions.toString(Files.getPosixFilePermissions(path)) + (Files.isRegularFile(path) ? sha(Files.readAllBytes(path)) : "")); } return result; }
     private void copyTree(Path source, Path target) throws Exception { try (var paths = Files.walk(source)) { for (Path path : paths.toList()) { Path copy = target.resolve(source.relativize(path)); if (Files.isDirectory(path)) directory(copy); else Files.copy(path, copy, StandardCopyOption.COPY_ATTRIBUTES); } } }

@@ -99,7 +99,9 @@ class LocalApiStartupTest {
             "spring.servlet.multipart.max-request-size,22MB", "spring.servlet.multipart.max-request-size,-1B",
             "spring.servlet.multipart.file-size-threshold,0B", "spring.servlet.multipart.file-size-threshold,20MB",
             "spring.servlet.multipart.file-size-threshold,2147483648B", "spring.servlet.multipart.enabled,false",
-            "spring.servlet.multipart.resolve-lazily,false", "spring.servlet.multipart.max-request-size,not-size"})
+            "spring.servlet.multipart.resolve-lazily,false", "spring.servlet.multipart.max-request-size,not-size",
+            "server.tomcat.max-http-form-post-size,2MB", "server.tomcat.max-http-form-post-size,22MB",
+            "server.tomcat.max-http-form-post-size,-1B", "server.tomcat.max-http-form-post-size,not-size"})
     void earlyGuardRejectsUnsafeMultipartSettingsBeforeContextRefresh(String field, String value) throws Exception {
         try (var context = new GenericWebApplicationContext()) {
             var env = environment(validEnvironment()); env.setProperty(field, value); context.setEnvironment(env);
@@ -207,6 +209,7 @@ class LocalApiStartupTest {
         var environment = new MockEnvironment().withProperty("spring.main.web-application-type", "servlet")
                 .withProperty("server.address", "127.0.0.1").withProperty("server.port", "0")
                 .withProperty("server.forward-headers-strategy", "NONE")
+                .withProperty("server.tomcat.max-http-form-post-size", "21MB")
                 .withProperty("spring.servlet.multipart.enabled", "true")
                 .withProperty("spring.servlet.multipart.resolve-lazily", "true")
                 .withProperty("spring.servlet.multipart.max-file-size", "20MB")

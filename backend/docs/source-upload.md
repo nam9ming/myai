@@ -14,7 +14,7 @@ export MYAI_LOCAL_API_PDFTOTEXT=/usr/bin/pdftotext
 java -jar backend/build/libs/myai-backend-0.1.0.jar --spring.profiles.active=local-api
 ```
 
-PDF 경로가 없거나 도구를 읽지 못하면 PDF 요청만503이다. txt/json·기존 JSON 관리 경로는 사용할 수 있다. 입력/출력 제한·프로필 설정을 완화해 실행하는 방식은 지원하지 않는다.
+PDF 경로가 없거나 도구를 읽지 못하면 PDF 요청만503이다. txt/json·기존 JSON 관리 경로는 사용할 수 있다. `server.tomcat.max-http-form-post-size=21MB`를 포함한 수신 한도는 기동 때 검사하며 metadata는 실제 part 읽기부터64KiB로 제한한다. 입력/출력 제한·프로필 설정을 완화해 실행하는 방식은 지원하지 않는다.
 
 ## 요청
 

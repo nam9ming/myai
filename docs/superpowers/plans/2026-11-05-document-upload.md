@@ -16,7 +16,7 @@
 - 새 파일20MiB·전체 multipart21MiB·metadata64KiB·cleaned_text200,000 Unicode code point다. metadata는 application/json·선언 charset UTF-8만 받으며 실제 part 읽기부터64KiB를 적용한다. 초과는413이며 자르거나 부분 성공으로 바꾸지 않는다.
 - txt/pdf/json 모두 실제 D03까지 연결한다. JSON 파일은 정확한 text-body-v1/text 규약, 기존 source-import는 원래 application/json 경로다.
 - metadata ID/버전/수집시각을 고정하고 원래 bytes·출처/전처리·실패·기존 자료를 보존한다. 새 자료는 pending/unchecked·checks없음이며 자동 AI·사람 승인·공개 없음.
-- local-api의 기존 인증·Origin/Host·공개 분리를 유지한다. 인증 실패/unknown metadata/초과 파일의 저장·DB쓰기0, 경로·본문·키·stderr를 오류/로그에 넣지 않는다.
+- local-api의 기존 인증·Origin/Host·공개 분리를 유지한다. Tomcat form-post도 전체 수신과 같은21MiB로 고정·기동 검증하고 metadata는 실제 part 읽기부터64KiB로 제한한다. 인증 실패/unknown metadata/초과 파일의 저장·DB쓰기0, 경로·본문·키·stderr를 오류/로그에 넣지 않는다.
 - PDF stdin은 원래 bytes, stdout≤4MiB/stderr≤64KiB·전체10초·키 없는 환경·종료 회수다. 텍스트 없는 페이지는 전체422, 내장 텍스트만 추출하고 모든 PDF는 실제 원문 대조 필요를 명시한다.
 - 새 본문은 LF/NFC·고정 전화/이메일 치환·범주/위치 기록, 최대2,000 code point 블록과 PDF 페이지를 보존한다. 기존 AI입력 블록/bytes는 바꾸지 않는다.
 - S10 raw20MiB 전체 embed·기타 artifact8MiB·JSON/HTML 전체64MiB를 유지한다. 총량 초과는 REPORT_TOO_LARGE이며 원문 생략은 하지 않는다.

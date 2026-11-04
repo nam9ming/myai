@@ -60,6 +60,6 @@ root/디렉터리0700·파일0600, 링크·기존 다른 내용·권한/전체 h
 
 공통 오류/request_id 형식이다. 한도413, 형식422, MIME415, 원본/버전 충돌409, PDF 도구 미준비503, 저장 I/O500과 기존 DB 오류를 구분한다. 원문·토큰·경로·자식stderr를 오류/로그에 반사하지 않는다.
 
-multipart는 전역 off·local-api에서만 on이다. 기동 때 파일20MiB·요청21MiB·메모리 threshold21MiB 이상/int 범위·lazy parsing을 검사한다. 이 조건을 풀면 기동을 거부한다. PDF는 공통10초 deadline·stdout4MiB/stderr64KiB·키 없는 환경이며 종료 정리에 최대600ms가 추가될 수 있다. OS 메모리 격리·전원 중단 내구성은 보증하지 않는다.
+multipart는 전역 off·local-api에서만 on이다. 기동 때 파일20MiB·요청21MiB·Tomcat form-post21MiB·메모리 threshold21MiB 이상/int 범위·lazy parsing을 검사한다. metadata는 실제 part 읽기부터64KiB로 제한한다. 이 조건을 풀면 기동을 거부한다. PDF는 공통10초 deadline·stdout4MiB/stderr64KiB·키 없는 환경이며 종료 정리에 최대600ms가 추가될 수 있다. OS 메모리 격리·전원 중단 내구성은 보증하지 않는다.
 
 기존 JSON/CLI/AI입력8MiB·D05 원출력/장문 보관 규약을 유지한다. S10 raw20MiB 전체 embed·AI artifact8MiB·전체 JSON/HTML64MiB다. AI 결과 파일5MiB 업로드, 관리 UI·실자료 사람 검토·독립 gold/40문서/90%·사용자 평가·운영 배포는 후속 범위다.
