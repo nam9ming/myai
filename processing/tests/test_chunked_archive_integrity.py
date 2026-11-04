@@ -66,6 +66,43 @@ class ChunkedArchiveIntegrityTest(unittest.TestCase):
         network.assert_not_called()
         self.assertEqual(self.state(), before)
 
+    def test_noncanonical_v2_identity_is_rejected_without_changing_v1_rules(self):
+        self.completed()
+        original = (self.folder / 'identity.json').read_bytes()
+        reordered = dict(reversed(list(json.loads(original).items())))
+        for changed in (b' ' + original, json.dumps(json.loads(original), indent=2).encode(),
+                        (json.dumps(reordered, ensure_ascii=False, separators=(',', ':')) + '\n').encode()):
+            with self.subTest(prefix=changed[:1]):
+                (self.folder / 'identity.json').write_bytes(changed)
+                self.rejects_without_writes()
+        (self.folder / 'identity.json').write_bytes(original)
+        self.assertEqual(archive.verify_run(fixtures.RUN, self.fixture.root)['status'], 'validated')
+        from processing.tests.test_extraction_archive import ArchiveTest
+        legacy = ArchiveTest(); legacy.setUp(); self.addCleanup(legacy.doCleanups)
+        receipt = legacy.run_import()
+        path = legacy.root / legacy.run_id / 'identity.json'
+        changed = b' ' + path.read_bytes(); path.write_bytes(changed)
+        self.assertEqual(archive.verify_run(legacy.run_id, legacy.root), receipt)
+        self.assertEqual(path.read_bytes(), changed)
+
+    def test_large_derived_cycle_manifest_is_checked_in_full(self):
+        from processing.extraction.chunk_archive import _cycle
+        folder = self.fixture.root / fixtures.RUN
+        folder.mkdir(parents=True)
+        plan = dict(status='requires_review', chunks=[dict(chunk_id=f'chunk-{i:06d}') for i in range(1, 135001)])
+        with patch('processing.extraction.api._exchange') as network:
+            expected, names, _, _ = _cycle(folder, {}, plan, 1, [])
+            self.assertGreater((folder / 'attempt-1.prompt').stat().st_size, 8 * 1024 * 1024)
+            artifacts = {name: archive._fingerprint(folder / name) for name in names}
+            actual, _, _, _ = _cycle(folder, {}, plan, 1, [], artifacts=artifacts)
+            self.assertEqual(actual, expected)
+            with (folder / 'attempt-1.prompt').open('ab') as stream:
+                stream.write(b' ')
+            artifacts['attempt-1.prompt'] = archive._fingerprint(folder / 'attempt-1.prompt')
+            with self.assertRaises(ExtractionError):
+                _cycle(folder, {}, plan, 1, [], artifacts=artifacts)
+        network.assert_not_called()
+
     def test_recomputed_plan_rejects_jointly_rehashed_requests_responses_and_outputs(self):
         self.completed()
         plan = self.read_json('chunk-plan.json')

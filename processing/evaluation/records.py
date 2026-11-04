@@ -109,7 +109,10 @@ def _human_source(value,doc,base,gold):
     _check(value['phase']!='initial' or basis=='source_only','EVALUATION_HUMAN_BASIS_INVALID')
     _check(basis!='gold_feedback' or value['review']['semantic_feedback_used']
            and value['review']['exposure_status']=='exposed','EVALUATION_HUMAN_FEEDBACK_CONFLICT')
-    parent = decode(_read_checked(folder/f'{prefix}/receipt.json',artifacts[f'{prefix}/receipt.json']),'archive')
+    parent_folder = folder/prefix
+    parent = verify_run(human['source']['run_id'],parent_folder.parent)
+    _check(_fingerprint(parent_folder/'receipt.json')==artifacts[f'{prefix}/receipt.json'],
+           'EVALUATION_SOURCE_MISMATCH')
     metadata = decode(_read_checked(folder/f'{prefix}/metadata.json',artifacts[f'{prefix}/metadata.json']),'archive')
     packet = dict(document=doc,receipt=receipt,human=human,parent=parent,parent_metadata=metadata,
         outputs=dict(human_reviewed=_read_checked(folder/'output.json',artifacts['output.json'])))
@@ -151,8 +154,9 @@ def _load_sources(value,gold_root,run_root):
         else:
             run = verify_run(run_id,folder.parent);_frozen(folder,run)
             _check(run['execution_mode']=='api','EVALUATION_AUTO_REQUIRES_API')
-        raw = _read(folder/'receipt.json');digest = hashlib.sha256(raw).hexdigest()
-        _check(raw==_json(run) and digest==doc['receipt_sha256'],'EVALUATION_RUN_MISMATCH')
+        raw = _json(run);digest = hashlib.sha256(raw).hexdigest()
+        _check(_fingerprint(folder/'receipt.json')==dict(sha256=digest,size=len(raw))
+               and digest==doc['receipt_sha256'],'EVALUATION_RUN_MISMATCH')
         if reference.startswith('registered/'):_check(reference.split('/')[1]==digest,'EVALUATION_RUN_MISMATCH')
         version = doc['document_version_id']
         run_input = _read_checked(folder/'input.json',run['artifacts']['input.json'])

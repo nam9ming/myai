@@ -263,6 +263,8 @@ metadata.attempts는 최대3개의 문서 cycle이고, 실제 호출 수는 rece
 
 전송하지 않은 block 인용과 문서 전체 not_stated 추정을 거부합니다. chunk 사이 사건·일정·장소를 임의로 합치지 않으며, v2 직접 draft/check-draft는 `CHUNK_DRAFT_REVIEW_REQUIRED`입니다. 실제 사람이 전체 관계를 확인한 human-review/handoff를 사용합니다. D08은 `api-document-cycle-v1`·`prompt-v2-or-v3` 정책으로 첫/최종 전체 문서 결과를 평가하고 기존 정책은 v1만 받습니다. 기계 검증을 실제 사람 검토·40문서 정확도 성과로 표시하지 않습니다.
 
+입력보다 큰 plan·cycle manifest·receipt도 전체 canonical size/SHA로 검증합니다. 큰 receipt의 Python 보관·동결·재사용과 D08 평가/사람 인계는 접두부만 읽지 않습니다. identity8MiB, Java 연결 stdout/receipt8MiB·최대60초, S10 파일8MiB/전체64MiB의 기존 한도는 유지하므로 Python 단독 성공과 Java 등록·보고서 성공을 구별합니다.
+
 ## 실제 입력 길이 진단
 
 2026-11-04에 DB D03의 전체 block 투영·hash와 대조한 기존47입력을 로컬에서 측정했습니다. 기존 `parse_input`·`render_prompt(..., prompt-v2)`·`request_bytes`만 사용하며 키·추출/토큰계산 API를 호출하지 않았습니다. 원입력/index의 SHA·권한·fileKey는 전후 동일합니다.

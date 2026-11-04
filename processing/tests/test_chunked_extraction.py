@@ -181,6 +181,70 @@ class ChunkedApiTest(unittest.TestCase):
         self.assertEqual(archive.verify_run(RUN, self.root), receipt)
         self.assertEqual(archive.freeze_run(RUN, self.root)['receipt'], receipt)
 
+    def test_large_derived_receipt_verifies_freezes_and_reuses_without_truncation(self):
+        from processing.extraction.chunk_archive import plan_chunks
+        self.document['title'] = 'T' * 131072
+        self.document['blocks'] = [dict(block_id=f'b{i}', page=None, text='x') for i in range(51000)]
+        original = archive._json(self.document)
+        self.assertLess(len(original), 8 * 1024 * 1024)
+        self.input.write_bytes(original)
+        plan = plan_chunks(self.document, 'gpt-6.1-sol', hashlib.sha256(original).hexdigest())
+        self.assertEqual((plan['status'], len(plan['chunks'])), ('requires_review', 51000))
+        # 같은 실제 계획을 재사용해 이 시험은 큰 receipt의 보관 경계를 검사한다.
+        with patch('processing.extraction.chunk_archive.plan_chunks', return_value=plan):
+            receipt, network = self.run_chunked()
+            network.assert_not_called()
+            self.assertEqual((receipt['status'], receipt['total_calls']), ('failed', 0))
+            folder = self.root / RUN
+            self.assertGreater((folder / 'receipt.json').stat().st_size, 8 * 1024 * 1024)
+            self.assertEqual((folder / 'input.json').read_bytes(), original)
+            self.assertEqual(archive.verify_run(RUN, self.root), receipt)
+            frozen = archive.freeze_run(RUN, self.root)
+            sealed = self.root / frozen['snapshot_ref']
+            self.assertEqual(archive.verify_sealed_run(RUN, sealed.parent)['receipt'], receipt)
+            with patch.dict(os.environ, {}, clear=True), patch('processing.extraction.api._exchange') as offline:
+                self.assertEqual(run_api(self.input, 'fixture-nfc-v1', self.root, RUN, model='gpt-6.1-sol'), receipt)
+            offline.assert_not_called()
+            from processing.evaluation import reviews, records, human_handoff
+            output = dict(schema_version='extract-schema-v1', document_version_id=self.document['document_version_id'],
+                          items=[], evidence=[], warnings=['NO_EVENT_FOUND'])
+            review = dict(schema_version='human-review-v1', review_id=RUN,
+                source=dict(run_id=RUN, snapshot_ref=frozen['snapshot_ref'],
+                            receipt_sha256=hashlib.sha256((sealed / 'receipt.json').read_bytes()).hexdigest()),
+                review=dict(reviewed_by='SYNTHETIC_REVIEW', started_at=receipt['recorded_at'],
+                            finished_at=receipt['recorded_at'], basis='source_only', note='합성 검토 선언; 실제 사람 아님'),
+                output=output, changes=[dict(field_path='output', before=None, after=output,
+                    reason='합성 실패 부모 검토', evidence_ids=[], reviewer='SYNTHETIC_REVIEW', time=receipt['recorded_at'])])
+            review_path = self.work / 'review.json'; review_path.write_bytes(archive._json(review))
+            review_root = self.root / 'reviews'
+            reviewed = reviews.freeze_review(review_path, review_root, self.root)
+            self.assertEqual(reviewed['summary']['source_status'], 'failed')
+            review_folder = review_root / reviewed['review_ref']
+            selected = dict(review_ref=reviewed['review_ref'], review_id=RUN,
+                document_version_id=self.document['document_version_id'],
+                receipt_sha256=hashlib.sha256((review_folder / 'receipt.json').read_bytes()).hexdigest())
+            packet, _ = records._human_source(dict(phase='initial'), selected, review_root,
+                dict(dataset=dict(data_kind='synthetic'), inputs={self.document['document_version_id']: original}))
+            self.assertEqual(packet['parent'], receipt)
+            source = json.loads((REPO / 'backend/examples/source-import.json').read_bytes())
+            doc = source['documents'][0]
+            doc.update(document_version_id=self.document['document_version_id'], title=self.document['title'],
+                       published_date=self.document['published_date'], block_index=self.document['blocks'],
+                       preprocessing_version='fixture-nfc-v1')
+            doc['cleaned_text'] = '\n'.join(block['text'] for block in self.document['blocks'])
+            doc['text_sha256'] = hashlib.sha256(doc['cleaned_text'].encode()).hexdigest()
+            handoff = dict(schema_version='human-handoff-v1', handoff_id=RUN, review_ref=selected['review_ref'],
+                review_receipt_sha256=selected['receipt_sha256'], source=source,
+                area_id='10000000-0000-4000-8000-000000000005',
+                split_group_id='10000000-0000-4000-8000-000000000006', dictionary_version='fixture-dictionary-v1')
+            projection = human_handoff.project_handoff(archive._json(handoff), review_root)['projection']
+            self.assertEqual((projection['parent']['status'], projection['events']), ('failed', []))
+            with (folder / 'receipt.json').open('ab') as stream:
+                stream.write(b' ')
+            with self.assertRaises(ExtractionError) as caught:
+                archive.verify_run(RUN, self.root)
+            self.assertEqual(caught.exception.code, 'ARCHIVE_INTEGRITY')
+
 
 if __name__ == '__main__':
     unittest.main()

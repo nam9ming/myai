@@ -28,10 +28,11 @@ def _cycle(directory, document, plan, number, previous, *, key=None, artifacts=N
             archive._write(directory / name, expected)
             return expected
         archive._archive_check(name in artifacts)
-        content = archive._read_checked(directory / name, artifacts[name])
         if expected is not None:
-            archive._archive_check(content == expected)
-        return content
+            fingerprint = dict(sha256=hashlib.sha256(expected).hexdigest(), size=len(expected))
+            archive._archive_check(archive._fingerprint(directory / name) == artifacts[name] == fingerprint)
+            return expected
+        return archive._read_checked(directory / name, artifacts[name])
 
     aborted = False
     for chunk in plan['chunks']:

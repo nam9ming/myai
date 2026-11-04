@@ -2,6 +2,7 @@ import copy
 import hashlib
 import json
 import os
+from contextlib import nullcontext
 from datetime import datetime
 from unittest.mock import patch
 
@@ -14,8 +15,13 @@ from processing.tests.test_extraction_api import KEY, response
 
 
 class ChunkedEvaluationTest(EvaluationFixture):
-    def prepare_chunked(self, *, retry=False, failed=False):
-        self.source['blocks'].extend(dict(block_id=f'long-{i}', page=None, text='x' * 48000) for i in range(3))
+    def prepare_chunked(self, *, retry=False, failed=False, large_receipt=False):
+        if large_receipt:
+            self.source['title'] = 'T' * 131072
+            self.source['blocks'].extend(dict(block_id=f'long-{i}', page=None, text='x')
+                                         for i in range(51000 - len(self.source['blocks'])))
+        else:
+            self.source['blocks'].extend(dict(block_id=f'long-{i}', page=None, text='x' * 48000) for i in range(3))
         self.input.write_text(json.dumps(self.source))
         self.manifest['dataset_version'] = 'synthetic-chunk-evaluation-v1'
         self.manifest['documents'][0]['versions'][0]['input_sha256'] = hashlib.sha256(self.input.read_bytes()).hexdigest()
@@ -51,11 +57,16 @@ class ChunkedEvaluationTest(EvaluationFixture):
             @classmethod
             def now(cls, tz=None): return datetime.fromisoformat(at)
         run_id = uid(502)
+        planner = nullcontext()
+        if large_receipt:
+            from processing.extraction.chunk_archive import plan_chunks
+            plan = plan_chunks(self.source, 'gpt-6.1-sol', hashlib.sha256(self.input.read_bytes()).hexdigest())
+            planner = patch('processing.extraction.chunk_archive.plan_chunks', return_value=plan)
         with patch.dict(os.environ, OPENAI_API_KEY=KEY), patch('processing.extraction.api._exchange', side_effect=exchange), \
                 patch('processing.extraction.api._now', return_value=at), patch('processing.extraction.api.time.sleep'), \
-                patch('processing.extraction.archive.datetime', RunClock):
+                patch('processing.extraction.archive.datetime', RunClock), planner:
             receipt = run_api(self.input, 'fixture-nfc-v1', self.run_root, run_id, model='gpt-6.1-sol')
-        frozen = freeze_run(run_id, self.run_root)
+            frozen = freeze_run(run_id, self.run_root)
         folder = self.run_root / frozen['snapshot_ref']
         self.control['documents'][0].update(run_id=run_id, snapshot_ref=frozen['snapshot_ref'],
             receipt_sha256=hashlib.sha256((folder / 'receipt.json').read_bytes()).hexdigest())
@@ -92,3 +103,21 @@ class ChunkedEvaluationTest(EvaluationFixture):
         self.prepare_chunked()
         self.control['policy'].update(prompt_version='prompt-v3', retry_policy_version='api-structure-retry-v1')
         self.invalid_record(self.control, 'EVALUATION_POLICY_MISMATCH')
+
+    def test_large_failed_receipt_preserves_bindings_and_evaluation_denominators(self):
+        from processing.evaluation.bindings import check_bindings
+        receipt = self.prepare_chunked(large_receipt=True)
+        selected = self.control['documents'][0]
+        folder = self.run_root / selected['snapshot_ref']
+        self.assertGreater((folder / 'receipt.json').stat().st_size, 8 * 1024 * 1024)
+        self.assertEqual((receipt['status'], receipt['total_calls']), ('failed', 0))
+        plan = json.loads((folder / 'chunk-plan.json').read_bytes())
+        binding = dict(schema_version='dataset-bindings-v1', dataset_ref=self.value['dataset_ref'],
+            manifest_sha256=self.value['manifest_sha256'], bindings=[dict(
+                document_version_id=self.source['document_version_id'], input_path=str(self.input),
+                runs=[{key: selected[key] for key in ('run_id', 'snapshot_ref', 'receipt_sha256')}])])
+        with patch('processing.extraction.chunk_archive.plan_chunks', return_value=plan):
+            self.assertEqual(check_bindings(json.dumps(binding).encode(), self.dataset_root, self.run_root)
+                             ['counts']['failed_runs'], 1)
+            final = self.evaluate()['result']['summary']['views']['final_auto']
+        self.assertEqual((final['correct_fields'], final['known_fields'], final['document_failures']), (0, 8, 1))

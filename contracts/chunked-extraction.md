@@ -48,9 +48,13 @@ identity의 키는 기존7키와 같으며 format_version만 extraction-archive-
 
 artifact 집합은 정확히 input.json·metadata.json·chunk-plan.json, 각 cycle의 attempt-N.prompt/output, 각 attempted subrequest의4파일이다. 전체 파일의 size/SHA·canonical identity/receipt·순서·계획·cycle 결과를 재검증하며 누락/추가/변조를 거부한다. 기존 freeze/봉인·읽기 전용 verify-sealed를 그대로 사용하고 archive-v1 검사를 완화하지 않는다. 입력·metadata·검증 출력/전체 파생 결과는8MiB다. 파생 plan은 유효한 입력보다 커질 수 있어 전체 canonical 계획을 재생성하고 실제 파일의 전체 size/SHA를 stream 대조한다. 보고서의 파일당8MiB·전체64MiB 초과는 기존 명시 오류이며 원본을 잘라 성공으로 표시하지 않는다.
 
+파생 cycle manifest·receipt도 입력보다 커질 수 있으므로 재계산한 canonical bytes의 전체 size/SHA를 실제 파일과 대조한다. Python 생성→verify→freeze→재사용과 D08 bindings/자동·사람 수정 평가·사람 검토/인계는 receipt의8MiB 접두부를 읽어 비교하지 않는다. identity는 기존8MiB decode 한도를 유지하며 v2는 공백·키 순서를 포함한 canonical bytes도 요구한다. 기존 v1 identity 허용 범위는 바꾸지 않는다.
+
 ## Java·사람 검토·평가
 
 Java는 v1/v2 exact 이름을 구분하고 마지막 attempt-N.output hash를 전체 파생 결과로 저장한다. metadata attempts1~3과 기존 DB 제약은 유지한다. report는 모든 subrequest와 파생 cycle을 구별해 표시한다. source 전체 D03·receipt·metadata·사용권·승인 재검증을 유지한다.
+
+Java 연결은 기존 Python 자식 프로세스 stdout8MiB·최대60초 및 saved receipt8MiB 한도를 유지한다. Python 단독으로 보관·평가 가능한 큰 receipt도 이 한도를 넘으면 Java 등록/인계 대상이 아니며 별도 검토가 필요하다. D03의 제목·block ID 등 기존 Java 입력 제약과 S10 파일8MiB/전체64MiB 한도도 그대로다. 큰 Python 합성 입력의 보관 성공을 Java 등록·보고서 성공으로 집계하지 않는다.
 
 v2 직접 ai-draft/check-draft는 CHUNK_DRAFT_REVIEW_REQUIRED로 거부한다. 실제 사람 검토자가 전체 원문·모든 chunk·교차 chunk 관계를 확인한 human-review/handoff는 기존 경로로 저장할 수 있다. 사람 결과를 자동 결과에 끼워 넣지 않는다.
 

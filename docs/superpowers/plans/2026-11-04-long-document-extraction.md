@@ -30,7 +30,7 @@
 ### Task 1: 결정적 계획·부분 문맥 prompt
 
 **Files:** `processing/extraction/chunks.py` 신규, `prompt.py` 수정, `processing/tests/test_extraction_chunks.py` 신규. 소유 worker1.
-**Interfaces:** `plan_chunks(document, model, input_sha256, *, request_limit=131072)`→계약 plan dict; `chunk_document(document, chunk)`→기존 입력5키의 부분집합; `chunk_request_bytes(document, model, chunk, error_path=None)`→실제 v3 request bytes; `validate_chunk_output(content, document)`→기존 parse_output+부분 문맥 검사; `assemble_outputs(document, plan, outputs)`→문서 전체 파생 output dict. `outputs`는 plan 순서의 validated chunk output dict 목록.
+**Interfaces:** `plan_chunks(document, model, input_sha256, *, request_limit=131072)`→계약 plan dict; `chunk_document(document, chunk)`→기존 입력5키의 부분집합; `chunk_request_bytes(document, model, chunk, error_path=None)`→실제 v3 request bytes; `validate_chunk_output(content, document)`→기존 parse_output+부분 문맥 검사; `assemble_outputs(document, plan, outputs)`→문서 전체 파생 output dict. `outputs`는 plan 순서의 validated chunk output dict를 순차 제공하는 iterable이다.
 
 - [x] RED: 강제 작은 예산의2+chunk·core 전체 coverage·정확한 인접1block·원문 ID/hash/emoji offset·계획 재현성/경계·단일 oversized block requires_review를 assert한다.
 - [x] RED: v1/v2 byte 고정, v3 범위/metadata·외부 block 인용/전체 not_stated/경고 누락 거부, 같은 local ID remap·사건 임의 융합 없음·전부 사건 없음/일부 사건 없음 경고를 assert한다.
@@ -45,7 +45,7 @@
 - [x] RED: 실제 모의 transport 다중chunk 호출·cycle 첫 실패/최종 성공·모든 cycle 실패·영구 오류 뒤 미시도·계획 불가 호출0·실제 total_calls/nullable usage·전체 파생 output을 assert한다.
 - [x] GREEN: 기존 request/response 검사·archive 쓰기/identity·freeze를 재사용하고 v2에서만 확장한다. chunk마다 중첩 재시도하지 않는다.
 - [x] RED→GREEN: 정확한 plan/요청/응답/실행 순서/receipt·전체 output 재계산, artifact 누락/추가/변조·동시ID/중단·원본 보존·봉인 무쓰기를 검사한다.
-- [ ] v1 전체 회귀와 새 CLI subprocess를 실행한다. 실제 외부 API 없이 통과한 뒤 커밋한다.
+- [x] v1 전체 회귀와 새 CLI subprocess를 실행한다. 실제 외부 API 없이 통과한 뒤 커밋한다.
 
 ### Task 3: Java 등록·보고서·사람 인계
 
@@ -62,7 +62,7 @@
 **Interfaces:** v2 직접 draft는 `CHUNK_DRAFT_REVIEW_REQUIRED`; 실제 사람 검토는 기존 전체 first/final/changes·handoff 경로. 새 평가 policy `api-document-cycle-v1`은 v1 단일 요청/v2 분할의 전체 문서 cycle을 허용하며 기존 policy는 v1만 받는다.
 
 - [x] RED→GREEN: 직접 v2 draft 거부·사람 수정/인계 성공, 첫 실패/최종 성공과 전체 실패·누락/중복 분모, 혼합 버전 policy·원본 동결/이전 v1 bytes를 검사한다.
-- [ ] Python 전체·Java/MySQL 전체·실제 합성 JAR·계약/Node/lint/build 실행, 전체 호출부/실패/원본 보존 자체 검토를 완료한다.
+- [x] Python 전체·Java/MySQL 전체·실제 합성 JAR·계약/Node/lint/build 실행, 전체 호출부/실패/원본 보존 자체 검토를 완료한다.
 - [ ] fresh 전체 검토1회→유효 minor 포함 수정·재검증→PR→정확 head CI/AI/새 사람 피드백→develop 병합·통합 gates→비공개 실행 증거 동결을 완료한다.
 
 **Expected:** 단순 길이 거부로 대체하지 않고 실제 여러 chunk의 결과를 끝까지 처리한다. oversized 단일 block 예외·사람 관계 확정·실제40문서/독립 gold/90%·기기/D09·운영/main은 구별해 기록한다.
