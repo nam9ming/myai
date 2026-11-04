@@ -123,7 +123,7 @@ class SourceUploadJarMySqlTest {
                 var metadata = metadata(format);
                 byte[] metadataBytes = bytes(metadata.toString());
                 byte[] raw = switch (format) {
-                    case "txt" -> bytes(PRIVATE + " TXT 😀\r\n문의 fixed@example.test / 031-123-4567");
+                    case "txt" -> bytes(" ".repeat(210_000) + "\n" + PRIVATE + " TXT 😀\r\n문의 fixed@example.test / 031-123-4567\n" + " ".repeat(210_000));
                     case "json" -> bytes("{\"schema_version\":\"text-body-v1\",\"text\":\"" + PRIVATE + " JSON 😀\\r\\n다음 행\"}");
                     default -> pdf(0, PRIVATE + " PDF first", "second page");
                 };

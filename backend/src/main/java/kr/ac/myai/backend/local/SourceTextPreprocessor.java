@@ -73,8 +73,6 @@ public final class SourceTextPreprocessor {
         for (int i = 0; i < pages.size(); i++) {
             String normalized = normalize(pages.get(i));
             String text = redact(normalized, isPdf ? "page:" + (i + 1) + ":" : "", redactions);
-            size += text.codePointCount(0, text.length()) + (i == 0 ? 0 : 1);
-            if (size > BODY_LIMIT) throw tooLarge();
             for (String line : text.split("\n", -1)) {
                 int remaining = line.codePointCount(0, line.length());
                 int start = 0;
@@ -82,7 +80,11 @@ public final class SourceTextPreprocessor {
                     int count = Math.min(BLOCK_LIMIT, remaining);
                     int end = line.offsetByCodePoints(start, count);
                     String part = line.substring(start, end);
-                    if (!blank(part)) blocks.add(new Block("block-" + (blocks.size() + 1), isPdf ? i + 1 : null, part));
+                    if (!blank(part)) {
+                        size += count + (blocks.isEmpty() ? 0 : 1);
+                        if (size > BODY_LIMIT) throw tooLarge();
+                        blocks.add(new Block("block-" + (blocks.size() + 1), isPdf ? i + 1 : null, part));
+                    }
                     start = end;
                     remaining -= count;
                 }
@@ -119,15 +121,16 @@ public final class SourceTextPreprocessor {
         var result = new StringBuilder();
         int previousEnd = 0;
         int previousCodePoint = 0;
-        int outputSize = 0;
+        int retainedMinimum = 0;
         while (matcher.find()) {
             String category = matcher.start("email") >= 0 ? "email" : "phone";
             String replacement = category.equals("email") ? "[EMAIL]" : "[PHONE]";
             int before = text.codePointCount(previousEnd, matcher.start());
             int start = previousCodePoint + before;
             int end = start + text.codePointCount(matcher.start(), matcher.end());
-            outputSize += before + replacement.length();
-            if (outputSize > BODY_LIMIT) throw tooLarge();
+            // 치환 표시는 공백 블록 제거 후에도 남으므로 본문 길이의 안전한 하한이다.
+            retainedMinimum += replacement.length();
+            if (retainedMinimum > BODY_LIMIT) throw tooLarge();
             log.add(new Redaction(category, prefix + "codepoints:" + start + "-" + end));
             matcher.appendReplacement(result, replacement);
             previousEnd = matcher.end();

@@ -40,6 +40,8 @@ JSON 파일은 정확히 `{"schema_version":"text-body-v1","text":"본문"}`이�
 
 txt/json은 엄격한 UTF-8, PDF는 설정한 Poppler의 내장 텍스트를 사용한다. LF/NFC·고정 전화/이메일 치환 후 최대2,000 code point 블록으로 만든다. PDF 페이지 번호를 보존하고 블록 text를 LF로 결합한다. 최종 본문200,000 code point를 넘으면413이며 자르지 않는다. 긴 한 행의 분할 LF도 한도에 포함한다.
 
+제거되는 빈 줄·공백 블록은 최종 본문 한도에 합산하지 않는다. 보관하는 블록 안의 공백·치환 표시·결합 LF는 포함한다. 원문20MiB와 PDF stdout4MiB 수신 한도는 별도로 유지한다.
+
 PDF는 `text_scope=embedded_text_only`, `text_review_required=true`다. 텍스트 없는 페이지는 전체422 `PDF_PAGE_REVIEW_REQUIRED`이며, 마지막 form-feed 종료 표식은 새 페이지가 아니다. 기존 OCR층은 내장 텍스트로 읽을 수 있지만 OCR을 실행하지 않는다. 그림·표·머리말만 추출된 페이지의 완전성은 사람이 대조해야 한다. txt/json의 `provided_text`·false도 개인정보/사실 검토 완료를 뜻하지 않는다.
 
 변환 stderr가 비어 있지 않으면 종료 코드0도 전체422 `PDF_EXTRACTION_FAILED`다. 손상 stream의 부분 본문을 등록하지 않으며 경고만 있는 PDF도 별도 검토한다. 원래 진단은 응답·로그에 넣지 않는다. 기존 첫 준비본의 정확 재사용은 새 변환 검사 통과를 뜻하지 않는다.

@@ -5,6 +5,8 @@ import kr.ac.myai.backend.exception.ApiException;
 import kr.ac.myai.backend.local.PdfTextExtractor;
 import kr.ac.myai.backend.local.SourceTextPreprocessor;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -15,6 +17,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class SourceTextPreprocessorTest {
     private final SourceTextPreprocessor preprocessor = new SourceTextPreprocessor(new PdfTextExtractor(""));
@@ -160,6 +164,32 @@ class SourceTextPreprocessorTest {
         failure("txt", "😀".repeat(200_000).getBytes(StandardCharsets.UTF_8), 413);
     }
 
+    @ParameterizedTest @ValueSource(strings = {"txt", "json"})
+    void discardedWhitespaceDoesNotRejectAnOtherwiseValidFinalBody(String format) {
+        String padding = " ".repeat(210_000);
+        var redacted = preprocessor.prepare(format, bodyBytes(format, padding + "\n문의 a@b.test\n" + padding));
+        assertThat(redacted.cleanedText()).isEqualTo("문의 [EMAIL]");
+        assertThat(redacted.redactionLog()).containsExactly(
+                new SourceTextPreprocessor.Redaction("email", "codepoints:210004-210012"));
+        String maximum = String.join("\n", java.util.Collections.nCopies(100, "😀".repeat(1_999))) + "😀";
+        var result = preprocessor.prepare(format, bodyBytes(format, padding + "\n" + maximum + "\n" + padding));
+        assertThat(result.cleanedText()).isEqualTo(maximum);
+        assertThat(result.cleanedText().codePointCount(0, result.cleanedText().length())).isEqualTo(200_000);
+        failure(format, bodyBytes(format, padding + "\n" + maximum + "😀\n" + padding), 413);
+    }
+
+    @Test
+    void discardsPdfWhitespaceBeforeCountingTheFinalBodyAndKeepsPageNumbers() {
+        var pdf = mock(PdfTextExtractor.class);
+        byte[] raw = {1};
+        String padding = " ".repeat(210_000);
+        when(pdf.extract(raw)).thenReturn(new PdfTextExtractor.PdfText(
+                List.of(padding + "\nNOTICE\n" + padding, "SECOND"), "25.04.0"));
+        var result = new SourceTextPreprocessor(pdf).prepare("pdf", raw);
+        assertThat(result.cleanedText()).isEqualTo("NOTICE\nSECOND");
+        assertThat(result.blocks()).extracting(SourceTextPreprocessor.Block::page).containsExactly(1, 2);
+    }
+
     @Test
     void projectedBlocksPassActualPythonValidationAndBoundedChunkPlanningWithoutAnApiCall() throws Exception {
         var prepared = prepare("txt", "가😀".repeat(50_000));
@@ -201,6 +231,12 @@ class SourceTextPreprocessorTest {
 
     private SourceTextPreprocessor.Prepared prepare(String format, String text) {
         return preprocessor.prepare(format, text.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private byte[] bodyBytes(String format, String body) {
+        String text = format.equals("txt") ? body : new ObjectMapper().createObjectNode()
+                .put("schema_version", "text-body-v1").put("text", body).toString();
+        return text.getBytes(StandardCharsets.UTF_8);
     }
 
     private void failure(String format, byte[] raw, int status) {

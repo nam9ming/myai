@@ -92,7 +92,7 @@ class SourceUploadMySqlTest {
         byte[] raw = switch (format) {
             case "pdf" -> pdf();
             case "json" -> bytes("{\"schema_version\":\"text-body-v1\",\"text\":\"합성 공지 😀\\n문의 a@b.test\"}");
-            default -> bytes("합성 공지 😀\r\n문의 a@b.test");
+            default -> bytes(" ".repeat(210_000) + "\n합성 공지 😀\r\n문의 a@b.test\n" + " ".repeat(210_000));
         };
         var untouched = counts(NON_SOURCE_TABLES);
         var first = upload(metadata, raw, format);
