@@ -16,7 +16,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Type;
 
-@ControllerAdvice(assignableTypes = LocalManagementController.class)
+@ControllerAdvice(assignableTypes = {LocalManagementController.class, ExtractionUploadController.class})
 @Profile("local-api")
 public class LocalBodyLimitAdvice extends RequestBodyAdviceAdapter {
     private static final int LIMIT = 8 * 1024 * 1024;
@@ -28,17 +28,20 @@ public class LocalBodyLimitAdvice extends RequestBodyAdviceAdapter {
     @Override
     public HttpInputMessage beforeBodyRead(HttpInputMessage input, MethodParameter parameter, Type type,
                                            Class<? extends HttpMessageConverter<?>> converter) throws IOException {
-        int limit = parameter.hasParameterAnnotation(RequestPart.class) ? METADATA_LIMIT : LIMIT;
-        if (input.getHeaders().getContentLength() > limit) throw tooLarge(limit);
+        boolean extractionUpload = parameter.getContainingClass() == ExtractionUploadController.class;
+        int limit = extractionUpload || parameter.hasParameterAnnotation(RequestPart.class) ? METADATA_LIMIT : LIMIT;
+        if (input.getHeaders().getContentLength() > limit) throw tooLarge(limit, extractionUpload);
         byte[] body = input.getBody().readNBytes(limit + 1);
-        if (body.length > limit) throw tooLarge(limit);
+        if (body.length > limit) throw tooLarge(limit, extractionUpload);
         return new HttpInputMessage() {
             public InputStream getBody() { return new ByteArrayInputStream(body); }
             public HttpHeaders getHeaders() { return input.getHeaders(); }
         };
     }
 
-    private ApiException tooLarge(int limit) {
+    private ApiException tooLarge(int limit, boolean extractionUpload) {
+        if (extractionUpload) return new ApiException(HttpStatus.PAYLOAD_TOO_LARGE,
+                "EXTRACTION_UPLOAD_TOO_LARGE", "업로드 control·metadata·finalize JSON은64KiB 이하여야 합니다.", null);
         if (limit == METADATA_LIMIT) return new ApiException(HttpStatus.PAYLOAD_TOO_LARGE,
                 "SOURCE_UPLOAD_TOO_LARGE", "업로드 metadata는64KiB 이하여야 합니다.", "metadata");
         return new ApiException(HttpStatus.PAYLOAD_TOO_LARGE, "PAYLOAD_TOO_LARGE", "로컬 관리 요청 본문은8MiB 이하여야 합니다.", null);

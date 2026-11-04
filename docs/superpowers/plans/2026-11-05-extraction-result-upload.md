@@ -65,12 +65,14 @@
 
 **Interfaces:** LocalManagementService에 공유3키 `readExtractionRequest(byte[] body): ExtractionRequest`와 nested record를 두고 기존 extraction도 같은 검사를 사용한다. 새 Service는 `initialize(byte[] control,byte[] metadata,byte[] input): Result`, `put(String runId,int attempt,String artifact,byte[] content): Result`, `finalizeUpload(String runId,byte[] control): LocalManagementService.Result`를 제공한다. Result는 spec의 extraction-upload-result-v1 필드다. Controller는 spec의 정확3경로/part/MIME만 매핑한다.
 
-- [ ] RED: initial/slot/finalize의 정확 성공응답·snake_case·수신 size/hash, UUID/입력hash/metadata 연결·mode/attempts·완료 canonical의 전체 원본/추가 slot 충돌을 assert한다. Python의17키/출력 의미 검증을 대신하지 않는다.
-- [ ] RED: 기존 JSON API는 유지하며 새 controller에 control/metadata64KiB·input8MiB·prompt20MiB·output5MiB와 전체21MiB를 실제 읽기부터 적용한다. 기존 controller JSON8MiB·source metadata64KiB는 유지한다. 크기/추가·중복 part/MIME·charset·Accept·auth/Origin·공개404와 로그/오류 비노출을 검증한다.
-- [ ] RED: Python 완료0/failed4 뒤 기존 D05 등록을 호출하고 DB 실패 후 같은 staging/UUID/hash 재-finalize, 중단 canonical의 동일 완성 staging 재개, canonical 손상을 부재로 바꾸지 않음을 assert한다. 기존 공개/원본을 변경하지 않는다.
-- [ ] 새 Service/Controller를 기존 LocalBodyLimitAdvice에 포함해 구현한다. 새 controller의 control/metadata/JSON finalize64KiB와 기존 controller JSON8MiB/source metadata64KiB를 구별한다. 공통 ApiExceptionHandler·LocalApiSecurityFilter·WebConfig의 media/Accept/auth 동작을 재사용한다. metadata3연결 필드만 읽고 전체 의미는 Task1 import에 맡긴다. 정확한 body bytes를 기존 request 보관과 D05 등록으로 전달한다. 새 상태조회/취소/자동재시도는 추가하지 않는다.
-- [ ] 새 API/Service와 기존 LocalManagementApiTest/LocalManagementServiceTest/LocalApiSecurityTest/LocalApiStartupTest/SourceUploadApiTest를 실행해 실패/오류/skip0을 확인한다. 실제 class명/명령을 구현 기록에 남긴다.
-- [ ] Commit: `feat: expose extraction file uploads`
+- [x] RED: initial/slot/finalize의 정확 성공응답·snake_case·수신 size/hash, UUID/입력hash/metadata 연결·mode/attempts·완료 canonical의 전체 원본/추가 slot 충돌을 assert한다. Python의17키/출력 의미 검증을 대신하지 않는다.
+- [x] RED: 기존 JSON API는 유지하며 새 controller에 control/metadata64KiB·input8MiB·prompt20MiB·output5MiB를 실제 읽기부터 적용한다. 기존 controller JSON8MiB·source metadata64KiB와 servlet 전체21MiB 설정은 유지한다. 크기/추가·중복 part/MIME·charset·Accept·auth/Origin·공개404와 로그/오류 비노출을 검증한다. 실제 servlet 전체21MiB·spool 검증은 Task4의 기동 JAR에서 수행한다.
+- [x] RED: Python 완료0/failed4 뒤 기존 D05 등록을 호출하고 DB 실패 후 같은 staging/UUID/hash 재-finalize, 중단 canonical의 동일 완성 staging 재개, canonical 손상을 부재로 바꾸지 않음을 assert한다. 기존 공개/원본을 변경하지 않는다.
+- [x] 새 Service/Controller를 기존 LocalBodyLimitAdvice에 포함해 구현한다. 새 controller의 control/metadata/JSON finalize64KiB와 기존 controller JSON8MiB/source metadata64KiB를 구별한다. 공통 ApiExceptionHandler·LocalApiSecurityFilter·WebConfig의 media/Accept/auth 동작을 재사용한다. metadata3연결 필드만 읽고 전체 의미는 Task1 import에 맡긴다. 정확한 body bytes를 기존 request 보관과 D05 등록으로 전달한다. 새 상태조회/취소/자동재시도는 추가하지 않는다.
+- [x] 새 API/Service와 기존 LocalManagementApiTest/LocalManagementServiceTest/LocalApiSecurityTest/LocalApiStartupTest/SourceUploadApiTest를 실행해 실패/오류/skip0을 확인한다. 실제 class명/명령을 구현 기록에 남긴다.
+- [x] Commit: `feat: expose extraction file uploads`
+
+Task3은 새 클래스 부재의 compiler RED 뒤 실제202개 중201통과/1실패를 관찰했다. 첫 identity hard-link 전 Python private 임시파일만 남은 정상 중단의 재개 거부를 수정했다. 같은 Service20·API21·기존5클래스 전체202개를 재실행해 실패/오류/skip0을 확인했다. 실행은 `run-java.py --tests '*ExtractionUploadServiceTest' --tests '*ExtractionUploadApiTest' --tests '*LocalManagementApiTest' --tests '*LocalManagementServiceTest' --tests '*LocalApiSecurityTest' --tests '*LocalApiStartupTest' --tests '*SourceUploadApiTest'`로 실제 Java21/Python3.13을 설정했다. 실제 DB rollback·전체21MiB·spool·S10·공동 복구는 Task4에 남아 있다.
 
 ### Task 4: 실제 Python·MySQL·JAR·복구·문서
 
