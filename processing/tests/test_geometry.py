@@ -25,6 +25,32 @@ class GeometryTest(unittest.TestCase):
                 self.assertAlmostEqual(metres, raw, places=7)
                 self.assertEqual('haversine_point', basis)
 
+    def test_independent_point_oracles(self):
+        # 별도 계산한 고정값·근거: docs/superpowers/specs/2026-11-05-independent-distance-oracles-design.md
+        point = (127.27, 37.01)
+        for other, expected, inside in [
+            ((127.27, 37.014495702498), 499.9, True),
+            ((127.27, 37.014497501139), 500.1, False),
+            ((127.275, 37.012), 496.5436566045, True),
+        ]:
+            with self.subTest(other=other):
+                self.assertAlmostEqual(expected, haversine(point, other), delta=0.01)
+                state, raw, basis = locate(point, self.location(list(other)))
+                self.assertIs(inside, state)
+                self.assertAlmostEqual(expected, raw, delta=0.01)
+                self.assertEqual('haversine_point', basis)
+
+    def test_independent_segment_oracles(self):
+        for point, expected in [
+            ((0, 0.004495702498), 499.9),
+            ((0, 0.004497501139), 500.1),
+            ((0.014495702498, 0), 499.9),
+            ((0.014497501139, 0), 500.1),
+        ]:
+            with self.subTest(point=point):
+                self.assertAlmostEqual(
+                    expected, segment_distance(point, (-0.01, 0), (0.01, 0)), delta=0.01)
+
     def test_segment_interior_and_endpoint(self):
         self.assertAlmostEqual(0, segment_distance((0, 0), (-1, 0), (1, 0)), places=6)
         self.assertAlmostEqual(haversine((2, 0), (1, 0)), segment_distance((2, 0), (-1, 0), (1, 0)))
