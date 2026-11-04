@@ -132,7 +132,8 @@ public class PublicationService {
             // shortcut: 사건별 원문 재검증은 소규모 수동 배치용이며 대량 공개 시 공통 원문 검증을 합친다.
             events.add(content.validate(payload, sources, root));
         }
-        var runReferences = extractions.verifyReferences(events);
+        var runReferences = command.action().equals("preview") ? extractions.verifyReadOnlyReferences(events)
+                : extractions.verifyReferences(events);
         String id = UUID.randomUUID().toString(); Instant now = now();
         var snapshot = content.snapshot(command, revisions, documents, id, now);
         if (command.action().equals("preview")) return previewTransaction.execute(status -> {

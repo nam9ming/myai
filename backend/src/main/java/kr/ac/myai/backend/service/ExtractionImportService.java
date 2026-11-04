@@ -80,6 +80,10 @@ public class ExtractionImportService {
         return verifyReferences(events, null, List.of());
     }
 
+    public List<Reference> verifyReadOnlyReferences(List<ReviewedBatch.Event> events) {
+        return verifyReferences(events, null, List.of(), List.of(), true);
+    }
+
     public List<Reference> verifyReferences(List<ReviewedBatch.Event> events, String batchRun, List<String> batchDocuments) {
         return verifyReferences(events, batchRun, batchDocuments, List.of());
     }
@@ -92,6 +96,11 @@ public class ExtractionImportService {
 
     private List<Reference> verifyReferences(List<ReviewedBatch.Event> events, String batchRun, List<String> batchDocuments,
                                             List<HandoffReference> batchHandoffs) {
+        return verifyReferences(events, batchRun, batchDocuments, batchHandoffs, false);
+    }
+
+    private List<Reference> verifyReferences(List<ReviewedBatch.Event> events, String batchRun, List<String> batchDocuments,
+                                            List<HandoffReference> batchHandoffs, boolean readOnly) {
         var verified = new LinkedHashMap<String, Reference>();
         var images = new LinkedHashMap<HandoffReference, VerifiedHandoff>();
         for (var event : events) {
@@ -107,24 +116,25 @@ public class ExtractionImportService {
                     throw new ExtractionException("EXTRACTION_ARCHIVE_INVALID", null, false);
                 }
                 proofs.put(run, image);
-                verifyReference(run, event.sourceVersionIds(), verified, image);
+                verifyReference(run, event.sourceVersionIds(), verified, image, readOnly);
             }
             for (String id : event.originatingRunIds()) {
                 // 사건별 증거를 먼저 검사하며 다른 사건의 run 캐시로 failed를 허용하지 않는다.
-                if (!proofs.containsKey(id)) verifyReference(id, event.sourceVersionIds(), verified, null);
+                if (!proofs.containsKey(id)) verifyReference(id, event.sourceVersionIds(), verified, null, readOnly);
             }
         }
         for (var reference : batchHandoffs) {
             var image = images.computeIfAbsent(reference, handoffs::read);
             String run = image.projection().path("parent").path("run_id").asText();
             if (batchRun != null && !batchRun.equals(run)) throw new ExtractionException("EXTRACTION_ARCHIVE_INVALID", null, false);
-            verifyReference(run, batchDocuments, verified, image);
+            verifyReference(run, batchDocuments, verified, image, readOnly);
         }
-        if (batchRun != null && batchHandoffs.isEmpty()) verifyReference(batchRun, batchDocuments, verified, null);
+        if (batchRun != null && batchHandoffs.isEmpty()) verifyReference(batchRun, batchDocuments, verified, null, readOnly);
         return verified.values().stream().sorted(Comparator.comparing(Reference::runId)).toList();
     }
 
-    private void verifyReference(String id, List<String> documents, Map<String, Reference> verified, VerifiedHandoff handoff) {
+    private void verifyReference(String id, List<String> documents, Map<String, Reference> verified, VerifiedHandoff handoff,
+                                 boolean readOnly) {
         var reference = verified.get(id);
         Path directory;
         try { directory = Path.of(handoff == null ? repository.referenceDirectory(id) : repository.handoffParentDirectory(id, handoff)); }
@@ -133,7 +143,7 @@ public class ExtractionImportService {
                 throw new ExtractionException("EXTRACTION_ARCHIVE_INVALID", null, false);
             }
         if (reference == null || handoff != null) {
-            var run = archives.read(id, directory.getParent());
+            var run = readOnly ? archives.readSealed(id, directory.getParent()) : archives.read(id, directory.getParent());
             repository.checkDocument(run);
             reference = handoff == null ? repository.verifiedReference(run) : repository.verifiedHandoffParent(run, handoff);
             verified.put(id, reference);

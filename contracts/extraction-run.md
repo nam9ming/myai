@@ -57,6 +57,8 @@ API 실행은 시도별 `attempt-N.prompt`(실제 HTTP JSON body, 헤더 제외)
 
 ## 파일·재실행·인계
 
+이미 봉인된 DB 참조는 `python3.13 -B -m processing.extraction verify-sealed RUN_ID --root PARENT_OF_DB_RAW_REF`로 읽기 전용 재검증한다. `verify`의 전체 검사와 기존 봉인 검사를 수행하고 `freeze`와 같은3키 `extraction-registration-v1` envelope를 반환한다. 성공0·보존된 실패4·무효/봉인되지 않은 원본3이며 생성·복사·권한 수정은 하지 않는다. 기존 등록은 `freeze`, 로컬 보고서와 공개 preview는 `verify-sealed`를 사용한다.
+
 Java 등록은 `python3.13 -m processing.extraction freeze RUN_ID --root ROOT`로 별도 읽기 전용 실행 보관본을 만든다. `extraction-registration-v1` 응답은 `protocol_version/snapshot_ref/receipt`의3키이며 snapshot_ref는 `registered/<receipt_sha256>/<run_id>` 또는 이미 읽기 전용인 현재 run_id의 상대 경로다. 전체 원본을 hash 대조 복사·검증하고 파일0400/실행 디렉터리0500으로 설정한 뒤 원자적으로 내놓는다. 같은 보관본은 재사용하며 원래 archive를 덮어쓰지 않는다. 실패/과다 출력도 그대로 보존하고 종료0/4는 receipt.status에 대응한다. 추가 저장 공간과 POSIX 권한 지원이 필요하다. 관리자 권한 변경·이동·삭제를 방어하는 WORM 보장은 아니다.
 
 `--root` 기본값은 Git 제외 `data/private/extraction-runs`입니다. 저장소 안에서는 `data/private/` 아래만 허용하며, 저장소 밖에서는 운영자가 지정한 비공개 디렉터리를 사용합니다. 새 디렉터리는0700, 파일은0600입니다. 기존 상위 디렉터리 권한·백업·공유 여부는 운영자가 관리합니다. 원본은 닫힌 일반 파일이어야 하며 symlink·FIFO는 거부합니다.

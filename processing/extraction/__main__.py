@@ -4,7 +4,7 @@ import argparse
 import json
 import sys
 
-from .archive import DEFAULT_ROOT, freeze_run, import_run, prepare, verify_run
+from .archive import DEFAULT_ROOT, freeze_run, import_run, prepare, verify_run, verify_sealed_run
 from .draft import check_draft, draft_run
 from .rule_runs import RULE_ROOT, run_rules, verify_rules_run
 from .validation import MAX_BYTES, ExtractionError
@@ -18,10 +18,10 @@ class Parser(argparse.ArgumentParser):
 def main():
     parser = Parser(description='AI 추출 입력 준비·수동 원출력 기록·무결성 검증')
     commands = parser.add_subparsers(dest='command', required=True, parser_class=Parser)
-    for name in ('prepare', 'import', 'verify', 'freeze', 'draft', 'check-draft', 'run', 'rules-run', 'rules-verify'):
+    for name in ('prepare', 'import', 'verify', 'verify-sealed', 'freeze', 'draft', 'check-draft', 'run', 'rules-run', 'rules-verify'):
         command = commands.add_parser(name)
         command.add_argument('--root', default=RULE_ROOT if name.startswith('rules-') else DEFAULT_ROOT)
-        if name in ('verify', 'freeze', 'draft', 'check-draft', 'rules-verify'):
+        if name in ('verify', 'verify-sealed', 'freeze', 'draft', 'check-draft', 'rules-verify'):
             command.add_argument('run_id')
         else:
             command.add_argument('--input', required=True)
@@ -53,6 +53,8 @@ def main():
             result = verify_rules_run(args.run_id, args.root)
         elif args.command == 'freeze':
             result = freeze_run(args.run_id, args.root)
+        elif args.command == 'verify-sealed':
+            result = verify_sealed_run(args.run_id, args.root)
         elif args.command == 'draft':
             result = draft_run(args.run_id, args.source, args.output, args.area_id, args.split_group_id,
                                args.dictionary_version, args.root)
@@ -61,7 +63,7 @@ def main():
         else:
             result = verify_run(args.run_id, args.root)
         sys.stdout.write(json.dumps(result, ensure_ascii=True, separators=(',', ':')) + '\n')
-        status = result['receipt']['status'] if args.command == 'freeze' else result['status']
+        status = result['receipt']['status'] if args.command in ('freeze', 'verify-sealed') else result['status']
         return 4 if status == 'failed' else 0
     except ExtractionError as error:
         sys.stderr.write(error.code + '\n')

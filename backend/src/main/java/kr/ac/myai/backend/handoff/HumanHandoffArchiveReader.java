@@ -55,7 +55,7 @@ public class HumanHandoffArchiveReader {
             Path directory = root.resolve(ref);
             Object rootKey = directoryKey(root), directoryKey = directoryKey(directory);
             sealed(directory, true);
-            var process = PythonProcess.execute(executable, workdir, List.of("-m", "processing.evaluation", "verify-handoff", ref,
+            var process = PythonProcess.execute(executable, workdir, List.of("-B", "-m", "processing.evaluation", "verify-handoff", ref,
                     "--root", root.toString()), new byte[0], timeout);
             if (process.exitCode() != 0) {
                 throw new ExtractionException(switch (process.exitCode()) {
