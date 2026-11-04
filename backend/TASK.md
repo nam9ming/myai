@@ -1,5 +1,7 @@
 # 백엔드·DB 작업
 
+R15/R16의 [최소 요청 로그](docs/request-logging.md)를 연결했다. 전체 동기 HTTP에서 요청당1회 서버 ID·오류·latency·확인된 선택 버전만 남기며 요청 조건·원문·IP·예외 stack은 수집하지 않는다. 실제 자료·기기 인수와 운영 보존/접근 정책은 후속 작업이다.
+
 S10의 파일 방식 [로컬 검토 보고서](docs/review-report.md)를 추가했다. 원문·모든 D05 시도·현재/과거 D06·사람 수정·승인/공개 이력·오류·명시 preview를 private HTML로 비교한다. 읽기 전용 capture·sealed 검증·비웹 기동·private 출력을 적용하며 기계 검사와 실제 사람 검토/공개를 구별한다. 실제 자료·기기 인수와 운영 승인은 후속 작업이다.
 
 구현한 기능과 실행 명령, 미완료 범위는 [README](README.md)에 기록합니다. 합성 API·초기 스키마·비공개 검토본 import와 로컬 승인·미리보기·공개·복구·snapshot JSON 내보내기를 구현했습니다. 공개 API는 DB snapshot을 조회하며 matches를 실제 Python 계산에 연결했습니다. [import 규격](docs/reviewed-import.md)·[승인·공개·내보내기 안내](docs/review-publication.md)·[공개 조회 안내](docs/public-snapshot-api.md)와 README의 Python 설정을 따릅니다.

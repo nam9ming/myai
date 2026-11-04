@@ -1,13 +1,18 @@
 package kr.ac.myai.backend.controller;
 
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import kr.ac.myai.backend.exception.ApiException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import kr.ac.myai.backend.logging.PublicRequestLogContext;
+import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.http.server.ServerHttpRequest;
+import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -16,17 +21,16 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.RecoverableDataAccessException;
 import org.springframework.dao.TransientDataAccessException;
 import org.springframework.transaction.CannotCreateTransactionException;
 
 import java.util.List;
-import java.util.UUID;
 
 @RestControllerAdvice
-public class ApiExceptionHandler {
-    private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
+public class ApiExceptionHandler implements ResponseBodyAdvice<Object> {
     private static final PropertyNamingStrategies.SnakeCaseStrategy names = new PropertyNamingStrategies.SnakeCaseStrategy();
 
     public record FieldError(String field, String message) {}
@@ -37,8 +41,7 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ErrorResponse> domain(ApiException error) {
-        String requestId = UUID.randomUUID().toString();
-        if (error.code().equals("CALCULATION_PROTOCOL_ERROR")) log.error("계산 응답 검증 실패 request_id={} code={}", requestId, error.code());
+        String requestId = PublicRequestLogContext.requestId();
         var fields = error.field() == null ? List.<FieldError>of() : List.of(new FieldError(error.field(), error.getMessage()));
         return ResponseEntity.status(error.status()).body(new ErrorResponse(
                 new ErrorDetail(error.code(), error.getMessage(), fields, error.retryable()), requestId, error.currentSnapshotId()));
@@ -79,14 +82,30 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> unexpected(Exception error) {
-        String requestId = UUID.randomUUID().toString();
-        log.error("요청 처리 실패 request_id={}", requestId, error);
+        String requestId = PublicRequestLogContext.requestId();
         return ResponseEntity.internalServerError().body(new ErrorResponse(
                 new ErrorDetail("INTERNAL_ERROR", "요청 처리 중 오류가 발생했습니다.", List.of(), false), requestId));
     }
 
     private ResponseEntity<ErrorResponse> response(HttpStatus status, String code, String message, List<FieldError> fields) {
         return ResponseEntity.status(status).body(new ErrorResponse(
-                new ErrorDetail(code, message, fields, status == HttpStatus.SERVICE_UNAVAILABLE), UUID.randomUUID().toString()));
+                new ErrorDetail(code, message, fields, status == HttpStatus.SERVICE_UNAVAILABLE), PublicRequestLogContext.requestId()));
+    }
+
+    @Override
+    public boolean supports(MethodParameter returnType, Class<? extends HttpMessageConverter<?>> converterType) {
+        return true;
+    }
+
+    @Override
+    public Object beforeBodyWrite(Object body, MethodParameter returnType, MediaType contentType,
+                                  Class<? extends HttpMessageConverter<?>> converterType,
+                                  ServerHttpRequest request, ServerHttpResponse response) {
+        if (body instanceof ErrorResponse errorResponse) {
+            if (errorResponse.error() != null) PublicRequestLogContext.error(errorResponse.error().code());
+        } else if (body instanceof JsonNode json) {
+            PublicRequestLogContext.response(json.path("snapshot_id").textValue(), json.path("data").path("rules_version").textValue());
+        }
+        return body;
     }
 }
