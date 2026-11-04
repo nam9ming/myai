@@ -254,6 +254,26 @@ python3.13 -m processing.extraction rules-verify RUN_UUID
 
 위 평가 CLI를 그대로 사용합니다. 보관본은6파일 규칙 원본·gold·initial 전체를 포함하며 원래 경로 없이 재검증합니다. 기존 AI 평가 형식/바이트도 유지합니다. 세 방법의 짝지은 개선/악화 비교는 아래 별도 CLI를 사용합니다. 실제 지명 검토·독립 정답·40건 평가를 수행한 결과가 아닙니다. Windows와 전원 중단 내구성은 미검증이며 POSIX 권한은 WORM이 아닙니다.
 
+## 실제 입력 길이 진단
+
+2026-11-04에 DB D03의 전체 block 투영·hash와 대조한 기존47입력을 로컬에서 측정했습니다. 기존 `parse_input`·`render_prompt(..., prompt-v2)`·`request_bytes`만 사용하며 키·추출/토큰계산 API를 호출하지 않았습니다. 원입력/index의 SHA·권한·fileKey는 전후 동일합니다.
+
+| 항목 | 최대 | 중앙값 |
+| --- | ---: | ---: |
+| D03 정제 본문 Unicode code points | 1,691 | 525 |
+| 입력 JSON UTF-8 bytes | 6,929 | 2,118 |
+| 입력 block 수 | 44 | 11 |
+| v2 prompt UTF-8 bytes | 31,827 | 22,761 |
+| 첫 요청 body UTF-8 bytes | 38,088 | 28,360 |
+
+D03 정제 본문 길이는 DB 값을 직접 계산했고, block.text 합계와 구별합니다. 전체715블록이며 제안200,000문자(code point/UTF-16 각각)·입력8MiB 초과는0입니다. 요청 body는 `gpt-6.1-sol`·첫 시도 framing·헤더 제외이며 재시도 피드백은 넣지 않았습니다. 이 측정을 G02 장문 분할 구현이나 공급자 token 한도 검증으로 대체하지 않습니다.
+
+기존 실행은 고유20문서·23run·25시도이며, v1 3회/v2 20회·기계 검증 통과19/실패4입니다. `usage_in`180,568·`usage_out`61,954는 각 실행의 전체 시도 사용량 합계입니다. 단일 prompt token 수나 문자별 환산값이 아니며, 상세 `model_version`23건은 모두 null로 남겼습니다.
+
+2026-11-04 확인한 [OpenAI 모델 문서](https://developers.openai.com/api/docs/models/gpt-6.1-sol)의 context window는1,050,000tokens·최대 출력128,000tokens입니다. 프로젝트의 `max_output_tokens=8192`와 별개입니다. 정확한 입력 token 수는 같은 model/instructions/input으로 [입력 토큰 계산 API](https://developers.openai.com/api/docs/guides/token-counting)를 사용할 수 있지만 이번에는 호출하지 않았습니다. 계정별 접근 권한·rate/spend 한도는 미확인이고 문자/바이트로 token 수를 추정하지 않습니다.
+
+상세 수치는 Git 제외 `data/private/evaluation/evidence/real-review-readiness-2026-11-04/diagnostics/input-lengths.json`, 처리20문서의 보고서는 [실자료 검토 인계 안내](../backend/docs/review-report.md#실제-개발-자료의-검토-인계-준비)를 따릅니다. 사람 검토·독립 정답표·dev20/holdout20·90% 평가·승인/공개·배포는 미완료입니다.
+
 ## 검증·남은 작업
 
 등록한 D05에서 `python3.13 -m processing.extraction draft`로 ai-draft-import-v1을 생성하고 Java local-import로 저장할 수 있다. 실행 인자·사람 검토본 작성·승인 경계는 [초안 연결 안내](../backend/docs/ai-review-draft.md)를 따른다. API 실행과 분리된 로컬 변환이며 AI 원본과 초안을 사람이 확인해야 한다.
