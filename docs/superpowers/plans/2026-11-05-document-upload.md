@@ -82,13 +82,21 @@
 
 **Files:** 신규 `SourceUploadMySqlTest.java`, `SourceUploadJarMySqlTest.java`; 관련 `DatabaseRecoveryTest.java`/S10 시험; `.github/workflows/ci.yml`, `package.json`의 지원 Node 테스트 명령, `contracts/source-upload.md`, `contracts/local-management-api.md`, `backend/README.md`·`TASK.md`·`docs/local-management-api.md`·`reviewed-import.md`·`review-report.md`·`backup-recovery.md`. 부모가 소유하며 합의한 테스트 파일만 독립 worker에 인계할 수 있다.
 
-- [ ] RED→GREEN: 실제 multipart HTTP로3형식→D03→Python 입력 검사→정확 재실행/거부를 검증한다. >8MiB와 최대20MiB 원문을 포함하고 새 자료는 pending/unchecked·공개0이다. 기존 source-review/preview/승인 경계·S10 full raw·선택 복구 후 원래 등록 재실행을 대조한다.
-- [ ] 실제 JAR에서 chunked/인증 전 parsing/part/크기 오류·키/본문/경로 비노출·공용 임시파일0·정상/빈페이지 PDF·전용 DB를 검증한다. `MYAI_LOCAL_API_PDFTOTEXT`만 설정하며 실제 키는 전달하지 않는다.
-- [ ] CI에서 Poppler 실행 파일을 확인/준비하고 실제 버전을 기록해 PDF시험을 건너뛰지 않는다. 기존 Node·계약·Python·전용MySQL·JAR 전체 검증을 유지한다.
-- [ ] `python3.13 -m unittest discover -s processing/tests -v`, `npm run lint`, `npm test`, `npm run build`, 전용 MySQL의 `./backend/gradlew -p backend test bootJar --no-daemon`을 실행한다. 실패/오류/skip0·종료코드/실제 실행 버전을 기록한다. 기존 공유/운영 DB에 시험하지 않는다.
-- [ ] 계약·실행/한도·원본/실패·PDF/비식별 검토·백업/복구·미완료를 기록한다. 실제키/API/실자료/운영 인수를 실행했다고 표시하지 않는다.
+- [x] RED→GREEN: 실제 multipart HTTP로3형식→D03→Python 입력 검사→정확 재실행/거부를 검증한다. >8MiB와 최대20MiB 원문을 포함하고 새 자료는 pending/unchecked·공개0이다. 기존 source-review/preview/승인 경계·S10 full raw·선택 복구 후 원래 등록 재실행을 대조한다.
+- [x] 실제 JAR에서 chunked/인증 전 parsing/part/크기 오류·키/본문/경로 비노출·공용 임시파일0·정상/빈페이지 PDF·전용 DB를 검증한다. `MYAI_LOCAL_API_PDFTOTEXT`만 설정하며 실제 키는 전달하지 않는다.
+- [x] CI에 Poppler 실행 파일 확인/준비·실제 버전 기록 단계를 구성하고 PDF시험을 건너뛰지 않도록 한다. 기존 Node·계약·Python·전용MySQL·JAR 전체 검증을 유지하며 원격 실행 결과는 최종 인수 게이트에서 확인한다.
+- [x] `python3.13 -m unittest discover -s processing/tests -v`, `npm run lint`, `npm test`, `npm run build`, 전용 MySQL의 `./backend/gradlew -p backend test bootJar --no-daemon`을 실행한다. 실패/오류/skip0·종료코드/실제 실행 버전을 기록한다. 기존 공유/운영 DB에 시험하지 않는다.
+- [x] 계약·실행/한도·원본/실패·PDF/비식별 검토·백업/복구·미완료를 기록한다. 실제키/API/실자료/운영 인수를 실행했다고 표시하지 않는다.
 
 **Expected:** txt/pdf/json의 원문·metadata·전처리·AI입력을 보존하면서 D03 저장과 기존 검토/공개/보고서/복구를 연결한다. 실제 AI 추출·사람 검토·정확도·UI·운영 배포 완료로 범위를 확대하지 않는다.
+
+## 로컬 검증 기록
+
+2026-11-05 KST, 실행 코드 `e0bfb39`에서 Java21.0.13·MySQL8.4.13 전체683개/52클래스·실패/오류/skip0, JAR 빌드6분3초를 확인했다. Python3.13.5 전체630개(358.043초), Node24.21.0의 린트401파일·시험34개·계약9예제·정적 빌드도 통과했다. Python 실행 코드 변경은 없으며 기존 JSON/CLI/AI입력8MiB·공개32KiB를 유지한다.
+
+별도 단계 검증은 raw/보고서155개, 텍스트/PDF22개, 관리/인증/기동/보관209개, form-post 설정 보완69기동+실제JAR1개다. 이 수치는 중복이 있어 전체683개에 더하지 않는다. 기존 큰 JSON 행도 삭제하지 않고 전체 비교하며, 시험용 MySQL을 정리하고 기존 서비스 컨테이너6개는 보존했다.
+
+전체 자체 검토에서 네 직접 controller 호출부와 Spring 프로필, raw 소비·확인/승인·공개·보고서·복구, 오류·metadata MIME/stream·정확 재실행·다른 JVM의 hash를 대조했다. 전체 브랜치 독립 리뷰와 PR의 원격 CI/AI·통합은 아래 최종 게이트에서 이어간다.
 
 ## 최종 인수 게이트
 
