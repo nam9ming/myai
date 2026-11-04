@@ -24,6 +24,92 @@ class ExtractionArchiveReaderTest {
     final String id = "71fb66f0-e610-4f9c-8f26-4bb77655ee8c";
 
     @Test
+    void readsActualChunkedCyclesAndSealedReuseWithFinalWholeOutputHash() throws Exception {
+        Path input = ChunkedArchiveFixtures.input(root);
+        Path archive = ChunkedArchiveFixtures.archive(root, input, id, "fixture-nfc-v1", "retry");
+        var result = reader(PythonProbe.REPO, 10000).read(id, archive);
+        assertThat(result.attempts()).isEqualTo(2);
+        assertThat(result.receipt().path("format_version").asText()).isEqualTo("extraction-archive-v2");
+        assertThat(result.metadata().path("prompt_version").asText()).isEqualTo("prompt-v3");
+        assertThat(result.status()).isEqualTo("validated");
+        assertThat(result.outputSha256()).isEqualTo(ReviewedImportReader.sha256(Files.readAllBytes(result.directory().resolve("attempt-2.output"))));
+        assertThat(Files.readAllBytes(result.directory().resolve("attempt-1.output"))).isEmpty();
+        var before = tree();
+        assertThat(reader(PythonProbe.REPO, 10000).readSealed(id, archive).receipt()).isEqualTo(result.receipt());
+        assertThat(tree()).isEqualTo(before);
+    }
+
+    @Test
+    void readsChunkedPermanentFailureAndRejectsChangedSubrequest() throws Exception {
+        Path input = ChunkedArchiveFixtures.input(root);
+        Path archive = ChunkedArchiveFixtures.archive(root, input, id, "fixture-nfc-v1", "permanent");
+        var result = reader(PythonProbe.REPO, 10000).readSealed(id, archive);
+        assertThat(result.status()).isEqualTo("failed");
+        assertThat(result.attempts()).isEqualTo(1);
+        assertThat(result.receipt().path("total_calls").asInt()).isEqualTo(1);
+        assertThat(result.receipt().path("attempts").get(0).path("chunks").get(1).path("attempted").asBoolean(true)).isFalse();
+        assertThat(Files.readAllBytes(result.directory().resolve("attempt-1.output"))).isEmpty();
+        Path output = result.directory().resolve("attempt-1-chunk-000001.response");
+        output.toFile().setWritable(true, true); Files.writeString(output, "changed"); output.toFile().setWritable(false, false);
+        var before = tree();
+        assertThatThrownBy(() -> reader(PythonProbe.REPO, 10000).readSealed(id, archive)).isInstanceOf(ExtractionException.class);
+        assertThat(tree()).isEqualTo(before);
+    }
+
+    @Test
+    void keepsThreeFailedDocumentCyclesSeparateFromActualHttpCalls() throws Exception {
+        Path input = ChunkedArchiveFixtures.input(root);
+        Path archive = ChunkedArchiveFixtures.archive(root, input, id, "fixture-nfc-v1", "all-failed");
+        var result = reader(PythonProbe.REPO, 10000).readSealed(id, archive);
+        assertThat(result.status()).isEqualTo("failed");
+        assertThat(result.attempts()).isEqualTo(3);
+        assertThat(result.metadata().path("attempts").asInt()).isEqualTo(3);
+        assertThat(result.receipt().path("total_calls").asInt()).isEqualTo(6);
+        assertThat(Files.readAllBytes(result.directory().resolve("attempt-3.output"))).isEmpty();
+        assertThat(result.receipt().path("artifacts").has("attempt-3-chunk-000002.response")).isTrue();
+    }
+
+    @Test
+    void rejectsFinalOutputChangedAfterPythonVerification() throws Exception {
+        Path archive = archive(false);
+        String receipt = Files.readString(archive.resolve(id).resolve("receipt.json"));
+        String target = new ObjectMapper().writeValueAsString(archive.resolve(id).resolve("attempt-1.output").toString());
+        Path probe = probe("p=Path(" + target + ");p.chmod(0o600);p.write_bytes(p.read_bytes()+b' ');p.chmod(0o400)\nprint(" + quotedPacket(receipt) + ")");
+        assertThatThrownBy(() -> reader(probe, 3000).read(id, archive)).isInstanceOfSatisfying(ExtractionException.class,
+                ex -> assertThat(ex.code()).isEqualTo("EXTRACTION_ARCHIVE_INVALID"));
+    }
+
+    @Test
+    void preservesOversizedFailedManualOutputWithoutChangingArchive() throws Exception {
+        byte[] raw = new byte[8 * 1024 * 1024 + 17]; java.util.Arrays.fill(raw, (byte) 'x');
+        raw[raw.length - 1] = (byte) 0xff;
+        Path archive = archive(true, 1, raw);
+        var before = tree();
+        var result = reader(PythonProbe.REPO, 10000).read(id, archive);
+        assertThat(result.status()).isEqualTo("failed");
+        assertThat(result.receipt().path("format_version").asText()).isEqualTo("extraction-archive-v1");
+        assertThat(result.receipt().path("attempts").get(0).path("error_code").asText()).isEqualTo("JSON_LIMIT");
+        assertThat(result.receipt().path("artifacts").path("attempt-1.output").path("size").asLong()).isEqualTo(raw.length);
+        assertThat(result.outputSha256()).isEqualTo(ReviewedImportReader.sha256(raw));
+        assertThat(reader(PythonProbe.REPO, 10000).readSealed(id, archive).receipt()).isEqualTo(result.receipt());
+        assertThat(tree()).isEqualTo(before);
+    }
+
+    @Test
+    void rejectsSameSizeChangeBeyondOutputLimitAfterPythonVerification() throws Exception {
+        byte[] raw = new byte[8 * 1024 * 1024 + 17]; java.util.Arrays.fill(raw, (byte) 'x');
+        raw[raw.length - 1] = (byte) 0xff;
+        Path archive = archive(true, 1, raw);
+        String receipt = Files.readString(archive.resolve(id).resolve("receipt.json"));
+        String target = new ObjectMapper().writeValueAsString(archive.resolve(id).resolve("attempt-1.output").toString());
+        Path probe = probe("p=Path(" + target + ");p.chmod(0o600)\n"
+                + "with p.open('r+b') as stream:\n stream.seek(-1,2);stream.write(b'x')\n"
+                + "p.chmod(0o400)\nprint(" + quotedPacket(receipt) + ");sys.exit(4)");
+        assertThatThrownBy(() -> reader(probe, 3000).readSealed(id, archive)).isInstanceOfSatisfying(ExtractionException.class,
+                ex -> assertThat(ex.code()).isEqualTo("EXTRACTION_ARCHIVE_INVALID"));
+    }
+
+    @Test
     void acceptsApiArchiveWithResponseArtifactsAndMeasuredUsage() throws Exception {
         Path archive = apiArchive(root, PythonProbe.REPO.resolve("contracts/examples/ai-input.json"), id, "fixture-nfc-v1");
         var result = reader(PythonProbe.REPO, 10000).read(id, archive);
@@ -206,6 +292,10 @@ class ExtractionArchiveReaderTest {
     }
 
     Path archive(boolean failed, int attempts) throws Exception {
+        return archive(failed, attempts, null);
+    }
+
+    private Path archive(boolean failed, int attempts, byte[] rawOutput) throws Exception {
         Path archive = root.resolve("archive");
         Path metadata = root.resolve("metadata.json");
         String meta = Files.readString(PythonProbe.REPO.resolve("processing/examples/extraction-metadata.json"))
@@ -214,7 +304,7 @@ class ExtractionArchiveReaderTest {
         Files.writeString(metadata, meta);
         Path prompt = Files.writeString(root.resolve("prompt.txt"), "합성 수동 도구 입력 전문; 실제 모델 호출 없음");
         Path output = root.resolve("output.json");
-        Files.write(output, failed ? new byte[]{(byte) 0xff} : Files.readAllBytes(PythonProbe.REPO.resolve("contracts/examples/ai-extraction.json")));
+        Files.write(output, rawOutput != null ? rawOutput : failed ? new byte[]{(byte) 0xff} : Files.readAllBytes(PythonProbe.REPO.resolve("contracts/examples/ai-extraction.json")));
         var command = new java.util.ArrayList<>(List.of(PythonProbe.PYTHON, "-m", "processing.extraction", "import", "--input",
                 PythonProbe.REPO.resolve("contracts/examples/ai-input.json").toString(), "--metadata", metadata.toString(),
                 "--root", archive.toString()));

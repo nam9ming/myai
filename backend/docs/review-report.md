@@ -57,6 +57,10 @@ DB 행은 읽기 전용 `REPEATABLE_READ`로 수집합니다. 운영 상태·파
 
 기능 시험은 합성 자료를 사용합니다. 아래 실자료 실행과 구별하며, 실제 사람 검토·권리 확인·독립 평가/40문서·실기기 인수·운영 보존 정책·main 병합/배포는 후속 작업입니다.
 
+## 장문 보관본 표시
+
+장문 `extraction-archive-v2`는 chunk-plan·모든 subrequest와 문서 전체 파생 cycle을 함께 표시합니다. `attempt-N.prompt/output`은 단일 HTTP 원출력이 아니며, 실제 요청/응답은 `attempt-N-chunk-000001.*`에 있습니다. metadata.attempts는 문서 cycle 수, receipt.total_calls는 실제 HTTP 호출 수입니다. 파일당8MiB·전체64MiB 한도는 그대로이며 초과 원출력은 별도 검토가 필요합니다.
+
 ## 실제 개발 자료의 검토 인계 준비
 
 2026-11-04에 기존 백업의 D03 47문서·D05 23실행·숨김 revision20개를 새 전용 MySQL8.4.13에 복원했습니다. SELECT만 허용한 계정으로 실제 JAR의 `local-review-report`를20회 실행해 처리한 고유 문서20건의 비공개 HTML과 검토 대기 목록을 만들었습니다. 쓰기 권한 거부1142도 확인했습니다.

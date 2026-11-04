@@ -27,6 +27,8 @@ source는 D05의 UUID 또는 `registered/HASH/UUID` 참조다. 정확한 canonic
 - reason은 비어 있을 수 없고 evidence_ids는 이전/새 유효 출력의 근거 ID만 참조한다. 의미를 뒷받침하는지는 사람이 확인한다.
 - 바뀐 부분이 모두 기록되어야 한다. 누락·허위·무변경·중복·서로 겹치는 경로는 거부한다. `output` 전체를 기록했다면 하위 변경을 중복 기록하지 않는다.
 - 정상 AI 값을 그대로 검토했다면 `changes=[]`다. 실패한 D05에는 유효한 이전 출력이 없으므로 `field_path="output"`, `before=null`, `after=새 출력 전체`의 기록이 필요하다. 실패 원출력은 원래 파일로 보존한다.
+
+장문 archive-v2 부모는 [분할 계약](chunked-extraction.md)을 따른다. 정상 부모의 before는 마지막 전체 문서 cycle의 파생 결과이며 마지막 HTTP chunk가 아니다. 모든 subrequest 원본·교차 chunk 관계를 함께 검토하고 변경 이유를 기록한다. 전체 cycle 실패라면 일부 chunk가 성공했더라도 before=null을 유지한다. v2 직접 ai-draft는 거부하며 검증한 사람 수정본의 기존 handoff를 사용한다.
 - 잘못 추출한 사건을 모두 제거할 수도 있다. 이때 수정후 출력의 `items=[]`·`warnings`의 `NO_EVENT_FOUND`와 전후 변경 기록이 필요하다.
 
 ## 명령·보관

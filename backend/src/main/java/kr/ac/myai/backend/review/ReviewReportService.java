@@ -133,15 +133,13 @@ public class ReviewReportService {
                         .put("scope", "봉인·원본 전체 검증이며 DB 등록 일치와 별개입니다.");
                 extraction.set("receipt", run.receipt()); extraction.set("metadata", run.metadata());
                 extraction.set("database_validation", inspect(() -> { compareRun(row, run, originals); return null; }));
-                for (var artifact : run.receipt().path("artifacts").properties()) {
-                    String name = artifact.getKey();
-                    check(Set.of("input.json", "metadata.json").contains(name)
-                            || name.matches("attempt-[1-3]\\.(?:prompt|output|response|exchange)"), "artifacts");
+                for (String name : ExtractionArchiveReader.artifactNames(run.receipt())) {
+                    JsonNode artifact = run.receipt().path("artifacts").path(name);
                     var item = mapper.createObjectNode(); artifacts.set(name, item);
                     item.set("validation", inspect(() -> {
                         byte[] bytes = read(path.resolve(name), path);
-                        check(artifact.getValue().path("size").isIntegralNumber() && bytes.length == artifact.getValue().path("size").asLong()
-                                && ReviewedImportReader.sha256(bytes).equals(artifact.getValue().path("sha256").asText()), "artifacts");
+                        check(artifact.path("size").isIntegralNumber() && bytes.length == artifact.path("size").asLong()
+                                && ReviewedImportReader.sha256(bytes).equals(artifact.path("sha256").asText()), "artifacts");
                         item.setAll(encoded(bytes)); budget.add(item); return null;
                     }));
                 }
@@ -357,13 +355,14 @@ public class ReviewReportService {
         try {
             check(directory.normalize().equals(directory) && directory.toRealPath().equals(directory)
                     && Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS), "raw_ref");
-            var names = new ArrayList<>(List.of("identity.json", "receipt.json", "input.json", "metadata.json"));
-            for (int attempt = 1; attempt <= 3; attempt++) for (String suffix : List.of("prompt", "output", "response", "exchange"))
-                names.add("attempt-" + attempt + "." + suffix);
-            for (String name : names) {
-                Path file = directory.resolve(name);
-                if (Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS) && Files.size(file) > ARTIFACT_LIMIT)
-                    throw error("REPORT_TOO_LARGE", "artifact");
+            try (var files = Files.newDirectoryStream(directory)) {
+                for (Path file : files) {
+                    String name = file.getFileName().toString();
+                    boolean artifact = Set.of("identity.json", "receipt.json", "input.json", "metadata.json", "chunk-plan.json").contains(name)
+                            || name.matches("attempt-[1-3](?:-chunk-[0-9]{6})?\\.(?:prompt|output|response|exchange)");
+                    if (artifact && Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS) && Files.size(file) > ARTIFACT_LIMIT)
+                        throw error("REPORT_TOO_LARGE", "artifact");
+                }
             }
         } catch (IOException | SecurityException ex) { throw error("REPORT_FILE_UNAVAILABLE", "raw_ref"); }
     }

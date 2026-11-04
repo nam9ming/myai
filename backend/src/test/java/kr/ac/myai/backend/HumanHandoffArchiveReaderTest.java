@@ -25,6 +25,30 @@ class HumanHandoffArchiveReaderTest {
     final ReviewedImportReader json = new ReviewedImportReader();
 
     @Test
+    void readsRealHumanReviewHandoffFromChunkedValidatedAndFailedParents() throws Exception {
+        var fixtures = new SourceReviewFixtures(root, null, json, null);
+        for (String mode : List.of("success", "permanent")) {
+            Path work = Files.createDirectories(root.resolve(mode));
+            var source = (ObjectNode) new ObjectMapper().readTree(PythonProbe.REPO.resolve("backend/examples/source-import.json").toFile());
+            var document = SourceReviewFixtures.document(source); ChunkedArchiveFixtures.enlarge(document, "block_index");
+            var input = new ObjectMapper().createObjectNode().put("data_kind", source.path("data_kind").asText());
+            for (String key : List.of("document_version_id", "title", "published_date")) input.set(key, document.path(key));
+            input.set("blocks", document.path("block_index")); Path inputFile = Files.writeString(work.resolve("input.json"), input.toString());
+            String run = java.util.UUID.randomUUID().toString();
+            Path archive = ChunkedArchiveFixtures.archive(work, inputFile, run, document.path("preprocessing_version").asText(), mode);
+            var handoff = fixtures.handoff(source, run, archive);
+            JsonNode receipt = new ObjectMapper().readTree(handoff.image().resolve("receipt.json").toFile());
+            String reference = receipt.path("handoff_ref").asText();
+            String hash = ReviewedImportReader.sha256(Files.readAllBytes(handoff.image().resolve("receipt.json")));
+            var result = reader(PythonProbe.REPO, 10000).read(reference, hash, handoff.directory());
+            assertThat(result.projection().path("parent").path("status").asText()).isEqualTo(mode.equals("success") ? "validated" : "failed");
+            assertThat(result.review().path("changes")).isNotEmpty();
+            assertThat(result.projection().path("events")).hasSize(1);
+            assertThat(reader(PythonProbe.REPO, 10000).read(result.reference()).receipt()).isEqualTo(result.receipt());
+        }
+    }
+
+    @Test
     void readsFrozenHandoffAfterOriginalReviewAndRunPathsAreRemoved() throws Exception {
         Fixture fixture = fixture("api");
         var result = reader(PythonProbe.REPO, 10000).read(fixture.reference(), fixture.hash(), fixture.directory().getParent());

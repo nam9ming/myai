@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import kr.ac.myai.backend.importing.ReviewedImportReader;
 import kr.ac.myai.backend.service.ReviewedImportService;
+import kr.ac.myai.backend.service.ExtractionImportService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
@@ -11,6 +12,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -29,7 +32,39 @@ class ReviewReportJarMySqlTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired ReviewedImportReader reader;
     @Autowired ReviewedImportService importer;
+    @Autowired ExtractionImportService extractions;
     final ObjectMapper mapper = new ObjectMapper();
+
+    @DynamicPropertySource
+    static void python(DynamicPropertyRegistry registry) {
+        registry.add("app.calculation.workdir", () -> PythonProbe.REPO.toString());
+        registry.add("app.calculation.python-executable", () -> PythonProbe.PYTHON);
+    }
+
+    @Test
+    void actualJarDisplaysEveryChunkCycleWithoutChangingStoredData() throws Exception {
+        var fixture = new SourceReviewFixtures(root, jdbc, reader, importer);
+        var source = fixture.source(true);
+        ChunkedArchiveFixtures.enlarge(SourceReviewFixtures.document(source), "block_index");
+        fixture.register(source); String run = UUID.randomUUID().toString();
+        Path prepared = fixture.archive(source, run);
+        Path archive = ChunkedArchiveFixtures.archive(root.resolve("chunk-jar"), prepared.resolve(run).resolve("input.json"), run,
+                SourceReviewFixtures.document(source).path("preprocessing_version").asText(), "retry");
+        extractions.importRun(run, archive, "synthetic-registrant");
+        var before = database();
+        Path output = root.resolve("data/private/chunk-reports"); Files.createDirectories(output);
+        Files.setPosixFilePermissions(output, PosixFilePermissions.fromString("rwx------"));
+        var result = run("--myai.report.document-version-id=" + SourceReviewFixtures.version(source),
+                "--myai.report.source-root=" + root, "--myai.report.directory=" + output);
+        assertThat(result.exit()).isZero();
+        Path file = output.resolve(result.json().path("result").path("file_name").asText());
+        byte[] bytes = Files.readAllBytes(file);
+        assertThat(result.json().path("result").path("checksum").asText()).isEqualTo(ReviewedImportReader.sha256(bytes));
+        assertThat(new String(bytes, StandardCharsets.UTF_8)).contains("extraction-archive-v2", "chunk-plan.json", "total_calls",
+                "attempt-1-chunk-000001.prompt", "attempt-2-chunk-000002.response", "attempt-2.output", "not_requested");
+        assertThat(database()).isEqualTo(before);
+        assertThat(Files.getPosixFilePermissions(file)).isEqualTo(PosixFilePermissions.fromString("rw-------"));
+    }
 
     @Test
     void actualJarWritesPrivateReceiptWithoutHonoringSchemaWriters() throws Exception {
@@ -89,7 +124,10 @@ class ReviewReportJarMySqlTest {
         var command = new ArrayList<>(List.of(Path.of(System.getProperty("java.home"), "bin", "java").toString(), "-jar", "build/libs/myai-backend-0.1.0.jar", "--spring.profiles.active=local-review-report"));
         command.addAll(List.of(settings));
         Path stdout = root.resolve(UUID.randomUUID() + ".stdout"), stderr = root.resolve(UUID.randomUUID() + ".stderr");
-        var process = new ProcessBuilder(command).redirectOutput(stdout.toFile()).redirectError(stderr.toFile()).start();
+        var builder = new ProcessBuilder(command).redirectOutput(stdout.toFile()).redirectError(stderr.toFile());
+        builder.environment().put("MYAI_PYTHON_EXECUTABLE", PythonProbe.PYTHON);
+        builder.environment().put("MYAI_PYTHON_WORKDIR", PythonProbe.REPO.toString());
+        var process = builder.start();
         boolean ended = process.waitFor(30, TimeUnit.SECONDS);
         if (!ended) { process.destroyForcibly(); process.waitFor(10, TimeUnit.SECONDS); }
         assertThat(ended).as("report process exited").isTrue();

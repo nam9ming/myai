@@ -93,8 +93,10 @@ def _load_review(content, run_root, checked_at):
     _check(folder == base / source['snapshot_ref'])
     receipt = verify_run(source['run_id'], folder.parent)
     _frozen(folder, receipt)
-    raw_receipt = _read(folder / 'receipt.json')
-    _check(raw_receipt == _json(receipt) and hashlib.sha256(raw_receipt).hexdigest() == source['receipt_sha256'],
+    raw_receipt = _json(receipt)
+    _check(_fingerprint(folder / 'receipt.json')
+           == dict(sha256=hashlib.sha256(raw_receipt).hexdigest(), size=len(raw_receipt))
+           and hashlib.sha256(raw_receipt).hexdigest() == source['receipt_sha256'],
            'HUMAN_REVIEW_SOURCE_MISMATCH')
     if source['snapshot_ref'].startswith('registered/'):
         _check(source['snapshot_ref'].split('/')[1] == source['receipt_sha256'], 'HUMAN_REVIEW_SOURCE_MISMATCH')
