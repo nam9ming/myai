@@ -263,6 +263,14 @@ java -jar backend/build/libs/myai-backend-0.1.0.jar --spring.profiles.active=pub
 
 증거·SQL·tar·입력 연결·소유권 가드40개 시험은 Git 제외 `data/private/evaluation/evidence/notice-source-registration-2026-11-04/`에 보관한다. 원래199항목과 준비575파일·기존 D05/D06·pending/미확정 상태·공개4테이블0을 유지했고, 시험 서버·자격증명을 정리하며 다른 연구실 서비스는 변경하지 않았다. 운영 서버 복구·backup 접근/보존/RPO/RTO·PITR·40문서 평가·사람 승인/공개·main/배포는 별도다.
 
+## 개발용17건을 추가한 DB 복원 검증
+
+앞47건 V4 full SQL을 새 빈 소유 MySQL8.4.13에 복원한 뒤, 개발용 실제 API17실행의 D05와 성공16실행의 숨김 사건17개를 추가했다. 최종16테이블206행에는 D03 47문서/버전·D05 23개·숨김 revision20개가 포함된다. 실패 D05 1개도 실패 상태로 유지했으며 공개4테이블은 비어 있다.
+
+새 full/data SQL을 두 번째 독립 빈 서버에 복원해 전체 행·스키마·Flyway와 data SQL 바이트를 대조했다. 실제 JAR116회에는 최초 등록·동일 재실행·복원 후 재실행이 포함되며 공개 HTTP10회도 확인했다. 전체 원본1398항목의 바이트/권한과 기존 DB 행을 보존했고 자기 서버·자격증명만 정리했다. full SQL의 원문·차이와 제한된 charset 표시 정규화 파생본은 별도로 남겼다.
+
+증거는 Git 제외 `data/private/development-notices/2026-11-04-development-extraction/`에 보관한다. **이번 검증은 SQL 복원이며 기존 같은 절대 경로의 등록 보관본을 사용했다. 신규 API 원본·등록본·초안은 앞 단계의 tar337항목에 포함되지 않는다.** 이 새 자료 경로도 운영 백업에 포함해야 하며, 이번 작업에서 추가 자료 tar나 실제 파일 유실 후 canonical 경로 복원을 수행한 것은 아니다. 운영 보존·접근권한·RPO/RTO/PITR·실제 사람 검토·main 병합/배포는 미완료다.
+
 ## 격리된 합성 복구 시험
 
 Docker·Java21·Python3.13·표준 tar가 필요하다. 아래 두 시험은 **자기 MySQL 서버를 새로 만들며 기존 DB_URL을 대상으로 삼지 않는다**. 새 테스트의 최종 실행 결과는 관련 PR의 실제 검증 기록을 따른다.
