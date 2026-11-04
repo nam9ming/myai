@@ -80,7 +80,7 @@
 
 ### Task 4: 실제 JAR·MySQL·보고서/복구·최종 검증
 
-**Files:** 신규 `SourceUploadMySqlTest.java`, `SourceUploadJarMySqlTest.java`; 관련 `DatabaseRecoveryTest.java`/S10 시험; `.github/workflows/ci.yml`, `contracts/source-upload.md`, `contracts/local-management-api.md`, `backend/README.md`·`TASK.md`·`docs/local-management-api.md`·`reviewed-import.md`·`review-report.md`·`backup-recovery.md`. 부모가 소유하며 합의한 테스트 파일만 독립 worker에 인계할 수 있다.
+**Files:** 신규 `SourceUploadMySqlTest.java`, `SourceUploadJarMySqlTest.java`; 관련 `DatabaseRecoveryTest.java`/S10 시험; `.github/workflows/ci.yml`, `package.json`의 지원 Node 테스트 명령, `contracts/source-upload.md`, `contracts/local-management-api.md`, `backend/README.md`·`TASK.md`·`docs/local-management-api.md`·`reviewed-import.md`·`review-report.md`·`backup-recovery.md`. 부모가 소유하며 합의한 테스트 파일만 독립 worker에 인계할 수 있다.
 
 - [ ] RED→GREEN: 실제 multipart HTTP로3형식→D03→Python 입력 검사→정확 재실행/거부를 검증한다. >8MiB와 최대20MiB 원문을 포함하고 새 자료는 pending/unchecked·공개0이다. 기존 source-review/preview/승인 경계·S10 full raw·선택 복구 후 원래 등록 재실행을 대조한다.
 - [ ] 실제 JAR에서 chunked/인증 전 parsing/part/크기 오류·키/본문/경로 비노출·공용 임시파일0·정상/빈페이지 PDF·전용 DB를 검증한다. `MYAI_LOCAL_API_PDFTOTEXT`만 설정하며 실제 키는 전달하지 않는다.
