@@ -27,7 +27,7 @@
 - 초기화·slot·finalize의 동시/중간I/O/DB 실패가 기존 원본·공개본을 덮거나 완료로 잘못 표시하지 않는다: Task2/3/4.
 - 새 controller도 기존 body/media/Accept advice와 인증 전 multipart 경계를 빠짐없이 적용한다: Task3/4.
 
-## Task1: 기존 Python 실행·수동 import 연결
+### Task 1: 기존 Python 실행·수동 import 연결
 
 **Files:**
 - Modify: `backend/src/main/java/kr/ac/myai/backend/process/PythonProcess.java`
@@ -43,7 +43,7 @@
 - [ ] `./backend/gradlew -p backend test --tests '*PythonProcessTest' --tests '*ExtractionArchiveReaderTest' --tests '*PythonCalculatorTest' --tests '*ExtractionArchiveProtocolTest' --no-daemon`을 실행한다. 실제 설정한 Python3.13/절대 workdir로 실패/오류/skip0을 확인한다.
 - [ ] Commit: `feat: import manual extraction files`
 
-## Task2: 불변 private staging 저장소
+### Task 2: 불변 private staging 저장소
 
 **Files:** Create `backend/src/main/java/kr/ac/myai/backend/local/ExtractionUploadStore.java`; test `backend/src/test/java/kr/ac/myai/backend/ExtractionUploadStoreTest.java`.
 
@@ -55,7 +55,7 @@
 - [ ] `./backend/gradlew -p backend test --tests '*ExtractionUploadStoreTest' --tests '*SourceUploadStoreTest' --tests '*LocalRequestStoreTest' --no-daemon`: 전체 대상 실패/오류/skip0.
 - [ ] Commit: `feat: stage extraction upload files`
 
-## Task3: 로컬 HTTP·기존 D05 서비스 연결
+### Task 3: 로컬 HTTP·기존 D05 서비스 연결
 
 **Files:**
 - Create: `backend/src/main/java/kr/ac/myai/backend/local/ExtractionUploadService.java`, `backend/src/main/java/kr/ac/myai/backend/local/ExtractionUploadController.java`
@@ -71,7 +71,7 @@
 - [ ] 새 API/Service와 기존 LocalManagementApiTest/LocalManagementServiceTest/LocalApiSecurityTest/LocalApiStartupTest/SourceUploadApiTest를 실행해 실패/오류/skip0을 확인한다. 실제 class명/명령을 구현 기록에 남긴다.
 - [ ] Commit: `feat: expose extraction file uploads`
 
-## Task4: 실제 Python·MySQL·JAR·복구·문서
+### Task 4: 실제 Python·MySQL·JAR·복구·문서
 
 **Files:** Create `backend/src/test/java/kr/ac/myai/backend/ExtractionUploadMySqlTest.java`, `backend/src/test/java/kr/ac/myai/backend/ExtractionUploadJarMySqlTest.java`, `contracts/extraction-upload.md`, `backend/docs/extraction-upload.md`. Modify `contracts/local-management-api.md`, `backend/README.md`, `backend/TASK.md`, `processing/README.md`, `processing/TASK.md`, `backend/docs/backup-recovery.md`, `backend/docs/review-report.md`와 이전 단계 종료 기록.
 

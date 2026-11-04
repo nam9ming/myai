@@ -12,7 +12,9 @@ import java.util.concurrent.*;
 public final class PythonProcess {
     private static final int LIMIT = 8 * 1024 * 1024;
 
-    public record Result(int exitCode, byte[] stdout) { }
+    public record Result(int exitCode, byte[] stdout, byte[] stderr) {
+        public Result(int exitCode, byte[] stdout) { this(exitCode, stdout, new byte[0]); }
+    }
 
     public static final class Failure extends RuntimeException {
         private final boolean retryable;
@@ -21,6 +23,15 @@ public final class PythonProcess {
     }
 
     public static Result execute(String executable, String workdir, List<String> arguments, byte[] input, long timeoutMillis) {
+        return execute(executable, workdir, arguments, input, timeoutMillis, false);
+    }
+
+    public static Result executeKeyless(String executable, String workdir, List<String> arguments, byte[] input, long timeoutMillis) {
+        return execute(executable, workdir, arguments, input, timeoutMillis, true);
+    }
+
+    private static Result execute(String executable, String workdir, List<String> arguments, byte[] input,
+                                  long timeoutMillis, boolean keyless) {
         Path directory;
         try { directory = Path.of(workdir); }
         catch (RuntimeException ex) { throw new Failure(false); }
@@ -32,7 +43,16 @@ public final class PythonProcess {
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
         try {
             var command = new ArrayList<String>(); command.add(executable); command.addAll(arguments);
-            process = new ProcessBuilder(command).directory(directory.toFile()).start();
+            var builder = new ProcessBuilder(command).directory(directory.toFile());
+            if (keyless) {
+                var environment = builder.environment();
+                environment.clear();
+                String path = System.getenv("PATH");
+                if (path != null) environment.put("PATH", path);
+                environment.put("LANG", "C.UTF-8");
+                environment.put("LC_ALL", "C.UTF-8");
+            }
+            process = builder.start();
             Process child = process;
             var output = CompletableFuture.supplyAsync(() -> bounded(child.getInputStream(), LIMIT), workers);
             var errors = CompletableFuture.supplyAsync(() -> bounded(child.getErrorStream(), 65536), workers);
@@ -47,8 +67,8 @@ public final class PythonProcess {
             CompletableFuture.anyOf(process.onExit(), failed).get(remaining(deadline), TimeUnit.NANOSECONDS);
             int exit = process.exitValue();
             write.get(remaining(deadline), TimeUnit.NANOSECONDS);
-            errors.get(remaining(deadline), TimeUnit.NANOSECONDS);
-            return new Result(exit, output.get(remaining(deadline), TimeUnit.NANOSECONDS));
+            byte[] stderr = errors.get(remaining(deadline), TimeUnit.NANOSECONDS);
+            return new Result(exit, output.get(remaining(deadline), TimeUnit.NANOSECONDS), stderr);
         } catch (IOException | ExecutionException ex) {
             throw new Failure(false);
         } catch (TimeoutException ex) {
