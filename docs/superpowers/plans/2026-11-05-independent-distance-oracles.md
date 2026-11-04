@@ -35,17 +35,17 @@
 - [x] private 별도 실행에서 제품 반경6300000과 끝점-only 선분 대체를 각각 주입한다. 신규 해당 시험이 assertion으로 실패해야 하며 제품 파일은 수정하지 않는다. 원본 구현으로 되돌리면 신규2개가 통과해야 한다. 시험 추가만으로서 기존 제품의 RED 결함을 주장하지 않는다.
 - [x] `/opt/homebrew/bin/python3.13 -m unittest processing.tests.test_geometry -v`:12개·실패/오류/skip0. 원본 제품/전체 Python code fingerprint와 별도 계산 원본을 보존한다.
 - [x] 이전 PR47의 병합·통합·563항목 동결·판단26건 인계/자기 scratch 정리 결과를 해당 계획에 기록하고 Backend의 낡은 업로드 검증 후속 문구를 갱신한다. Python README에는 신규 시험 근거만 연결한다.
-- [x] `/opt/homebrew/bin/python3.13 -m unittest discover -s processing/tests -v`, Node24의 `npm run lint`, `npm test`, `npm run build`, `python3.13 contracts/validate_examples.py`: 전체 Python632개·Node34·계약9·린트/정적 build 종료0 예상. 실제 count/exit·skip·source hash를 대조한다. Java는 변경 없으며 정확 head 원격 CI의 전체790개를 확인한다.
+- [x] `/opt/homebrew/bin/python3.13 -m unittest discover -s processing/tests -v`, Node24의 `npm run lint`, `npm test`, `npm run build`, `python3.13 contracts/validate_examples.py`: 전체 Python632개·Node34·계약9·린트/정적 build 종료0 예상. 실제 count/exit·skip·source hash를 대조한다.
 - [x] Commit: `test: add independent distance oracles`.
 
 ## 최종 게이트
 
 - [x] 관련 호출부·fixture·계약·문서·계산/오류 영향의 전체 자체 검토, 모든 유효 지적 수정·재검증.
-- [ ] 새 문맥 전체 브랜치 리뷰1회, 유효 minor 포함 수정·회귀. 추가 독립 재리뷰 없음.
-- [ ] PR→정확 head CI/AI 원문·새 사람 피드백→유효 미해결0→비main 병합·통합 검증·판단 인계·비공개 증거 보존. main은 사람이 병합한다.
+- [x] 새 문맥 전체 브랜치 리뷰1회, 유효 minor 포함 수정·회귀. 추가 독립 재리뷰 없음.
+- [ ] PR→정확 head CI(Java/MySQL790개·Python전체·빌드/산출물)/AI 원문·새 사람 피드백→유효 미해결0→비main 병합·통합 검증·판단 인계·비공개 증거 보존. main은 사람이 병합한다.
 
 ## 실행·자체 검토
 
 기하12개·신규2개와 전체 Python632개/330.531초가 실패/오류/skip0이다. 반경6300000 음성 대조는3 assertion, 끝점-only 대체는2 assertion으로 실패했고 원래 구현을 복원하면 신규2개가 통과했다. 이는 시험 검출력 확인이며 기존 제품 결함의 재현이 아니다. 제품 Python42개와 전체 시험 중84개 소스 hash가 유지됐다. Node24.21.0의34개·계약9·린트418파일·정적 HTML build도 종료0이다. 정적 HTML을 Flutter 빌드로 집계하지 않는다.
 
-별도 계산 원본과 수치·단위·문서 링크·기존10개 기하 시험·관련 계산/CLI/오류 경계를 자체 검토했고 유효 미해결/보류 minor0이다. Java 제품은 변경하지 않았으며 정확 head 원격 CI에서790개 전체와 빌드·산출물을 확인한다. 독립 리뷰·원격 CI/AI·비main 병합/통합은 최종 게이트에 남아 있다.
+별도 계산 원본과 수치·단위·문서 링크·기존10개 기하 시험·관련 계산/CLI/오류 경계를 자체 검토했고 유효 미해결/보류 minor0이다. Java 제품은 변경하지 않았으며 정확 head 원격 CI에서790개 전체와 빌드·산출물을 확인한다. 독립 전체 브랜치 리뷰1회는 Critical0/Important0/Minor0이었다. 이후 자동 리뷰에서 로컬 검증 완료 항목에 원격 Java 확인까지 묶인 문서 모순1건을 확인해 로컬 완료와 원격 대기 항목을 분리했다. 새 정확 head 원격 CI/AI·비main 병합/통합은 최종 게이트에 남아 있다.
