@@ -94,6 +94,28 @@ class LocalApiStartupTest {
         rejected(validEnvironment(), "--myai.local-api.token=short");
     }
 
+    @ParameterizedTest
+    @CsvSource({"spring.servlet.multipart.max-file-size,21MB", "spring.servlet.multipart.max-file-size,-1B",
+            "spring.servlet.multipart.max-request-size,22MB", "spring.servlet.multipart.max-request-size,-1B",
+            "spring.servlet.multipart.file-size-threshold,0B", "spring.servlet.multipart.file-size-threshold,20MB",
+            "spring.servlet.multipart.file-size-threshold,2147483648B", "spring.servlet.multipart.enabled,false",
+            "spring.servlet.multipart.resolve-lazily,false", "spring.servlet.multipart.max-request-size,not-size",
+            "server.tomcat.max-http-form-post-size,2MB", "server.tomcat.max-http-form-post-size,22MB",
+            "server.tomcat.max-http-form-post-size,-1B", "server.tomcat.max-http-form-post-size,not-size"})
+    void earlyGuardRejectsUnsafeMultipartSettingsBeforeContextRefresh(String field, String value) throws Exception {
+        try (var context = new GenericWebApplicationContext()) {
+            var env = environment(validEnvironment()); env.setProperty(field, value); context.setEnvironment(env);
+            assertThatThrownBy(() -> new LocalApiStartupGuard().initialize(context))
+                    .isInstanceOfSatisfying(LocalApiStartupGuard.ModeException.class, error -> assertThat(error.field()).isEqualTo(field));
+            assertThat(context.isActive()).isFalse();
+        }
+    }
+
+    @Test
+    void actualJarRefusesMultipartDiskSpoolingBeforeDatabaseStartup() throws Exception {
+        rejected(validEnvironment(), "--spring.servlet.multipart.file-size-threshold=0B");
+    }
+
     @Test
     void earlyGuardAllowsServletEphemeralPortAndTokenBoundaryLengths() throws Exception {
         for (String token : List.of("A".repeat(32), "Z".repeat(128))) {
@@ -186,7 +208,13 @@ class LocalApiStartupTest {
     private MockEnvironment environment(Map<String, String> values) {
         var environment = new MockEnvironment().withProperty("spring.main.web-application-type", "servlet")
                 .withProperty("server.address", "127.0.0.1").withProperty("server.port", "0")
-                .withProperty("server.forward-headers-strategy", "NONE");
+                .withProperty("server.forward-headers-strategy", "NONE")
+                .withProperty("server.tomcat.max-http-form-post-size", "21MB")
+                .withProperty("spring.servlet.multipart.enabled", "true")
+                .withProperty("spring.servlet.multipart.resolve-lazily", "true")
+                .withProperty("spring.servlet.multipart.max-file-size", "20MB")
+                .withProperty("spring.servlet.multipart.max-request-size", "21MB")
+                .withProperty("spring.servlet.multipart.file-size-threshold", "21MB");
         environment.setActiveProfiles("local-api");
         environment.getPropertySources().addFirst(new SystemEnvironmentPropertySource("systemEnvironment", new HashMap<>(values)));
         for (String suffix : List.of("TOKEN", "ACTOR", "SOURCE_ROOT", "EXTRACTION_ROOT", "HANDOFF_ROOT", "REQUEST_ROOT")) {

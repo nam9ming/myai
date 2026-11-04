@@ -27,6 +27,7 @@ import java.util.*;
 
 @Component
 public class ReviewedImportReader {
+    public static final int RAW_ASSET_LIMIT = 20 * 1024 * 1024;
     private static final int LIMIT = 8 * 1024 * 1024;
     private final ObjectMapper mapper = new ObjectMapper(JsonFactory.builder()
             .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
@@ -153,7 +154,7 @@ public class ReviewedImportReader {
         check(!relative.isAbsolute() && relative.normalize().equals(relative) && !relative.startsWith(".."), "documents.raw_asset_path");
         Path raw = root.resolve(relative).toRealPath();
         check(raw.startsWith(root), "documents.raw_asset_path");
-        check(sha256(readBounded(raw, "documents.raw_asset_path")).equals(hash(doc, "raw_sha256")), "documents.raw_sha256");
+        check(sha256(readBounded(raw, "documents.raw_asset_path", RAW_ASSET_LIMIT)).equals(hash(doc, "raw_sha256")), "documents.raw_sha256");
         String cleaned = text(doc, "cleaned_text", LIMIT);
         String textHash = hash(doc, "text_sha256");
         check(sha256(cleaned.getBytes(StandardCharsets.UTF_8)).equals(textHash), "documents.text_sha256");
@@ -563,10 +564,14 @@ public class ReviewedImportReader {
     }
 
     public byte[] readBounded(Path file, String path) throws IOException {
+        return readBounded(file, path, LIMIT);
+    }
+
+    private byte[] readBounded(Path file, String path, int limit) throws IOException {
         check(Files.isRegularFile(file), path);
         try (var input = Files.newInputStream(file)) {
-            byte[] bytes = input.readNBytes(LIMIT + 1);
-            check(bytes.length > 0 && bytes.length <= LIMIT, path);
+            byte[] bytes = input.readNBytes(limit + 1);
+            check(bytes.length > 0 && bytes.length <= limit, path);
             return bytes;
         }
     }

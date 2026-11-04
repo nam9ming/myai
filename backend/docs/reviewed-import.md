@@ -21,7 +21,9 @@ java -jar backend/build/libs/myai-backend-0.1.0.jar \
 
 종료 코드는 `0` 성공/기존 결과, `2` 입력·설정 검증 실패, `3` ID·버전·동시 수정 충돌, `4` DB 접근 실패다. 초기 DB 연결·인증/권한·없는 DB 오류도 안전한 JSON과 `4`로 반환하며 `retryable`을 확인한다. 강제 웹·혼합 프로필은 DB 작업 전에 `2`로 거부한다. 나머지 내부·프로토콜·Spring 초기 기동 오류는 `1`이며, 분류되지 않은 기동 실패는 결과 JSON 없이 stderr에 나타날 수 있다. 오류 결과는 공개 API와 같은 `error`·`request_id` 구조를 사용하며 원문·SQL·비밀번호·절대 경로는 넣지 않는다.
 
-실제 작업본은 Git 제외 `data/private/`에 보관하고 해당 원문 디렉터리를 `source-root`로 지정한다. `raw_asset_path`에는 이 디렉터리를 기준으로 한 상대 경로를 쓴다. 절대 경로·`..` 경로·밖으로 나가는 symlink·일반 파일이 아닌 입력은 거부한다. 입력 JSON과 각 원문은 각각 최대8MiB다. 이 명령은 원문을 복사/이동하지 않으므로 **원문 디렉터리와 검토 JSON은 별도로 보존**해야 한다. DB의 원문 참조는 해당 root를 기준으로 해석하므로 이후 root를 임의로 변경하지 않는다.
+실제 작업본은 Git 제외 `data/private/`에 보관하고 해당 원문 디렉터리를 `source-root`로 지정한다. `raw_asset_path`에는 이 디렉터리를 기준으로 한 상대 경로를 쓴다. 절대 경로·`..` 경로·밖으로 나가는 symlink·일반 파일이 아닌 입력은 거부한다. 입력 JSON은 최대8MiB, 참조하는 raw 원문 파일만 최대20MiB다. 기존 CLI·AI입력 JSON8MiB를 늘린 것이 아니며, 저장 후 source-review·승인·preview·공개도 같은20MiB 원문 한도로 hash를 다시 검증한다. 이 명령은 원문을 복사/이동하지 않으므로 **원문 디렉터리와 검토 JSON은 별도로 보존**해야 한다. DB의 원문 참조는 해당 root를 기준으로 해석하므로 이후 root를 임의로 변경하지 않는다.
+
+새 txt/pdf/json 파일은 [로컬 multipart 업로드](source-upload.md)로 원문·metadata·준비본을 보존하고 `source-import-v1` D03를 등록할 수 있다. 이 파일 import의 준비된 JSON을 자동 텍스트화하거나 기존 본문·블록·전처리를 다시 만드는 경로는 아니다. 업로드도 pending/unchecked로 시작하며 실제 AI·사람 검토·승인·공개를 실행하지 않는다. 전체 업로드 검증·리뷰·PR/CI·통합 결과는 [업로드 계획](../../docs/superpowers/plans/2026-11-05-document-upload.md)에서 추적한다.
 
 합성 원문 `synthetic-source.txt`와 입력 `reviewed-import.json`은 Git에서 LF로 고정한다. `core.autocrlf=true`에서도 원문 SHA-256과 입력 파일 hash가 유지되도록 한 규칙이다. 실제 원문은 수집한 바이트 그대로 보존한다.
 

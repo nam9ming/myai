@@ -1,6 +1,6 @@
 # Python AI·계산 — 김윤기
 
-Java의 [S10 로컬 검토 보고서](../backend/docs/review-report.md)는 이미 봉인된 D05 전체를 `verify-sealed`로 읽기 전용 검증한다. 모든 시도·불완전 API response·실패를 수정하지 않으며 사람 수정값과 구별한다. 생성/복사하는 `freeze`는 기존 등록에 유지한다.
+Java의 [S10 로컬 검토 보고서](../backend/docs/review-report.md)는 이미 봉인된 D05 전체를 `verify-sealed`로 읽기 전용 검증한다. 모든 시도·불완전 API response·실패를 수정하지 않으며 사람 수정값과 구별한다. D03 raw 원문만 파일당20MiB 전체를 text/base64로 표시하며 AI artifact8MiB·전체 JSON/HTML64MiB, 기존 계산·추출 입력8MiB는 유지한다. 생성/복사하는 `freeze`는 기존 등록에 유지한다.
 
 C01~C10 순수 계산과 `calc-v1` CLI, Spring 공개 matches 연결, OpenAI 추출·수동 원출력 보관 CLI를 구현했습니다. 실제 API 연결 결과는 각 실행의 receipt로 확인하며, 합성 연결 시험을 실제 공지 처리·품질 평가로 세지 않습니다. 공개 API·DB는 Spring이 맡으며 계산 CLI는 AI·네트워크·DB를 호출하거나 사용자 조건을 저장하지 않습니다. 서버의 Python 실행 파일·작업 경로는 [백엔드 안내](../backend/README.md#python-계산-연결)를 따릅니다.
 
@@ -263,7 +263,7 @@ metadata.attempts는 최대3개의 문서 cycle이고, 실제 호출 수는 rece
 
 전송하지 않은 block 인용과 문서 전체 not_stated 추정을 거부합니다. chunk 사이 사건·일정·장소를 임의로 합치지 않으며, v2 직접 draft/check-draft는 `CHUNK_DRAFT_REVIEW_REQUIRED`입니다. 실제 사람이 전체 관계를 확인한 human-review/handoff를 사용합니다. D08은 `api-document-cycle-v1`·`prompt-v2-or-v3` 정책으로 첫/최종 전체 문서 결과를 평가하고 기존 정책은 v1만 받습니다. 기계 검증을 실제 사람 검토·40문서 정확도 성과로 표시하지 않습니다.
 
-입력보다 큰 plan·cycle manifest·receipt도 전체 canonical size/SHA로 검증합니다. 큰 receipt의 Python 보관·동결·재사용과 D08 평가/사람 인계는 접두부만 읽지 않습니다. identity8MiB, Java 연결 stdout/receipt8MiB·최대60초, S10 파일8MiB/전체64MiB의 기존 한도는 유지하므로 Python 단독 성공과 Java 등록·보고서 성공을 구별합니다.
+입력보다 큰 plan·cycle manifest·receipt도 전체 canonical size/SHA로 검증합니다. 큰 receipt의 Python 보관·동결·재사용과 D08 평가/사람 인계는 접두부만 읽지 않습니다. identity8MiB, Java 연결 stdout/receipt8MiB·최대60초, S10 AI artifact8MiB·전체 JSON/HTML64MiB 한도는 유지합니다. S10 D03 raw 원문만 파일당20MiB까지 전체 표시하며, Python 단독 성공과 Java 등록·보고서 성공을 구별합니다.
 
 ## 실제 입력 길이 진단
 

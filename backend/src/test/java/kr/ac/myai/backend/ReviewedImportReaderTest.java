@@ -7,6 +7,8 @@ import kr.ac.myai.backend.importing.ReviewedImportReader;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -62,6 +64,32 @@ class ReviewedImportReaderTest {
         byte[] overLimit = Arrays.copyOf(atLimit, atLimit.length + 1);
         overLimit[overLimit.length - 1] = ' ';
         rejected(overLimit);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {8 * 1024 * 1024 + 1, 20 * 1024 * 1024})
+    void acceptsLargerRawAssetsWithMatchingHashesThroughImportAndStoredValidation(int size) throws Exception {
+        byte[] bytes = new byte[size]; Arrays.fill(bytes, (byte) 'x');
+        Path raw = Files.write(root.resolve("synthetic-source.txt"), bytes);
+        String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+        ((ObjectNode) input.path("documents").get(0)).put("raw_sha256", hash);
+        var fromFile = reader.read(write(), root);
+        assertThat(reader.read(input.toString().getBytes(StandardCharsets.UTF_8), root)).isEqualTo(fromFile);
+        assertThat(reader.validateStored(input, root).documents()).isEqualTo(fromFile.documents());
+        assertThat(fromFile.documents()).hasSize(1);
+        assertThat(Files.readAllBytes(raw)).isEqualTo(bytes);
+        assertThatThrownBy(() -> reader.readBounded(raw, "file")).isInstanceOf(ImportException.class);
+    }
+
+    @Test
+    void rejectsRawAssetAboveTwentyMiBWithMatchingHash() throws Exception {
+        byte[] bytes = new byte[20 * 1024 * 1024 + 1]; Arrays.fill(bytes, (byte) 'x');
+        Files.write(root.resolve("synthetic-source.txt"), bytes);
+        ((ObjectNode) input.path("documents").get(0)).put("raw_sha256",
+                HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes)));
+        rejected();
+        assertThatThrownBy(() -> reader.validateStored(input, root)).isInstanceOfSatisfying(ImportException.class,
+                error -> assertThat(error.field()).isEqualTo("documents.raw_asset_path"));
     }
 
     @Test
@@ -384,7 +412,7 @@ class ReviewedImportReaderTest {
     }
 
     @Test
-    void rejectsPathTraversalSymlinkEscapeAndOversizeFiles() throws Exception {
+    void rejectsPathTraversalAndSymlinkEscape() throws Exception {
         var document = (ObjectNode) input.path("documents").get(0);
         document.put("raw_asset_path", "../synthetic-source.txt");
         rejected();
@@ -395,11 +423,6 @@ class ReviewedImportReaderTest {
             document.put("raw_asset_path", "escaped.txt");
             rejected();
         } finally { Files.deleteIfExists(outside); }
-        document.put("raw_asset_path", "synthetic-source.txt");
-        Files.write(root.resolve("synthetic-source.txt"), new byte[8 * 1024 * 1024 + 1]);
-        rejected();
-        Files.write(root.resolve("batch.json"), new byte[8 * 1024 * 1024 + 1]);
-        assertThatThrownBy(() -> reader.read(root.resolve("batch.json"), root)).isInstanceOf(ImportException.class);
     }
 
     @Test

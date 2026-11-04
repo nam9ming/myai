@@ -69,7 +69,7 @@ class LocalManagementApiTest {
         var reader = new ReviewedImportReader();
         var service = new LocalManagementService(reader, new PublicationCommandReader(reader, validators.getValidator()),
                 imports, extractions, handoffs, publication, new LocalRequestStore(requests.toString()), env);
-        mvc = MockMvcBuilders.standaloneSetup(new LocalManagementController(service))
+        mvc = MockMvcBuilders.standaloneSetup(new LocalManagementController(service, mock(kr.ac.myai.backend.local.SourceUploadService.class)))
                 .setControllerAdvice(new ApiExceptionHandler(), new LocalBodyLimitAdvice())
                 .setMessageConverters(new ByteArrayHttpMessageConverter(), new MappingJackson2HttpMessageConverter(mapper))
                 .addFilters(new PublicRequestLogFilter(), new LocalApiSecurityFilter(env, mapper)).build();

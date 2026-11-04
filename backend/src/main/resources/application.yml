@@ -3,6 +3,9 @@ spring:
     name: myai-backend
   profiles:
     default: public
+  servlet:
+    multipart:
+      enabled: false
   jackson:
     property-naming-strategy: SNAKE_CASE
     deserialization:

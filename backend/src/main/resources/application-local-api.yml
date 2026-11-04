@@ -2,7 +2,16 @@ spring:
   main:
     web-application-type: servlet
     banner-mode: 'off'
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 20MB
+      max-request-size: 21MB
+      file-size-threshold: 21MB
+      resolve-lazily: true
 server:
+  tomcat:
+    max-http-form-post-size: 21MB
   address: 127.0.0.1
   port: ${MYAI_LOCAL_API_PORT:8081}
   forward-headers-strategy: NONE
@@ -19,3 +28,4 @@ myai:
     extraction-root: ${MYAI_LOCAL_API_EXTRACTION_ROOT:}
     handoff-root: ${MYAI_LOCAL_API_HANDOFF_ROOT:}
     request-root: ${MYAI_LOCAL_API_REQUEST_ROOT:}
+    pdftotext: ${MYAI_LOCAL_API_PDFTOTEXT:}

@@ -1,12 +1,14 @@
 # 로컬 관리 HTTP API
 
-B05/I10/I11의 문서·AI 실행 등록, 검토 수정/승인, 공개 미리보기·공개·복구를 HTTP로 연결한다. 기존 [파일 import](reviewed-import.md)·[AI 실행 등록](extraction-run-import.md)·[사람 인계](human-handoff-import.md)·[승인·공개](review-publication.md)의 JSON과 서비스를 사용한다. 현재 검증 상태는 [구현 계획](../../docs/superpowers/plans/2026-11-04-local-management-api.md)을 따른다.
+B05/I10/I11의 문서·AI 실행 등록, 검토 수정/승인, 공개 미리보기·공개·복구를 HTTP로 연결한다. 기존 [파일 import](reviewed-import.md)·[AI 실행 등록](extraction-run-import.md)·[사람 인계](human-handoff-import.md)·[승인·공개](review-publication.md)의 JSON과 서비스를 사용한다. 같은 문서 경로의 [txt/pdf/json 업로드](source-upload.md)는 원문을 보존·텍스트화해 D03와 Python 입력을 준비한다. 기존 JSON 관리 경로의 검증 기록은 [관리 API 계획](../../docs/superpowers/plans/2026-11-04-local-management-api.md), 업로드의 전체 회귀·리뷰·PR/CI·통합 결과는 [업로드 계획](../../docs/superpowers/plans/2026-11-05-document-upload.md)에서 추적한다.
 
 ## 실행 준비
 
 Java21·MySQL8.4와 [백엔드 실행 설정](../README.md)을 먼저 준비한다. AI 보관본 검증에는 Python3.13과 같은 버전의 `processing/`이 필요하다. Java 관리 서버가 OpenAI를 호출하지는 않는다.
 
 아래는 새 개발 DB와 합성 예제를 위한 설정이다. 실제 자료에서는 원문 상대 경로의 기준과 선택한 추출·사람 인계 보관 root로 바꾼다. root를 바꾸면 기존 등록 자료의 출처를 다시 확인해야 한다.
+
+아래 source root는 준비된 JSON의 합성 원문을 읽는 예다. 새 파일 업로드에는 별도 private source root와 request root를0700으로 준비하고 중간 symlink가 없는 실제 절대 경로를 지정해야 한다. PDF만 선택 설정 `MYAI_LOCAL_API_PDFTOTEXT`의 절대 실행 파일이 추가로 필요하며, 미설정이면 PDF 요청만503이다. [업로드 실행 준비](source-upload.md#실행-준비)를 따른다.
 
 ```bash
 # myai 저장소 루트에서 실행
@@ -50,7 +52,8 @@ curl --fail-with-body --noproxy '*' \
 
 | 경로 | 입력·동작 |
 | --- | --- |
-| POST `/local/documents` | `source-import-v1`. 문서만 등록하며 사건·공개본을 만들지 않는다. |
+| POST `/local/documents` | `application/json`의 `source-import-v1`. 문서만 등록하며 사건·공개본을 만들지 않는다. |
+| POST `/local/documents` | `multipart/form-data`의 metadata/file 두 part. [업로드 계약](../../contracts/source-upload.md)에 따라 txt/pdf/json 원문을 보존하고 pending/unchecked D03와 기존5키 Python 입력을 준비한다. |
 | POST `/local/extractions/import` | `extraction-import-request-v1`의 `run_id`·`expected_input_hash`. 지정 root의 전체 보관본과 입력 SHA를 확인한 뒤 D05를 저장한다. 실패 실행도 실패로 보존한다. |
 | PUT `/local/events/{id}/review` | 사건1개의 `reviewed-import-v1`/`human-handoff-import-v1`, 또는 `publication-command-v1` approve/reject. URL과 JSON 사건ID가 같아야 한다. |
 | POST `/local/reviews/import` | 다중 사건을 포함한 기존 검토/사람 인계 배치 전체. 동결한 인계 이미지를 잘라서 보내지 않는다. |
@@ -60,14 +63,18 @@ curl --fail-with-body --noproxy '*' \
 
 ## 한도·오류·원본
 
-JSON은 UTF-8·최대8MiB이며 Content-Length 없이 전송해도 실제 stream을 제한한다. 공개 API의32KiB 제한과 기존 CLI 제한은 유지한다. 추가/중복키·후행 JSON·잘못된 ID/상태는 거부한다.
+기존 `application/json`은 UTF-8·최대8MiB이며 Content-Length 없이 전송해도 실제 stream을 제한한다. 공개 API32KiB·기존 CLI/AI입력8MiB는 유지한다. 추가/중복키·후행 JSON·잘못된 ID/상태는 거부한다. multipart는 metadata64KiB·원문20MiB·전체21MiB이며 최종 본문은200,000 Unicode code point다. multipart는 local-api에서만 켜고 lazy parsing·메모리 threshold21MiB 이상을 기동 때 검사한다. 인증·Origin/Host 검사는 multipart parsing 전에 실행한다.
+
+multipart 성공은 별도 `source-upload-result-v1`이며 위 JSON 관리 성공의 request_sha256 규격과 구별한다. 원문/본문/AI입력 hash·문서/버전ID·전처리와 검토 범위·기존 import 결과를 반환한다. S10은 raw20MiB 전체를 text/base64로 표시하되 AI artifact8MiB·전체 JSON/HTML64MiB를 유지한다. 초과 원문을 잘라서 등록하거나 보고서에서 생략하지 않는다.
 
 오류는 기존 `error`·`request_id` 형식이다. 인증401, 출처403, 본문 초과413, 요청 media415, 응답 media406, 입력422, 미등록404, 충돌409, DB/실행환경 미준비503, 내부500을 구별한다. JSON을 허용하지 않는 Accept에도406 JSON 오류를 반환한다. 응답의 request_id와 `X-Request-ID`는 같은 서버 ID이며 원문·토큰·절대 경로·SQL·stack은 반사하지 않는다.
 
 알려진 관리 요청의 원본은 request root0700 아래 `<sha256>.json`0600에 배타 설치한다. root 경로의 symlink·공개 권한이나 기존 파일 충돌을 거부한다. 저장 실패면 domain 서비스를 호출하지 않는다. 인증 실패·초과·잘못된 JSON·알 수 없는 schema·preview는 파일을 만들지 않는다. 알려진 요청의 domain 실패 원본은 남을 수 있으며 파일 보관 성공과 DB 저장 성공은 별개다.
 
+업로드 raw는 source root의 `uploads/<raw_sha256>.<format>`, 준비본은 request root의 `uploads/bundles/<server UUID>/`에 metadata.json·source-import.json·input.json·receipt.json으로 보관한다. 검증을 마친 묶음만 `uploads/<document_version_id>.json` index로 공개한다. metadata와 생성 source-import의 기존 flat SHA JSON도 함께 남는다. 같은 버전의 정확한 metadata/file bytes는 첫 준비본을 재사용하고 다른 원본은409다. DB 실패 뒤에도 raw·완료 준비본을 보존해 재시도하며 multipart 전체 bytes·파일명·인증 헤더를 보관한 것으로 표시하지 않는다.
+
 source·extraction·handoff·request root를 함께 백업하고 [복구 안내](backup-recovery.md)를 따른다. 관리자는 원본의 접근·보존·삭제 정책을 정해야 한다. POSIX 권한·hard link를 지원하는 파일시스템이 필요하며 전원 중단 내구성을 검증한 결과는 아니다.
 
 ## 남은 범위
 
-이 API는 준비된 JSON·원문·보관본을 연결한다. txt/pdf 새 업로드·텍스트화와 제안20MiB/200000문자/AI5MiB 경로, 관리 UI, 실제 사람 검토·독립 정답표·40문서/90% 평가·사용자 평가·운영 배포는 별도 후속 작업이다. `main` 병합·배포는 사람이 진행한다.
+이 API는 준비된 JSON·원문·보관본 연결과 txt/pdf/json 업로드·텍스트화를 구현했다. 업로드의 전체 회귀·리뷰·PR/CI·통합 결과는 [업로드 계획](../../docs/superpowers/plans/2026-11-05-document-upload.md)에서 추적한다. AI 결과 파일5MiB 업로드, 관리 UI, 실제 AI 품질·PDF 추출 완전성·개인정보/사용권·사람 검토/승인·독립 정답표·40문서/90% 평가·사용자 평가·운영 배포는 후속 작업이다. 업로드는 외부 AI·사건 생성·승인·공개를 실행하지 않으며 `main` 병합·배포는 사람이 진행한다.

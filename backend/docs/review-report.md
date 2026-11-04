@@ -51,7 +51,9 @@ preview의 snapshot ID·checksum은 검토용이며 실제 포인터를 바꾸�
 
 DB 행은 읽기 전용 `REPEATABLE_READ`로 수집합니다. 운영 상태·파일 검증·preview는 별도 검사 시각을 표시하므로 동일 순간의 snapshot으로 간주하지 않습니다. 웹·다른 프로필 혼합, Flyway·Hibernate DDL·SQL 초기화는 기동 전에 차단합니다. D05는 `verify-sealed`로 이미 봉인된 원본만 검사하며 파일 생성·복사·수리·chmod를 하지 않습니다. 변경 가능한 원본은 기존 등록부터 완료해야 합니다.
 
-조회당1000행, 원본 파일당8MiB, 전체 JSON/HTML64MiB 한도입니다. 초과는 전체 `REPORT_TOO_LARGE`이며 잘라서 성공으로 표시하지 않습니다. 보존된 수동 실패 output은8MiB를 넘을 수 있어 별도 검토가 필요합니다. 원래 파일은 유지합니다.
+조회당1000행, D03 raw 원문 파일당20MiB, AI artifact 파일당8MiB, 전체 JSON/HTML64MiB 한도입니다. raw 원문은 UTF-8 text 또는 base64 전체를 embed하며 생략하거나 자르지 않습니다. raw20MiB 허용이 여러 원문·AI 출력·인코딩을 합친 보고서의64MiB 이내를 보장하지는 않습니다. 초과는 전체 `REPORT_TOO_LARGE`이며 원래 파일은 유지합니다. 보존된 수동 실패 output은8MiB를 넘을 수 있어 별도 검토가 필요합니다. 기존 JSON/CLI/AI입력8MiB는 유지합니다.
+
+[파일 업로드](source-upload.md)의 pending/unchecked 원문도 같은 방식으로 비교합니다. 전체 업로드 회귀·리뷰·PR/CI·통합 결과는 [업로드 계획](../../docs/superpowers/plans/2026-11-05-document-upload.md)에서 추적하며, 보고서 생성이나 hash 검사를 실제 AI 품질·개인정보·사용권 검토·사람 승인/공개로 해석하지 않습니다.
 
 종료0 성공,2 입력·미등록·크기 오류,3 출력 충돌,4 DB 미준비,5 출력 I/O,1 내부 오류입니다. 항목 검증 실패가 있어도 보고서 저장 성공이면 종료0일 수 있으므로 receipt만으로 승인하지 않습니다.
 
@@ -59,7 +61,7 @@ DB 행은 읽기 전용 `REPEATABLE_READ`로 수집합니다. 운영 상태·파
 
 ## 장문 보관본 표시
 
-장문 `extraction-archive-v2`는 chunk-plan·모든 subrequest와 문서 전체 파생 cycle을 함께 표시합니다. `attempt-N.prompt/output`은 단일 HTTP 원출력이 아니며, 실제 요청/응답은 `attempt-N-chunk-000001.*`에 있습니다. metadata.attempts는 문서 cycle 수, receipt.total_calls는 실제 HTTP 호출 수입니다. 파일당8MiB·전체64MiB 한도는 그대로이며 초과 원출력은 별도 검토가 필요합니다.
+장문 `extraction-archive-v2`는 chunk-plan·모든 subrequest와 문서 전체 파생 cycle을 함께 표시합니다. `attempt-N.prompt/output`은 단일 HTTP 원출력이 아니며, 실제 요청/응답은 `attempt-N-chunk-000001.*`에 있습니다. metadata.attempts는 문서 cycle 수, receipt.total_calls는 실제 HTTP 호출 수입니다. 이 AI 보관본의 artifact 파일당8MiB·전체 보고서64MiB 한도는 그대로이며 초과 원출력은 별도 검토가 필요합니다. D03 raw 원문의20MiB 한도와 구별합니다.
 
 ## 실제 개발 자료의 검토 인계 준비
 
