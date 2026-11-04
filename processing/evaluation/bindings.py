@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 import stat
 
-from processing.extraction.archive import (DEFAULT_ROOT as EXTRACTION_ROOT, _json, _read,
+from processing.extraction.archive import (DEFAULT_ROOT as EXTRACTION_ROOT, _fingerprint, _json, _read,
                                             _read_checked, _root, verify_run)
 from processing.extraction.schema import HASH, UUID
 from processing.extraction.validation import array, decode, parse_input, require, shape, text
@@ -62,9 +62,10 @@ def check_bindings(content, dataset_root=DEFAULT_ROOT, run_root=EXTRACTION_ROOT)
             _check(directory == base/reference)
             receipt = verify_run(run_id, directory.parent)
             _frozen(directory, receipt)
-            raw = _read(directory/'receipt.json')
+            raw = _json(receipt)
             receipt_hash = hashlib.sha256(raw).hexdigest()
-            _check(raw == _json(receipt) and receipt_hash == selected['receipt_sha256'], 'BINDING_RUN_MISMATCH')
+            _check(_fingerprint(directory/'receipt.json') == dict(sha256=receipt_hash, size=len(raw))
+                   and receipt_hash == selected['receipt_sha256'], 'BINDING_RUN_MISMATCH')
             if reference.startswith('registered/'):
                 _check(reference.split('/')[1] == receipt_hash, 'BINDING_RUN_MISMATCH')
             run_input = _read_checked(directory/'input.json', receipt['artifacts']['input.json'])

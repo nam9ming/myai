@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 import hashlib
 
-from processing.extraction.archive import REPO, _fingerprint, _json, _read, _read_checked, _root
+from processing.extraction.archive import REPO, _fingerprint, _json, _read, _read_checked, _root, verify_run
 from processing.extraction.draft import _content, _context, _project_output, _source
 from processing.extraction.metadata import stamp
 from processing.extraction.schema import HASH
@@ -38,7 +38,9 @@ def project_handoff(content, review_root=REVIEW_ROOT, *, projected_at=None):
     artifacts = receipt['artifacts']
     review = decode(_read_checked(directory / 'review.json', artifacts['review.json']), 'archive')
     prefix = 'source/' + review['source']['snapshot_ref']
-    parent = decode(_read_checked(directory / f'{prefix}/receipt.json', artifacts[f'{prefix}/receipt.json']), 'archive')
+    parent_folder = directory / prefix
+    parent = verify_run(review['source']['run_id'], parent_folder.parent)
+    _check(_fingerprint(parent_folder / 'receipt.json') == artifacts[f'{prefix}/receipt.json'], 'HANDOFF_REVIEW_MISMATCH')
     metadata = decode(_read_checked(directory / f'{prefix}/metadata.json', artifacts[f'{prefix}/metadata.json']), 'archive')
     document = parse_input(_read_checked(directory / f'{prefix}/input.json', artifacts[f'{prefix}/input.json']))
     output = parse_output(_read_checked(directory / 'output.json', artifacts['output.json']), document)

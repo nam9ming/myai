@@ -16,7 +16,11 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermission;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.HashSet;
+import java.util.HexFormat;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -24,6 +28,7 @@ import java.util.Set;
 @Profile("!fixture")
 public class ExtractionArchiveReader {
     private static final int LIMIT = 8 * 1024 * 1024;
+    private static final String HASH = "[0-9a-f]{64}";
     private static final String UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
     private final ReviewedImportReader json;
     private final String executable;
@@ -72,29 +77,15 @@ public class ExtractionArchiveReader {
             directory = base.resolve(snapshot);
             require(Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS) && directory.toRealPath().equals(directory));
             JsonNode receipt = packet.path("receipt");
-            require(keys(receipt).equals(Set.of("format_version", "run_id", "document_version_id", "data_kind", "execution_mode",
-                    "recorded_at", "status", "review_required", "input_sha256", "metadata_sha256", "artifacts", "attempts")));
-            require(receipt.path("format_version").asText().equals("extraction-archive-v1") && receipt.path("run_id").asText().equals(runId));
-            require(receipt.path("document_version_id").asText().matches(UUID));
-            require(receipt.path("data_kind").isTextual() && Set.of("synthetic", "real").contains(receipt.path("data_kind").asText()));
-            String mode = receipt.path("execution_mode").asText();
-            require(Set.of("manual_import", "api").contains(mode));
+            Set<String> names = artifactNames(receipt);
+            require(receipt.path("run_id").asText().equals(runId));
             require(receipt.path("status").asText().equals(process.exitCode() == 0 ? "validated" : "failed"));
-            require(receipt.path("review_required").isBoolean() && receipt.path("review_required").asBoolean());
-            require(receipt.path("attempts").isArray() && receipt.path("attempts").size() >= 1 && receipt.path("attempts").size() <= 3);
-            var names = new HashSet<>(Set.of("input.json", "metadata.json"));
-            for (int i = 1; i <= receipt.path("attempts").size(); i++) {
-                names.add("attempt-" + i + ".prompt"); names.add("attempt-" + i + ".output");
-                if (mode.equals("api")) {
-                    names.add("attempt-" + i + ".response"); names.add("attempt-" + i + ".exchange");
-                }
-            }
-            require(keys(receipt.path("artifacts")).equals(names));
             byte[] savedReceipt = read(directory.resolve("receipt.json"));
             require(json.parseJson(savedReceipt).equals(receipt));
             if (!snapshot.equals(runId)) require(snapshot.split("/")[1].equals(ReviewedImportReader.sha256(savedReceipt)));
             byte[] input = checked(directory, "input.json", receipt);
             byte[] metadata = checked(directory, "metadata.json", receipt);
+            checkFingerprint(directory, "attempt-" + receipt.path("attempts").size() + ".output", receipt);
             require(receipt.path("input_sha256").asText().equals(ReviewedImportReader.sha256(input))
                     && receipt.path("metadata_sha256").asText().equals(ReviewedImportReader.sha256(metadata)));
             JsonNode source = json.parseJson(input), info = json.parseJson(metadata);
@@ -104,7 +95,6 @@ public class ExtractionArchiveReader {
                     && info.path("execution_mode").equals(receipt.path("execution_mode"))
                     && info.path("schema_version").asText().equals("extract-schema-v1"));
             require(info.path("attempts").isIntegralNumber() && info.path("attempts").asInt() == receipt.path("attempts").size());
-            require(receipt.path("attempts").get(receipt.path("attempts").size() - 1).path("status").equals(receipt.path("status")));
             sealed(directory);
             for (String name : names) sealed(directory.resolve(name));
             sealed(directory.resolve("identity.json")); sealed(directory.resolve("receipt.json"));
@@ -117,6 +107,91 @@ public class ExtractionArchiveReader {
         } catch (IOException ex) {
             throw new ExtractionException("EXTRACTION_IO_ERROR", null, true);
         }
+    }
+
+    /** 버전별 정확한 파일 집합만 반환해 동적 파일 경로도 원본 계약 안에서 읽는다. */
+    public static Set<String> artifactNames(JsonNode receipt) {
+        require(receipt != null && receipt.isObject());
+        String version = receipt.path("format_version").asText();
+        boolean chunked = version.equals("extraction-archive-v2");
+        require(chunked || version.equals("extraction-archive-v1"));
+        var fields = new HashSet<>(Set.of("format_version", "run_id", "document_version_id", "data_kind", "execution_mode",
+                "recorded_at", "status", "review_required", "input_sha256", "metadata_sha256", "artifacts", "attempts"));
+        if (chunked) fields.addAll(Set.of("chunk_plan_sha256", "total_calls"));
+        require(keys(receipt).equals(fields));
+        require(receipt.path("run_id").asText().matches(UUID) && receipt.path("document_version_id").asText().matches(UUID));
+        require(Set.of("synthetic", "real").contains(receipt.path("data_kind").asText()));
+        String mode = receipt.path("execution_mode").asText();
+        require(Set.of("manual_import", "api").contains(mode) && (!chunked || mode.equals("api")));
+        require(Set.of("validated", "failed").contains(receipt.path("status").asText())
+                && receipt.path("review_required").isBoolean() && receipt.path("review_required").booleanValue());
+        require(receipt.path("recorded_at").isTextual() && !receipt.path("recorded_at").textValue().isBlank());
+        require(receipt.path("input_sha256").isTextual() && receipt.path("input_sha256").textValue().matches(HASH)
+                && receipt.path("metadata_sha256").isTextual() && receipt.path("metadata_sha256").textValue().matches(HASH));
+        JsonNode attempts = receipt.path("attempts"), artifacts = receipt.path("artifacts");
+        require(attempts.isArray() && attempts.size() >= 1 && attempts.size() <= 3 && artifacts.isObject());
+        var names = new LinkedHashSet<>(List.of("input.json", "metadata.json"));
+        if (chunked) names.add("chunk-plan.json");
+        int chunkCount = -1; long calls = 0;
+        for (int index = 0; index < attempts.size(); index++) {
+            JsonNode attempt = attempts.get(index);
+            require(attempt.isObject() && keys(attempt).equals(chunked
+                    ? Set.of("attempt", "status", "error_code", "error_path", "failure_kind", "retryable", "chunks")
+                    : Set.of("attempt", "status", "error_code", "error_path", "failure_kind", "retryable")));
+            require(attempt.path("attempt").isIntegralNumber() && attempt.path("attempt").canConvertToInt()
+                    && attempt.path("attempt").intValue() == index + 1);
+            result(attempt);
+            String prefix = "attempt-" + (index + 1);
+            names.add(prefix + ".prompt"); names.add(prefix + ".output");
+            if (!chunked) {
+                if (mode.equals("api")) { names.add(prefix + ".response"); names.add(prefix + ".exchange"); }
+                continue;
+            }
+            JsonNode chunks = attempt.path("chunks");
+            require(chunks.isArray() && !chunks.isEmpty() && chunks.size() <= 999999);
+            require(chunkCount == -1 || chunkCount == chunks.size()); chunkCount = chunks.size();
+            boolean allValidated = true;
+            for (int chunkIndex = 0; chunkIndex < chunks.size(); chunkIndex++) {
+                JsonNode chunk = chunks.get(chunkIndex);
+                require(chunk.isObject() && keys(chunk).equals(Set.of("chunk_id", "attempted", "status", "error_code", "error_path", "failure_kind", "retryable")));
+                String id = "chunk-" + String.format(java.util.Locale.ROOT, "%06d", chunkIndex + 1);
+                require(chunk.path("chunk_id").asText().equals(id) && chunk.path("attempted").isBoolean());
+                if (chunk.path("attempted").booleanValue()) {
+                    result(chunk); calls++;
+                    for (String suffix : List.of("prompt", "output", "response", "exchange")) names.add(prefix + "-" + id + "." + suffix);
+                } else {
+                    require(chunk.path("status").asText().equals("not_attempted")
+                            && Set.of("CHUNK_REQUEST_LIMIT", "CHUNK_NOT_ATTEMPTED").contains(chunk.path("error_code").asText())
+                            && chunk.path("error_path").isNull() && chunk.path("failure_kind").asText().equals("review")
+                            && chunk.path("retryable").isBoolean() && !chunk.path("retryable").booleanValue());
+                }
+                allValidated &= chunk.path("status").asText().equals("validated");
+            }
+            require(!attempt.path("status").asText().equals("validated") || allValidated);
+        }
+        require(attempts.get(attempts.size() - 1).path("status").equals(receipt.path("status")) && keys(artifacts).equals(names));
+        for (JsonNode artifact : artifacts) {
+            require(artifact.isObject() && keys(artifact).equals(Set.of("size", "sha256"))
+                    && artifact.path("size").isIntegralNumber() && artifact.path("size").canConvertToLong() && artifact.path("size").longValue() >= 0
+                    && artifact.path("sha256").isTextual() && artifact.path("sha256").textValue().matches(HASH));
+        }
+        require(receipt.path("input_sha256").equals(artifacts.path("input.json").path("sha256"))
+                && receipt.path("metadata_sha256").equals(artifacts.path("metadata.json").path("sha256")));
+        if (chunked) require(receipt.path("total_calls").isIntegralNumber() && receipt.path("total_calls").canConvertToLong()
+                && receipt.path("total_calls").longValue() == calls
+                && receipt.path("chunk_plan_sha256").isTextual() && receipt.path("chunk_plan_sha256").textValue().matches(HASH)
+                && receipt.path("chunk_plan_sha256").equals(artifacts.path("chunk-plan.json").path("sha256")));
+        return names;
+    }
+
+    private static void result(JsonNode result) {
+        String status = result.path("status").asText();
+        require(Set.of("validated", "failed").contains(status) && result.path("retryable").isBoolean());
+        if (status.equals("validated")) require(result.path("error_code").isNull() && result.path("error_path").isNull()
+                && result.path("failure_kind").isNull() && !result.path("retryable").booleanValue());
+        else require(result.path("error_code").isTextual() && !result.path("error_code").textValue().isBlank()
+                && (result.path("error_path").isNull() || result.path("error_path").isTextual())
+                && result.path("failure_kind").isTextual() && !result.path("failure_kind").textValue().isBlank());
     }
 
     public void checkDraft(String runId, Path root, String draftJson) {
@@ -147,6 +222,19 @@ public class ExtractionArchiveReader {
         require(artifact.path("size").isIntegralNumber() && artifact.path("size").longValue() == bytes.length
                 && artifact.path("sha256").asText().equals(ReviewedImportReader.sha256(bytes)));
         return bytes;
+    }
+
+    /** 큰 실패 원출력도 보존하며 전체 size/SHA를 고정 크기 버퍼로 대조한다. */
+    private void checkFingerprint(Path directory, String name, JsonNode receipt) throws IOException {
+        Path file = directory.resolve(name); require(Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS));
+        try (var stream = Files.newInputStream(file, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
+            var digest = MessageDigest.getInstance("SHA-256");
+            byte[] buffer = new byte[64 * 1024]; long size = 0; int count;
+            while ((count = stream.read(buffer)) != -1) { digest.update(buffer, 0, count); size += count; }
+            JsonNode artifact = receipt.path("artifacts").path(name);
+            require(artifact.path("size").longValue() == size
+                    && artifact.path("sha256").textValue().equals(HexFormat.of().formatHex(digest.digest())));
+        } catch (NoSuchAlgorithmException ex) { throw new IllegalStateException(ex); }
     }
 
     private byte[] read(Path file) throws IOException {

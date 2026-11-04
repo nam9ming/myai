@@ -1,6 +1,7 @@
 package kr.ac.myai.backend.handoff;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import kr.ac.myai.backend.extraction.ExtractionArchiveReader;
 import kr.ac.myai.backend.extraction.ExtractionException;
 import kr.ac.myai.backend.importing.ImportException;
 import kr.ac.myai.backend.importing.ReviewedImportReader;
@@ -136,8 +137,8 @@ public class HumanHandoffArchiveReader {
             byte[] parentReceiptBytes = checked(directory, reviewPath + "source/" + snapshot + "/receipt.json", receipt);
             require(ReviewedImportReader.sha256(parentReceiptBytes).equals(parent.path("receipt_sha256").textValue()));
             JsonNode parentReceipt = json.parseJson(parentReceiptBytes);
-            require(text(parentReceipt, "format_version").equals("extraction-archive-v1")
-                    && parentReceipt.path("run_id").equals(parent.path("run_id")) && parentReceipt.path("status").equals(parent.path("status"))
+            ExtractionArchiveReader.artifactNames(parentReceipt);
+            require(parentReceipt.path("run_id").equals(parent.path("run_id")) && parentReceipt.path("status").equals(parent.path("status"))
                     && parentReceipt.path("execution_mode").equals(parent.path("execution_mode"))
                     && parentReceipt.path("data_kind").equals(projection.path("data_kind"))
                     && text(parentReceipt, "document_version_id").matches(UUID)

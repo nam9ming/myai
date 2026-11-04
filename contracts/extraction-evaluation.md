@@ -57,7 +57,7 @@ gold 비기재/모호 셀에 알려진 값을 넣거나 대응한 미상 occurre
 | documents[](ai_auto/rules) | `document_version_id`, `run_id`, `snapshot_ref`, `receipt_sha256`, `first_annotation`, `final_annotation` |
 | documents[](human_reviewed) | `document_version_id`, `review_id`, `review_ref`, `receipt_sha256`, `annotation` |
 
-method=ai_auto는 기존 api D05의 구조 재시도 정책을 사용한다. retry_policy_version=`api-structure-retry-v1`. provider/model_label/prompt_version/schema_version은 선택한 모든 실행과 일치해야 한다. preprocessing_version은 실행별 원본을 보존한다. 모든 gold 버전을 한 번씩, 버전마다 한 D05를 명시한다. 성공 실행을 자동 선택하지 않는다. 첫 raw와 마지막 자동 결과를 모두 기록하고 기본 view는 final_auto다. manual_import를 AI 자동 성능으로 표시하지 않는다.
+method=ai_auto의 기존 `api-structure-retry-v1` 정책은 archive-v1만 받으며 provider/model_label/prompt_version/schema_version이 모든 선택 실행과 일치해야 한다. [장문 분할](chunked-extraction.md)의 `api-document-cycle-v1`은 prompt_version=`prompt-v2-or-v3`을 명시하고 archive-v1/prompt-v2와 archive-v2/prompt-v3을 고정 규칙으로 선택한다. provider/model_label/schema_version 일치는 계속 요구한다. preprocessing_version은 실행별 원본을 보존한다. 모든 gold 버전을 한 번씩, 버전마다 한 D05를 명시한다. 성공 실행을 자동 선택하지 않는다. 첫 raw와 마지막 자동 결과를 모두 기록하고 기본 view는 final_auto다. v2의 first_raw는 첫 전체 문서 cycle의 파생 결과이며, attempt_count/source_attempt도 문서 cycle이다. 실제 HTTP 호출 수는 함께 보관한 원본 receipt.total_calls에서 확인한다. manual_import를 AI 자동 성능으로 표시하지 않는다.
 
 method=rules는 rules-run-v1의 UUID 실행을 선택한다. snapshot_ref도 UUID이며 API registered 경로를 받지 않는다. schema_version=`extract-schema-v1`, retry_policy_version=`rules-single-pass-v1`이다. 모든 선택 실행의 규칙/프로필 버전·정확한 profile.json SHA가 policy와 같아야 한다. 실제6파일·입력 바이트·data_kind·문서ID·receipt SHA를 재검증한다. 원본의 실행 모드·receipt·모델/사용량은 변경하지 않는다.
 

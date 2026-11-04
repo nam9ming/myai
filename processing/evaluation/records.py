@@ -47,7 +47,9 @@ def _header(content):
         shape(policy,'provider model_label prompt_version schema_version retry_policy_version',kind='input')
         for field in policy:_label(policy[field],100)
         _check(policy['provider']=='openai' and policy['schema_version']=='extract-schema-v1'
-               and policy['retry_policy_version']=='api-structure-retry-v1')
+               and policy['retry_policy_version'] in ('api-structure-retry-v1', 'api-document-cycle-v1'))
+        if policy['retry_policy_version']=='api-document-cycle-v1':
+            _check(policy['prompt_version']=='prompt-v2-or-v3')
     elif value['method']=='rules':
         shape(policy,'rule_version profile_version profile_sha256 schema_version retry_policy_version '
                      'profile_reviewed_by profile_locked_at profile_basis',kind='input')
@@ -107,7 +109,10 @@ def _human_source(value,doc,base,gold):
     _check(value['phase']!='initial' or basis=='source_only','EVALUATION_HUMAN_BASIS_INVALID')
     _check(basis!='gold_feedback' or value['review']['semantic_feedback_used']
            and value['review']['exposure_status']=='exposed','EVALUATION_HUMAN_FEEDBACK_CONFLICT')
-    parent = decode(_read_checked(folder/f'{prefix}/receipt.json',artifacts[f'{prefix}/receipt.json']),'archive')
+    parent_folder = folder/prefix
+    parent = verify_run(human['source']['run_id'],parent_folder.parent)
+    _check(_fingerprint(parent_folder/'receipt.json')==artifacts[f'{prefix}/receipt.json'],
+           'EVALUATION_SOURCE_MISMATCH')
     metadata = decode(_read_checked(folder/f'{prefix}/metadata.json',artifacts[f'{prefix}/metadata.json']),'archive')
     packet = dict(document=doc,receipt=receipt,human=human,parent=parent,parent_metadata=metadata,
         outputs=dict(human_reviewed=_read_checked(folder/'output.json',artifacts['output.json'])))
@@ -149,8 +154,9 @@ def _load_sources(value,gold_root,run_root):
         else:
             run = verify_run(run_id,folder.parent);_frozen(folder,run)
             _check(run['execution_mode']=='api','EVALUATION_AUTO_REQUIRES_API')
-        raw = _read(folder/'receipt.json');digest = hashlib.sha256(raw).hexdigest()
-        _check(raw==_json(run) and digest==doc['receipt_sha256'],'EVALUATION_RUN_MISMATCH')
+        raw = _json(run);digest = hashlib.sha256(raw).hexdigest()
+        _check(_fingerprint(folder/'receipt.json')==dict(sha256=digest,size=len(raw))
+               and digest==doc['receipt_sha256'],'EVALUATION_RUN_MISMATCH')
         if reference.startswith('registered/'):_check(reference.split('/')[1]==digest,'EVALUATION_RUN_MISMATCH')
         version = doc['document_version_id']
         run_input = _read_checked(folder/'input.json',run['artifacts']['input.json'])
@@ -164,8 +170,15 @@ def _load_sources(value,gold_root,run_root):
             raw_output = _read_checked(folder/'output.json',run['artifacts']['output.json'])
             outputs = {view:raw_output for view in VIEWS}
         else:
-            _check(all(metadata[k]==value['policy'][k] for k in ('provider','model_label','prompt_version','schema_version')),
+            policy=value['policy']
+            _check(all(metadata[k]==policy[k] for k in ('provider','model_label','schema_version')),
                    'EVALUATION_POLICY_MISMATCH')
+            if policy['retry_policy_version']=='api-document-cycle-v1':
+                expected_prompt='prompt-v3' if run['format_version']=='extraction-archive-v2' else 'prompt-v2'
+                _check(metadata['prompt_version']==expected_prompt,'EVALUATION_POLICY_MISMATCH')
+            else:
+                _check(run['format_version']=='extraction-archive-v1' and metadata['prompt_version']==policy['prompt_version'],
+                       'EVALUATION_POLICY_MISMATCH')
             attempts = run['attempts']
             outputs = {view:_read_checked(folder/f'attempt-{number}.output',run['artifacts'][f'attempt-{number}.output'])
                        for view,number in (('first_raw',1),('final_auto',len(attempts)))}

@@ -51,6 +51,70 @@ class ReviewReportMySqlTest {
     @AfterEach void cleanup() throws Exception { ExtractionArchiveReaderTest.unseal(root); }
 
     @Test
+    void chunkedCyclesRegisterAndExposeEverySubrequestThroughHumanHandoffReport() throws Exception {
+        var source = fixtures.source(false);
+        ChunkedArchiveFixtures.enlarge(SourceReviewFixtures.document(source), "block_index");
+        fixtures.register(source); String run = UUID.randomUUID().toString();
+        Path prepared = fixtures.archive(source, run);
+        Path archive = ChunkedArchiveFixtures.archive(root.resolve("chunked"), prepared.resolve(run).resolve("input.json"), run,
+                SourceReviewFixtures.document(source).path("preprocessing_version").asText(), "retry");
+        var first = extractions.importRun(run, archive, "synthetic-registrant");
+        var reused = extractions.importRun(run, archive, "synthetic-registrant");
+        assertThat(first.alreadyRegistered()).isFalse(); assertThat(reused.alreadyRegistered()).isTrue();
+        assertThat(reused.receiptSha256()).isEqualTo(first.receiptSha256());
+        var handoff = fixtures.handoff(source, run, archive);
+        handoffs.importFile(handoff.file(), root, handoff.directory(), "synthetic-reviewer");
+        var before = database(); var files = files();
+        var report = reports.build(UUID.fromString(SourceReviewFixtures.version(source)), root, null);
+        var extraction = byRun(report, run); var receipt = extraction.path("receipt"); var artifacts = extraction.path("artifacts");
+        assertThat(extraction.path("validation").path("status").asText()).isEqualTo("valid");
+        assertThat(extraction.path("database").path("attempts").asInt()).isEqualTo(2);
+        assertThat(extraction.path("database").path("output_sha256").asText()).isEqualTo(artifacts.path("attempt-2.output").path("sha256").asText());
+        assertThat(artifacts.size()).isEqualTo(3 + 2 * 2 + 4 * receipt.path("total_calls").asInt());
+        for (String name : List.of("chunk-plan.json", "attempt-1.prompt", "attempt-1.output", "attempt-2.output",
+                "attempt-1-chunk-000001.prompt", "attempt-1-chunk-000001.output", "attempt-1-chunk-000001.response", "attempt-1-chunk-000001.exchange",
+                "attempt-2-chunk-000002.prompt", "attempt-2-chunk-000002.output", "attempt-2-chunk-000002.response", "attempt-2-chunk-000002.exchange"))
+            assertThat(artifacts.path(name).path("validation").path("status").asText()).as(name).isEqualTo("valid");
+        assertThat(artifacts.path("attempt-1.output").path("size").asInt(-1)).isZero();
+        assertThat(report.path("events")).hasSize(1);
+        assertThat(report.path("events").get(0).path("revisions").get(0).path("handoff_validation").path("status").asText()).isEqualTo("valid");
+        assertThat(database()).isEqualTo(before); assertThat(files()).isEqualTo(files);
+    }
+
+    @Test
+    void oversizedChunkPlanAndSubrequestFailBeforePythonVerificationWithoutWrites() throws Exception {
+        for (String name : List.of("chunk-plan.json", "attempt-1-chunk-000001.response")) {
+            var source = fixtures.source(false); ChunkedArchiveFixtures.enlarge(SourceReviewFixtures.document(source), "block_index");
+            fixtures.register(source); String run = UUID.randomUUID().toString(); Path prepared = fixtures.archive(source, run);
+            Path archive = ChunkedArchiveFixtures.archive(root.resolve(run), prepared.resolve(run).resolve("input.json"), run,
+                    SourceReviewFixtures.document(source).path("preprocessing_version").asText(), "success");
+            extractions.importRun(run, archive, "synthetic-registrant");
+            Path directory = Path.of(jdbc.queryForObject("SELECT raw_ref FROM extraction_runs WHERE run_id=?", String.class, run));
+            Path file = directory.resolve(name); file.toFile().setWritable(true, true);
+            Files.writeString(file, "x".repeat(8 * 1024 * 1024 + 1)); file.toFile().setWritable(false, false);
+            var before = database(); var files = files();
+            assertThatThrownBy(() -> reports.build(UUID.fromString(SourceReviewFixtures.version(source)), root, null))
+                    .isInstanceOfSatisfying(PublicationException.class, ex -> assertThat(ex.code()).isEqualTo("REPORT_TOO_LARGE"));
+            assertThat(database()).isEqualTo(before); assertThat(files()).isEqualTo(files);
+        }
+    }
+
+    @Test
+    void missingChunkSubrequestIsInvalidAndPreservesDatabaseAndRemainingFiles() throws Exception {
+        var source = fixtures.source(false); ChunkedArchiveFixtures.enlarge(SourceReviewFixtures.document(source), "block_index");
+        fixtures.register(source); String run = UUID.randomUUID().toString(); Path prepared = fixtures.archive(source, run);
+        Path archive = ChunkedArchiveFixtures.archive(root.resolve("missing-chunk"), prepared.resolve(run).resolve("input.json"), run,
+                SourceReviewFixtures.document(source).path("preprocessing_version").asText(), "success");
+        extractions.importRun(run, archive, "synthetic-registrant");
+        Path directory = Path.of(jdbc.queryForObject("SELECT raw_ref FROM extraction_runs WHERE run_id=?", String.class, run));
+        directory.toFile().setWritable(true, true); Files.delete(directory.resolve("attempt-1-chunk-000001.response")); directory.toFile().setWritable(false, false);
+        var before = database(); var files = files();
+        var extraction = byRun(reports.build(UUID.fromString(SourceReviewFixtures.version(source)), root, null), run);
+        assertThat(extraction.path("archive_validation").path("status").asText()).isEqualTo("invalid");
+        assertThat(database()).isEqualTo(before); assertThat(files()).isEqualTo(files);
+    }
+
+    @Test
     void sourceOnlyPreservesPendingOriginalAndSeparatesInspectionFromCapture() throws Exception {
         var source = fixtures.source(true); fixtures.register(source);
         var before = database(); var files = files();

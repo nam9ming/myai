@@ -169,6 +169,9 @@ def prepare(input_path, root=DEFAULT_ROOT):
 
 
 def _receipt(directory, identity):
+    if type(identity) is dict and identity.get('format_version') == 'extraction-archive-v2':
+        from .chunk_archive import verify_receipt
+        return verify_receipt(directory, identity)
     shape(identity, 'format_version run_id document_version_id data_kind attempt_count artifacts recorded_at', kind='archive')
     _archive_check(identity['format_version'] == FORMAT and identity['run_id'] == directory.name)
     count = identity['attempt_count']
@@ -266,9 +269,14 @@ def verify_run(run_id, root=DEFAULT_ROOT):
     _archive_check(directory.is_dir() and not directory.is_symlink(), 'ARCHIVE_INCOMPLETE')
     _archive_check((directory / 'identity.json').exists() and (directory / 'receipt.json').exists(), 'ARCHIVE_INCOMPLETE')
     try:
-        identity = decode(_read(directory / 'identity.json'), 'archive')
+        identity_bytes = _read(directory / 'identity.json')
+        identity = decode(identity_bytes, 'archive')
+        if type(identity) is dict and identity.get('format_version') == 'extraction-archive-v2':
+            _archive_check(identity_bytes == _json(identity))
         expected = _receipt(directory, identity)
-        _archive_check(_read(directory / 'receipt.json') == _json(expected))
+        content = _json(expected)
+        _archive_check(_fingerprint(directory / 'receipt.json')
+                       == dict(sha256=hashlib.sha256(content).hexdigest(), size=len(content)))
     except (ExtractionError, FileNotFoundError):
         raise ExtractionError('ARCHIVE_INTEGRITY', kind='archive') from None
     return expected

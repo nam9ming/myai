@@ -70,6 +70,8 @@ freeze는 입력·metadata·프롬프트·모든 시도 원출력·identity/rece
 
 Python 성공0과 원출력 검증 실패4를 각각 D05 validated/failed로 등록한다. input/metadata/receipt 원본과 hash를 대조한 뒤 짧은 RR 트랜잭션에서 D03 입력·합성 태그·전처리 버전을 확인한다. 손상·미완료·잘못된 원본은 등록하지 않는다. 같은 run_id·같은 원본은 최초 결과를 재사용하며 다른 원본·archive 경로·receipt는 충돌이다. 동시 중복 복구는 실패 트랜잭션 종료 후 새로 조회한다.
 
+[장문 archive-v2](../../contracts/chunked-extraction.md)는 같은 wrapper로 등록한다. metadata.attempts1~3은 문서 cycle이며 실제 HTTP 전송 시도는 receipt.total_calls다. D03 전체 입력을 대조하고 마지막 attempt-N.output의 전체 파생 hash를 저장한다. 모든 chunk 원본은 봉인 검증하며, 직접 ai-draft 대신 실제 사람 검토/handoff를 요구한다. 큰 기존 v1 실패 원출력은 전체 size/SHA를 stream 대조해 보존하며, 보고서 표시 한도와 구별한다.
+
 V3는 provider/model을 nullable로 바꾸고 모델/계약/전처리 버전·실행 방식·시도 수·합성 태그·metadata/receipt 원문과 hash·최초 등록 actor/시각을 보존한다. 비용·usage·외부 나노초 시각·미상 사유는 LONGTEXT 원본에 남긴다. registered_at은 DB 등록 시각이며 실제 모델 시각·Python recorded_at과 다르다. legacy 행의 없는 metadata는 null로 유지하고 성공으로 승격하지 않는다. legacy 행의 별도 이관은 미지원이다.
 
 stdout은 안전한 JSON 한 건이다. 바깥 `status=succeeded`는 등록 성공이며 안쪽 `result.status`는 AI 원출력의 validated/failed다. 모두 `review_required=true`다. 본문·raw_ref·실제 경로·원출력은 결과에 넣지 않는다. 강제 웹 모드와 public/fixture/다른 local 프로필 혼합은 context refresh 전에 차단한다.

@@ -44,6 +44,6 @@
 - [x] 백업·선택 metadata hash 검증→새 빈 소유 DB 복원→47/23/20·206행·공개0 대조·SELECT 계정 준비.
 - [x] 고유 처리 문서20건의 모든 시도/실패를 포함한 private HTML과 인계 index를 만든다. 보고서 항목 검증과 stdout 성공을 구별한다.
 - [x] 생성 전후 DB/스키마·기존 원본을 대조하고 HTML 링크/표시·외부 자원 부재를 검사한 뒤 소유 자원/credential을 정리한다.
-- [ ] 전체 자체 검토→새 전체 검토1회→유효 지적 수정→aggregate 문서 PR·정확 head CI/AI/사람 피드백→승인된 develop 병합·통합 검증·인계 증거 동결.
+- [x] 전체 자체 검토→새 전체 검토1회→유효 지적 수정→aggregate 문서 PR·정확 head CI/AI/사람 피드백→승인된 develop 병합·통합 검증·인계 증거 동결. PR43·develop eb94dd1, 동결 manifest f3c709da.
 
 **Expected:** 실제 검토 가능한 파일과 재현 가능한 진단 근거를 제공한다. 사람 승인·정답/90%·40문서·D09·실기기·운영/main 배포 게이트는 남겨 둔다.
