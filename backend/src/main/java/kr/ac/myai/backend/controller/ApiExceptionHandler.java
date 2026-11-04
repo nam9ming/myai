@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.servlet.http.HttpServletRequest;
 import kr.ac.myai.backend.exception.ApiException;
-import kr.ac.myai.backend.local.ExtractionUploadController;
 import kr.ac.myai.backend.logging.PublicRequestLogContext;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpStatus;
@@ -23,8 +22,6 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
-import org.springframework.web.method.HandlerMethod;
-import org.springframework.web.servlet.HandlerMapping;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
@@ -78,17 +75,21 @@ public class ApiExceptionHandler implements ResponseBodyAdvice<Object> {
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<ErrorResponse> uploadTooLarge(HttpServletRequest request) {
-        Object handler = request.getAttribute(HandlerMapping.BEST_MATCHING_HANDLER_ATTRIBUTE);
-        String code = handler instanceof HandlerMethod method && ExtractionUploadController.class.isAssignableFrom(method.getBeanType())
-                ? "EXTRACTION_UPLOAD_TOO_LARGE" : "SOURCE_UPLOAD_TOO_LARGE";
-        return response(HttpStatus.PAYLOAD_TOO_LARGE, code,
+        return response(HttpStatus.PAYLOAD_TOO_LARGE, uploadCode(request, "TOO_LARGE"),
                 "업로드 크기 한도를 초과했습니다. 파일을 나누거나 별도 검토해 주세요.", List.of());
     }
 
     @ExceptionHandler(MultipartException.class)
     public ResponseEntity<ErrorResponse> malformedUpload(MultipartException error, HttpServletRequest request) {
         if (error.contains(MaxUploadSizeExceededException.class) || error.contains(SizeException.class)) return uploadTooLarge(request);
-        return response(HttpStatus.UNPROCESSABLE_ENTITY, "SOURCE_UPLOAD_INVALID", "multipart 요청 형식과 part를 확인해 주세요.", List.of());
+        return response(HttpStatus.UNPROCESSABLE_ENTITY, uploadCode(request, "INVALID"), "multipart 요청 형식과 part를 확인해 주세요.", List.of());
+    }
+
+    private String uploadCode(HttpServletRequest request, String suffix) {
+        String path = request.getPathInfo();
+        if (path == null) path = request.getServletPath();
+        boolean extraction = path != null && (path.equals("/local/extractions/uploads") || path.startsWith("/local/extractions/uploads/"));
+        return (extraction ? "EXTRACTION" : "SOURCE") + "_UPLOAD_" + suffix;
     }
 
     @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})

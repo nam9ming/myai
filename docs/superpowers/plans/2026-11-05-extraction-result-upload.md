@@ -101,6 +101,12 @@ Task4 첫 실제 MySQL/JAR15개에서는13통과·2실패였다. 신규 경로�
 
 ## 계획 자체 검토
 
+[PR #47](https://github.com/nam9ming/myai/pull/47)의 첫 head `ddfbcb3`은 [CI41926419421](https://github.com/nam9ming/myai/actions/runs/41926419421)에서 Java782개/실패·skip0·빌드8분41초, Python630개/343.326초·Node34·계약9·린트415·Poppler24.02·산출물2개 보관까지 통과했다. 자동 리뷰는 변경분 앞60,000자 부분 검토의 원문1건이며, CI 성공을 지적0으로 처리하지 않았다.
+
+자동 리뷰의 매핑 전 파싱 전제는 현재 `enabled/resolve-lazily=true`를 강제하는 기동 규칙과 맞지 않았으나, 실제 잘린 multipart·boundary 누락에서 추출 경로에도 SOURCE_UPLOAD_INVALID가 반환되는 문제는 재현했다. 두 multipart 오류 handler를 ServletPath/PathInfo의 요청 경로 공통 분류로 연결하고 기존 SOURCE 코드·공통 missing-part422·인증/lazy 규칙은 유지했다. 매핑 속성 없는 context/servlet prefix·유사 prefix7개 시험의3실패를 수정했으며, 실제 JAR의 일반/인코딩/행렬 매개변수 경로12요청·기존 원문 경로·DB/파일/로그 불변을 대조했다.
+
+수정 후 관련131개·전체 Java/MySQL790개/60클래스·실패/오류/skip0·빌드7분10초를 확인했다. 시험 중306개 source fingerprint가 같았다. Python630·Node34·계약9의 기존107개 code/schema fingerprint는 그대로이며 새 문서/시험을 포함한 린트416파일도 통과했다. 전체 자체 검토를 반복해 유효 미해결0·보류 minor0이다. 추가 독립 리뷰는 하지 않으며 새 정확 head의 원격 CI/AI·새 사람 피드백·비main 통합은 최종 gate에서 확인한다.
+
 새 문맥의 전체29파일·6커밋 리뷰는 Critical0/Important0/Minor1이었다. multipart 전용 초기화/slot의415가 JSON을 사용하라고 잘못 안내하던 공통 문구를 범용 Content-Type 안내1줄로 수정했다. status/code/DTO/매핑을 유지하고 신규/기존 API3클래스41개를 재실행해 실패/오류/skip0을 확인했다. 전체782개 이후 다른304개 source는 그대로이며, 이 문구 수정 뒤의 정확 head 전체 CI/AI는 PR 게이트에서 확인한다. 전체 자체 검토를 반복했고 유효 미해결0·보류 minor0이며 재리뷰를 추가하지 않았다. 운영 내구성·앱 밖 관리자 변경·실제 품질/사람/gold/운영·기존 GitHub secret 신뢰 정책은 이번 기능 검증으로 완료/감사한 것으로 표시하지 않는다.
 
 각 spec 요구는 Task1(기존 Python/원본/환경), Task2(staging/CAS), Task3(HTTP/등록/경계), Task4(실제 연결/복구/문서)에 대응한다. Review Focus5개는 각 소유 Task의 RED 항목에 포함했다. 공통 API 이름/한도는 위 Interfaces를 사용하며 검사 count는 예상으로 완료 처리하지 않는다. 이전 PR46 통합/동결이 미완료면 제품 구현을 시작하지 않는다.

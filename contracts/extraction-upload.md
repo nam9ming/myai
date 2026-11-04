@@ -65,6 +65,8 @@ staging은 request root의 `extraction-uploads/`에 원래 control/input/metadat
 
 한도413, 입력/미완료·무효 archive422, 부재404, 충돌409, MIME/charset415, 실행/DB 미준비503, 예상하지 못한 I/O500을 공통 JSON/request_id로 구분한다. transport 초과413은 미수신 전체 파일을 보존했다는 뜻이 아니다.
 
+multipart 자체의 파싱 실패·전체 크기 초과도 추출 경로에서는 `EXTRACTION_UPLOAD_INVALID`·`EXTRACTION_UPLOAD_TOO_LARGE`다. 기존 원문 경로의 `SOURCE_UPLOAD_*`와 구분한다. 필수 part가 없는 요청은 기존 공통 `INVALID_REQUEST`422일 수 있다.
+
 새 HTTP metadata64KiB/prompt20MiB/output5MiB는 기존 CLI metadata8MiB·manual prompt 무제한·큰 실패 출력 전체 stream 보존을 바꾸지 않는다. 기존 관리 JSON·AI 입력8MiB, 원문 업로드 file20MiB/request21MiB도 유지한다.
 
 S10의 AI artifact8MiB·전체 JSON/HTML64MiB는 유지한다. 업로드/D05 등록 성공이 보고서 성공을 보장하지 않으며, 초과 원본을 생략해 보고서를 성공 처리하지 않는다. 원본을 보존하고 별도 검토가 필요하다.

@@ -214,6 +214,29 @@ class ExtractionUploadJarMySqlTest {
     }
 
     @Test
+    void actualMultipartParsingFailuresKeepTheExtractionAndSourceErrorFamiliesSeparate() throws Exception {
+        var roots = roots(); var jar = start(roots, "local-api");
+        try (jar) {
+            var before = database(); var originalFiles = files(roots); String run = UUID.randomUUID().toString();
+            for (String route : List.of(BASE, BASE + ";version=1", "/local/%65xtractions/uploads",
+                    slotPath(run, 1, "output"), slotPath(run, 1, "output").replace("/uploads/", "/uploads;version=1/"), "/local/documents")) {
+                String name = route.equals("/local/documents") ? "metadata" : route.contains("/attempts/") ? "file" : "control";
+                byte[] complete = multipart(part(name, "application/json", bytes(PRIVATE)));
+                byte[] incomplete = Arrays.copyOf(complete, complete.length - bytes("--" + BOUNDARY + "--\r\n").length);
+                String expected = route.equals("/local/documents") ? "SOURCE_UPLOAD_INVALID" : "EXTRACTION_UPLOAD_INVALID";
+                for (boolean boundaryDeclared : List.of(true, false)) {
+                    var request = multipartRequest(jar, route, true);
+                    if (!boundaryDeclared) request.setHeader("Content-Type", "multipart/form-data");
+                    var publisher = chunked(incomplete);
+                    error(jar.send(route.contains("/attempts/") ? request.PUT(publisher) : request.POST(publisher)), 422, expected);
+                }
+            }
+            assertThat(database()).isEqualTo(before); assertThat(files(roots)).isEqualTo(originalFiles); jar.awaitLogs();
+        }
+        safeLogs(jar);
+    }
+
+    @Test
     void publicAndFixtureProfilesExposeNoneOfTheThreeUploadRoutes() throws Exception {
         for (String profile : List.of("public", "fixture")) {
             var roots = roots(); var jar = start(roots, profile);
