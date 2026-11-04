@@ -41,7 +41,7 @@
 - [x] RED: 401/403·정상 Bearer/Origin, 중복 헤더·Host/remote 주소·실제 port·OPTIONS·encoded path/forwarded header를 검사하고 body/domain 호출0을 assert한다.
 - [x] GREEN: early initializer·단독 프로필·loopback·constant-time 토큰 검사·Origin/Host 검사를 구현한다. 0번 port는 시험/실제 임시 포트로 허용한다.
 - [x] 추가 경계 RED→GREEN: 실제 port80의 기본 port 생략/명시를 허용하며 다른 port/host/scheme은 거부한다. actor128자 상한·ISO control 거부는 기존 서비스 검증을 기동 전에 재사용한다.
-- [ ] 공개/fixture `/local`404, 올바른 로컬 인증을 보낸 local `/api/v1`404, 기존 CLI 동작·공개 오류/로그 회귀를 실행하고 커밋한다.
+- [x] 공개/fixture `/local`404, 올바른 로컬 인증을 보낸 local `/api/v1`404, 기존 CLI 동작·공개 오류/로그 회귀를 실행하고 커밋한다.
 
 ### Task 2: 파일 reader의 원입력 byte[] 재사용
 
@@ -52,7 +52,7 @@
 - [x] RED: 동일 파일/bytes의 결과와 원본 SHA 일치, 공백만 다른 body의 서로 다른 inputSha256을 assert한다.
 - [x] RED: malformed/후행/중복키/잘못된 UTF-8·추가키·8MiB 초과와 source symlink/hash·revision/승인 상태 오류를 두 경로에서 동일하게 거부한다.
 - [x] GREEN: 기존 private batch/strict publication 변환·Bean Validation을 재사용한다. 새 coercion/자동 보정/재직렬화 hash를 넣지 않는다.
-- [ ] 관련 reader 전체와 기존 파일 CLI 시험을 실행하고 커밋한다.
+- [x] 관련 reader 전체와 기존 파일 CLI 시험을 실행하고 커밋한다.
 
 ### Task 3: 원본 보관·네 관리 HTTP 경로
 
@@ -72,15 +72,15 @@
 - [x] RED: 8MiB+1/Content-Length 없음·잘못된 media·UTF-8/중복키, 인증 실패 때 body 저장0, preview 때 파일/DB 쓰기0을 검사한다.
 - [x] RED: 원본 공백/hash·같은 body 동시 설치·기존 충돌/symlink·파일 실패 시 domain 호출0과 원본 보존을 검사한다.
 - [x] GREEN: 기존 서비스·readers·예외·파일 원자 설치 패턴을 연결한다. field 값이나 exception message의 원문을 오류에 반사하지 않는다.
-- [ ] 관련 HTTP/reader/CLI·공개 회귀를 실행하고 커밋한다.
+- [x] 관련 HTTP/reader/CLI·공개 회귀를 실행하고 커밋한다.
 
 ### Task 4: 실제 MySQL·JAR HTTP 흐름과 최종 검증
 
 **Files:** `LocalManagementMySqlTest.java`는 기존 reader worker, `LocalManagementJarMySqlTest.java`는 기존 보안 worker가 독립 담당한다. 부모는 격리 DB·실행/결과 확인·수정·`contracts/local-management-api.md`·`backend/docs/local-management-api.md`·README/TASK·계획 체크박스와 최종 통합/Git을 소유한다.
 
-- [ ] RED→GREEN: 별도 MySQL에서 실제 HTTP 문서/D05(성공·실패) 등록→수정→승인/반려→preview→publish→공개 조회→rollback, 중복·stale·동시 충돌·권한 미확인/실패 부모를 검증한다. 원본·행·이전 공개본을 대조한다.
-- [ ] 실제 합성 JAR를 loopback 임시 port에 실행하고 토큰/Origin·공개/관리 분리·안전한 오류·파일/DB 보존을 확인한다. 시험용 프로세스/컨테이너만 정리한다.
-- [ ] Python 전체·Java/MySQL 전체·Node/계약/lint/build를 실행하고 전체 호출부·상태·보관/복구·문서 자체 리뷰를 완료한다.
+- [x] RED→GREEN: 별도 MySQL에서 실제 HTTP 문서/D05(성공·실패) 등록→수정→승인/반려→preview→publish→공개 조회→rollback, 중복·stale·동시 충돌·권한 미확인/실패 부모를 검증한다. 원본·행·이전 공개본을 대조한다.
+- [x] 실제 합성 JAR를 loopback 임시 port에 실행하고 토큰/Origin·공개/관리 분리·안전한 오류·파일/DB 보존을 확인한다. 시험용 프로세스/컨테이너만 정리한다.
+- [x] Python 전체·Java/MySQL 전체·Node/계약/lint/build를 실행하고 전체 호출부·상태·보관/복구·문서 자체 리뷰를 완료한다.
 - [ ] fresh 전체 검토1회→유효 minor 포함 수정·재검증→PR→정확 head CI/AI/새 사람 피드백→비main 병합·통합 검증→비공개 증거 동결을 완료한다. provider 오류가 지속되면 정확한 대기 상태를 유지한다.
 
 **Expected:** 네 관리 JSON 경로가 실제 기존 DB/승인 서비스에 연결되고 공개·CLI 경계와 원입력/실패·충돌을 유지한다. txt/pdf 새 업로드·관리 UI·실자료 사람 검토·40문서/gold/D09·실제 배포/main 인수를 완료로 확대하지 않는다.
