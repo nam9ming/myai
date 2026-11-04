@@ -148,8 +148,10 @@ def verify_receipt(directory, identity):
                            and metadata['cost'] is None and metadata['currency'] is None)
     archive._archive_check(len(api.request_bytes(document, metadata['model_label'], None, API_PROMPT_VERSION)) > REQUEST_LIMIT_BYTES)
     plan = plan_chunks(document, metadata['model_label'], hashlib.sha256(content).hexdigest())
-    plan_bytes = archive._read_checked(directory / 'chunk-plan.json', artifacts['chunk-plan.json'])
-    archive._archive_check(plan_bytes == archive._json(plan))
+    plan_bytes = archive._json(plan)
+    expected_plan = dict(sha256=hashlib.sha256(plan_bytes).hexdigest(), size=len(plan_bytes))
+    archive._archive_check(archive._fingerprint(directory / 'chunk-plan.json')
+                           == artifacts['chunk-plan.json'] == expected_plan)
     names, attempts, usages, exchanges = {'input.json', 'metadata.json', 'chunk-plan.json'}, [], [], []
     for number in range(1, count + 1):
         archive._archive_check(not attempts or attempts[-1]['retryable'])

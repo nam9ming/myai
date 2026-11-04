@@ -167,6 +167,20 @@ class ChunkedApiTest(unittest.TestCase):
             self.assertGreater((self.root / RUN / (prefix + '.response')).stat().st_size, 4300000)
         self.assertEqual(archive.verify_run(RUN, self.root), receipt)
 
+    def test_large_derived_plan_preserves_valid_input_and_failed_wire_attempt(self):
+        self.document['blocks'] = [dict(block_id=str(i) + 'A' * 4400, page=None, text='x') for i in range(1800)]
+        original = archive._json(self.document)
+        self.assertLess(len(original), 8 * 1024 * 1024)
+        self.input.write_bytes(original)
+        receipt, network = self.run_chunked(lambda request, key: (401, b'{}', None, True))
+        self.assertEqual((receipt['status'], receipt['total_calls'], network.call_count), ('failed', 1, 1))
+        plan = self.root / RUN / 'chunk-plan.json'
+        self.assertGreater(plan.stat().st_size, 8 * 1024 * 1024)
+        self.assertEqual((self.root / RUN / 'input.json').read_bytes(), original)
+        self.assertEqual(receipt['chunk_plan_sha256'], hashlib.sha256(plan.read_bytes()).hexdigest())
+        self.assertEqual(archive.verify_run(RUN, self.root), receipt)
+        self.assertEqual(archive.freeze_run(RUN, self.root)['receipt'], receipt)
+
 
 if __name__ == '__main__':
     unittest.main()
