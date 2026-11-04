@@ -30,9 +30,9 @@
 
 **Interfaces:** workflow의 diff 단계 Bash를 시험에서 그대로 실행하되 `/tmp/pr.diff` 출력 경로만 소유 임시 경로로 치환한다. `BASE_SHA`, `HEAD_SHA`는 PR 이벤트의 불변 SHA다.
 
-- [ ] 네트워크 없는 실제 Git 임시 저장소에서301파일·갈라진 base/전진한 head·외부 도구 미실행·없는 commit 실패 시험을 먼저 작성한다. `gh`는 관찰된 HTTP406 실패로 stub한다.
-- [ ] `node --test test/ai-review-diff.test.mjs` RED 확인 후 fetch-depth0·Git3점 diff·외부 도구 차단을 연결하고 GREEN을 확인한다.
-- [ ] `npm run lint`, `npm test`, `npm run build`와 현재 통합304파일의 로컬 diff를 검증한다. 앱 소스 미변경이므로 직전 Java404 결과와 새 원격 CI를 구분한다.
+- [x] 네트워크 없는 실제 Git 임시 저장소에서301파일·갈라진 base/전진한 head·외부 도구 미실행·없는 commit 실패 시험을 먼저 작성한다. `gh`는 관찰된 HTTP406 실패로 stub한다.
+- [x] `node --test test/ai-review-diff.test.mjs` RED 확인 후 fetch-depth0·Git3점 diff·외부 도구 차단을 연결하고 GREEN을 확인한다.
+- [x] `npm run lint`, `npm test`, `npm run build`와 현재 통합304파일의 로컬 diff를 검증한다. 앱 소스 미변경이므로 직전 Java404 결과와 새 원격 CI를 구분한다.
 - [ ] 자체 전체 검토→새 전체 검토1회→유효 지적 전부 수정→PR/정확 head CI·AI·사람 피드백0→승인된 develop 병합·통합 PR20 자동 리뷰 복구를 검증한다.
 
 **Expected:** GitHub diff API 호출 없이 전체 Git 변경을 수집하고 실패·빈 리뷰를 성공으로 숨기지 않는다. 앱 범위나 실제 인수 기준은 줄이지 않는다.

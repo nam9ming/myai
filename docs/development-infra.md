@@ -61,6 +61,8 @@ bash scripts/set-secret.sh PROJECT_TOKEN nam9ming/myai
 
 리뷰 스크립트는 비밀값 보호를 위해 기본 브랜치에서 읽는다. 기본 브랜치가 이전 Anthropic 버전이면 실행을 생략하며, OpenAI 리뷰 자동화는 main 반영 후 새 PR 또는 추가 커밋에서 확인한다.
 
+diff는 전체 Git 이력에서 PR 이벤트의 고정 `base.sha...head.sha`를 merge-base 기준으로 수집한다. GitHub diff API의300파일 한도를 사용하지 않으며, 기본 브랜치 checkout을 유지하고 PR head 코드를 실행하지 않는다. 외부 diff 드라이버·textconv도 차단한다. 전체 이력 다운로드 비용은 늘지만 모델에 전달하는 앞60000자 부분 검토 한도는 그대로다. 로컬 회귀 시험에는 기존 Git과 Bash가 필요하다. [checkout 이력 설정](https://github.com/actions/checkout#fetch-all-history-for-all-tags-and-branches)·[Git diff 기준](https://git-scm.com/docs/git-diff)을 따른다.
+
 주간 리포트는 기존 Anthropic 구성을 유지한다. `ANTHROPIC_API_KEY`가 없으면 원본 활동 목록을 사용하며, 요약 모델은 `ANTHROPIC_SUMMARY_MODEL`로 변경한다. `OPENAI_API_KEY`만 등록해도 주간 리포트의 AI 요약이 켜지는 것은 아니다.
 
 main 반영·시크릿 등록 후 아래 명령은 실제 기존 채널에 메시지를 보낸다.
