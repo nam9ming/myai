@@ -47,7 +47,9 @@ def _header(content):
         shape(policy,'provider model_label prompt_version schema_version retry_policy_version',kind='input')
         for field in policy:_label(policy[field],100)
         _check(policy['provider']=='openai' and policy['schema_version']=='extract-schema-v1'
-               and policy['retry_policy_version']=='api-structure-retry-v1')
+               and policy['retry_policy_version'] in ('api-structure-retry-v1', 'api-document-cycle-v1'))
+        if policy['retry_policy_version']=='api-document-cycle-v1':
+            _check(policy['prompt_version']=='prompt-v2-or-v3')
     elif value['method']=='rules':
         shape(policy,'rule_version profile_version profile_sha256 schema_version retry_policy_version '
                      'profile_reviewed_by profile_locked_at profile_basis',kind='input')
@@ -164,8 +166,15 @@ def _load_sources(value,gold_root,run_root):
             raw_output = _read_checked(folder/'output.json',run['artifacts']['output.json'])
             outputs = {view:raw_output for view in VIEWS}
         else:
-            _check(all(metadata[k]==value['policy'][k] for k in ('provider','model_label','prompt_version','schema_version')),
+            policy=value['policy']
+            _check(all(metadata[k]==policy[k] for k in ('provider','model_label','schema_version')),
                    'EVALUATION_POLICY_MISMATCH')
+            if policy['retry_policy_version']=='api-document-cycle-v1':
+                expected_prompt='prompt-v3' if run['format_version']=='extraction-archive-v2' else 'prompt-v2'
+                _check(metadata['prompt_version']==expected_prompt,'EVALUATION_POLICY_MISMATCH')
+            else:
+                _check(run['format_version']=='extraction-archive-v1' and metadata['prompt_version']==policy['prompt_version'],
+                       'EVALUATION_POLICY_MISMATCH')
             attempts = run['attempts']
             outputs = {view:_read_checked(folder/f'attempt-{number}.output',run['artifacts'][f'attempt-{number}.output'])
                        for view,number in (('first_raw',1),('final_auto',len(attempts)))}

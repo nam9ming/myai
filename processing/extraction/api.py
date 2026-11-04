@@ -18,7 +18,10 @@ REQUEST_TIMEOUT = 120
 DEFAULT_MODEL = 'gpt-6.1-sol'
 
 
-def request_bytes(document, model, error_path=None, prompt_version=API_PROMPT_VERSION):
+def request_bytes(document, model, error_path=None, prompt_version=API_PROMPT_VERSION, chunk=None):
+    if prompt_version == 'prompt-v3':
+        from .chunks import chunk_request_bytes
+        return chunk_request_bytes(document, model, chunk, error_path)
     system = instructions(prompt_version)
     if error_path is not None:
         system += '\n직전 구조 오류 경로만 참고하여 같은 원문을 다시 추출한다: ' + error_path
@@ -65,8 +68,9 @@ def _failure(code, retryable, kind='transport', path=None):
     return dict(status='failed', error_code=code, error_path=path, failure_kind=kind, retryable=retryable)
 
 
-def check_api_attempt(request, response, exchange, document, model, error_path=None, prompt_version=API_PROMPT_VERSION):
-    archive._archive_check(request == request_bytes(document, model, error_path, prompt_version))
+def check_api_attempt(request, response, exchange, document, model, error_path=None, prompt_version=API_PROMPT_VERSION,
+                      chunk=None):
+    archive._archive_check(request == request_bytes(document, model, error_path, prompt_version, chunk))
     shape(exchange, 'http_status transport_error response_complete started_at finished_at', kind='archive')
     archive._archive_check(stamp(exchange['started_at'], '$.started_at') <= stamp(exchange['finished_at'], '$.finished_at'))
     status, error, complete = [exchange[k] for k in ('http_status', 'transport_error', 'response_complete')]
@@ -122,7 +126,11 @@ def check_api_attempt(request, response, exchange, document, model, error_path=N
     # decode가 모든 문자열의 UTF-8 표현 가능 여부를 이미 검사했다.
     output = '\n'.join(parts).encode('utf-8')
     try:
-        parse_output(output, document)
+        if prompt_version == 'prompt-v3':
+            from .chunks import validate_chunk_output
+            validate_chunk_output(output, document)
+        else:
+            parse_output(output, document)
         result = dict(status='validated', error_code=None, error_path=None, failure_kind=None, retryable=False)
     except ExtractionError as failure:
         result = _failure(failure.code, failure.retryable, failure.kind, failure.path)
@@ -169,6 +177,10 @@ def run_api(input_path, preprocessing_version, root=archive.DEFAULT_ROOT, run_id
     except FileExistsError:
         return reuse()
     archive._write(directory / 'input.json', content)
+    from .chunks import REQUEST_LIMIT_BYTES
+    if len(request_bytes(document, model, None, API_PROMPT_VERSION)) > REQUEST_LIMIT_BYTES:
+        from .chunk_archive import run_chunked
+        return run_chunked(directory, content, document, preprocessing_version, model, key)
     pairs, api_artifacts, exchanges, usages = [], [], [], []
     previous = None
     for number in range(1, 4):

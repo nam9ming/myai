@@ -229,6 +229,76 @@ class ExtractionChunksTest(unittest.TestCase):
         with self.assertRaises(ExtractionError):
             chunks.assemble_outputs(self.document, plan, outputs[:-1])
 
+    def test_assembly_rejects_total_size_when_each_chunk_fits(self):
+        plan = self.plan()
+        outputs = [output_for(self.document, self.document['blocks'][c['core_end'] - 1])
+                   for c in plan['chunks']]
+        for chunk, output in zip(plan['chunks'], outputs):
+            self.assertLess(len(raw(output)), 12000)
+            chunks.validate_chunk_output(raw(output), chunks.chunk_document(self.document, chunk))
+        with patch.object(chunks, 'MAX_BYTES', 12000, create=True):
+            with self.assertRaises(ExtractionError) as caught:
+                chunks.assemble_outputs(self.document, plan, outputs)
+        self.assertEqual((caught.exception.code, caught.exception.kind, caught.exception.retryable),
+                         ('CHUNK_OUTPUT_LIMIT', 'review', False))
+
+    def test_assembly_stops_before_pulling_next_chunk_after_output_limit(self):
+        plan = self.plan()
+        pulled = []
+
+        def outputs():
+            for index, chunk in enumerate(plan['chunks']):
+                pulled.append(index)
+                if index == 2:
+                    self.fail('결합 예산 초과 뒤 다음 청크를 읽었다')
+                value = output_for(self.document, self.document['blocks'][chunk['core_end'] - 1])
+                yield chunks.validate_chunk_output(raw(value), chunks.chunk_document(self.document, chunk))
+
+        with patch.object(chunks, 'MAX_BYTES', 12000, create=True):
+            with self.assertRaises(ExtractionError) as caught:
+                chunks.assemble_outputs(self.document, plan, outputs())
+        self.assertEqual((caught.exception.code, caught.exception.kind), ('CHUNK_OUTPUT_LIMIT', 'review'))
+        self.assertEqual(pulled, [0, 1])
+
+    def test_assembly_iterator_and_list_preserve_existing_canonical_bytes(self):
+        plan = self.plan()
+        outputs = [output_for(self.document, self.document['blocks'][c['core_end'] - 1])
+                   for c in plan['chunks']]
+        expected_hash = '3ab4cf704ffc984bf8ddae8b749fbb3ea27922b0bcd4fb5a4de2ecdfcbdc9b78'
+        from_list = raw(chunks.assemble_outputs(self.document, plan, outputs))
+        self.assertEqual(hashlib.sha256(from_list).hexdigest(), expected_hash)
+        from_iterator = raw(chunks.assemble_outputs(self.document, plan, (value for value in outputs)))
+        self.assertEqual(from_iterator, from_list)
+
+    def test_assembly_iterator_rejects_missing_or_extra_chunk_outputs(self):
+        plan = self.plan()
+        outputs = [output_for(self.document, self.document['blocks'][c['core_end'] - 1])
+                   for c in plan['chunks']]
+        for values in (outputs[:-1], outputs + [outputs[-1]]):
+            with self.subTest(count=len(values)):
+                with self.assertRaises(ExtractionError) as caught:
+                    chunks.assemble_outputs(self.document, plan, iter(values))
+                self.assertEqual((caught.exception.code, caught.exception.kind), ('CHUNK_OUTPUT_INCOMPLETE', 'review'))
+
+    def test_assembly_exact_budget_includes_final_warning_filter_and_order(self):
+        plan = self.plan()
+        outputs = [output_for(self.document, self.document['blocks'][c['core_end'] - 1], empty=True)
+                   for c in plan['chunks']]
+        outputs[0]['warnings'].append('앞선 경고😀')
+        outputs[1] = output_for(self.document, self.document['blocks'][plan['chunks'][1]['core_end'] - 1])
+        outputs[1]['warnings'].extend(['뒤 경고', 'CHUNK_RELATIONS_REQUIRE_REVIEW', '앞선 경고😀'])
+        outputs[2]['warnings'].append('마지막 경고')
+        expected = chunks.assemble_outputs(self.document, plan, outputs)
+        self.assertEqual(expected['warnings'], ['CHUNK_CONTEXT_PARTIAL', '앞선 경고😀', '뒤 경고',
+                                                'CHUNK_RELATIONS_REQUIRE_REVIEW', '마지막 경고'])
+        limit = len(raw(expected))
+        with patch.object(chunks, 'MAX_BYTES', limit, create=True):
+            self.assertEqual(chunks.assemble_outputs(self.document, plan, outputs), expected)
+        with patch.object(chunks, 'MAX_BYTES', limit - 1, create=True):
+            with self.assertRaises(ExtractionError) as caught:
+                chunks.assemble_outputs(self.document, plan, outputs)
+        self.assertEqual((caught.exception.code, caught.exception.kind), ('CHUNK_OUTPUT_LIMIT', 'review'))
+
 
 if __name__ == '__main__':
     unittest.main()

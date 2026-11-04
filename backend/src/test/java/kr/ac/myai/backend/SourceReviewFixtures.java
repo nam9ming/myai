@@ -84,7 +84,7 @@ final class SourceReviewFixtures {
                 parent = run_root / frozen['snapshot_ref']
                 receipt = frozen['receipt']
                 output = json.loads(Path(output_path).read_bytes())
-                before = json.loads((parent / f"attempt-{len(receipt['attempts'])}.output").read_bytes())
+                before = json.loads((parent / f"attempt-{len(receipt['attempts'])}.output").read_bytes()) if receipt['status'] == 'validated' else None
                 at = datetime.now(timezone.utc).isoformat(timespec='microseconds').replace('+00:00', 'Z')
                 review = dict(schema_version='human-review-v1', review_id=str(uuid.uuid4()),
                     source=dict(run_id=run, snapshot_ref=frozen['snapshot_ref'], receipt_sha256=hashlib.sha256((parent / 'receipt.json').read_bytes()).hexdigest()),

@@ -42,6 +42,7 @@ def _project_draft(run_id, source, area_id, split_group_id, dictionary_version, 
     packet = freeze_run(run_id, root)
     receipt = packet['receipt']
     require(receipt['status'] == 'validated', kind='input', code='DRAFT_REQUIRES_VALIDATED')
+    require(receipt['format_version'] != 'extraction-archive-v2', kind='input', code='CHUNK_DRAFT_REVIEW_REQUIRED')
     directory = _root(root, create=False) / packet['snapshot_ref']
     artifacts = receipt['artifacts']
     document = parse_input(_read_checked(directory / 'input.json', artifacts['input.json']))

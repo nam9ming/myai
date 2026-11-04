@@ -7,7 +7,7 @@ import uuid
 from .archive import _json
 from .prompt import CHUNK_PROMPT_VERSION, instructions, render_prompt
 from .schema import HASH, SCHEMA_VERSION
-from .validation import parse_output, require, text
+from .validation import MAX_BYTES, parse_output, require, text
 
 REQUEST_LIMIT_BYTES = 131072
 FEEDBACK_RESERVE_BYTES = 4096
@@ -93,11 +93,14 @@ def validate_chunk_output(content, document):
 
 def assemble_outputs(document, plan, outputs):
     require(plan['status'] == 'ready', kind='review', code='CHUNK_REQUEST_LIMIT')
-    require(len(outputs) == len(plan['chunks']), kind='review', code='CHUNK_OUTPUT_INCOMPLETE')
+    iterator, missing = iter(outputs), object()
     result = dict(schema_version=SCHEMA_VERSION, document_version_id=document['document_version_id'],
                   items=[], evidence=[], warnings=[])
     namespace = uuid.UUID(document['document_version_id'])
-    for chunk, output in zip(plan['chunks'], outputs):
+    serialized = b''
+    for chunk in plan['chunks']:
+        output = next(iterator, missing)
+        require(output is not missing, kind='review', code='CHUNK_OUTPUT_INCOMPLETE')
         def identifier(kind, local_id):
             return str(uuid.uuid5(namespace, _json([chunk['chunk_id'], kind, local_id]).decode('utf-8')))
 
@@ -130,9 +133,11 @@ def assemble_outputs(document, plan, outputs):
         result['evidence'].extend(dict(entry, evidence_id=evidence_ids[entry['evidence_id']])
                                   for entry in output['evidence'])
         result['warnings'].extend(output['warnings'])
-    result['warnings'] = list(dict.fromkeys(result['warnings']))
-    if result['items']:
-        result['warnings'] = [warning for warning in result['warnings'] if warning != 'NO_EVENT_FOUND']
-    if 'CHUNK_RELATIONS_REQUIRE_REVIEW' not in result['warnings']:
-        result['warnings'].append('CHUNK_RELATIONS_REQUIRE_REVIEW')
-    return parse_output(_json(result), document)
+        result['warnings'] = list(dict.fromkeys(result['warnings']))
+        warnings = [warning for warning in result['warnings'] if warning != 'NO_EVENT_FOUND' or not result['items']]
+        if 'CHUNK_RELATIONS_REQUIRE_REVIEW' not in warnings:
+            warnings.append('CHUNK_RELATIONS_REQUIRE_REVIEW')
+        serialized = _json(dict(result, warnings=warnings))
+        require(len(serialized) <= MAX_BYTES, kind='review', code='CHUNK_OUTPUT_LIMIT')
+    require(next(iterator, missing) is missing, kind='review', code='CHUNK_OUTPUT_INCOMPLETE')
+    return parse_output(serialized, document)

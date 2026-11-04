@@ -169,6 +169,9 @@ def prepare(input_path, root=DEFAULT_ROOT):
 
 
 def _receipt(directory, identity):
+    if type(identity) is dict and identity.get('format_version') == 'extraction-archive-v2':
+        from .chunk_archive import verify_receipt
+        return verify_receipt(directory, identity)
     shape(identity, 'format_version run_id document_version_id data_kind attempt_count artifacts recorded_at', kind='archive')
     _archive_check(identity['format_version'] == FORMAT and identity['run_id'] == directory.name)
     count = identity['attempt_count']

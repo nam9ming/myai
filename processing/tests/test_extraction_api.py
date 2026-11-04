@@ -288,8 +288,23 @@ class ApiTest(unittest.TestCase):
         self.input.write_bytes(json.dumps(document, ensure_ascii=False).encode())
         output = dict(schema_version='extract-schema-v1', document_version_id=document['document_version_id'],
                       items=[], evidence=[], warnings=['NO_EVENT_FOUND'])
-        result, calls = self.run_api([(200, response(json.dumps(output)), None, True)])
-        self.assertEqual((calls, result['status']), (1, 'validated'))
+        # 이전 v1 보관본의 큰 prompt는 새 분할 정책과 별개로 계속 재검증한다.
+        from processing.extraction.api import request_bytes
+        from processing.tests.test_extraction_prompt_metadata import metadata
+        packet = self.work / 'legacy'; packet.mkdir()
+        prompt = packet / 'request'; prompt.write_bytes(request_bytes(document, 'gpt-6.1-sol', None, 'prompt-v2'))
+        target = packet / 'output'; target.write_bytes(json.dumps(output).encode())
+        raw = packet / 'response'; raw.write_bytes(response(json.dumps(output)))
+        at = '2020-01-01T00:00:00Z'
+        exchange = packet / 'exchange'; exchange.write_text(json.dumps(dict(http_status=200, transport_error=None,
+            response_complete=True, started_at=at, finished_at=at)))
+        meta = metadata(); meta.update(run_id=RUN, document_version_id=document['document_version_id'],
+            execution_mode='api', attempts=1, provider='openai', model_label='gpt-6.1-sol', model_version=None,
+            prompt_version='prompt-v2', started_at=at, finished_at=at, usage_in=17, usage_out=31,
+            cost=None, currency=None, unavailable_reasons=dict(model_version='synthetic unavailable'))
+        path = packet / 'metadata'; path.write_text(json.dumps(meta))
+        result = import_run(self.input, path, [(prompt, target)], self.root, [(raw, exchange)])
+        self.assertEqual((result['format_version'], result['status']), ('extraction-archive-v1', 'validated'))
         self.assertGreater((self.root / RUN / 'attempt-1.prompt').stat().st_size, MAX_BYTES)
         self.assertEqual(verify_run(RUN, self.root), result)
 
