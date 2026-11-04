@@ -3,6 +3,7 @@ package kr.ac.myai.backend.controller;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import jakarta.servlet.http.HttpServletRequest;
 import kr.ac.myai.backend.exception.ApiException;
 import kr.ac.myai.backend.logging.PublicRequestLogContext;
 import org.springframework.core.MethodParameter;
@@ -73,15 +74,22 @@ public class ApiExceptionHandler implements ResponseBodyAdvice<Object> {
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
-    public ResponseEntity<ErrorResponse> uploadTooLarge() {
-        return response(HttpStatus.PAYLOAD_TOO_LARGE, "SOURCE_UPLOAD_TOO_LARGE",
+    public ResponseEntity<ErrorResponse> uploadTooLarge(HttpServletRequest request) {
+        return response(HttpStatus.PAYLOAD_TOO_LARGE, uploadCode(request, "TOO_LARGE"),
                 "업로드 크기 한도를 초과했습니다. 파일을 나누거나 별도 검토해 주세요.", List.of());
     }
 
     @ExceptionHandler(MultipartException.class)
-    public ResponseEntity<ErrorResponse> malformedUpload(MultipartException error) {
-        if (error.contains(MaxUploadSizeExceededException.class) || error.contains(SizeException.class)) return uploadTooLarge();
-        return response(HttpStatus.UNPROCESSABLE_ENTITY, "SOURCE_UPLOAD_INVALID", "multipart 요청 형식과 part를 확인해 주세요.", List.of());
+    public ResponseEntity<ErrorResponse> malformedUpload(MultipartException error, HttpServletRequest request) {
+        if (error.contains(MaxUploadSizeExceededException.class) || error.contains(SizeException.class)) return uploadTooLarge(request);
+        return response(HttpStatus.UNPROCESSABLE_ENTITY, uploadCode(request, "INVALID"), "multipart 요청 형식과 part를 확인해 주세요.", List.of());
+    }
+
+    private String uploadCode(HttpServletRequest request, String suffix) {
+        String path = request.getPathInfo();
+        if (path == null) path = request.getServletPath();
+        boolean extraction = path != null && (path.equals("/local/extractions/uploads") || path.startsWith("/local/extractions/uploads/"));
+        return (extraction ? "EXTRACTION" : "SOURCE") + "_UPLOAD_" + suffix;
     }
 
     @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
@@ -96,7 +104,7 @@ public class ApiExceptionHandler implements ResponseBodyAdvice<Object> {
 
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
     public ResponseEntity<ErrorResponse> unsupportedMedia() {
-        return response(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "UNSUPPORTED_MEDIA_TYPE", "application/json 요청을 사용해 주세요.", List.of());
+        return response(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "UNSUPPORTED_MEDIA_TYPE", "이 경로에서 지원하는 Content-Type을 사용해 주세요.", List.of());
     }
 
     @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)

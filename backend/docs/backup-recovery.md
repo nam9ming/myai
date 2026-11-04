@@ -26,6 +26,16 @@
 
 두 root와 DB를 공동 시점으로 보존하고 **각각 같은 원래 실제 절대 경로**로 복원한다. index→bundle 네 파일→metadata/raw/생성물 hash와 private 권한을 확인한 뒤, 원래 metadata/file bytes로 업로드를 재실행해 기존 import 결과·문서/버전/hash와 DB 행 불변을 대조한다. S10에서 raw20MiB 전체, 원래 D03의 pending/unchecked와 별도 확인·사용권·승인 기록 보존, 미승인 공개 차단도 확인한다. S10 AI artifact8MiB·전체 JSON/HTML64MiB 및 기존 JSON/CLI/AI입력8MiB는 유지한다. 선택 파일 복구를 전체 과거 자료 동시 유실·전원 중단 내구성·운영 복구 인수로 간주하지 않는다. 업로드 전체 회귀·리뷰·PR/CI·통합 결과는 [업로드 계획](../../docs/superpowers/plans/2026-11-05-document-upload.md)에서 추적한다.
 
+[수동 AI 결과 업로드](extraction-upload.md)도 사용한다면 같은 백업에 다음 항목을 추가한다. DB 성공 행만 기준으로 고르지 않고 미완료·실패의 원래 파일도 보존한다.
+
+| 선택 root | 빠뜨리지 않을 항목 |
+| --- | --- |
+| request root | `extraction-uploads/<run_id>.json` index와 `extraction-uploads/bundles/<server UUID>/` 전체. 초기 control/metadata/input, identity, 각 attempt의 prompt/output·size/hash sidecar를 함께 보존한다. 디렉터리0700·파일0600이다. |
+| extraction root | 같은 run UUID의 canonical identity·receipt·전체 원본과 `registered/` 봉인본. 원래 bytes/hash·canonical 권한과 봉인0400/0500을 보존한다. |
+| source root·DB | 대응 D03 원문·준비본, D05 raw_ref와 기존 검토·공개 자료 전체를 같은 중지 시점에 기록한다. |
+
+source/request/extraction root와 DB를 **각각 같은 원래 절대 경로**에 복원한 뒤, 원래 control/UUID/hash로 finalize를 재실행해 D05 재사용·전체 원본·기존 공개본 불변을 확인한다. index·sidecar·identity·누락 시도를 새로 추측해 만들지 않는다. 미완료 canonical의 복구 조건과 S10 AI artifact8MiB/전체64MiB 거부는 [업로드 안내](extraction-upload.md)를 따른다. 새 경로의 공동 복구·단계 종료 여부는 [진행 계획](../../docs/superpowers/plans/2026-11-05-extraction-result-upload.md)에서 추적한다.
+
 아래 `RECOVERY_*`는 이 문서의 Bash 변수이며 새 앱 설정이 아니다. 값은 직접 선택하고, 한 Bash 세션에서 실패 시 멈추는 상태로 실행한다.
 
 | 변수 | 운영자가 제공할 값 |

@@ -60,6 +60,8 @@ Java D05 등록은 [D03/D05 연결 안내](../backend/docs/extraction-run-import
 
 ## AI 수동 원출력 기록
 
+같은 수동 실행 원본을 [로컬 HTTP 파일 업로드](../backend/docs/extraction-upload.md)로 전달할 수도 있습니다. Java는 자격정보를 제거한 자식 환경에서 기존 import/freeze를 호출하며 AI를 새로 실행하지 않습니다. 새 HTTP의 metadata64KiB·prompt20MiB·output5MiB와 기존 CLI metadata8MiB·manual prompt 무제한·큰 실패 출력 보존은 별도입니다. 실제 검증·리뷰·통합 상태는 [진행 계획](../docs/superpowers/plans/2026-11-05-extraction-result-upload.md)을 따릅니다.
+
 ```sh
 python3.13 -m processing.extraction prepare --input contracts/examples/ai-input.json
 python3.13 -m processing.extraction import \

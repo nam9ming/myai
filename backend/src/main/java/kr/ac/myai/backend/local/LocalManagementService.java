@@ -49,6 +49,7 @@ public class LocalManagementService {
     }
 
     public record Result(String schemaVersion, String requestSha256, Object data) {}
+    public record ExtractionRequest(String runId, String expectedInputHash) {}
 
     public Result documents(byte[] body) {
         return execute(body, input -> {
@@ -61,16 +62,25 @@ public class LocalManagementService {
 
     public Result extraction(byte[] body) {
         return execute(body, input -> {
-            var fields = new HashSet<String>(); input.fieldNames().forEachRemaining(fields::add);
-            check(schema(input).equals("extraction-import-request-v1")
-                    && fields.equals(Set.of("schema_version", "run_id", "expected_input_hash")), "schema_version");
-            check(input.path("run_id").isTextual() && input.path("run_id").textValue().matches(UUID), "run_id");
-            check(input.path("expected_input_hash").isTextual()
-                    && input.path("expected_input_hash").textValue().matches("[0-9a-f]{64}"), "expected_input_hash");
+            var request = extractionRequest(input);
             requests.retain(body);
-            return extractions.importRun(input.path("run_id").textValue(), extractionRoot, actor,
-                    input.path("expected_input_hash").textValue());
+            return extractions.importRun(request.runId(), extractionRoot, actor, request.expectedInputHash());
         });
+    }
+
+    public ExtractionRequest readExtractionRequest(byte[] body) {
+        try { return extractionRequest(readObject(body)); }
+        catch (ImportException error) { throw translated(error.code(), true); }
+    }
+
+    private ExtractionRequest extractionRequest(JsonNode input) {
+        var fields = new HashSet<String>(); input.fieldNames().forEachRemaining(fields::add);
+        check(schema(input).equals("extraction-import-request-v1")
+                && fields.equals(Set.of("schema_version", "run_id", "expected_input_hash")), "schema_version");
+        check(input.path("run_id").isTextual() && input.path("run_id").textValue().matches(UUID), "run_id");
+        check(input.path("expected_input_hash").isTextual()
+                && input.path("expected_input_hash").textValue().matches("[0-9a-f]{64}"), "expected_input_hash");
+        return new ExtractionRequest(input.path("run_id").textValue(), input.path("expected_input_hash").textValue());
     }
 
     public Result review(String eventId, byte[] body) {
@@ -120,10 +130,7 @@ public class LocalManagementService {
 
     private Result execute(byte[] body, Function<JsonNode, Object> operation) {
         try {
-            check(body != null && body.length > 0 && body.length <= 8 * 1024 * 1024, "body");
-            JsonNode input = json.parseJson(body);
-            check(input != null && input.isObject(), "body");
-            Object result = operation.apply(input);
+            Object result = operation.apply(readObject(body));
             return new Result("local-management-result-v1", ReviewedImportReader.sha256(body), result);
         } catch (ImportException error) {
             throw translated(error.code(), true);
@@ -134,7 +141,14 @@ public class LocalManagementService {
         }
     }
 
-    private ApiException translated(String code, boolean retryable) {
+    private JsonNode readObject(byte[] body) {
+        check(body != null && body.length > 0 && body.length <= 8 * 1024 * 1024, "body");
+        JsonNode input = json.parseJson(body);
+        check(input != null && input.isObject(), "body");
+        return input;
+    }
+
+    static ApiException translated(String code, boolean retryable) {
         HttpStatus status = switch (code) {
             case "IMPORT_VALIDATION_ERROR", "PUBLICATION_VALIDATION_ERROR", "EXTRACTION_VALIDATION_ERROR",
                     "EXTRACTION_ARCHIVE_INVALID" -> HttpStatus.UNPROCESSABLE_ENTITY;

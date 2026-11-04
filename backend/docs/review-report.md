@@ -61,6 +61,8 @@ DB 행은 읽기 전용 `REPEATABLE_READ`로 수집합니다. 운영 상태·파
 
 ## 장문 보관본 표시
 
+[수동 결과 업로드](extraction-upload.md)의 모든 시도도 기존 D05 봉인본에서 전체 표시한다. HTTP output5MiB·prompt20MiB 허용은 S10 AI artifact8MiB·전체 JSON/HTML64MiB를 늘리지 않는다. 따라서 큰 prompt의 D05 등록이 성공해도 보고서는 `REPORT_TOO_LARGE`일 수 있으며, 원본을 생략해 성공 처리하지 않는다. 작은 정상/실패 원본과 큰 prompt의 거부·재시도/복구 검증은 [업로드 계획](../../docs/superpowers/plans/2026-11-05-extraction-result-upload.md)에서 추적한다.
+
 장문 `extraction-archive-v2`는 chunk-plan·모든 subrequest와 문서 전체 파생 cycle을 함께 표시합니다. `attempt-N.prompt/output`은 단일 HTTP 원출력이 아니며, 실제 요청/응답은 `attempt-N-chunk-000001.*`에 있습니다. metadata.attempts는 문서 cycle 수, receipt.total_calls는 실제 HTTP 호출 수입니다. 이 AI 보관본의 artifact 파일당8MiB·전체 보고서64MiB 한도는 그대로이며 초과 원출력은 별도 검토가 필요합니다. D03 raw 원문의20MiB 한도와 구별합니다.
 
 ## 실제 개발 자료의 검토 인계 준비

@@ -1,5 +1,7 @@
 # 로컬 관리 HTTP API
 
+[수동 AI 결과 업로드](extraction-upload.md)는 별도3경로로 초기 control/metadata/input·시도별 prompt/output을 보존하고 finalize로 기존 D05에 등록한다. 새 JSON control/metadata/finalize64KiB·input8MiB·prompt20MiB·output5MiB·multipart 전체21MiB와 기존 JSON 관리8MiB를 구별한다. 자동 AI·사건 생성·승인·공개는 없으며, 실제 검증·리뷰·통합 상태는 [진행 계획](../../docs/superpowers/plans/2026-11-05-extraction-result-upload.md)을 따른다.
+
 B05/I10/I11의 문서·AI 실행 등록, 검토 수정/승인, 공개 미리보기·공개·복구를 HTTP로 연결한다. 기존 [파일 import](reviewed-import.md)·[AI 실행 등록](extraction-run-import.md)·[사람 인계](human-handoff-import.md)·[승인·공개](review-publication.md)의 JSON과 서비스를 사용한다. 같은 문서 경로의 [txt/pdf/json 업로드](source-upload.md)는 원문을 보존·텍스트화해 D03와 Python 입력을 준비한다. 기존 JSON 관리 경로의 검증 기록은 [관리 API 계획](../../docs/superpowers/plans/2026-11-04-local-management-api.md), 업로드의 전체 회귀·리뷰·PR/CI·통합 결과는 [업로드 계획](../../docs/superpowers/plans/2026-11-05-document-upload.md)에서 추적한다.
 
 ## 실행 준비
@@ -77,4 +79,4 @@ source·extraction·handoff·request root를 함께 백업하고 [복구 안내]
 
 ## 남은 범위
 
-이 API는 준비된 JSON·원문·보관본 연결과 txt/pdf/json 업로드·텍스트화를 구현했다. 업로드의 전체 회귀·리뷰·PR/CI·통합 결과는 [업로드 계획](../../docs/superpowers/plans/2026-11-05-document-upload.md)에서 추적한다. AI 결과 파일5MiB 업로드, 관리 UI, 실제 AI 품질·PDF 추출 완전성·개인정보/사용권·사람 검토/승인·독립 정답표·40문서/90% 평가·사용자 평가·운영 배포는 후속 작업이다. 업로드는 외부 AI·사건 생성·승인·공개를 실행하지 않으며 `main` 병합·배포는 사람이 진행한다.
+이 API는 준비된 JSON·원문·보관본 연결과 txt/pdf/json 업로드·텍스트화를 구현했다. 원문 업로드의 전체 회귀·리뷰·PR/CI·통합 결과는 [계획](../../docs/superpowers/plans/2026-11-05-document-upload.md)에서 추적한다. 수동 추출 업로드의 단계 종료 검증, 관리 UI, 실제 AI 품질·PDF 추출 완전성·개인정보/사용권·사람 검토/승인·독립 정답표·40문서/90% 평가·사용자 평가·운영 배포는 후속 작업이다. 업로드는 외부 AI·사건 생성·승인·공개를 실행하지 않으며 `main` 병합·배포는 사람이 진행한다.
