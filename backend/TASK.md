@@ -1,6 +1,8 @@
 # 백엔드·DB 작업
 
-B05/I10/I11의 [로컬 관리 HTTP API](docs/local-management-api.md)는 기존 import·승인/공개 서비스를 연결하고 원입력 보관·loopback/토큰·Origin 경계를 적용했습니다. 전체 회귀와 격리 MySQL·실제 합성 JAR에서 등록·수정·승인/반려·미리보기·공개/복구·동시 충돌·공개 API3종을 검증했습니다. 독립 전체 리뷰·PR은 [계획](../docs/superpowers/plans/2026-11-04-local-management-api.md)대로 진행합니다. txt/pdf 새 업로드·텍스트화·관리 UI·실자료 사람 검토와 운영 인수는 후속 작업입니다.
+B05/I10/I11의 [로컬 관리 HTTP API](docs/local-management-api.md)는 기존 import·승인/공개 서비스를 연결하고 원입력 보관·loopback/토큰·Origin 경계를 적용했습니다. 전체 회귀와 격리 MySQL·실제 합성 JAR에서 등록·수정·승인/반려·미리보기·공개/복구·동시 충돌·공개 API3종을 검증했습니다. 기존 JSON 관리 경로의 검증·리뷰 기록은 [계획](../docs/superpowers/plans/2026-11-04-local-management-api.md)을 따릅니다.
+
+[txt/pdf/json 원문 업로드](docs/source-upload.md)·텍스트화를 추가해 원문20MiB까지 보존하고 pending/unchecked D03와 Python 입력을 준비합니다. 기존 JSON/CLI/AI입력8MiB, S10의 AI artifact8MiB·전체 JSON/HTML64MiB는 유지하며 S10 raw 원문만20MiB 전체를 표시합니다. source/request 두 root의 원본·준비본을 함께 보존하며 DB 실패 뒤에도 완료 준비본으로 정확히 재시도합니다. 전체 회귀·리뷰·PR/CI·통합 결과는 [업로드 계획](../docs/superpowers/plans/2026-11-05-document-upload.md)에서 추적합니다. AI 결과5MiB 업로드·관리 UI·실제 AI 품질/개인정보·사람 검토/승인·실자료 독립 평가·운영 배포는 후속 작업입니다.
 
 [장문 v2 보관본](../contracts/chunked-extraction.md)의 D05 등록·봉인 재검증·전체 파생 출력 hash·보고서·실제 사람 인계를 연결합니다. 문서 cycle1~3/실제 HTTP 호출 수를 구별하며 기존 DB 제약과 공개 승인 경계를 유지합니다. 작은 기존 v1 및 큰 실패 원출력의 전체 보존도 유지합니다.
 

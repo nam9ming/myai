@@ -7,11 +7,24 @@
 ## 먼저 정할 값과 중지 범위
 
 - 원본과 대상은 운영자가 소유한 전용 개발 MySQL이다. 대상은 **새 서버의 새 빈 폐기 가능 schema**이며 기존 연구실 DB·계정은 사용하지 않는다.
-- DB와 파일을 기록하기 **전에** 공개 앱·로컬 import/검토/공개·추출/인계 작업 및 다른 세션·예약 작업의 모든 쓰기와 DDL을 중지한다. 백업과 기준값 기록이 끝날 때까지 중지를 유지한다. `--single-transaction`만으로 DB와 파일의 공동 일관성을 보장하지 않는다.
+- DB와 파일을 기록하기 **전에** 공개 앱·로컬 import/업로드/검토/공개·추출/인계 작업 및 다른 세션·예약 작업의 모든 쓰기와 DDL을 중지한다. 백업과 기준값 기록이 끝날 때까지 중지를 유지한다. `--single-transaction`만으로 DB와 파일의 공동 일관성을 보장하지 않는다.
 - D03 원본·성공/실패 D05·사람 인계 중 DB가 참조하는 경로를 명시적으로 선택한다. D05 `raw_ref`와 인계 `directory`는 **같은 실제 절대 경로**로 복원해야 한다. SQL 경로 문자열 치환·symlink 우회·새 identity 발급을 복구로 세지 않는다.
 - [로컬 관리 HTTP](local-management-api.md)를 사용하면 해당 프로세스의 쓰기도 중지하고 `MYAI_LOCAL_API_REQUEST_ROOT`를 별도 선택 root로 백업한다. 요청 root0700·원본 JSON0600·파일명 SHA와 bytes를 보존한다. domain 실패 원본도 포함될 수 있어 요청 파일 수를 DB 성공 건수로 세지 않으며 토큰 환경은 자료 백업에 넣지 않는다.
 - 선택 경로에 D09 pack·사진·JSON/CSV 출력·자격증명이 없어야 한다. `data/private/` 전체를 tar로 묶지 않는다. [D09의 동의·기한·사본 처리](../../contracts/user-study.md#private-pack과-경계)는 별도다.
 - MySQL client 설정 파일은 `[client]`의 host/port/user/password를 운영자가 따로 준비한 **0600 비공개 파일**이다. 백업/proof 밖에 두고 값·env 파일·SQL을 로그나 공개 PR에 붙이지 않는다. SQL도 비공개 원문·경로·검토 이력을 담는 민감 파일이다.
+
+[txt/pdf/json 업로드](source-upload.md)를 사용하면 source/request 두 root를 다음 범위로 함께 선택한다. 경로는 각각 원래의 `MYAI_LOCAL_API_SOURCE_ROOT`·`MYAI_LOCAL_API_REQUEST_ROOT`를 기준으로 하며 디렉터리0700·파일0600과 원래 bytes/hash를 보존한다.
+
+| 선택 root | 빠뜨리지 않을 항목 |
+| --- | --- |
+| source root | `uploads/<raw_sha256>.<format>` 원문 전체와 기존 D03가 참조하는 원문 파일. raw 원문은 파일당20MiB까지다. |
+| request root | `uploads/bundles/<server UUID>/`의 metadata.json·source-import.json·input.json·receipt.json 네 파일 전체. metadata는64KiB·생성 JSON/AI입력은 기존8MiB 한도다. |
+| request root | `uploads/<document_version_id>.json` 완료 index. bundle_id로 참조하는 준비본과 함께 보존한다. |
+| request root | 기존 flat `<sha256>.json` 전체. metadata 원bytes·생성 source-import·다른 관리 요청과 domain 실패 때 보관한 요청도 포함한다. |
+
+파일 보관과 DB commit은 별개다. DB 실패 뒤에도 raw·완료 준비본·요청 JSON이 남을 수 있으므로 DB 성공 행만으로 파일을 골라 백업하거나 실패 원본을 삭제하지 않는다. index가 없는 후보를 완료본으로 승격하지 않으며, 이미 완료된 준비본의 전처리/도구 버전·source-import·AI입력을 새로 생성해 복구하지 않는다.
+
+두 root와 DB를 공동 시점으로 보존하고 **각각 같은 원래 실제 절대 경로**로 복원한다. index→bundle 네 파일→metadata/raw/생성물 hash와 private 권한을 확인한 뒤, 원래 metadata/file bytes로 업로드를 재실행해 기존 import 결과·문서/버전/hash와 DB 행 불변을 대조한다. S10에서 raw20MiB 전체, 원래 D03의 pending/unchecked와 별도 확인·사용권·승인 기록 보존, 미승인 공개 차단도 확인한다. S10 AI artifact8MiB·전체 JSON/HTML64MiB 및 기존 JSON/CLI/AI입력8MiB는 유지한다. 선택 파일 복구를 전체 과거 자료 동시 유실·전원 중단 내구성·운영 복구 인수로 간주하지 않는다. 업로드 전체 회귀·리뷰·PR/CI·통합 결과는 [업로드 계획](../../docs/superpowers/plans/2026-11-05-document-upload.md)에서 추적한다.
 
 아래 `RECOVERY_*`는 이 문서의 Bash 변수이며 새 앱 설정이 아니다. 값은 직접 선택하고, 한 Bash 세션에서 실패 시 멈추는 상태로 실행한다.
 

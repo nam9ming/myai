@@ -59,6 +59,17 @@ jobs:
       - name: Python AI 계약·기록·계산·CLI 회귀 시험
         run: python -m unittest discover -s processing/tests -v
 
+      - name: PDF 텍스트 변환 도구 준비
+        run: |
+          if ! command -v pdftotext >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends poppler-utils
+          fi
+          pdf_tool="$(command -v pdftotext)"
+          [[ "$pdf_tool" = /* ]]
+          printf 'MYAI_LOCAL_API_PDFTOTEXT=%s\n' "$pdf_tool" >> "$GITHUB_ENV"
+          "$pdf_tool" -v
+
       - name: 백엔드 API·MySQL 마이그레이션 검증·빌드
         env:
           DB_URL: jdbc:mysql://127.0.0.1:3306/myai_test?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8

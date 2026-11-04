@@ -6,7 +6,9 @@ Java 21 / Spring Boot **3.5.16** / Gradle Wrapper **8.14.3** / MySQL **8.4.13**.
 
 ## 구현 범위
 
-- [로컬 관리 HTTP API](docs/local-management-api.md)는 전용 `local-api` 프로필에서 문서·D05·검토 수정/승인·preview/publish/rollback을 기존 서비스에 연결한다. loopback·실행 토큰·동일 Origin, 원입력 bytes 보관과 공개/관리 경계를 적용하고 전체 회귀·격리 MySQL·실제 합성 JAR로 검증했다. 독립 전체 리뷰·PR 상태는 [계획](../docs/superpowers/plans/2026-11-04-local-management-api.md)에서 추적한다. txt/pdf 새 업로드·관리 UI는 후속 범위다.
+- [로컬 관리 HTTP API](docs/local-management-api.md)는 전용 `local-api` 프로필에서 문서·D05·검토 수정/승인·preview/publish/rollback을 기존 서비스에 연결한다. loopback·실행 토큰·동일 Origin, 원입력 bytes 보관과 공개/관리 경계를 적용하고 전체 회귀·격리 MySQL·실제 합성 JAR로 검증했다. 기존 JSON 관리 경로의 검증·리뷰 기록은 [계획](../docs/superpowers/plans/2026-11-04-local-management-api.md)을 따른다.
+
+- [txt/pdf/json 원문 업로드](docs/source-upload.md)는 같은 `/local/documents`의 multipart 경로에서 원문·metadata 원래 bytes를 보존하고 pending/unchecked D03와 기존5키 Python 입력을 준비한다. metadata64KiB·원문20MiB·전체 multipart21MiB·최종 본문200,000 Unicode code point를 적용하며, 기존 JSON/CLI/AI입력8MiB는 유지한다. PDF는 선택 설정 `MYAI_LOCAL_API_PDFTOTEXT`의 내장 텍스트만 추출하고 전체 원문 대조를 요구한다. 업로드는 AI·사건 생성·승인·공개를 실행하지 않는다. 구현과 합성 검증을 최종 인수로 간주하지 않으며, 전체 회귀·새 문맥 리뷰·PR/CI·통합 결과는 [업로드 계획](../docs/superpowers/plans/2026-11-05-document-upload.md)에서 추적한다.
 
 - [최소 요청 로그](docs/request-logging.md)는 요청별 서버 UUID·오류 코드·처리시간·확인된 snapshot/rules 버전만 기록한다. `X-Request-ID` 헤더와 오류 본문의 ID를 연결하며 본문·URI·IP·예외 stack은 기록하지 않는다. 운영 수집·접근·보존 정책은 배포 때 확정한다.
 
@@ -38,7 +40,7 @@ Python OpenAI `run`이 만든 api archive도 같은 `local-extraction`으로 등
 
 신규17건의 선택 파일321개/55디렉터리도 별도 tar로 백업하고 canonical 경로 부재에서 복원했다. 새 전용 DB의 현재206행을 기준으로 부재/다른 경로 거부6회·전체 D05/D06 재실행33회·HTTP15회를 대조했다. 복원본을 실제 소비한 뒤 보관 원본을 원위치로 돌렸으며 기존2618항목·스키마/data SQL·공개0을 보존하고 자기 자원을 정리했다. [선택 파일 복구 범위](docs/backup-recovery.md#개발용17건의-선택-파일-유실-복구-검증)를 따르며 운영 백업·모든 과거 자료의 동시 유실·전원 중단 내구성은 미검증이다.
 
-**미구현:** 관리 UI, 운영 배포·실자료 평가. 저장 계층에는 이미 포함된 Spring JDBC를 사용한다. JPA entity/일반 CRUD와 Java 후보 판정 엔진은 추가하지 않았다. 승인·공개·복구·계산 연결·내보내기는 합성 자료와 전용 DB로 시험하며 실제 자료의 사실성·이용권한 검토를 완료한 상태는 아니다.
+**후속 범위:** AI 결과 파일5MiB 업로드, 관리 UI, 실제 AI 품질·PDF 추출 완전성·개인정보/이용권한 검토, 사람 승인·실자료 독립 평가·운영 배포. 저장 계층에는 이미 포함된 Spring JDBC를 사용한다. JPA entity/일반 CRUD와 Java 후보 판정 엔진은 추가하지 않았다. 승인·공개·복구·계산 연결·내보내기는 합성 자료와 전용 DB로 시험하며 실제 자료의 사실성·이용권한 검토를 완료한 상태는 아니다.
 
 ## DB 없이 합성 API 실행
 

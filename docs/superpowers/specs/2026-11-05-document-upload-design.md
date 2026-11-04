@@ -12,7 +12,7 @@ I10의 준비된 JSON 입력에 txt/pdf/json 파일 업로드를 추가한다. �
 
 기존 `POST /local/documents`의 `application/json`·`source-import-v1`·8MiB 입력은 그대로 둔다. 같은 URL에 `multipart/form-data`를 추가하며 정확히 두 part만 받는다.
 
-- `metadata`: UTF-8 JSON, 최대64KiB, 중복/추가키·후행 JSON·잘못된 Unicode 거부.
+- `metadata`: application/json·UTF-8, 최대64KiB, 중복/추가키·후행 JSON·잘못된 Unicode 거부. charset을 선언하면 UTF-8이어야 하며 MIME 누락/불일치는 보관 전에415로 거부한다.
 - `file`: 최대20MiB. 파일명은 저장경로·ID·명령 인자로 사용하지 않는다. 형식은 metadata의 `format=txt|pdf|json`으로 명시하고 part media type·내용을 함께 검사한다.
 
 metadata의 정확한 필드는 `schema_version=source-upload-v1`, `format`, `data_kind`, `document_id`, `document_version_id`, `version_no`, `publisher`, `official_url`, `title`, `official_number`, `published_date`, `collected_at`, `collection_method`, `use_note`다. ID·시각·버전은 기존 D03 준비 JSON처럼 명시한다. 같은 게시물의 수정본은 같은 document_id를 사용하고 최신+1 버전을 제출한다. 서버가 임의 새 문서ID·현재시각을 만들어 재시도와 문서 계보를 바꾸지 않는다. URL을 자동 수집하거나 같은 URL을 자동 병합하지 않는다.
@@ -41,7 +41,7 @@ PDF 실행 파일 경로는 서버 설정으로만 받는다. 설치된 Poppler�
 
 ## 파일 보관·재실행·DB
 
-인증·Origin/Host 검사는 multipart parsing 전에 기존 필터가 수행한다. local-api 전용 multipart의 파일20MiB/전체21MiB 실제 수신 한도를 적용한다. threshold를 전체 한도 이상으로 두어 servlet이 private 원문을 공용 임시 디렉터리에 쓰지 않게 한다. metadata64KiB·정확한 part 수는 별도 검사한다. 인증 실패·unknown metadata·초과 파일은 원문/DB 쓰기0이다.
+인증·Origin/Host 검사는 multipart parsing 전에 기존 필터가 수행한다. multipart는 전역 off·local-api에서만 on이며 파일20MiB/전체21MiB 실제 수신 한도를 적용한다. 기동 때 enabled/lazy parsing·정확한20/21MiB 한도·threshold21MiB 이상/int 범위를 검사해 잘못된 override를 DB/웹 기동 전에 거부한다. threshold를 전체 한도 이상으로 두어 servlet이 private 원문을 공용 임시 디렉터리에 쓰지 않게 한다. metadata64KiB·정확한 part 수·MIME/charset은 별도 검사한다. 인증 실패·unknown metadata·초과 파일은 원문/DB 쓰기0이다. lazy parser가 감싼 크기 예외도413이며 일반 malformed multipart422와 구별한다.
 
 원문은 source root 아래 고정 `uploads/<raw_sha256>.<format>`로 배타 설치한다. 요청 metadata·생성 source-import JSON·AI입력·정책/파일 hash를 담은 receipt는 request root의 업로드 전용 하위 디렉터리에 버전ID로 보관한다. 운영자가 관리하는 private root만 사용하고 링크·경로 이탈·기존 다른 내용·권한 충돌은 거부한다. 디렉터리0700/파일0600, 실패 시 기존 파일을 덮어쓰지 않는다.
 
