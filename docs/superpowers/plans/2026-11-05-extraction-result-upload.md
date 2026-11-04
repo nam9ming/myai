@@ -33,15 +33,16 @@
 - Modify: `backend/src/main/java/kr/ac/myai/backend/process/PythonProcess.java`
 - Modify: `backend/src/main/java/kr/ac/myai/backend/extraction/ExtractionArchiveReader.java`
 - Create test: `backend/src/test/java/kr/ac/myai/backend/PythonProcessTest.java`
-- Modify test: `backend/src/test/java/kr/ac/myai/backend/ExtractionArchiveReaderTest.java`; 기존 `PythonCalculatorTest.java` 회귀도 실행한다.
+- Create test: `backend/src/test/java/kr/ac/myai/backend/ExtractionManualImportTest.java`
+- Regression: 기존 `ExtractionArchiveReaderTest.java`, `ExtractionArchiveProtocolTest.java`, `PythonCalculatorTest.java`도 실행한다.
 
 **Interfaces:** `PythonProcess.executeKeyless(String executable,String workdir,List<String> arguments,byte[] input,long timeoutMillis): Result`; Result의 bounded stderr 내부 접근과 기존2인자 생성자 호환. Reader의 `record AttemptFiles(Path prompt,Path output)` 및 `importManual(String runId,Path root,Path input,Path metadata,List<AttemptFiles> attempts): JsonNode`. 기존 read/readSealed 서명은 유지한다.
 
-- [ ] RED: synthetic 자격정보 환경을 준 실제 JVM/자식 process에서 새 entry·Reader import/verify/freeze의 허용 환경만 남음, 기존 execute 동작, stdout/stderr 초과·timeout/interrupt·종료 회수를 assert한다.
-- [ ] RED: 실제 Python CLI로1·3시도 성공/failed·빈/invalidUTF8 출력, 기존 완료 UUID의 정확 재사용/다른 bytes 충돌409·임의 stderr 비노출·exit0/4/receipt 일치를 assert한다. 기존 freeze/readSealed·api/v2 원본 검증도 유지한다.
-- [ ] 기존 공통 runner와 CLI를 재사용해 최소 구현한다. 정확한 고정 ARCHIVE_CONFLICT만 내부 분류하고 Python17키/identity 의미를 재구현하지 않는다. Reader의 archive 명령도 keyless를 사용한다.
-- [ ] `./backend/gradlew -p backend test --tests '*PythonProcessTest' --tests '*ExtractionArchiveReaderTest' --tests '*PythonCalculatorTest' --tests '*ExtractionArchiveProtocolTest' --no-daemon`을 실행한다. 실제 설정한 Python3.13/절대 workdir로 실패/오류/skip0을 확인한다.
-- [ ] Commit: `feat: import manual extraction files`
+- [x] RED: synthetic 자격정보 환경을 준 실제 JVM/자식 process에서 새 entry·Reader import/verify/freeze의 허용 환경만 남음, 기존 execute 동작, stdout/stderr 초과·timeout/interrupt·종료 회수를 assert한다.
+- [x] RED: 실제 Python CLI로1·3시도 성공/failed·빈/invalidUTF8 출력, 기존 완료 UUID의 정확 재사용/다른 bytes 충돌409·임의 stderr 비노출·exit0/4/receipt 일치를 assert한다. 기존 freeze/readSealed·api/v2 원본 검증도 유지한다.
+- [x] 기존 공통 runner와 CLI를 재사용해 최소 구현한다. 정확한 고정 ARCHIVE_CONFLICT만 내부 분류하고 Python17키/identity 의미를 재구현하지 않는다. Reader의 archive 명령도 keyless를 사용한다.
+- [x] `./backend/gradlew -p backend test --tests '*PythonProcessTest' --tests '*ExtractionManualImportTest' --tests '*ExtractionArchiveReaderTest' --tests '*PythonCalculatorTest' --tests '*ExtractionArchiveProtocolTest' --no-daemon`을 실행한다. 실제 설정한 Python3.13/절대 workdir로 실패/오류/skip0을 확인한다.
+- [x] Commit: `feat: import manual extraction files`
 
 ### Task 2: 불변 private staging 저장소
 
@@ -49,11 +50,11 @@
 
 **Interfaces:** Store의 `record Artifact(String name,long sizeBytes,String sha256)`와 `record Staged(String runId,String expectedInputHash,int attempts,Path directory,byte[] control,List<Artifact> artifacts)`. `initialize(String runId,String expectedInputHash,int attempts,byte[] control,byte[] metadata,byte[] input): Staged`; `find(String runId): Optional<Staged>`; `put(String runId,int attempt,String artifact,byte[] content): Staged`; `ready(String runId,String expectedInputHash): Staged`. 생성자는 기존 request-root와 JSON reader를 받는다. 이름/직렬화 필드는 spec과 일치시킨다.
 
-- [ ] RED: root/중간/파일 symlink·권한·기존 손상, 동일/상이 초기 bytes, slot1..3·범위/이름, 정확 재시도·동시 설치·다른 bytes409, 미완성 쌍/finalize 거부를 assert한다. 모든 원본 bytes/hash를 대조한다.
-- [ ] RED: 실제 두 파일 기록 뒤 I/O 실패를 주입해 index 부재·자기 후보만 정리·기존 bundle/raw 불변·정확 재시도를 assert한다. JVM lock만 믿지 않는 두 Store instance의 경합도 포함한다.
-- [ ] 기존 SourceUploadStore/LocalRequestStore의 private root·배타 hard link 패턴으로 구현한다. 초기 identity/index·고정 slot만 쓰며 원본 교체/자동 정리/새 DB 테이블은 추가하지 않는다.
-- [ ] `./backend/gradlew -p backend test --tests '*ExtractionUploadStoreTest' --tests '*SourceUploadStoreTest' --tests '*LocalRequestStoreTest' --no-daemon`: 전체 대상 실패/오류/skip0.
-- [ ] Commit: `feat: stage extraction upload files`
+- [x] RED: root/중간/파일 symlink·권한·기존 손상, 동일/상이 초기 bytes, slot1..3·범위/이름, 정확 재시도·동시 설치·다른 bytes409, 미완성 쌍/finalize 거부를 assert한다. 모든 원본 bytes/hash를 대조한다.
+- [x] RED: 실제 두 파일 기록 뒤 I/O 실패를 주입해 index 부재·자기 후보만 정리·기존 bundle/raw 불변·정확 재시도를 assert한다. JVM lock만 믿지 않는 두 Store instance의 경합도 포함한다.
+- [x] 기존 SourceUploadStore/LocalRequestStore의 private root·배타 hard link 패턴으로 구현한다. 초기 identity/index·고정 slot만 쓰며 원본 교체/자동 정리/새 DB 테이블은 추가하지 않는다.
+- [x] `./backend/gradlew -p backend test --tests '*ExtractionUploadStoreTest' --tests '*SourceUploadStoreTest' --tests '*LocalRequestStoreTest' --no-daemon`: 전체 대상 실패/오류/skip0.
+- [x] Commit: `feat: stage extraction upload files`
 
 ### Task 3: 로컬 HTTP·기존 D05 서비스 연결
 

@@ -19,6 +19,8 @@ import java.nio.file.attribute.PosixFilePermission;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashSet;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -50,6 +52,63 @@ public class ExtractionArchiveReader {
         return read(runId, root, true);
     }
 
+    public record AttemptFiles(Path prompt, Path output) { }
+
+    public JsonNode importManual(String runId, Path root, Path input, Path metadata, List<AttemptFiles> attempts) {
+        validate(runId != null && runId.matches(UUID), "run_id");
+        validate(root != null && root.isAbsolute() && !Files.isSymbolicLink(root), "archive_root");
+        validate(regularInput(input) && regularInput(metadata), "input");
+        validate(attempts != null && attempts.size() >= 1 && attempts.size() <= 3, "attempts");
+        for (var attempt : attempts) {
+            validate(attempt != null && regularInput(attempt.prompt()) && regularInput(attempt.output()), "attempts");
+        }
+        try {
+            byte[] originalInput = read(input), originalMetadata = read(metadata);
+            JsonNode info = json.parseJson(originalMetadata);
+            validate(info != null && info.isObject() && info.path("run_id").isTextual()
+                    && info.path("run_id").asText().equals(runId)
+                    && info.path("execution_mode").asText().equals("manual_import"), "metadata");
+            var arguments = new ArrayList<>(List.of("-B", "-s", "-m", "processing.extraction", "import",
+                    "--input", input.toString(), "--metadata", metadata.toString(), "--root", root.toString()));
+            for (var attempt : attempts) arguments.addAll(List.of("--attempt", attempt.prompt().toString(), attempt.output().toString()));
+            var process = PythonProcess.executeKeyless(executable, workdir, arguments, new byte[0], timeout);
+            if (process.exitCode() != 0 && process.exitCode() != 4) {
+                throw new ExtractionException(switch (process.exitCode()) {
+                    case 2 -> "EXTRACTION_VALIDATION_ERROR";
+                    case 3 -> Arrays.equals(process.stderr(), "ARCHIVE_CONFLICT\n".getBytes(StandardCharsets.UTF_8))
+                            ? "EXTRACTION_CONFLICT" : "EXTRACTION_ARCHIVE_INVALID";
+                    case 5 -> "EXTRACTION_IO_ERROR";
+                    default -> "EXTRACTION_PROTOCOL_ERROR";
+                }, null, false);
+            }
+            JsonNode receipt = json.parseJson(process.stdout());
+            Set<String> names = artifactNames(receipt);
+            require(receipt.path("format_version").asText().equals("extraction-archive-v1")
+                    && receipt.path("execution_mode").asText().equals("manual_import")
+                    && receipt.path("run_id").asText().equals(runId)
+                    && receipt.path("attempts").size() == attempts.size()
+                    && receipt.path("status").asText().equals(process.exitCode() == 0 ? "validated" : "failed")
+                    && receipt.path("input_sha256").asText().equals(ReviewedImportReader.sha256(originalInput))
+                    && receipt.path("metadata_sha256").asText().equals(ReviewedImportReader.sha256(originalMetadata)));
+            Path directory = root.toRealPath().resolve(runId);
+            require(Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS) && directory.toRealPath().equals(directory)
+                    && Files.isRegularFile(directory.resolve("receipt.json"), LinkOption.NOFOLLOW_LINKS));
+            require(json.parseJson(read(directory.resolve("receipt.json"))).equals(receipt));
+            for (String name : names) checkFingerprint(directory, name, receipt);
+            return receipt;
+        } catch (PythonProcess.Failure error) {
+            throw new ExtractionException("EXTRACTION_RUNTIME_UNAVAILABLE", null, error.retryable());
+        } catch (ImportException error) {
+            throw new ExtractionException("EXTRACTION_ARCHIVE_INVALID", null, false);
+        } catch (IOException error) {
+            throw new ExtractionException("EXTRACTION_IO_ERROR", null, true);
+        }
+    }
+
+    private boolean regularInput(Path path) {
+        return path != null && path.isAbsolute() && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS);
+    }
+
     private VerifiedExtraction read(String runId, Path root, boolean readOnly) {
         validate(runId != null && runId.matches(UUID), "run_id");
         validate(root != null && root.isAbsolute() && !Files.isSymbolicLink(root), "archive_root");
@@ -57,9 +116,9 @@ public class ExtractionArchiveReader {
             Path base = root.toRealPath();
             Path directory = base.resolve(runId);
             validate(Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS), "archive_root");
-            var arguments = readOnly ? List.of("-B", "-m", "processing.extraction", "verify-sealed", runId, "--root", base.toString())
-                    : List.of("-m", "processing.extraction", "freeze", runId, "--root", base.toString());
-            var process = PythonProcess.execute(executable, workdir, arguments, new byte[0], timeout);
+            var arguments = readOnly ? List.of("-B", "-s", "-m", "processing.extraction", "verify-sealed", runId, "--root", base.toString())
+                    : List.of("-B", "-s", "-m", "processing.extraction", "freeze", runId, "--root", base.toString());
+            var process = PythonProcess.executeKeyless(executable, workdir, arguments, new byte[0], timeout);
             if (process.exitCode() != 0 && process.exitCode() != 4) {
                 throw new ExtractionException(switch (process.exitCode()) {
                     case 2 -> "EXTRACTION_VALIDATION_ERROR";
@@ -200,7 +259,7 @@ public class ExtractionArchiveReader {
         byte[] input = draftJson.getBytes(StandardCharsets.UTF_8);
         validate(input.length <= LIMIT, "events");
         try {
-            var process = PythonProcess.execute(executable, workdir, List.of("-m", "processing.extraction", "check-draft",
+            var process = PythonProcess.executeKeyless(executable, workdir, List.of("-B", "-s", "-m", "processing.extraction", "check-draft",
                     runId, "--root", root.toString()), input, timeout);
             validate(process.exitCode() == 0, "events");
             JsonNode packet = json.parseJson(process.stdout());

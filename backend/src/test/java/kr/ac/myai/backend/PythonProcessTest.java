@@ -36,7 +36,7 @@ class PythonProcessTest {
         var result = run("sys.stdout.buffer.write(b'unchanged');sys.stderr.buffer.write(b'ARCHIVE_CONFLICT\\n');sys.exit(3)", 3000);
         assertThat(result.exitCode()).isEqualTo(3);
         assertThat(result.stdout()).isEqualTo("unchanged".getBytes(StandardCharsets.UTF_8));
-        assertThat(stderr(result)).isEqualTo("ARCHIVE_CONFLICT\n".getBytes(StandardCharsets.UTF_8));
+        assertThat(result.stderr()).isEqualTo("ARCHIVE_CONFLICT\n".getBytes(StandardCharsets.UTF_8));
     }
 
     @Test
@@ -46,7 +46,7 @@ class PythonProcessTest {
         byte[] output = new byte[8 * 1024 * 1024]; Arrays.fill(output, (byte) 'o');
         byte[] errors = new byte[65536]; Arrays.fill(errors, (byte) 'e'); errors[65535] = (byte) 0xff;
         assertThat(Arrays.equals(result.stdout(), output)).isTrue();
-        assertThat(Arrays.equals(stderr(result), errors)).isTrue();
+        assertThat(Arrays.equals(result.stderr(), errors)).isTrue();
     }
 
     @ParameterizedTest @ValueSource(strings = {"stdout", "stderr"})
@@ -89,11 +89,6 @@ class PythonProcessTest {
         return PythonProcess.executeKeyless(PythonProbe.PYTHON, root.toString(), List.of("-B", "-s", "-c",
                 "import os,sys,time\nfrom pathlib import Path\nPath('pid-'+str(os.getpid())).write_text(str(os.getpid()))\n" + code),
                 new byte[0], timeout);
-    }
-
-    private byte[] stderr(PythonProcess.Result result) {
-        try { return (byte[]) result.getClass().getMethod("stderr").invoke(result); }
-        catch (ReflectiveOperationException error) { throw new AssertionError("Result does not preserve bounded stderr", error); }
     }
 
     private void assertStartedAndReaped() throws Exception {
