@@ -48,6 +48,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static kr.ac.myai.backend.SourceReviewFixtures.*;
 import static org.assertj.core.api.Assertions.*;
@@ -341,6 +344,87 @@ class LocalManagementMySqlTest {
     }
 
     @Test
+    void handoffDatabaseHashUsesReceivedBytesIfRetainedFileChanges() throws Exception {
+        var source = fixtures.source(false); fixtures.register(source);
+        String run = UUID.randomUUID().toString();
+        Path archive = fixtures.archive(source, run);
+        extractions.importRun(run, archive, ACTOR);
+        var handoff = fixtures.handoff(source, run, archive);
+        byte[] body = Files.readAllBytes(handoff.file());
+        String eventId = mapper.readTree(body).path("revisions").get(0).path("event_id").asText();
+        var changingStore = new LocalRequestStore(requests.toString()) {
+            @Override public Path retain(byte[] content) {
+                Path file = super.retain(content);
+                try { Files.writeString(file, " ", java.nio.file.StandardOpenOption.APPEND); }
+                catch (java.io.IOException error) { throw new AssertionError(error); }
+                return file;
+            }
+        };
+        local = localMvc(archive, handoff.directory(), changingStore);
+        var response = success(put("/local/events/" + eventId + "/review"), body);
+        String id = response.path("data").path("import_id").asText();
+        assertThat(jdbc.queryForObject("SELECT input_sha256 FROM import_batches WHERE import_id=?", String.class, id))
+                .isEqualTo(response.path("request_sha256").asText());
+        assertThat(Files.readAllBytes(requests.resolve(ReviewedImportReader.sha256(body) + ".json"))).isNotEqualTo(body);
+    }
+
+    @Test
+    void concurrentHttpReviewAndPublicationKeepOneWinnerWithoutPartialWrites() throws Exception {
+        var input = fixtures.human(false);
+        String eventId = event(input);
+        String originalId = success(put("/local/events/" + eventId + "/review"), raw(input))
+                .path("data").path("revision_ids").get(0).asText();
+        String original = payload(originalId);
+        var left = input.deepCopy();
+        var right = input.deepCopy();
+        for (var request : List.of(left, right)) {
+            var item = (ObjectNode) request.path("events").get(0);
+            item.put("expected_revision_no", 1);
+            ((ObjectNode) item.path("revision")).put("revision_no", 2).put("revision_id", UUID.randomUUID().toString());
+        }
+        var reviewResults = race("/local/events/" + eventId + "/review", true, raw(left), raw(right));
+        var winner = reviewResults.stream().filter(response -> response.getStatus() == 200).findFirst().orElseThrow();
+        String selected = mapper.readTree(winner.getContentAsByteArray()).path("data").path("revision_ids").get(0).asText();
+        assertThat(current(eventId)).isEqualTo(selected);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM event_revisions WHERE event_id=?", Long.class, eventId)).isEqualTo(2);
+        assertThat(payload(originalId)).isEqualTo(original);
+        assertRetained(raw(left)); assertRetained(raw(right));
+        for (var response : reviewResults) if (response.getStatus() == 409)
+            assertThat(mapper.readTree(response.getContentAsByteArray()).path("error").path("code").asText()).isEqualTo("IMPORT_CONFLICT");
+
+        String approved = success(put("/local/events/" + eventId + "/review"), raw(decision(eventId, "approve", 2)))
+                .path("data").path("revision_id").asText();
+        var first = publish(input.path("events").get(0).path("area_id").asText(), approved);
+        var second = first.deepCopy().put("reason", "합성 동시 공개 요청");
+        var publications = race("/local/publish", false, raw(first), raw(second));
+        var published = publications.stream().filter(response -> response.getStatus() == 200).findFirst().orElseThrow();
+        String snapshot = mapper.readTree(published.getContentAsByteArray()).path("data").path("snapshot_id").asText();
+        String caseId = first.path("case_id").asText();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM snapshots WHERE case_id=?", Long.class, caseId)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM publication_audits WHERE channel_key=?", Long.class, "replay:" + caseId)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT snapshot_id FROM publication_heads WHERE channel_key=?", String.class, "replay:" + caseId)).isEqualTo(snapshot);
+        for (var response : publications) if (response.getStatus() == 409)
+            assertThat(mapper.readTree(response.getContentAsByteArray()).path("error").path("code").asText()).isEqualTo("PUBLICATION_CONFLICT");
+        assertRetained(raw(first)); assertRetained(raw(second));
+        publicSnapshot(caseId, snapshot, eventId, approved);
+    }
+
+    private List<org.springframework.mock.web.MockHttpServletResponse> race(String route, boolean review, byte[] first, byte[] second) throws Exception {
+        var barrier = new CyclicBarrier(2);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var futures = new ArrayList<java.util.concurrent.Future<org.springframework.mock.web.MockHttpServletResponse>>();
+            for (byte[] body : List.of(first, second)) futures.add(executor.submit(() -> {
+                barrier.await(10, TimeUnit.SECONDS);
+                return local.perform(auth(review ? put(route) : post(route)).content(body)).andReturn().getResponse();
+            }));
+            var results = new ArrayList<org.springframework.mock.web.MockHttpServletResponse>();
+            for (var future : futures) results.add(future.get(30, TimeUnit.SECONDS));
+            assertThat(results.stream().map(response -> response.getStatus()).toList()).containsExactlyInAnyOrder(200, 409);
+            return results;
+        }
+    }
+
+    @Test
     void requestFileConflictAndAuthenticationFailureCannotWriteBusinessRows() throws Exception {
         var source = fixtures.source(false);
         byte[] body = raw(source);
@@ -368,11 +452,14 @@ class LocalManagementMySqlTest {
     }
 
     private MockMvc localMvc(Path extractionRoot, Path handoffRoot) {
+        return localMvc(extractionRoot, handoffRoot, new LocalRequestStore(requests.toString()));
+    }
+
+    private MockMvc localMvc(Path extractionRoot, Path handoffRoot, LocalRequestStore store) {
         var env = new MockEnvironment().withProperty("myai.local-api.token", TOKEN).withProperty("myai.local-api.actor", ACTOR)
                 .withProperty("myai.local-api.source-root", root.toString()).withProperty("myai.local-api.extraction-root", extractionRoot.toString())
                 .withProperty("myai.local-api.handoff-root", handoffRoot.toString());
-        var service = new LocalManagementService(reader, commands, imports, extractions, handoffs, publication,
-                new LocalRequestStore(requests.toString()), env);
+        var service = new LocalManagementService(reader, commands, imports, extractions, handoffs, publication, store, env);
         return MockMvcBuilders.standaloneSetup(new LocalManagementController(service))
                 .setControllerAdvice(new ApiExceptionHandler(), new LocalBodyLimitAdvice())
                 .setMessageConverters(new ByteArrayHttpMessageConverter(), new MappingJackson2HttpMessageConverter(mapper))
@@ -425,8 +512,15 @@ class LocalManagementMySqlTest {
     }
 
     private void publicSnapshot(String caseId, String snapshot, String eventId, String revision) throws Exception {
-        publicMvc.perform(get("/api/v1/config").param("mode", "replay").param("case_id", caseId)).andExpect(status().isOk())
-                .andExpect(jsonPath("$.snapshot_id").value(snapshot)).andExpect(jsonPath("$.data.points.length()").value(5));
+        var response = publicMvc.perform(get("/api/v1/config").param("mode", "replay").param("case_id", caseId)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.snapshot_id").value(snapshot)).andExpect(jsonPath("$.data.points.length()").value(5))
+                .andReturn().getResponse();
+        String pointId = mapper.readTree(response.getContentAsByteArray()).path("data").path("points").get(0).path("point_id").asText();
+        var query = (ObjectNode) mapper.readTree(PythonProbe.REPO.resolve("contracts/examples/matches-request.json").toFile());
+        query.put("mode", "replay").put("case_id", caseId).put("point_id", pointId).put("snapshot_id", snapshot);
+        publicMvc.perform(post("/api/v1/matches").contentType(MediaType.APPLICATION_JSON).content(query.toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.snapshot_id").value(snapshot))
+                .andExpect(jsonPath("$.data.query_context.point_id").value(pointId));
         publicMvc.perform(get("/api/v1/events/" + eventId).param("snapshot_id", snapshot)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.event.event_id").value(eventId)).andExpect(jsonPath("$.data.event.revision_id").value(revision));
     }

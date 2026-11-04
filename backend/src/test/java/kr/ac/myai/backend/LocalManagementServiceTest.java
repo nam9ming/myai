@@ -152,8 +152,8 @@ class LocalManagementServiceTest {
         byte[] body = bytes(request);
         invalid(() -> service.review(eventId, body));
         noRequestsOrDomainCalls();
-        when(handoffs.importFile(any(), eq(sources), eq(handoffRoot), eq(actor))).thenAnswer(invocation -> {
-            assertThat((Path) invocation.getArgument(0)).hasBinaryContent(body);
+        when(handoffs.importBytes(any(), eq(sources), eq(handoffRoot), eq(actor))).thenAnswer(invocation -> {
+            assertThat((byte[]) invocation.getArgument(0)).isEqualTo(body);
             return imported;
         });
         assertThat(service.reviews(body).data()).isEqualTo(imported);
@@ -165,7 +165,7 @@ class LocalManagementServiceTest {
         byte[] body = bytes(handoffRequest());
         invalid(() -> service.review(otherId, body));
         noRequestsOrDomainCalls();
-        when(handoffs.importFile(any(), eq(sources), eq(handoffRoot), eq(actor))).thenReturn(imported);
+        when(handoffs.importBytes(any(), eq(sources), eq(handoffRoot), eq(actor))).thenReturn(imported);
         assertThat(service.review(eventId, body).data()).isEqualTo(imported);
         retained(body);
     }
@@ -246,6 +246,20 @@ class LocalManagementServiceTest {
             assertThat(error.getMessage()).doesNotContain("PRIVATE_PATH", root.toString());
         });
         retained(body);
+    }
+
+    @Test
+    void archiveIoFailureKeepsItsExplicitRetryHint() throws Exception {
+        byte[] body = bytes(extractionRequest());
+        for (boolean retryable : new boolean[] {true, false}) {
+            doThrow(new ExtractionException("EXTRACTION_IO_ERROR", null, retryable)).when(extractions)
+                    .importRun(runId, archive, actor, "a".repeat(64));
+            assertThatThrownBy(() -> service.extraction(body)).isInstanceOfSatisfying(ApiException.class, error -> {
+                assertThat(error.status()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+                assertThat(error.code()).isEqualTo("EXTRACTION_IO_ERROR");
+                assertThat(error.retryable()).isEqualTo(retryable);
+            });
+        }
     }
 
     @Test

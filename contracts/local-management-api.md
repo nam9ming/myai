@@ -22,7 +22,7 @@ JSON 원문은 UTF-8·최대8MiB다. Content-Length 유무와 무관하게 실�
 | POST `/local/reviews/import` | `reviewed-import-v1` 또는 `human-handoff-import-v1` | 기존 다중 사건 배치 전체를 명시적으로 저장한다. 인계 이미지를 임의로 잘라 단일 사건 요청으로 바꾸지 않는다. |
 | POST `/local/publish` | `publication-command-v1` preview/publish/rollback | 기존 승인·사용권·원문 확인·5지점·mode·revision/head 검사를 그대로 실행한다. preview는 파일·DB 읽기 전용이다. |
 
-성공200은 `schema_version:local-management-result-v1,request_sha256,data`다. request_sha256은 수신한 원래 bytes의 SHA이며 data는 기존 서비스 결과 record다. 상태를 자동 승인/공개로 보정하지 않는다. 오류는 기존 `error:{code,message,field_errors,retryable},request_id`이며 입력422·미등록404·충돌409·DB/실행환경 미준비503·내부500을 구별한다. 원문·키·SQL·절대 경로·stack은 반사하지 않는다.
+성공200은 `schema_version:local-management-result-v1,request_sha256,data`다. request_sha256은 수신한 원래 bytes의 SHA이며 data는 기존 서비스 결과 record다. 상태를 자동 승인/공개로 보정하지 않는다. 오류는 기존 `error:{code,message,field_errors,retryable},request_id`이며 입력422·미등록404·충돌409·응답 media406·DB/실행환경 미준비503·내부500을 구별한다. JSON을 허용하지 않는 Accept도406 JSON 오류로 반환한다. 원문·키·SQL·절대 경로·stack은 반사하지 않는다.
 
 ## 원본 보관·미완료
 

@@ -56,13 +56,14 @@
 
 ### Task 3: 원본 보관·네 관리 HTTP 경로
 
-**Files:** `local/LocalManagementController.java`, `LocalManagementService.java`, `LocalRequestStore.java`, `LocalBodyLimitAdvice.java`, `service/ExtractionImportService.java`, `controller/ApiExceptionHandler.java` 및 `LocalManagementApiTest.java`·`LocalManagementServiceTest.java`·`LocalRequestStoreTest.java`·`ExtractionImportServiceTest.java`. 부모가 전체 연결을 소유하며 `LocalRequestStore.java`·`LocalRequestStoreTest.java`만 기존 reader worker가 독립 담당한다.
+**Files:** `local/LocalManagementController.java`, `LocalManagementService.java`, `LocalRequestStore.java`, `LocalBodyLimitAdvice.java`, `service/ExtractionImportService.java`, `service/HumanHandoffImportService.java`, `controller/ApiExceptionHandler.java` 및 `LocalManagementApiTest.java`·`LocalManagementServiceTest.java`·`LocalRequestStoreTest.java`·`ExtractionImportServiceTest.java`. 부모가 전체 연결을 소유하며 `LocalRequestStore.java`·`LocalRequestStoreTest.java`만 기존 reader worker가 독립 담당한다.
 
 **Interfaces:**
 - POST `/local/documents`: 원본 `source-import-v1` JSON만 받는다. 기존 read/importBatch 결과를 반환하며 사건/공개를 만들지 않는다.
 - POST `/local/extractions/import`: 정확히 `schema_version:extraction-import-request-v1,run_id,expected_input_hash`. 서버 extraction root의 원본을 검증하고 hash가 같을 때만 D05를 저장한다. 기존 `importRun(String,Path,String)`는 유지하고 expected hash를 받는 overload를 추가해 DB 쓰기 전에 검사한다.
 - PUT `/local/events/{id}/review`: 기존 `reviewed-import-v1`의 사건1개 또는 `human-handoff-import-v1`, 혹은 `publication-command-v1` approve/reject다. URL ID는 해당 유일 사건과 같아야 하며 expected 번호·원래 AI/사람 인계를 보존한다.
 - POST `/local/reviews/import`: 기존 `reviewed-import-v1`/`human-handoff-import-v1` 전체 배치다. 다중 사건의 원래 인계 이미지를 유지하며 단일 사건 URL에 다른 사건 수정을 섞지 않는다. handoff의 유일/전체 대상은 `revisions[].event_id`로 검사한다.
+- 사람 인계도 HTTP에서 검사한 원래 bytes를 `HumanHandoffImportService.importBytes`에 직접 전달한다. 기존 `importFile`은 bounded 파일 읽기 뒤 같은 검증 본문을 사용하며 보관 파일을 다시 열어 URL/hash와 다른 요청을 처리하지 않는다.
 - POST `/local/publish`: 기존 `publication-command-v1` preview/publish/rollback만 받는다. `PublicationService.execute`의 mode/revision/head/권한 재검증을 그대로 사용한다.
 - 성공200: `schema_version:local-management-result-v1,request_sha256,data`이며 data는 기존 결과 record다. 오류는 기존 error/request_id 형태로401/403/413/415/422/404/409/503/500을 구별한다. 경로·본문·비밀값은 반환하지 않는다.
 - 원입력은 request root0700의 `<sha256>.json`0600에 원자적으로 배타 설치한다. 같은 bytes는 무쓰기 재사용하며 다른 기존 bytes·symlink·권한 오류는 거부한다. 재직렬화본으로 대체하지 않는다. preview는 요청 파일을 만들지 않는 읽기 전용이다. 인증/본문 한도/잘못된 JSON·미지원 schema는 보관하지 않는다. 인식한 관리 요청의 원본 보관과 DB 성공/실패를 구별하며 실패 batch DB 기록은 추가하지 않는다. 파일 저장 실패는 domain 호출 전에 끝낸다.

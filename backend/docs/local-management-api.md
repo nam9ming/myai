@@ -46,7 +46,7 @@ curl --fail-with-body --noproxy '*' \
   "http://127.0.0.1:$MYAI_LOCAL_API_PORT/local/documents"
 ```
 
-`--data-binary`로 원래 bytes를 보낸다. 성공200은 `schema_version=local-management-result-v1`, `request_sha256`, 기존 서비스의 `data` 결과를 반환한다. 같은 의미의 JSON도 공백이 다르면 요청 hash가 달라진다. 동일한 bytes의 보관 파일은 덮어쓰지 않는다.
+`--data-binary`로 원래 bytes를 보낸다. 성공200은 `schema_version=local-management-result-v1`, `request_sha256`, 기존 서비스의 `data` 결과를 반환한다. 같은 의미의 JSON도 공백이 다르면 요청 hash가 달라진다. 사람 인계도 수신 bytes를 직접 검증해 DB hash를 연결하며 보관 파일의 재읽기로 요청을 바꾸지 않는다. 동일한 bytes의 보관 파일은 덮어쓰지 않는다.
 
 | 경로 | 입력·동작 |
 | --- | --- |
@@ -62,7 +62,7 @@ curl --fail-with-body --noproxy '*' \
 
 JSON은 UTF-8·최대8MiB이며 Content-Length 없이 전송해도 실제 stream을 제한한다. 공개 API의32KiB 제한과 기존 CLI 제한은 유지한다. 추가/중복키·후행 JSON·잘못된 ID/상태는 거부한다.
 
-오류는 기존 `error`·`request_id` 형식이다. 인증401, 출처403, 본문 초과413, media415, 입력422, 미등록404, 충돌409, DB/실행환경 미준비503, 내부500을 구별한다. 응답의 request_id와 `X-Request-ID`는 같은 서버 ID이며 원문·토큰·절대 경로·SQL·stack은 반사하지 않는다.
+오류는 기존 `error`·`request_id` 형식이다. 인증401, 출처403, 본문 초과413, 요청 media415, 응답 media406, 입력422, 미등록404, 충돌409, DB/실행환경 미준비503, 내부500을 구별한다. JSON을 허용하지 않는 Accept에도406 JSON 오류를 반환한다. 응답의 request_id와 `X-Request-ID`는 같은 서버 ID이며 원문·토큰·절대 경로·SQL·stack은 반사하지 않는다.
 
 알려진 관리 요청의 원본은 request root0700 아래 `<sha256>.json`0600에 배타 설치한다. root 경로의 symlink·공개 권한이나 기존 파일 충돌을 거부한다. 저장 실패면 domain 서비스를 호출하지 않는다. 인증 실패·초과·잘못된 JSON·알 수 없는 schema·preview는 파일을 만들지 않는다. 알려진 요청의 domain 실패 원본은 남을 수 있으며 파일 보관 성공과 DB 저장 성공은 별개다.
 

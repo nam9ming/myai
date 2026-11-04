@@ -145,6 +145,14 @@ class LocalManagementApiTest {
         noRequests(); verifyNoInteractions(imports, extractions, handoffs, publication);
     }
 
+    @Test void unsupportedResponseMediaReturnsSafe406BeforeAnyDomainWork() throws Exception {
+        mvc.perform(auth(post("/local/documents")).accept(MediaType.TEXT_HTML)
+                        .content(Files.readAllBytes(Path.of("examples/source-import.json"))))
+                .andExpect(status().isNotAcceptable()).andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.error.code").value("NOT_ACCEPTABLE"));
+        noRequests(); verifyNoInteractions(imports, extractions, handoffs, publication);
+    }
+
     @Test void authenticationAndOriginFailuresCannotArchiveOversizedInput() throws Exception {
         byte[] body = new byte[8 * 1024 * 1024 + 1];
         mvc.perform(auth(post("/local/documents")).header("Authorization", "Bearer wrong").content(body))

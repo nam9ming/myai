@@ -104,7 +104,8 @@ public class LocalManagementService {
         check(eventId == null || revisions.isArray() && revisions.size() == 1
                 && revisions.get(0).path("event_id").isTextual()
                 && eventId.equals(revisions.get(0).path("event_id").textValue()), "event_id");
-        return handoffs.importFile(requests.retain(body), sourceRoot, handoffRoot, actor);
+        requests.retain(body);
+        return handoffs.importBytes(body, sourceRoot, handoffRoot, actor);
     }
 
     public Result publish(byte[] body) {
@@ -148,7 +149,7 @@ public class LocalManagementService {
         if (status == null) return new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "LOCAL_API_INTERNAL_ERROR",
                 "로컬 관리 작업을 완료하지 못했습니다.", null);
         return new ApiException(status, code, "로컬 관리 요청을 처리하지 못했습니다. 입력·기록·실행 상태를 확인해 주세요.",
-                null, status == HttpStatus.SERVICE_UNAVAILABLE && retryable);
+                null, retryable && (status == HttpStatus.SERVICE_UNAVAILABLE || code.equals("EXTRACTION_IO_ERROR")));
     }
 
     private String schema(JsonNode input) {
