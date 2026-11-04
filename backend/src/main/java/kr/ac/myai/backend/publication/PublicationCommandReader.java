@@ -37,7 +37,13 @@ public class PublicationCommandReader {
 
     public PublicationCommand read(Path file) {
         try {
-            JsonNode input = json.readJson(file);
+            return read(json.readBounded(file, "file"));
+        } catch (ImportException | java.io.IOException | IllegalArgumentException ex) { throw invalid("file"); }
+    }
+
+    public PublicationCommand read(byte[] content) {
+        try {
+            JsonNode input = json.parseJson(content);
             check(input.isObject(), "file");
             check(input.path("schema_version").isTextual() && input.path("schema_version").asText().equals("publication-command-v1"), "schema_version");
             validateScalars(input);

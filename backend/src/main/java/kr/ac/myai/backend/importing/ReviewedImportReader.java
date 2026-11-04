@@ -35,9 +35,16 @@ public class ReviewedImportReader {
 
     public ReviewedBatch read(Path file, Path sourceRoot) {
         try {
-            byte[] bytes = readBounded(file, "file");
-            JsonNode input = parseJson(bytes);
-            return batch(input, sourceRoot, sha256(bytes), false);
+            return read(readBounded(file, "file"), sourceRoot);
+        } catch (IOException | IllegalArgumentException ex) {
+            throw invalid("file", "UTF-8 JSON 또는 원문 파일을 읽고 검증할 수 없습니다.");
+        }
+    }
+
+    public ReviewedBatch read(byte[] content, Path sourceRoot) {
+        try {
+            JsonNode input = parseJson(content);
+            return batch(input, sourceRoot, sha256(content), false);
         } catch (IOException | IllegalArgumentException ex) {
             throw invalid("file", "UTF-8 JSON 또는 원문 파일을 읽고 검증할 수 없습니다.");
         }
