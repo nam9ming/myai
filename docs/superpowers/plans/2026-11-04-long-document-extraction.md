@@ -63,6 +63,8 @@
 
 - [x] RED→GREEN: 직접 v2 draft 거부·사람 수정/인계 성공, 첫 실패/최종 성공과 전체 실패·누락/중복 분모, 혼합 버전 policy·원본 동결/이전 v1 bytes를 검사한다.
 - [x] Python 전체·Java/MySQL 전체·실제 합성 JAR·계약/Node/lint/build 실행, 전체 호출부/실패/원본 보존 자체 검토를 완료한다.
-- [ ] fresh 전체 검토1회→유효 minor 포함 수정·재검증→PR→정확 head CI/AI/새 사람 피드백→develop 병합·통합 gates→비공개 실행 증거 동결을 완료한다.
+- [x] fresh 전체 검토1회→유효 minor 포함 수정·재검증→PR→정확 head CI/AI/새 사람 피드백→develop 병합·통합 gates→비공개 실행 증거 동결을 완료한다.
 
 **Expected:** 단순 길이 거부로 대체하지 않고 실제 여러 chunk의 결과를 끝까지 처리한다. oversized 단일 block 예외·사람 관계 확정·실제40문서/독립 gold/90%·기기/D09·운영/main은 구별해 기록한다.
+
+완료 기록: PR #44·develop `7d614f0`, source/통합 CI Python630·Java420 통과. source 자동 리뷰 원문0/부분·통합 원문1/기존 시크릿 신뢰 정책을 구별한다. 실행 증거는 Git 제외 `data/private/evaluation/evidence/long-document-extraction-2026-11-04/`에 동결하며 main·실자료 인수는 별도다.
