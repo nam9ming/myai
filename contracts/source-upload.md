@@ -42,6 +42,8 @@ txt/json은 엄격한 UTF-8, PDF는 설정한 Poppler의 내장 텍스트를 사
 
 PDF는 `text_scope=embedded_text_only`, `text_review_required=true`다. 텍스트 없는 페이지는 전체422 `PDF_PAGE_REVIEW_REQUIRED`이며, 마지막 form-feed 종료 표식은 새 페이지가 아니다. 기존 OCR층은 내장 텍스트로 읽을 수 있지만 OCR을 실행하지 않는다. 그림·표·머리말만 추출된 페이지의 완전성은 사람이 대조해야 한다. txt/json의 `provided_text`·false도 개인정보/사실 검토 완료를 뜻하지 않는다.
 
+변환 stderr가 비어 있지 않으면 종료 코드0도 전체422 `PDF_EXTRACTION_FAILED`다. 손상 stream의 부분 본문을 등록하지 않으며 경고만 있는 PDF도 별도 검토한다. 원래 진단은 응답·로그에 넣지 않는다. 기존 첫 준비본의 정확 재사용은 새 변환 검사 통과를 뜻하지 않는다.
+
 모든 신규 D03은 use_review=pending·check_result=unchecked·checks=[]·확인 시각null이다. 고정 연락처 치환은 모든 개인정보 제거를 보증하지 않는다. 외부 AI 전송 전 실제 비식별·원문 검토가 필요하다.
 
 redaction_log는 치환 전 LF/NFC 본문의0기반 Unicode code point 범위 `[start,end)`를 기록한다. PDF는 페이지별 `page:N:codepoints:start-end`, txt/json은 `codepoints:start-end`이며 치환된 본문의 offset과 구별한다. 제거한 연락처 값은 로그에 넣지 않는다.

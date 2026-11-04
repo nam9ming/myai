@@ -9,16 +9,21 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.charset.StandardCharsets;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.mockStatic;
 
 class SourceUploadStoreTest {
     private static final String VERSION = "55555555-5555-4555-8555-555555555555";
@@ -142,6 +147,53 @@ class SourceUploadStoreTest {
         rejected(() -> store.commit(VERSION, META, SOURCE, INPUT, bad), 422);
         assertThat(store.find(VERSION, META, RAW)).isNull();
         assertThat(Files.readAllBytes(sources.resolve("uploads/" + sha(RAW) + ".txt"))).isEqualTo(RAW);
+    }
+
+    @Test void partialBundleWriteFailureKeepsExistingOriginalAndAllowsAnExactRetry() throws Exception {
+        Path raw = store.retainRaw(RAW, "txt");
+        store.commit(VERSION, META, SOURCE, INPUT, receipt(SOURCE, INPUT));
+        Path firstIndex = requests.resolve("uploads/" + VERSION + ".json");
+        byte[] indexBytes = Files.readAllBytes(firstIndex);
+        Path firstBundle = requests.resolve("uploads/bundles/" + JSON.readTree(indexBytes).path("bundle_id").asText());
+        var firstFiles = new java.util.TreeMap<String, String>();
+        for (String name : List.of("metadata.json", "source-import.json", "input.json", "receipt.json")) {
+            firstFiles.put(name, sha(Files.readAllBytes(firstBundle.resolve(name))));
+        }
+        String nextVersion = "66666666-6666-4666-8666-666666666666";
+        byte[] metadata = new String(META, StandardCharsets.UTF_8).replace(VERSION, nextVersion).getBytes(StandardCharsets.UTF_8);
+        var nextReceipt = (com.fasterxml.jackson.databind.node.ObjectNode) receipt(SOURCE, INPUT);
+        nextReceipt.put("document_version_id", nextVersion).put("metadata_sha256", sha(metadata));
+        var writes = new AtomicInteger();
+        try (var ignored = mockStatic(Files.class, call -> {
+            if (call.getMethod().getName().equals("newByteChannel") && call.getArguments().length == 3
+                    && call.getArgument(0) instanceof Path file && call.getArgument(1) instanceof Set<?> options
+                    && options.contains(StandardOpenOption.CREATE_NEW)
+                    && Set.of("metadata.json", "source-import.json", "input.json", "receipt.json").contains(file.getFileName().toString())
+                    && writes.incrementAndGet() == 3) {
+                assertThat(Files.readAllBytes(file.getParent().resolve("metadata.json"))).isEqualTo(metadata);
+                assertThat(Files.readAllBytes(file.getParent().resolve("source-import.json"))).isEqualTo(SOURCE);
+                throw new IOException("SYNTHETIC_PARTIAL_WRITE_FAILURE");
+            }
+            return call.callRealMethod();
+        })) {
+            assertThatThrownBy(() -> store.commit(nextVersion, metadata, SOURCE, INPUT, nextReceipt))
+                    .isInstanceOfSatisfying(ApiException.class, error -> {
+                        assertThat(error.status().value()).isEqualTo(500);
+                        assertThat(error.code()).isEqualTo("SOURCE_UPLOAD_IO_ERROR");
+                        assertThat(error.getMessage()).doesNotContain("SYNTHETIC_PARTIAL_WRITE_FAILURE", temporary.toString());
+                    });
+        }
+        assertThat(writes.get()).isEqualTo(3);
+        assertThat(requests.resolve("uploads/" + nextVersion + ".json")).doesNotExist();
+        try (var bundles = Files.list(requests.resolve("uploads/bundles"))) { assertThat(bundles.toList()).containsExactly(firstBundle); }
+        assertThat(Files.readAllBytes(raw)).isEqualTo(RAW);
+        assertThat(Files.readAllBytes(firstIndex)).isEqualTo(indexBytes);
+        for (var entry : firstFiles.entrySet()) assertThat(sha(Files.readAllBytes(firstBundle.resolve(entry.getKey())))).isEqualTo(entry.getValue());
+        assertThat(store.find(VERSION, META, RAW).sourceImport()).isEqualTo(SOURCE);
+        assertThat(store.find(nextVersion, metadata, RAW)).isNull();
+        assertThat(store.commit(nextVersion, metadata, SOURCE, INPUT, nextReceipt).aiInput()).isEqualTo(INPUT);
+        assertThat(Files.readAllBytes(firstIndex)).isEqualTo(indexBytes);
+        for (var entry : firstFiles.entrySet()) assertThat(sha(Files.readAllBytes(firstBundle.resolve(entry.getKey())))).isEqualTo(entry.getValue());
     }
 
     private JsonNode receipt(byte[] source, byte[] input) throws Exception {

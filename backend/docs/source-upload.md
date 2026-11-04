@@ -22,7 +22,7 @@ PDF 경로가 없거나 도구를 읽지 못하면 PDF 요청만503이다. txt/j
 
 ```bash
 printf 'Authorization: Bearer %s\n' "$MYAI_LOCAL_API_TOKEN" |
-  curl --fail-with-body --header @- \
+  curl --fail-with-body --noproxy '*' --header @- \
     --header "Origin: http://127.0.0.1:${MYAI_LOCAL_API_PORT:-8081}" \
     --form 'metadata=@data/private/upload/metadata.json;type=application/json' \
     --form 'file=@data/private/upload/notice.txt;type=text/plain' \
@@ -42,6 +42,8 @@ PDF는 format=pdf·file part application/pdf, JSON은 format=json·application/j
 ## 준비본·재실행·실패
 
 성공의 문서/버전ID와 hash를 보관한다. 업로드는 항상 pending/unchecked다. PDF는 내장 텍스트만 추출하고 text_review_required=true이며 텍스트 없는 페이지가 있으면 전체 등록을 중단한다. OCR층·그림·표·원문 누락, 연락처 이외 개인정보는 실제 검토가 필요하다.
+
+변환 stderr에 진단이 있으면 exit0이어도422로 중단해 손상 stream의 부분 본문을 등록하지 않는다. 무해한 경고도 별도 검토 대상이며 진단 원문은 응답·로그에 넣지 않는다. 정확 재실행으로 이전 준비본을 받은 것은 새 변환 검사 통과가 아니다.
 
 request root의 `uploads/<document_version_id>.json`에서 bundle_id를 읽으면 `uploads/bundles/<bundle_id>/input.json`이 기존5키 Python 입력이다. 같은 디렉터리에 metadata·source-import·receipt가 있다. metadata/file의 원래 bytes, 도구/전처리 버전과 전체 hash를 보존한다. 파일명은 저장경로로 사용하지 않는다.
 

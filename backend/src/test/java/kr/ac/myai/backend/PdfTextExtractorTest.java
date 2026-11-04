@@ -66,6 +66,26 @@ class PdfTextExtractorTest {
     }
 
     @Test
+    void rejectsActualPdfWhenADamagedBodyStreamLeavesOnlyTheHeader() {
+        String header = "BT /F1 12 Tf 50 700 Td (SYNTHETIC SURVIVING HEADER) Tj ET\n";
+        String damaged = "NOT_A_ZLIB_STREAM\n";
+        byte[] raw = pdf(List.of("<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [4 0 R] /Count 1 >>",
+                "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents [5 0 R 6 0 R] >>",
+                "<< /Length " + header.length() + " >>\nstream\n" + header + "endstream",
+                "<< /Filter /FlateDecode /Length " + damaged.length() + " >>\nstream\n" + damaged + "endstream"), false);
+        failure(new PdfTextExtractor(actualTool()), raw, 422, "PDF_EXTRACTION_FAILED");
+    }
+
+    @Test
+    void rejectsZeroExitDiagnosticsWithoutExposingSurvivingTextOrStderr() throws Exception {
+        var tool = probe("/bin/cat > /dev/null\nprintf 'SURVIVING_HEADER\\f'\nprintf 'PRIVATE_PDF_DIAGNOSTIC' >&2");
+        failure(new PdfTextExtractor(tool.toString()), new byte[]{1}, 422, "PDF_EXTRACTION_FAILED");
+        assertStopped();
+    }
+
+    @Test
     void validatesOptionalAbsoluteExecutableOnlyWhenPdfIsRequested() {
         for (String executable : List.of("", "pdftotext", root.resolve("private-missing").toString(), root.toString())) {
             var extractor = new PdfTextExtractor(executable);
@@ -102,14 +122,13 @@ class PdfTextExtractorTest {
     }
 
     @Test
-    void drainsBothOutputPipesWhileWritingLargeStdin() throws Exception {
+    void drainsBothPipesAndRejectsDiagnosticsWhileWritingLargeStdin() throws Exception {
         Path probe = probe("""
                 /bin/dd if=/dev/zero bs=60000 count=1 >&2 2>/dev/null
                 printf 'synthetic body\f'
                 /bin/cat > /dev/null
                 """);
-        assertThat(new PdfTextExtractor(probe.toString()).extract(new byte[20 * 1024 * 1024]).pages())
-                .containsExactly("synthetic body");
+        failure(new PdfTextExtractor(probe.toString()), new byte[20 * 1024 * 1024], 422, "PDF_EXTRACTION_FAILED");
         assertStopped();
     }
 
@@ -248,6 +267,12 @@ class PdfTextExtractorTest {
                 objects.add("<< /Length " + stream.length() + " >>\nstream\n" + stream + "endstream");
             }
             if (encrypted) objects.add("<< /Filter /Standard /V 1 /R 2 /O <" + "00".repeat(32) + "> /U <" + "00".repeat(32) + "> /P -4 >>");
+            return pdf(objects, encrypted);
+        } catch (Exception ex) { throw new AssertionError(ex); }
+    }
+
+    private static byte[] pdf(List<String> objects, boolean encrypted) {
+        try {
             var output = new ByteArrayOutputStream();
             output.write("%PDF-1.4\n".getBytes(StandardCharsets.US_ASCII));
             var offsets = new ArrayList<Integer>();

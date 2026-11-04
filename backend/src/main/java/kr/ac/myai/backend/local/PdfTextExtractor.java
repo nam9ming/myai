@@ -53,7 +53,7 @@ public final class PdfTextExtractor {
         var version = VERSION.matcher(decode(versionOutput.stdout(), true) + decode(versionOutput.stderr(), true));
         if (versionOutput.exitCode() != 0 || !version.find()) throw failure(true);
         var output = execute(List.of("-enc", "UTF-8", "-eol", "unix", "-layout", "-", "-"), raw, deadline, false);
-        if (output.exitCode() != 0) throw failure(false);
+        if (output.exitCode() != 0 || output.stderr().length != 0) throw failure(false);
         String text = decode(output.stdout(), false);
         if (text.codePoints().anyMatch(value -> Character.isISOControl(value)
                 && value != '\n' && value != '\r' && value != '\t' && value != '\f')) throw failure(false);
