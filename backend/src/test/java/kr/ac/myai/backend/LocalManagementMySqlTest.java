@@ -460,7 +460,8 @@ class LocalManagementMySqlTest {
                 .withProperty("myai.local-api.source-root", root.toString()).withProperty("myai.local-api.extraction-root", extractionRoot.toString())
                 .withProperty("myai.local-api.handoff-root", handoffRoot.toString());
         var service = new LocalManagementService(reader, commands, imports, extractions, handoffs, publication, store, env);
-        return MockMvcBuilders.standaloneSetup(new LocalManagementController(service))
+        return MockMvcBuilders.standaloneSetup(new LocalManagementController(service,
+                        org.mockito.Mockito.mock(kr.ac.myai.backend.local.SourceUploadService.class)))
                 .setControllerAdvice(new ApiExceptionHandler(), new LocalBodyLimitAdvice())
                 .setMessageConverters(new ByteArrayHttpMessageConverter(), new MappingJackson2HttpMessageConverter(mapper))
                 .addFilters(new PublicRequestLogFilter(), new LocalApiSecurityFilter(env, mapper)).build();

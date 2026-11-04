@@ -24,6 +24,10 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.apache.tomcat.util.http.fileupload.impl.SizeException;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.RecoverableDataAccessException;
 import org.springframework.dao.TransientDataAccessException;
@@ -62,9 +66,22 @@ public class ApiExceptionHandler implements ResponseBodyAdvice<Object> {
         return response(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_REQUEST", "입력 조건을 확인해 주세요.", fields);
     }
 
-    @ExceptionHandler({HttpMessageNotReadableException.class, MissingServletRequestParameterException.class, MethodArgumentTypeMismatchException.class})
+    @ExceptionHandler({HttpMessageNotReadableException.class, MissingServletRequestParameterException.class,
+            MethodArgumentTypeMismatchException.class, MissingServletRequestPartException.class})
     public ResponseEntity<ErrorResponse> malformed(Exception error) {
         return response(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_REQUEST", "요청 형식과 필수 필드를 확인해 주세요.", List.of());
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> uploadTooLarge() {
+        return response(HttpStatus.PAYLOAD_TOO_LARGE, "SOURCE_UPLOAD_TOO_LARGE",
+                "업로드 크기 한도를 초과했습니다. 파일을 나누거나 별도 검토해 주세요.", List.of());
+    }
+
+    @ExceptionHandler(MultipartException.class)
+    public ResponseEntity<ErrorResponse> malformedUpload(MultipartException error) {
+        if (error.contains(MaxUploadSizeExceededException.class) || error.contains(SizeException.class)) return uploadTooLarge();
+        return response(HttpStatus.UNPROCESSABLE_ENTITY, "SOURCE_UPLOAD_INVALID", "multipart 요청 형식과 part를 확인해 주세요.", List.of());
     }
 
     @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})

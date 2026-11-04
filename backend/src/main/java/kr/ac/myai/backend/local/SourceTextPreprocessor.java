@@ -1,11 +1,14 @@
 package kr.ac.myai.backend.local;
 
 import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import kr.ac.myai.backend.exception.ApiException;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
@@ -17,6 +20,8 @@ import java.util.List;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+@Component
+@Profile("local-api")
 public final class SourceTextPreprocessor {
     private static final int BODY_LIMIT = 200_000;
     private static final int BLOCK_LIMIT = 2_000;
@@ -27,6 +32,7 @@ public final class SourceTextPreprocessor {
             + "@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?){1,10})(?![A-Za-z0-9-])"
             + "|(?<phone>(?<![0-9])(?:0(?:2|[3-6][1-5]|70|1[016789]))[- .]?[0-9]{3,4}[- .]?[0-9]{4}(?![0-9]))");
     private static final ObjectMapper JSON = new ObjectMapper(JsonFactory.builder()
+            .streamReadConstraints(StreamReadConstraints.builder().maxStringLength(20 * 1024 * 1024).maxNestingDepth(100).build())
             .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION).build())
             .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
 

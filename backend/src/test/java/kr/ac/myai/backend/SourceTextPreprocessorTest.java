@@ -63,6 +63,17 @@ class SourceTextPreprocessorTest {
     }
 
     @Test
+    void classifiesAJsonStringBelowTheRawLimitButAboveTheBodyLimitAsTooLarge() {
+        byte[] raw = ("{\"schema_version\":\"text-body-v1\",\"text\":\"" + "a".repeat(20_100_000) + "\"}")
+                .getBytes(StandardCharsets.UTF_8);
+        assertThat(raw.length).isLessThan(20 * 1024 * 1024);
+        var error = catchThrowable(() -> preprocessor.prepare("json", raw));
+        assertThat(error).isInstanceOf(ApiException.class);
+        assertThat(((ApiException) error).status().value()).isEqualTo(413);
+        assertThat(((ApiException) error).code()).isEqualTo("SOURCE_TEXT_TOO_LARGE");
+    }
+
+    @Test
     void replacesFixedEmailAndPhonePatternsWithoutCopyingValuesToTheLog() throws Exception {
         String original = "담당 😀 notice@example.test / 031-123-4567 / 010-1234-5678, 날짜 2026-11-05";
         var result = prepare("txt", original);

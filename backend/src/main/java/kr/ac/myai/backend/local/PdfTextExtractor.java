@@ -1,7 +1,10 @@
 package kr.ac.myai.backend.local;
 
 import kr.ac.myai.backend.exception.ApiException;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -22,6 +25,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 
+@Component
+@Profile("local-api")
 public final class PdfTextExtractor {
     private static final int STDOUT_LIMIT = 4 * 1024 * 1024;
     private static final int STDERR_LIMIT = 64 * 1024;
@@ -31,7 +36,7 @@ public final class PdfTextExtractor {
     private record Output(int exitCode, byte[] stdout, byte[] stderr) { }
     private final String executable;
 
-    public PdfTextExtractor(String executable) { this.executable = executable; }
+    public PdfTextExtractor(@Value("${myai.local-api.pdftotext:}") String executable) { this.executable = executable; }
 
     public PdfText extract(byte[] raw) {
         try {
