@@ -277,11 +277,15 @@ java -jar backend/build/libs/myai-backend-0.1.0.jar --spring.profiles.active=pub
 
 현재206행 full SQL을 새 빈 소유 MySQL8.4.13에 복원했다. 원본 세 디렉터리는0700 보관 위치로 배타 이동해 삭제하지 않았다. canonical 부재와 다른 경로 소비는 성공/실패 D05 각1개·D06 1개씩 총6회 실제 JAR로 거부했다. D05 부재는 `EXTRACTION_IO_ERROR`/종료5·retryable=true, 다른 경로는 `EXTRACTION_CONFLICT`/종료3이며 D06은 `IMPORT_VALIDATION_ERROR`/종료2다.
 
+다른 위치의 D06 입력도 canonical 등록 보관본이 없는 상태에서 부모 참조를 검증해 거부했다. D06 입력 파일 자체의 위치를 일반적으로 고정하는 시험과 구분한다.
+
 tar에서 같은 실제 절대 경로로 복원한 뒤 모든 D05 17개·D06 16개를 실제 JAR로 재실행했다. 원래 실패1건과 `already_registered`/`already_imported`를 유지했으며 새 revision·감사 기록을 만들지 않았다. 총39 CLI·HTTP15회, 전체16테이블206행·스키마/Flyway·data SQL 바이트·공개4테이블0을 대조했다. HTTP는 빈 공개 snapshot의 health200·미준비503·요청422/미등록404 경계이며 실제 공개/계산 성공 증거는 아니다.
 
 보관 원본과 canonical 복원본은 서로 다른 root file key를 갖고 전체 bytes/mode는 일치하는지 대조했다. 이 복원본으로 재실행한 뒤 복원본을 별도 증거 경로에 남기고 처음 보관한 원본을 원위치로 돌려 root identity·기존2618항목의 bytes/mode를 확인했다. 자기 서버·프로세스·임시 credential은 정리했으며 다른7Docker ID/상태/포트는 같았다. 복구 probe에서 추가 추출 API 호출이나 실제 키 접근은 없었다.
 
 증거는 Git 제외 `data/private/evaluation/evidence/development-material-recovery-2026-11-04/`에 보관한다. 이는 새17건의 선택 파일 복구다. 과거 모든 root의 동시 유실·소유자/xattr/hardlink 관계·강제 종료/전원 중단 내구성·운영 접근/보존/RPO/RTO/PITR을 인증하지 않는다. 이동 journal·보관 경로·복귀 경계를 유지하며, 실제 사람 검토·정확도/40문서 평가·운영 등록·main 병합/배포도 미완료다.
+
+전체 리뷰에서 tar 손상/삭제를 원본 복귀 조건으로 묶은 오류를 발견했다. 원본 복귀는 journal에 고정한 manifest hash·경로·원본 identity/bytes/mode로 검증하고 tar 검증은 백업 복원에 유지하도록 분리했다. 손상/삭제·복귀 재실행·변조 거부를 포함한 합성24시험을 통과했다. 출력 수집기가 잘못된 UTF-8을 교체 문자로 바꾸던 경계도 거부하도록 수정해 Java54시험을 통과했다. 위 실제39 CLI/HTTP15 실행 코드·hash·원본 증거는 보존하고, 수정본의 합성 검증과 구분한다.
 
 ## 격리된 합성 복구 시험
 
