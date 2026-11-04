@@ -81,6 +81,14 @@
 - [x] RED→GREEN: 별도 MySQL에서 실제 HTTP 문서/D05(성공·실패) 등록→수정→승인/반려→preview→publish→공개 조회→rollback, 중복·stale·동시 충돌·권한 미확인/실패 부모를 검증한다. 원본·행·이전 공개본을 대조한다.
 - [x] 실제 합성 JAR를 loopback 임시 port에 실행하고 토큰/Origin·공개/관리 분리·안전한 오류·파일/DB 보존을 확인한다. 시험용 프로세스/컨테이너만 정리한다.
 - [x] Python 전체·Java/MySQL 전체·Node/계약/lint/build를 실행하고 전체 호출부·상태·보관/복구·문서 자체 리뷰를 완료한다.
-- [ ] fresh 전체 검토1회→유효 minor 포함 수정·재검증→PR→정확 head CI/AI/새 사람 피드백→비main 병합·통합 검증→비공개 증거 동결을 완료한다. provider 오류가 지속되면 정확한 대기 상태를 유지한다.
+- [x] fresh 전체 검토1회→유효 minor 포함 수정·재검증→PR→정확 head CI/AI/새 사람 피드백→비main 병합·통합 검증→비공개 증거 동결을 완료한다. provider 오류가 지속되면 정확한 대기 상태를 유지한다.
 
 **Expected:** 네 관리 JSON 경로가 실제 기존 DB/승인 서비스에 연결되고 공개·CLI 경계와 원입력/실패·충돌을 유지한다. txt/pdf 새 업로드·관리 UI·실자료 사람 검토·40문서/gold/D09·실제 배포/main 인수를 완료로 확대하지 않는다.
+
+## 통합 완료 기록
+
+- PR #45는2026-11-04 17:24:09 UTC에 develop `5c2d6a3`으로 일반 병합했다. source `8efe91a`·source CI checkout `4ee136b`·통합 checkout `6461771`의 tree `22529e76bdfbb2302668681fb579f1d0329eb809`가 같다. main은 변경하지 않았다.
+- source CI41875369610과 통합 CI41877263228 모두 Java/MySQL600·실패/skip0, Python630·Node34·계약9·lint385·정적/JAR 빌드·산출물 보관을 통과했다. 통합 Python286.995초·Java 빌드4분44초다. 원문 로그의600개 PASSED를 직접 대조했다.
+- 별도 전체33파일 검토 C0/I0/M0 뒤 인증 시험 표시 annotation2개를 수정했고 입력/assertion/runtime은 그대로다. 새 head의 인증56건과 전체 원격 CI를 통과했다. source 자동 AI는 앞60000/219695 UTF16자, 통합 AI는 앞60000/2914016 UTF16자 부분 검토·현재 원문0이며 전체 검토로 확대하지 않는다. 새 사람 리뷰/inline thread0·유효 미해결0·보류 minor0이다.
+- 기존 시크릿 신뢰 정책과 원문 지적 이력은 유지했다. 새 키 노출 감사·회전·유출 시험은 하지 않았다. 실자료 사람 검토·독립 평가·UI·운영/main 인수는 미완료다.
+- 비공개 `local-management-api-2026-11-05` 증거293항목(파일267/디렉터리26)을0400/0500으로 동결하고 전체 크기/hash/권한을 검증했다. manifest SHA `5e8519abe3179e7ce818864d91b70db0a4561dbfb885db6c4bec55ff2a4140e2`, 단계 판단17건·선행 장문 판단11건을 보존했다. 공개 완료 표시는 다음 업로드 작업 브랜치에서 기록한다.

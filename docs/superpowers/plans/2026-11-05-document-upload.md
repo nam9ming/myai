@@ -35,7 +35,7 @@
 
 ### Task 1: raw20MiB 검증과 S10 전체 원문
 
-**Files:** `backend/src/main/java/kr/ac/myai/backend/importing/ReviewedImportReader.java`, `service/ReviewReportService.java`, `backend/src/test/java/kr/ac/myai/backend/ReviewedImportReaderTest.java`, `ReviewReportMySqlTest.java`, 관련 source-review/publication 검증 시험. 이 파일들만 raw worker 소유이며 공통 error/controller는 부모 소유다.
+**Files:** `backend/src/main/java/kr/ac/myai/backend/importing/ReviewedImportReader.java`, `review/ReviewReportService.java`, `backend/src/test/java/kr/ac/myai/backend/ReviewedImportReaderTest.java`, `ReviewReportMySqlTest.java`, 관련 source-review/publication 검증 시험. 이 파일들만 raw worker 소유이며 공통 error/controller는 부모 소유다.
 
 **Interfaces:** `ReviewedImportReader.RAW_ASSET_LIMIT=20*1024*1024`를 원문 전용으로 공개한다. 기존 `readBounded(Path,String)`·`parseJson(byte[])`의8MiB는 유지한다. `read/validateStored`의 D03 raw 검사와 S10 raw capture만 새 한도를 사용한다.
 
@@ -55,7 +55,7 @@
 - `PdfTextExtractor.extract(byte[] raw) -> PdfText(List<String> pages,String toolVersion)`; Spring의 선택 설정 `myai.local-api.pdftotext`/`MYAI_LOCAL_API_PDFTOTEXT`는 절대 실행 파일이다. 미설정은 PDF 요청만503이며 기존 local-api/CLI 기동을 막지 않는다.
 - 공통 ApiException을 사용하며 payload/metadata 오류422, 한도413, `PDF_TOOL_NOT_READY`503, `PDF_PAGE_REVIEW_REQUIRED`422, 변환 실패는 안전한 `PDF_EXTRACTION_FAILED`422로 구별한다. 실제 stdout/stderr는 오류에 포함하지 않는다.
 
-- [ ] RED: txt/json의 엄격 UTF-8·추가/중복키·후행 JSON·제어문자·CRLF/NFC, 연락처 치환과 값 미기록, emoji 포함200,000/200,001 code point를 assert한다.
+- [ ] RED: txt/json의 엄격 UTF-8·추가/중복키·후행 JSON·제어문자·CRLF/NFC, 연락처 치환과 값 미기록, emoji 포함 최종 cleaned_text200,000/200,001 code point를 assert한다. 줄바꿈 없는200,000자 입력의 추가 분할 LF로 최종 한도가 넘으면413이며 자르지 않는다.
 - [ ] RED: 긴 한 행을2,000 code point 이하 블록으로 분리하고 순서/결합/페이지·블록 유일ID·UTF-8 hash가 일치함을 assert한다. 기존 Python parse_input·chunk planner가 이 투영을 받아 입력 한도 내 장문 계획을 만든다(API0회).
 - [ ] RED: 실제 합성 다페이지 PDF의 stdin/stdout 텍스트·페이지를 검사한다. 중간/마지막 빈 페이지·깨짐/암호화·비정상 종료·timeout·stdout4MiB+1/stderr64KiB+1·키 없는 환경·프로세스 회수를 별도 고정 fixture로 assert한다.
 - [ ] GREEN: 설치된 도구의 shell 없는 고정 argv·동시 bounded drain·공통 deadline·실행 버전 기록, 순수 변환/블록 정책을 구현한다. 기존 PythonProcess는 키 없는 환경/20MiB 입력 계약이 달라 임의 전역 확장을 하지 않는다.
