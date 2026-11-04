@@ -120,6 +120,8 @@ AI 출처가 있는 기존 사건을 수정할 때는 이전 revision과 바뀐 
 
 SQL 복원은 그대로 유지한 같은 경로의 등록 보관본을 사용했다. [추가 백업 한계](backup-recovery.md#개발용17건을-추가한-db-복원-검증)를 확인한다. 일부 공지의 후속/재공지 관계·고유 사건 수·권리·사람의 사실 확인은 미확정이다. 추가17건을 D08 분할 manifest에 배정하지 않았으며 실제 데이터셋은 dev3/holdout0이다. 남은27건도 blind holdout으로 인증하지 않는다. 기계 검증 통과를 추출 정확도나 사람 검토 완료로 표시하지 않는다.
 
+후속 [선택 파일 복구 검증](backup-recovery.md#개발용17건의-선택-파일-유실-복구-검증)에서는 신규321파일/55디렉터리의 실제 canonical 부재·tar 복원·39 CLI/HTTP15·206행 불변과 원본 복귀를 확인했다. 이 결과도 사람 검토·추출 정확도·운영 백업 완료와 구분한다.
+
 ## 동결 사람 수정 원본의 인계 준비
 
 [human-handoff-v1](../../contracts/human-handoff.md)은 수정된 extract-schema 값과 원래 D05를 검증하고 workflow 없는 D06 사실 투영을 별도0400/0500 이미지에 보존한다. status=projection_only·backend_import_supported=false이며 현재 local-import는 투영 schema를 거부한다. raw를 가짜 성공 D05로 재등록하거나 origin=human으로 출처를 지우지 않는다. 별도 [Java 인계 요청](human-handoff-import.md)이 실제 원문 파일·등록 D03/D05/사람 원본 hash·명시 revision/실제 DB 변경 기록·승인/공개 재검증을 연결한다. Python 투영 성공만으로 DB 저장 완료를 표시하지 않는다.
