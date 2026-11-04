@@ -20,7 +20,7 @@
 - 설정은 `MYAI_LOCAL_API_TOKEN`, `MYAI_LOCAL_API_ACTOR`, `MYAI_LOCAL_API_SOURCE_ROOT`, `MYAI_LOCAL_API_EXTRACTION_ROOT`, `MYAI_LOCAL_API_HANDOFF_ROOT`, `MYAI_LOCAL_API_REQUEST_ROOT`, `MYAI_LOCAL_API_PORT`다. root는 명시 절대 private 경로이며 임의 client root를 받지 않는다.
 - 실제 키/자료/gold/D09·운영 DB/서버·배포는 사용하지 않는다. 합성 DB·원문·보관본만 시험한다. 실제 자료 승인/공개·40문서/90%·기기 인수는 여전히 미완료다.
 - 이번 단계는 기존 JSON과 보관본을 연결한다. txt/pdf 새 업로드·텍스트화와 제안20MiB/200000문자/AI5MiB 경로는 전체 후속 범위로 유지하며 이 API 완료로 표시하지 않는다.
-- PR44 source `4b6b9ff`는 CI/리뷰를 통과했지만 GitHub develop 쓰기 서버 오류로 원격 병합 대기다. 이 작업은 동일 검증 tree의 별도 worktree에서 진행한다. PR44/로컬 develop7bfe/main·사용자 .gitignore·AGENTS·기존 private pack을 보존한다. 원격 복구 후 실제 base/통합 CI를 다시 확인한다.
+- PR44 source `4b6b9ff`는 서버 오류 대기 뒤2026-11-04 11:03:14 UTC에 원격 develop `7d614f0`으로 병합됐다. tree는 검증한 source와 같다. 이 작업은 source4b 기반 별도 worktree에서 진행하며 로컬 develop7bfe/main·사용자 .gitignore·AGENTS·기존 private pack을 보존한다. 원격 base7d의 통합 CI/리뷰도 별도로 확인한다.
 - 커밋은 영어 Conventional Commit≤50자·AI trailer 없음. 문서/주석/PR은 한국어. 유효 minor도 수정하며 새 전체 리뷰는1회다.
 
 ## Review Focus
@@ -75,7 +75,7 @@
 
 ### Task 4: 실제 MySQL·JAR HTTP 흐름과 최종 검증
 
-**Files:** `LocalManagementMySqlTest.java`, `LocalManagementJarMySqlTest.java`, `contracts/local-management-api.md`, `backend/docs/local-management-api.md`, README/TASK·계획 체크박스. 부모 소유.
+**Files:** `LocalManagementMySqlTest.java`는 기존 reader worker, `LocalManagementJarMySqlTest.java`는 기존 보안 worker가 독립 담당한다. 부모는 격리 DB·실행/결과 확인·수정·`contracts/local-management-api.md`·`backend/docs/local-management-api.md`·README/TASK·계획 체크박스와 최종 통합/Git을 소유한다.
 
 - [ ] RED→GREEN: 별도 MySQL에서 실제 HTTP 문서/D05(성공·실패) 등록→수정→승인/반려→preview→publish→공개 조회→rollback, 중복·stale·동시 충돌·권한 미확인/실패 부모를 검증한다. 원본·행·이전 공개본을 대조한다.
 - [ ] 실제 합성 JAR를 loopback 임시 port에 실행하고 토큰/Origin·공개/관리 분리·안전한 오류·파일/DB 보존을 확인한다. 시험용 프로세스/컨테이너만 정리한다.
