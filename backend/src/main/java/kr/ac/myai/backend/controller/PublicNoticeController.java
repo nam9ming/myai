@@ -4,11 +4,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.Valid;
 import kr.ac.myai.backend.dto.MatchRequest;
 import kr.ac.myai.backend.service.PublicNoticeService;
+import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 
 @RestController
+@Profile("!local-api")
 @RequestMapping("/api/v1")
 public class PublicNoticeController {
     private final PublicNoticeService notices;

@@ -16,6 +16,11 @@ public final class PublicRequestLogContext {
         return state == null ? UUID.randomUUID().toString() : state.requestId;
     }
 
+    public static String requestId(HttpServletRequest request) {
+        State state = state(request);
+        return state == null ? initialize(request).requestId : state.requestId;
+    }
+
     public static void selected(String snapshotId, String rulesVersion) {
         State state = current();
         if (state == null) return;
@@ -33,6 +38,11 @@ public final class PublicRequestLogContext {
 
     public static void error(String code) {
         State state = current();
+        if (state != null) state.errorCode = code != null && code.matches("[A-Z][A-Z_]{0,99}") ? code : null;
+    }
+
+    public static void error(HttpServletRequest request, String code) {
+        State state = state(request);
         if (state != null) state.errorCode = code != null && code.matches("[A-Z][A-Z_]{0,99}") ? code : null;
     }
 

@@ -1,6 +1,7 @@
 package kr.ac.myai.backend;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import kr.ac.myai.backend.config.LocalApiStartupGuard;
 import kr.ac.myai.backend.config.LocalExportStartupGuard;
 import kr.ac.myai.backend.config.LocalExtractionStartupGuard;
 import kr.ac.myai.backend.config.LocalImportStartupGuard;
@@ -23,8 +24,19 @@ public class MyaiBackendApplication {
         ConfigurableApplicationContext context;
         var environment = new AtomicReference<ConfigurableEnvironment>();
         var application = new SpringApplication(MyaiBackendApplication.class);
-        application.addListeners((ApplicationListener<ApplicationEnvironmentPreparedEvent>) event -> environment.set(event.getEnvironment()));
+        var localApi = new LocalApiStartupGuard();
+        application.addInitializers(localApi);
+        application.addListeners((ApplicationListener<ApplicationEnvironmentPreparedEvent>) event -> {
+            environment.set(event.getEnvironment());
+            try { localApi.validateEnvironment(event.getEnvironment()); }
+            catch (LocalApiStartupGuard.ModeException ex) {
+                fail("LOCAL_API_VALIDATION_ERROR", ex.getMessage(), ex.field(), false, 2);
+            }
+        });
         try { context = application.run(args); }
+        catch (LocalApiStartupGuard.ModeException ex) {
+            fail("LOCAL_API_VALIDATION_ERROR", ex.getMessage(), ex.field(), false, 2); return;
+        }
         catch (LocalReviewReportStartupGuard.ModeException ex) {
             fail("REPORT_VALIDATION_ERROR", ex.getMessage(), ex.field(), false, 2); return;
         }
@@ -41,10 +53,11 @@ public class MyaiBackendApplication {
             fail("EXTRACTION_VALIDATION_ERROR", ex.getMessage(), ex.field(), false, 2); return;
         }
         catch (RuntimeException ex) {
-            if (environment.get() == null || !environment.get().matchesProfiles("local-import", "local-extraction", "local-source-review", "local-review-report")) throw ex;
+            if (environment.get() == null || !environment.get().matchesProfiles("local-import", "local-extraction", "local-source-review", "local-review-report", "local-api")) throw ex;
             boolean importing = environment.get().matchesProfiles("local-import");
             boolean sourceReview = environment.get().matchesProfiles("local-source-review");
             boolean report = environment.get().matchesProfiles("local-review-report");
+            boolean local = environment.get().matchesProfiles("local-api");
             boolean database = false, retryable = false;
             for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
                 if (cause instanceof SQLException sql) {
@@ -53,9 +66,10 @@ public class MyaiBackendApplication {
                     retryable |= connection;
                 }
             }
-            String prefix = report ? "REPORT_" : sourceReview ? "SOURCE_REVIEW_" : importing ? "IMPORT_" : "EXTRACTION_";
+            String prefix = local ? "LOCAL_API_" : report ? "REPORT_" : sourceReview ? "SOURCE_REVIEW_" : importing ? "IMPORT_" : "EXTRACTION_";
             fail(prefix + (database ? "DATABASE_UNAVAILABLE" : "INTERNAL_ERROR"),
-                    report ? "검토 보고서를 시작하지 못했습니다. DB·실행 설정을 확인해 주세요."
+                    local ? "로컬 관리 API를 시작하지 못했습니다. DB·실행 설정을 확인해 주세요."
+                            : report ? "검토 보고서를 시작하지 못했습니다. DB·실행 설정을 확인해 주세요."
                             : sourceReview ? "원문 검토 명령을 시작하지 못했습니다. DB·실행 설정을 확인해 주세요."
                             : importing ? "import 명령을 시작하지 못했습니다. DB·실행 설정을 확인해 주세요."
                             : "AI 실행 기록 명령을 시작하지 못했습니다. DB·실행 설정을 확인해 주세요.", null, retryable, database ? 4 : 1);
