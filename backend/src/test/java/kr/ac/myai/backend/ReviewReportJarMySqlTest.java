@@ -35,6 +35,8 @@ class ReviewReportJarMySqlTest {
     void actualJarWritesPrivateReceiptWithoutHonoringSchemaWriters() throws Exception {
         var fixture = new SourceReviewFixtures(root, jdbc, reader, importer);
         var source = fixture.source(true); fixture.register(source);
+        jdbc.update("INSERT INTO extraction_runs(run_id,document_version_id,input_sha256,provider,model,prompt_version,status,registered_at) VALUES (?,?,?,'legacy','legacy','legacy','failed',CURRENT_TIMESTAMP(6))",
+                UUID.randomUUID().toString(), SourceReviewFixtures.version(source), "1".repeat(64));
         Path output = root.resolve("data/private/reports"); Files.createDirectories(output);
         Files.setPosixFilePermissions(output, PosixFilePermissions.fromString("rwx------"));
         Path raw = root.resolve(SourceReviewFixtures.document(source).path("raw_asset_path").asText());
@@ -99,7 +101,10 @@ class ReviewReportJarMySqlTest {
     private Map<String, String> database() {
         var result = new TreeMap<String, String>();
         for (String table : jdbc.queryForList("SELECT TABLE_NAME FROM information_schema.tables WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME", String.class)) {
-            var rows = jdbc.queryForList("SELECT * FROM `" + table + "`").stream().map(row -> mapper.valueToTree(new TreeMap<>(row)).toString()).sorted().toList();
+            var rows = jdbc.queryForList("SELECT * FROM `" + table + "`").stream().map(row -> {
+                var cells = new TreeMap<String, String>(); row.forEach((key, value) -> cells.put(key, value == null ? null : value.toString()));
+                return mapper.valueToTree(cells).toString();
+            }).sorted().toList();
             result.put(table, rows.toString());
         }
         return result;

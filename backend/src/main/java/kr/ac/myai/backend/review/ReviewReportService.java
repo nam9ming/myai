@@ -16,6 +16,7 @@ import kr.ac.myai.backend.publication.PublicationCommandReader;
 import kr.ac.myai.backend.publication.PublicationContent;
 import kr.ac.myai.backend.publication.PublicationException;
 import kr.ac.myai.backend.repository.PublicationRepository;
+import kr.ac.myai.backend.repository.ExtractionRunRepository;
 import kr.ac.myai.backend.repository.ReviewReportRepository;
 import kr.ac.myai.backend.repository.SourceReviewRepository;
 import kr.ac.myai.backend.service.PublicationService;
@@ -53,14 +54,16 @@ public class ReviewReportService {
     private final PublicationCommandReader commands;
     private final PublicationService publication;
     private final ExtractionImportService extractions;
+    private final ExtractionRunRepository extractionRuns;
 
     public ReviewReportService(ReviewReportRepository repository, ObjectMapper mapper, ReviewedImportReader json,
                                PublicationContent content, SourceReviewRepository sources, ExtractionArchiveReader archives,
                                HumanHandoffArchiveReader handoffs, PublicationCommandReader commands, PublicationService publication,
-                               ExtractionImportService extractions) {
+                               ExtractionImportService extractions, ExtractionRunRepository extractionRuns) {
         this.repository = repository; this.mapper = mapper; this.json = json; this.content = content;
         this.sources = sources; this.archives = archives; this.handoffs = handoffs; this.commands = commands; this.publication = publication;
         this.extractions = extractions;
+        this.extractionRuns = extractionRuns;
     }
 
     public ObjectNode build(UUID documentVersionId, Path sourceRoot, Path optionalPreviewRequest) {
@@ -110,7 +113,9 @@ public class ReviewReportService {
                 operational.put("source_review_no", view.reviewNo()).put("source_review_sha256", view.reviewSha256());
                 return null;
             }));
-            budget.add(document); documents.add(document);
+            var imports = document.putArray("imports");
+            for (var rowImport : filtered(saved.path("imports"), "report_document_version_id", id)) imports.add(importedHandoff(rowImport, id, budget));
+            budget.addRemainder(document, imports); documents.add(document);
         }
         var extractions = report.putArray("extractions");
         for (var row : saved.path("extractions")) {
@@ -244,6 +249,37 @@ public class ReviewReportService {
         }));
         if (baseline.path("validation").path("status").asText().equals("invalid")) baseline.put("status", "unknown");
         return summary;
+    }
+
+    private ObjectNode importedHandoff(JsonNode row, String documentVersionId, Budget budget) {
+        var imported = mapper.createObjectNode(); imported.set("database", row);
+        var proofs = imported.putArray("handoffs");
+        imported.set("validation", inspect(() -> {
+            check(row.path("status").asText().equals("succeeded") && row.path("schema_version").asText().equals("human-handoff-import-v1"), "import_batches");
+            var refs = parse(row.path("result_refs_json")); imported.set("result_refs", refs);
+            var references = HandoffReference.list(refs.path("human_handoffs"));
+            check(!references.isEmpty(), "human_handoffs");
+            String runId = refs.path("originating_run_id").textValue();
+            for (var reference : references) {
+                var proof = mapper.createObjectNode(); proof.set("reference", mapper.valueToTree(reference));
+                proof.set("validation", inspect(() -> {
+                    var image = handoffs.read(reference);
+                    proof.set("projection", image.projection()); proof.set("review", image.review()); proof.set("receipt", image.receipt());
+                    boolean related = false;
+                    for (var document : image.projection().path("documents")) related |= document.path("document_version_id").asText().equals(documentVersionId);
+                    check(related && Objects.equals(runId, image.projection().path("parent").path("run_id").textValue()), "originating_run_id");
+                    Path directory = Path.of(extractionRuns.handoffParentDirectory(runId, image));
+                    var run = archives.readSealed(runId, directory.getParent());
+                    extractionRuns.checkDocument(run); extractionRuns.verifiedHandoffParent(run, image);
+                    return null;
+                }));
+                budget.add(proof); proofs.add(proof);
+            }
+            for (var proof : proofs) check(proof.path("validation").path("status").asText().equals("valid"), "human_handoffs");
+            return null;
+        }));
+        budget.addRemainder(imported, proofs);
+        return imported;
     }
 
     private Map<String, String> eventRevisions(JsonNode snapshot) {

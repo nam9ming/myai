@@ -63,6 +63,14 @@ public class ReviewReportRepository {
             var checks = rows("SELECT * FROM source_checks WHERE document_version_id IN (" + marks(versions) + ") ORDER BY document_version_id,checked_at,check_id", bytes, versions.toArray());
             var sourceReviews = rows("SELECT * FROM source_reviews WHERE document_version_id IN (" + marks(versions) + ") ORDER BY document_version_id,review_no", bytes, versions.toArray());
             var runs = rows("SELECT * FROM extraction_runs WHERE document_version_id IN (" + marks(versions) + ") ORDER BY document_version_id,run_id", bytes, versions.toArray());
+            var imports = rows("""
+                    SELECT b.*, d.document_version_id AS report_document_version_id
+                    FROM document_versions d JOIN import_batches b ON (
+                      JSON_CONTAINS(b.result_refs_json, JSON_QUOTE(d.document_version_id), '$.document_version_ids')=1
+                      OR EXISTS (SELECT 1 FROM extraction_runs x WHERE x.document_version_id=d.document_version_id
+                        AND x.run_id=JSON_UNQUOTE(JSON_EXTRACT(b.result_refs_json, '$.originating_run_id'))))
+                    WHERE b.source_kind='human_handoff' AND d.document_version_id IN (
+                    """ + marks(versions) + ") ORDER BY d.document_version_id,b.import_id", bytes, versions.toArray());
             ArrayNode audits = mapper.createArrayNode(), snapshots = mapper.createArrayNode(), memberships = mapper.createArrayNode(), publication = mapper.createArrayNode(), heads = mapper.createArrayNode();
             if (!events.isEmpty()) {
                 audits = rows("SELECT * FROM review_audits WHERE event_id IN (" + marks(events) + ") ORDER BY happened_at,audit_id", bytes, events.toArray());
@@ -85,7 +93,7 @@ public class ReviewReportRepository {
                     .put("read_only", true).put("validation_same_snapshot", false)
                     .put("validation_scope", "파일·운영 상태·preview는 capture 이후 별도 시점의 읽기 전용 검사입니다.");
             result.set("documents", documents); result.set("source_checks", checks); result.set("source_reviews", sourceReviews);
-            result.set("extractions", runs); result.set("revisions", revisions); result.set("review_audits", audits);
+            result.set("extractions", runs); result.set("imports", imports); result.set("revisions", revisions); result.set("review_audits", audits);
             var published = result.putObject("publication"); published.set("audits", publication); published.set("snapshots", snapshots);
             published.set("memberships", memberships); published.set("heads", heads);
             return result;

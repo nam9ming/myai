@@ -218,6 +218,74 @@ class ReviewReportMySqlTest {
     }
 
     @Test
+    void emptyHumanHandoffRemainsVisibleBeforeAndAfterAnExistingEvent() throws Exception {
+        for (boolean existing : List.of(false, true)) {
+            var source = fixtures.source(false); fixtures.register(source); String run = UUID.randomUUID().toString();
+            var archive = fixtures.archive(source, run); extractions.importRun(run, archive, "synthetic-registrant");
+            if (existing) {
+                var first = fixtures.handoff(source, run, archive);
+                handoffs.importFile(first.file(), root, first.directory(), "synthetic-reviewer");
+            }
+            var empty = fixtures.handoff(source, run, archive, output -> {
+                output.putArray("items"); output.putArray("warnings").add("NO_EVENT_FOUND");
+            });
+            var imported = handoffs.importFile(empty.file(), root, empty.directory(), "synthetic-reviewer");
+            assertThat(imported.revisionIds()).isEmpty();
+            var before = database(); var files = files();
+            var report = reports.build(UUID.fromString(SourceReviewFixtures.version(source)), root, null);
+            var imports = report.path("documents").get(0).path("imports");
+            assertThat(imports).hasSize(existing ? 2 : 1);
+            JsonNode selected = null;
+            for (var item : imports) if (item.path("database").path("import_id").asText().equals(imported.importId())) selected = item;
+            assertThat(selected).isNotNull();
+            assertThat(selected.path("validation").path("status").asText()).isEqualTo("valid");
+            var proof = selected.path("handoffs").get(0);
+            assertThat(proof.path("review").path("output").path("items")).isEmpty();
+            assertThat(proof.path("review").path("output").path("warnings").toString()).contains("NO_EVENT_FOUND");
+            assertThat(proof.path("review").path("changes")).isNotEmpty();
+            assertThat(report.path("events")).hasSize(existing ? 1 : 0);
+            assertThat(database()).isEqualTo(before); assertThat(files()).isEqualTo(files);
+            var refs = (ObjectNode) mapper.readTree(jdbc.queryForObject("SELECT result_refs_json FROM import_batches WHERE import_id=?", String.class, imported.importId()));
+            refs.put("originating_run_id", UUID.randomUUID().toString());
+            jdbc.update("UPDATE import_batches SET result_refs_json=? WHERE import_id=?", refs.toString(), imported.importId());
+            before = database();
+            var invalid = reports.build(UUID.fromString(SourceReviewFixtures.version(source)), root, null).path("documents").get(0).path("imports");
+            for (var item : invalid) if (item.path("database").path("import_id").asText().equals(imported.importId()))
+                assertThat(item.path("validation").path("status").asText()).isEqualTo("invalid");
+            assertThat(database()).isEqualTo(before); assertThat(files()).isEqualTo(files);
+        }
+    }
+
+    @Test
+    void rejectedPartialHandoffPreservesUnknownsWithoutWeakeningApproval() throws Exception {
+        var source = fixtures.source(false); fixtures.register(source); String run = UUID.randomUUID().toString();
+        var archive = fixtures.archive(source, run); extractions.importRun(run, archive, "synthetic-registrant");
+        var image = fixtures.handoff(source, run, archive, output -> {
+            var item = (ObjectNode) output.path("items").get(0);
+            for (String field : List.of("title", "types")) {
+                var value = (ObjectNode) item.path(field);
+                value.putNull("value").put("knowledge", field.equals("types") ? "ambiguous" : "not_stated").put("reason", "합성 미기재").putArray("evidence_ids");
+            }
+        });
+        var imported = handoffs.importFile(image.file(), root, image.directory(), "synthetic-reviewer");
+        String event = jdbc.queryForObject("SELECT event_id FROM event_revisions WHERE revision_id=?", String.class, imported.revisionIds().getFirst());
+        assertThatThrownBy(() -> publication.execute(new PublicationCommand.Decision("publication-command-v1", "approve", "합성 승인 거부", UUID.fromString(event), 1, List.of("e1")), root, "synthetic-approver"))
+                .isInstanceOf(PublicationException.class);
+        publication.execute(new PublicationCommand.Decision("publication-command-v1", "reject", "합성 반려", UUID.fromString(event), 1, List.of()), null, "synthetic-rejector");
+        var before = database(); var files = files();
+        var report = reports.build(UUID.fromString(SourceReviewFixtures.version(source)), root, null);
+        var revisions = report.path("events").get(0).path("revisions");
+        assertThat(revisions).hasSize(2);
+        assertThat(revisions.get(1).path("payload").path("revision").path("review_status").asText()).isEqualTo("rejected");
+        assertThat(revisions.get(1).path("payload").path("revision").path("title").isNull()).isTrue();
+        assertThat(revisions.get(1).path("payload").path("revision").path("types")).isEmpty();
+        assertThat(revisions.get(1).path("validation").path("status").asText()).isEqualTo("valid");
+        assertThatThrownBy(() -> publication.execute(new PublicationCommand.Decision("publication-command-v1", "approve", "합성 재승인 거부", UUID.fromString(event), 2, List.of("e1")), root, "synthetic-approver"))
+                .isInstanceOf(PublicationException.class);
+        assertThat(database()).isEqualTo(before); assertThat(files()).isEqualTo(files);
+    }
+
+    @Test
     void mixedBundlePreviewCountsNewChangedRemovedUnchangedAndCancelledAgainstExactHead() throws Exception {
         var first = fixtures.human(false); importInput(first);
         String firstEvent = SourceReviewFixtures.event(first), area = first.path("events").get(0).path("area_id").asText();
