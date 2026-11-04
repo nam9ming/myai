@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.RecoverableDataAccessException;
@@ -65,7 +66,7 @@ public class ApiExceptionHandler implements ResponseBodyAdvice<Object> {
         return response(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_REQUEST", "요청 형식과 필수 필드를 확인해 주세요.", List.of());
     }
 
-    @ExceptionHandler(NoResourceFoundException.class)
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
     public ResponseEntity<ErrorResponse> notFound() {
         return response(HttpStatus.NOT_FOUND, "NOT_FOUND", "요청 경로를 찾을 수 없습니다.", List.of());
     }

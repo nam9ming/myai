@@ -8,7 +8,7 @@ B05/I10/I11의 구현 계획용 계약이다. 현재 브랜치의 실제 구현�
 
 필수 설정은 `MYAI_LOCAL_API_TOKEN/ACTOR/SOURCE_ROOT/EXTRACTION_ROOT/HANDOFF_ROOT/REQUEST_ROOT`와 선택 `MYAI_LOCAL_API_PORT`다. token은 실행 전에 새로 준비한32~128자리 `[A-Za-z0-9_-]` 문자열이다. 소스·URL·로그·응답에 넣지 않는다. root는 운영자가 지정한 절대 private 디렉터리이며 client가 임의 root를 전달하지 않는다.
 
-모든 로컬 HTTP 요청은 `Authorization: Bearer <token>`, `Origin: http://127.0.0.1:<실제 port>`, 같은 Host를 요구한다. 실제 loopback socket·서버 port로 비교하며 forwarded header를 신뢰하지 않는다. 토큰 오류401, origin/host/socket 오류403이며 body를 읽거나 보관·domain 호출하기 전에 거부한다. encoded path·OPTIONS·오류 경로로 우회하지 않는다.
+모든 로컬 HTTP 요청은 `Authorization: Bearer <token>`, `Origin: http://127.0.0.1:<실제 port>`, 같은 Host를 요구한다. 실제 HTTP port80에서만 `http://127.0.0.1`/`127.0.0.1`의 기본 port 생략과 `:80` 명시를 동등하게 허용한다([Origin 직렬화 규칙](https://www.rfc-editor.org/rfc/rfc6454#section-6.2)). 실제 loopback socket·서버 port로 비교하며 forwarded header를 신뢰하지 않는다. 토큰 오류401, origin/host/socket 오류403이며 body를 읽거나 보관·domain 호출하기 전에 거부한다. encoded path·OPTIONS·오류 경로로 우회하지 않는다.
 
 ## 요청·결과
 

@@ -15,7 +15,7 @@
 - 공개 I01~I03·32KiB·오류 DTO·조건 비수집, 기존 CLI 입력8MiB·원본 hash·실패/충돌·승인 경계를 유지한다. Java/Dart에 Python 계산을 복제하지 않는다.
 - `/local`은 공개/fixture 실행에서404다. 로컬 관리 실행은 `local-api` 단독·servlet·127.0.0.1만 허용한다. 공개/fixture/CLI 혼합과 외부 bind·빈 설정은 DB/웹 기동 전에 거부한다.
 - Bearer 토큰은 환경변수로 제공한32~128자리 URL-safe 문자다. 예시는 합성 값만 쓴다. 토큰·본문·원문·절대 경로·SQL·stack을 HTTP 오류나 요청 로그에 넣지 않는다.
-- Origin과 Host는 실제 서버 port의 `http://127.0.0.1:<port>`/`127.0.0.1:<port>`와 정확히 같아야 한다. 누락/null/외부 origin은403, 잘못된/누락 토큰은401이다. forwarded-header 처리는 NONE이며 인증/출처 실패는 body 저장·domain 호출 전에 끝낸다.
+- Origin과 Host는 실제 서버 port의 `http://127.0.0.1:<port>`/`127.0.0.1:<port>`와 같아야 한다. 실제 HTTP port80에서만 기본 port 생략과 명시를 동등하게 허용한다. 누락/null/외부 origin은403, 잘못된/누락 토큰은401이다. forwarded-header 처리는 NONE이며 인증/출처 실패는 body 저장·domain 호출 전에 끝낸다.
 - 로컬 JSON body8MiB, 공개 body32KiB를 각각 실제 stream에서 제한하고 초과는413이다. UTF-8·중복/추가키·후행 JSON·타입·버전 검사는 기존 reader를 따른다.
 - 설정은 `MYAI_LOCAL_API_TOKEN`, `MYAI_LOCAL_API_ACTOR`, `MYAI_LOCAL_API_SOURCE_ROOT`, `MYAI_LOCAL_API_EXTRACTION_ROOT`, `MYAI_LOCAL_API_HANDOFF_ROOT`, `MYAI_LOCAL_API_REQUEST_ROOT`, `MYAI_LOCAL_API_PORT`다. root는 명시 절대 private 경로이며 임의 client root를 받지 않는다.
 - 실제 키/자료/gold/D09·운영 DB/서버·배포는 사용하지 않는다. 합성 DB·원문·보관본만 시험한다. 실제 자료 승인/공개·40문서/90%·기기 인수는 여전히 미완료다.
@@ -33,13 +33,14 @@
 
 ### Task 1: 로컬 프로세스·인증·요청 경계
 
-**Files:** `config/LocalApiStartupGuard.java`, `local/LocalApiSecurityFilter.java`, `resources/application-local-api.yml`, `MyaiBackendApplication.java`, `controller/PublicNoticeController.java`, `controller/StatusController.java`와 `LocalApiStartupTest.java`·`LocalApiSecurityTest.java`. 보안 worker 소유; controller의 실제 API 메서드는 부모 소유다.
+**Files:** `config/LocalApiStartupGuard.java`, `local/LocalApiSecurityFilter.java`, `logging/PublicRequestLogContext.java`, `resources/application-local-api.yml`, `MyaiBackendApplication.java`, `controller/PublicNoticeController.java`, `controller/StatusController.java`와 `LocalApiStartupTest.java`·`LocalApiSecurityTest.java`. 보안 worker 소유; controller의 실제 API 메서드는 부모 소유다.
 
-**Interfaces:** 프로필 이름 `local-api`; 공통 설정 prefix `myai.local-api`. 필터는 local-api의 모든 servlet 요청을 검사하고 기존 `PublicRequestLogFilter` 다음 순서에서 `ApiExceptionHandler.ErrorResponse`·서버 request_id·오류 code를 사용한다. raw/decoded 경로 차이로 인증을 건너뛰지 않는다. 기존 공개/CLI bean의 의미를 바꾸지 않으며 로컬 HTTP body 제한은 부모가 새 controller에만 적용한다.
+**Interfaces:** 프로필 이름 `local-api`; 공통 설정 prefix `myai.local-api`. 실제 필수 환경과 같은 alias만 소비한다. 필터는 local-api의 모든 servlet 요청을 검사하고 기존 `PublicRequestLogFilter` 다음 순서에서 `ApiExceptionHandler.ErrorResponse`·서버 request_id·오류 code를 사용한다. DispatcherServlet 전에도 같은 요청 상태를 쓰도록 `PublicRequestLogContext.requestId(HttpServletRequest)`/`error(HttpServletRequest,String)`를 추가하고 기존 no-arg 동작을 유지한다. raw/decoded 경로 차이로 인증을 건너뛰지 않는다. 로컬 HTTP body 제한은 부모가 새 controller에만 적용한다.
 
-- [ ] RED: 실제 JAR의 빈 토큰/actor/root·외부 bind·non-web·공개/fixture/CLI 혼합을 기동 실패로 assert한다. 합성 토큰/본문/경로가 결과에 없는지 검사한다.
-- [ ] RED: 401/403·정상 Bearer/Origin, 중복 헤더·Host/remote 주소·실제 port·OPTIONS·encoded path/forwarded header를 검사하고 body/domain 호출0을 assert한다.
-- [ ] GREEN: early initializer·단독 프로필·loopback·constant-time 토큰 검사·Origin/Host 검사를 구현한다. 0번 port는 시험/실제 임시 포트로 허용한다.
+- [x] RED: 실제 JAR의 빈 토큰/actor/root·외부 bind·non-web·공개/fixture/CLI 혼합을 기동 실패로 assert한다. 합성 토큰/본문/경로가 결과에 없는지 검사한다.
+- [x] RED: 401/403·정상 Bearer/Origin, 중복 헤더·Host/remote 주소·실제 port·OPTIONS·encoded path/forwarded header를 검사하고 body/domain 호출0을 assert한다.
+- [x] GREEN: early initializer·단독 프로필·loopback·constant-time 토큰 검사·Origin/Host 검사를 구현한다. 0번 port는 시험/실제 임시 포트로 허용한다.
+- [x] 추가 경계 RED→GREEN: 실제 port80의 기본 port 생략/명시를 허용하며 다른 port/host/scheme은 거부한다. actor128자 상한·ISO control 거부는 기존 서비스 검증을 기동 전에 재사용한다.
 - [ ] 공개/fixture `/local`404, 올바른 로컬 인증을 보낸 local `/api/v1`404, 기존 CLI 동작·공개 오류/로그 회귀를 실행하고 커밋한다.
 
 ### Task 2: 파일 reader의 원입력 byte[] 재사용
@@ -48,14 +49,14 @@
 
 **Interfaces:** `ReviewedImportReader.read(byte[] content, Path sourceRoot) -> ReviewedBatch`, `PublicationCommandReader.read(byte[] content) -> PublicationCommand`. 기존 `read(Path,...)`는 실제 파일 읽기 경계를 유지한 채 위 공통 검증으로 위임한다. `validateStored`는 HTTP 신규 입력에 사용하지 않는다.
 
-- [ ] RED: 동일 파일/bytes의 결과와 원본 SHA 일치, 공백만 다른 body의 서로 다른 inputSha256을 assert한다.
-- [ ] RED: malformed/후행/중복키/잘못된 UTF-8·추가키·8MiB 초과와 source symlink/hash·revision/승인 상태 오류를 두 경로에서 동일하게 거부한다.
-- [ ] GREEN: 기존 private batch/strict publication 변환·Bean Validation을 재사용한다. 새 coercion/자동 보정/재직렬화 hash를 넣지 않는다.
+- [x] RED: 동일 파일/bytes의 결과와 원본 SHA 일치, 공백만 다른 body의 서로 다른 inputSha256을 assert한다.
+- [x] RED: malformed/후행/중복키/잘못된 UTF-8·추가키·8MiB 초과와 source symlink/hash·revision/승인 상태 오류를 두 경로에서 동일하게 거부한다.
+- [x] GREEN: 기존 private batch/strict publication 변환·Bean Validation을 재사용한다. 새 coercion/자동 보정/재직렬화 hash를 넣지 않는다.
 - [ ] 관련 reader 전체와 기존 파일 CLI 시험을 실행하고 커밋한다.
 
 ### Task 3: 원본 보관·네 관리 HTTP 경로
 
-**Files:** `local/LocalManagementController.java`, `LocalManagementService.java`, `LocalRequestStore.java`, `LocalBodyLimitAdvice.java`, `service/ExtractionImportService.java` 및 `LocalManagementApiTest.java`·`LocalRequestStoreTest.java`. 부모 소유.
+**Files:** `local/LocalManagementController.java`, `LocalManagementService.java`, `LocalRequestStore.java`, `LocalBodyLimitAdvice.java`, `service/ExtractionImportService.java`, `controller/ApiExceptionHandler.java` 및 `LocalManagementApiTest.java`·`LocalManagementServiceTest.java`·`LocalRequestStoreTest.java`·`ExtractionImportServiceTest.java`. 부모가 전체 연결을 소유하며 `LocalRequestStore.java`·`LocalRequestStoreTest.java`만 기존 reader worker가 독립 담당한다.
 
 **Interfaces:**
 - POST `/local/documents`: 원본 `source-import-v1` JSON만 받는다. 기존 read/importBatch 결과를 반환하며 사건/공개를 만들지 않는다.
@@ -66,10 +67,10 @@
 - 성공200: `schema_version:local-management-result-v1,request_sha256,data`이며 data는 기존 결과 record다. 오류는 기존 error/request_id 형태로401/403/413/415/422/404/409/503/500을 구별한다. 경로·본문·비밀값은 반환하지 않는다.
 - 원입력은 request root0700의 `<sha256>.json`0600에 원자적으로 배타 설치한다. 같은 bytes는 무쓰기 재사용하며 다른 기존 bytes·symlink·권한 오류는 거부한다. 재직렬화본으로 대체하지 않는다. preview는 요청 파일을 만들지 않는 읽기 전용이다. 인증/본문 한도/잘못된 JSON·미지원 schema는 보관하지 않는다. 인식한 관리 요청의 원본 보관과 DB 성공/실패를 구별하며 실패 batch DB 기록은 추가하지 않는다. 파일 저장 실패는 domain 호출 전에 끝낸다.
 
-- [ ] RED: 필수 네 경로와 배치 인계 경로의 byte/ID/hash/행위 dispatch, source-only·사건1개·URL ID/다중 배치 구별, expected hash 불일치 때 DB 쓰기0을 assert한다.
-- [ ] RED: 8MiB+1/Content-Length 없음·잘못된 media·UTF-8/중복키, 인증 실패 때 body 저장0, preview 때 파일/DB 쓰기0을 검사한다.
-- [ ] RED: 원본 공백/hash·같은 body 동시 설치·기존 충돌/symlink·파일 실패 시 domain 호출0과 원본 보존을 검사한다.
-- [ ] GREEN: 기존 서비스·readers·예외·파일 원자 설치 패턴을 연결한다. field 값이나 exception message의 원문을 오류에 반사하지 않는다.
+- [x] RED: 필수 네 경로와 배치 인계 경로의 byte/ID/hash/행위 dispatch, source-only·사건1개·URL ID/다중 배치 구별, expected hash 불일치 때 DB 쓰기0을 assert한다.
+- [x] RED: 8MiB+1/Content-Length 없음·잘못된 media·UTF-8/중복키, 인증 실패 때 body 저장0, preview 때 파일/DB 쓰기0을 검사한다.
+- [x] RED: 원본 공백/hash·같은 body 동시 설치·기존 충돌/symlink·파일 실패 시 domain 호출0과 원본 보존을 검사한다.
+- [x] GREEN: 기존 서비스·readers·예외·파일 원자 설치 패턴을 연결한다. field 값이나 exception message의 원문을 오류에 반사하지 않는다.
 - [ ] 관련 HTTP/reader/CLI·공개 회귀를 실행하고 커밋한다.
 
 ### Task 4: 실제 MySQL·JAR HTTP 흐름과 최종 검증
