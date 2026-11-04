@@ -111,6 +111,8 @@ python3.13 -m processing.evaluation verify DATASET_REF
 
 `gpt-6.1-sol`·`prompt-v2`의 실제19요청에서16건은 기계 검증을 통과했고,1건은 `LOCATION_BINDING_UNKNOWN` 누락으로3시도 후 실패했습니다. 실패 원출력은 보정·대체하지 않았습니다. 완료17개 ID를 키 없이 재사용·verify하고 성공16실행에서 미배정 숨김 사건17개를 생성했습니다. 새 전용 DB의 D05 성공16/실패1 등록·D06 저장·전체16테이블206행의 SQL 복원은 [저장 검증](../backend/docs/ai-review-draft.md#개발용17건의-추출과-저장-확장)을 따릅니다. 실행·선택·원본은 Git 제외 `data/private/development-notices/2026-11-04-development-extraction/`에 보관하며, 앞 준비 pack의 상태 표시는 준비 당시 기록으로 유지합니다.
 
+후속 단계에서 이17건의 원본/등록 archive·단일 source·초안을 포함한321파일/55디렉터리를 별도 tar로 백업하고 같은 절대 경로에 복원했습니다. 원본 보관→부재/다른 경로 거부6회→복원본의 전체 D05 17/D06 16 재사용을 실제 JAR로 확인했습니다. 총39 CLI·HTTP15회·현재206행/스키마/data SQL·공개0과 원본 복귀/기존2618항목 보존을 대조했습니다. 추가 추출 API나 키 접근은 없으며 [선택 파일 복구의 범위와 제한](../backend/docs/backup-recovery.md#개발용17건의-선택-파일-유실-복구-검증)을 따릅니다.
+
 후보는 미배정 상태입니다. 추가17건을 D08 manifest에 배정하지 않았으며 실제 데이터셋은 dev3/holdout0입니다. 남은27건은 보류8·개발 상한 미선택19로 구분하고 blind holdout으로 인증하지 않습니다. 운영 DB 등록·지역·이용권한·사건 관계와 추가 개인정보 검토, 개발20/확인20 분할·독립 정답표·실제 품질 평가가 남아 있습니다. 수신한 DOM·도구 응답과 작성된 ALT는 서버 원본 바이트·본문 완전성·공식 수정 시각을 인증하지 않습니다.16기계 검증 통과를 추출 정확도·사람 검토 실적으로 표시하지 않습니다.
 
 manifest만으로는 실제 본문이나 정답을 인증하지 않으며 `unexposed_as_declared`도 blind 평가 보증이 아닙니다. 실제 입력·실행 연결은 별도 [dataset-bindings-v1](../contracts/dataset-bindings.md) 명세로 검사합니다.

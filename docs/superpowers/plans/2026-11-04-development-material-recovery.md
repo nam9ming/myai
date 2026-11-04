@@ -27,7 +27,7 @@
 **Files/Owner:** Python worker는 private `material_backup.py`·`test_material_backup.py`만 소유한다. 부모가 고정 selection/baseline·실제 백업을 작성한다.
 **Interfaces:** `create_backup(roots: list[Path], output: Path) -> Path`, `verify_backup(manifest: Path) -> dict`, `displace(manifest: Path, holding: Path)`, `restore(manifest: Path, holding: Path)`, `return_originals(manifest: Path, holding: Path)`. CLI는 create의 반복 `--root`/`--output`, verify의 `--manifest`, 나머지의 `--manifest`/`--holding`을 받는다. manifest는 schema_version·roots의 absolute_root/tar_name/tar_sha256/entries를 보존한다.
 
-- [ ] 쓰기 없는 fixture에서 정상 bytes/mode roundtrip과 링크/중첩/기존root/중복·탈출·변조 tar 거부, 이동/복원 실패의 원본 복귀 시험을 먼저 작성·실패시킨다. Expected: 기능 누락의 실제 RED, 원본 손실 없음.
+- [ ] 실자료를 쓰지 않는 합성 fixture에서 정상 bytes/mode roundtrip과 링크/중첩/기존root/중복·탈출·변조 tar 거부, 이동/복원 실패의 원본 복귀 시험을 먼저 작성·실패시킨다. Expected: 기능 누락의 실제 RED, 원본 손실 없음.
 - [ ] 기존 tar/hash와 배타 rename을 재사용해 최소 구현하고 같은 시험을 통과시킨다. Expected: GREEN·단일 안전 JSON·키/DB/API 접근0.
 - [ ] 부모가 정확321파일 선택·현재206행 SQL·이전 manifest/protected baseline을 고정하고 새 백업과 별도 위치 검증을 실행한다. Expected: 전체 구성/hash/mode 일치, canonical 이동은 아직 없음.
 
