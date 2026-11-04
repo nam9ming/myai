@@ -40,6 +40,24 @@ class HumanHandoffArchiveReaderTest {
     }
 
     @Test
+    void verifiesHandoffWithoutWritingPythonBytecodeIntoWorkdir() throws Exception {
+        Fixture fixture = fixture("manual");
+        String receipt = Files.readString(fixture.directory().resolve("receipt.json"));
+        Path probe = probe("print(" + quote(receipt) + ")");
+        Path launcher = Files.writeString(root.resolve("python-launcher"), "#!/bin/sh\n"
+                + "unset PYTHONDONTWRITEBYTECODE PYTHONPYCACHEPREFIX\n"
+                + "exec '" + PythonProbe.PYTHON.replace("'", "'\\''") + "' \"$@\"\n");
+        Files.setPosixFilePermissions(launcher, Set.of(PosixFilePermission.OWNER_READ,
+                PosixFilePermission.OWNER_WRITE, PosixFilePermission.OWNER_EXECUTE));
+        var reader = new HumanHandoffArchiveReader(json, launcher.toString(), probe.toString(), 10000);
+        var result = reader.read(fixture.reference(), fixture.hash(), fixture.directory().getParent());
+        assertThat(result.projection().path("parent").path("execution_mode").asText()).isEqualTo("manual_import");
+        try (var files = Files.walk(probe)) {
+            assertThat(files.map(path -> path.getFileName().toString()).toList()).doesNotContain("__pycache__");
+        }
+    }
+
+    @Test
     void preservesFailedManualAndEmptyProjectionWithoutInventingWorkflow() throws Exception {
         for (String mode : List.of("failed", "manual", "empty")) {
             Fixture fixture = fixture(mode);

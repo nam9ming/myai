@@ -6,6 +6,8 @@ Java 21 / Spring Boot **3.5.16** / Gradle Wrapper **8.14.3** / MySQL **8.4.13**.
 
 ## 구현 범위
 
+- S10의 [비공개 로컬 검토 보고서](docs/review-report.md)는 원문/모든 AI 시도/현재·과거 수정값·오류·승인·공개 이력과 명시 preview를 비교한다. `local-review-report`는 DB·원본을 변경하지 않고 private HTML과 안전한 receipt를 저장한다. 수정·승인·공개는 기존 파일 명령을 사용한다.
+
 - `/health`: 프로세스 기동을 확인하는 liveness다. DB·Python 준비 완료 여부는 확인하지 않는다.
 - `GET /api/v1/config`, `POST /api/v1/matches`, `GET /api/v1/events/{id}?snapshot_id=…`. 기본 `public` 프로필은 실제 공개 snapshot을 조회하고 matches는 Python C01~C10 계산에 연결한다. [공개 조회 안내](docs/public-snapshot-api.md)를 따른다.
 - `fixture` 프로필에서 `contracts/examples/`의 합성 응답을 제공한다. Gradle이 필요한 JSON만 JAR에 포함하므로 별도 복사본을 수정하지 않는다.

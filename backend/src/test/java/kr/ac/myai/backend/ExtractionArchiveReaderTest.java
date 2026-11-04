@@ -10,7 +10,10 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.LinkOption;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.*;
@@ -96,6 +99,65 @@ class ExtractionArchiveReaderTest {
         assertThat(result.receipt().path("attempts").get(0).path("status").asText()).isEqualTo("failed");
         assertThat(result.receipt().path("attempts").get(1).path("status").asText()).isEqualTo("validated");
         assertThat(result.status()).isEqualTo("validated");
+    }
+
+    @Test
+    void readsSealedMultipleAttemptArchiveWithoutChangingFilesOrModes() throws Exception {
+        Path archive = archive(false, 2);
+        var before = tree();
+        var result = reader(PythonProbe.REPO, 10000).readSealed(id, archive);
+        assertThat(result.directory()).isEqualTo(archive.resolve(id).toRealPath());
+        assertThat(result.attempts()).isEqualTo(2);
+        assertThat(result.receipt().path("attempts").get(0).path("status").asText()).isEqualTo("failed");
+        assertThat(result.status()).isEqualTo("validated");
+        assertThat(tree()).isEqualTo(before);
+    }
+
+    @Test
+    void readsSealedFailedNonUtf8ArchiveWithoutDiscardingRawOutput() throws Exception {
+        Path archive = archive(true);
+        var before = tree();
+        var result = reader(PythonProbe.REPO, 10000).readSealed(id, archive);
+        assertThat(result.status()).isEqualTo("failed");
+        assertThat(Files.readAllBytes(result.directory().resolve("attempt-1.output"))).containsExactly((byte) 0xff);
+        assertThat(tree()).isEqualTo(before);
+    }
+
+    @Test
+    void refusesMutableArchiveWithoutCreatingFrozenCopiesOrRepairingModes() throws Exception {
+        Path archive = archive(false);
+        unseal(archive.resolve(id));
+        var before = tree();
+        assertThatThrownBy(() -> reader(PythonProbe.REPO, 10000).readSealed(id, archive))
+                .isInstanceOfSatisfying(ExtractionException.class,
+                        ex -> assertThat(ex.code()).isEqualTo("EXTRACTION_ARCHIVE_INVALID"));
+        assertThat(tree()).isEqualTo(before);
+    }
+
+    @Test
+    void refusesMissingSealedArtifactsWithoutRepair() throws Exception {
+        Path archive = archive(false);
+        Path directory = archive.resolve(id);
+        directory.toFile().setWritable(true, true);
+        Files.delete(directory.resolve("attempt-1.output"));
+        directory.toFile().setWritable(false, false);
+        var before = tree();
+        assertThatThrownBy(() -> reader(PythonProbe.REPO, 10000).readSealed(id, archive))
+                .isInstanceOfSatisfying(ExtractionException.class,
+                        ex -> assertThat(ex.code()).isEqualTo("EXTRACTION_ARCHIVE_INVALID"));
+        assertThat(tree()).isEqualTo(before);
+    }
+
+    private Map<String, String> tree() throws Exception {
+        var result = new TreeMap<String, String>();
+        try (var paths = Files.walk(root)) {
+            for (Path path : paths.toList()) {
+                String content = Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
+                        ? ReviewedImportReader.sha256(Files.readAllBytes(path)) : "directory";
+                result.put(root.relativize(path).toString(), Files.getPosixFilePermissions(path).toString() + ":" + content);
+            }
+        }
+        return result;
     }
 
     @Test

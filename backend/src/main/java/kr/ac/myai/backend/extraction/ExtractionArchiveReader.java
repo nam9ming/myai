@@ -38,14 +38,23 @@ public class ExtractionArchiveReader {
     }
 
     public VerifiedExtraction read(String runId, Path root) {
+        return read(runId, root, false);
+    }
+
+    public VerifiedExtraction readSealed(String runId, Path root) {
+        return read(runId, root, true);
+    }
+
+    private VerifiedExtraction read(String runId, Path root, boolean readOnly) {
         validate(runId != null && runId.matches(UUID), "run_id");
-        validate(root.isAbsolute() && !Files.isSymbolicLink(root), "archive_root");
+        validate(root != null && root.isAbsolute() && !Files.isSymbolicLink(root), "archive_root");
         try {
             Path base = root.toRealPath();
             Path directory = base.resolve(runId);
             validate(Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS), "archive_root");
-            var process = PythonProcess.execute(executable, workdir, List.of("-m", "processing.extraction", "freeze", runId,
-                    "--root", base.toString()), new byte[0], timeout);
+            var arguments = readOnly ? List.of("-B", "-m", "processing.extraction", "verify-sealed", runId, "--root", base.toString())
+                    : List.of("-m", "processing.extraction", "freeze", runId, "--root", base.toString());
+            var process = PythonProcess.execute(executable, workdir, arguments, new byte[0], timeout);
             if (process.exitCode() != 0 && process.exitCode() != 4) {
                 throw new ExtractionException(switch (process.exitCode()) {
                     case 2 -> "EXTRACTION_VALIDATION_ERROR";
@@ -59,6 +68,7 @@ public class ExtractionArchiveReader {
                     && packet.path("protocol_version").asText().equals("extraction-registration-v1"));
             String snapshot = packet.path("snapshot_ref").asText();
             require(snapshot.equals(runId) || snapshot.matches("registered/[0-9a-f]{64}/" + runId));
+            require(!readOnly || snapshot.equals(runId));
             directory = base.resolve(snapshot);
             require(Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS) && directory.toRealPath().equals(directory));
             JsonNode receipt = packet.path("receipt");

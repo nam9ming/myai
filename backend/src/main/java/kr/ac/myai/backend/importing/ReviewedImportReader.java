@@ -237,7 +237,8 @@ public class ReviewedImportReader {
         boolean rawDraft = origin.equals("ai_draft");
         String status = stored ? choice(revision, "review_status", "draft", "needs_review", "approved", "rejected") : choice(revision, "review_status", "draft", "needs_review");
         String intent = stored ? choice(revision, "publication_intent", "hidden", "public") : choice(revision, "publication_intent", "hidden");
-        boolean partial = rawDraft || handoffs != null && status.equals("needs_review") && intent.equals("hidden");
+        boolean partial = rawDraft || handoffs != null && intent.equals("hidden")
+                && (status.equals("needs_review") || stored && status.equals("rejected"));
         check(stored || draftImport == rawDraft, "events.revision.origin");
         check(uuid(revision, "event_id").equals(id), "events.revision.event_id");
         String revisionId = uuid(revision, "revision_id");

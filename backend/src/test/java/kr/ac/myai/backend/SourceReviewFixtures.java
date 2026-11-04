@@ -56,6 +56,10 @@ final class SourceReviewFixtures {
     Path archive(ObjectNode source, String run) throws Exception { return extraction.archive(source, run, false); }
 
     Handoff handoff(ObjectNode source, String run, Path archive) throws Exception {
+        return handoff(source, run, archive, output -> { });
+    }
+
+    Handoff handoff(ObjectNode source, String run, Path archive, java.util.function.Consumer<ObjectNode> edit) throws Exception {
         Path work = Files.createTempDirectory(root, "source-review-handoff-").toRealPath();
         Path sourceFile = Files.writeString(work.resolve("source.json"), source.toString());
         var output = (ObjectNode) mapper.readTree(PythonProbe.REPO.resolve("contracts/examples/ai-extraction.json").toFile());
@@ -64,6 +68,7 @@ final class SourceReviewFixtures {
         ((ObjectNode) output.path("evidence").get(0)).put("block_id", block.path("block_id").asText()).put("quote", text)
                 .put("start_char", 0).put("end_char", text.codePointCount(0, text.length()))
                 .put("text_sha256", ReviewedImportReader.sha256(text.getBytes(StandardCharsets.UTF_8)));
+        edit.accept(output);
         Path outputFile = Files.writeString(work.resolve("output.json"), output.toString());
         Path handoffRoot = work.resolve("handoffs");
         String script = """

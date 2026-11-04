@@ -284,6 +284,13 @@ def _sealed(directory, receipt):
     return True
 
 
+def verify_sealed_run(run_id, root=DEFAULT_ROOT):
+    receipt = verify_run(run_id, root)
+    directory = _root(root, create=False) / run_id
+    _archive_check(_sealed(directory, receipt), 'ARCHIVE_REQUIRES_SEALED')
+    return dict(protocol_version='extraction-registration-v1', snapshot_ref=run_id, receipt=receipt)
+
+
 def freeze_run(run_id, root=DEFAULT_ROOT):
     receipt = verify_run(run_id, root)
     base = _root(root, create=False)
