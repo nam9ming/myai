@@ -35,16 +35,19 @@ function repository(t, count = 1) {
   git("commit", "-m", "test: add notices");
   const head = git("rev-parse", "HEAD");
   git("switch", "main");
+  const remote = join(root, "remote.git");
+  git("clone", "--bare", "--no-local", root, remote);
+  git("remote", "add", "origin", remote);
   const tools = join(root, "tools");
   mkdirSync(tools);
   const gh = join(tools, "gh");
   writeFileSync(gh, "#!/usr/bin/env bash\nprintf 'HTTP 406: diff exceeded maximum files (300)\\n' >&2\nexit 1\n");
   chmodSync(gh, 0o700);
   const diff = join(root, "result.diff");
-  return { root, git, base, head, execute(overrides = {}) {
-    const result = spawnSync("bash", ["-c", script], { cwd: root, encoding: "utf8",
+  return { root, git, base, head, remote, execute(overrides = {}, cwd = root) {
+    const result = spawnSync("bash", ["-c", script], { cwd, encoding: "utf8",
       env: { ...env, PATH: `${tools}:${env.PATH}`, BASE_SHA: base, HEAD_SHA: head,
-        PR: "20", GITHUB_REPOSITORY: "example/project", TEST_DIFF: diff, ...overrides } });
+        GH_TOKEN: "test-action-token", PR: "20", GITHUB_REPOSITORY: "example/project", TEST_DIFF: diff, ...overrides } });
     return { ...result, diff: existsSync(diff) ? readFileSync(diff, "utf8") : "" };
   } };
 }
@@ -55,6 +58,8 @@ test("300파일 API 제한 없이301파일 전체를 신뢰된 checkout에서 �
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.diff.match(/^diff --git /gm)?.length, 301);
   assert.equal(repo.git("rev-parse", "HEAD"), repo.base);
+  assert.doesNotMatch(repo.git("config", "--local", "--list"), /credential\.helper|test-action-token/);
+  assert.doesNotMatch(result.stdout + result.stderr, /test-action-token/);
   assert.match(workflow, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/);
   assert.match(workflow, /fetch-depth: 0/);
   assert.match(workflow, /persist-credentials: false/);
@@ -78,6 +83,24 @@ test("갈라진 base와 전진한 head 대신 이벤트 SHA의 PR 변경만 비�
   assert.match(result.diff, /notice-0\.txt/);
   assert.doesNotMatch(result.diff, /future\.txt|base-only\.txt/);
   assert.equal(repo.git("rev-parse", "HEAD"), base);
+});
+
+test("강제 푸시 뒤 새 clone에서도 이전 이벤트 head를 확보한다", (t) => {
+  const repo = repository(t);
+  repo.git("switch", "-C", "feature", repo.base);
+  writeFileSync(join(repo.root, "replacement.txt"), "replacement head\n");
+  repo.git("add", "replacement.txt");
+  repo.git("commit", "-m", "test: replace head");
+  repo.git("push", "--force", "origin", "feature");
+  repo.git("switch", "main");
+  const fresh = join(repo.root, "fresh");
+  repo.git("clone", "--no-local", "--branch", "main", repo.remote, fresh);
+  assert.notEqual(spawnSync("git", ["-C", fresh, "cat-file", "-e", repo.head]).status, 0);
+  const result = repo.execute({}, fresh);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.diff, /notice-0\.txt/);
+  assert.doesNotMatch(result.diff, /replacement\.txt/);
+  assert.equal(repo.git("-C", fresh, "rev-parse", "HEAD"), repo.base);
 });
 
 test("외부 diff와 textconv를 실행하지 않는다", (t) => {

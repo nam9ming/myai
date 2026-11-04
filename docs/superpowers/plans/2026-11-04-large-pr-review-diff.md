@@ -4,7 +4,7 @@
 
 **Goal:** 통합 PR20의 304파일 diff가 GitHub API의300파일 한도로 실패하는 문제를 고친다.
 
-**Architecture:** 기본 브랜치의 신뢰된 리뷰 스크립트는 유지한다. 전체 Git 이력을 가져와 이벤트의 base/head SHA를 merge-base 기준으로 비교하고, 외부 diff/textconv 실행을 차단한다. API 키·모델·앞60000자 제한·기존 시크릿 정책은 바꾸지 않는다.
+**Architecture:** 기본 브랜치의 신뢰된 리뷰 스크립트는 유지한다. 전체 Git 이력과 명시적 base/head SHA fetch 후 merge-base 기준으로 비교하고, 외부 diff/textconv 실행을 차단한다. fetch 인증은 해당 명령의 GitHub CLI helper에만 지정한다. API 키·모델·앞60000자 제한·기존 시크릿 정책은 바꾸지 않는다.
 
 **Tech Stack:** 기존 Git·Bash·GitHub Actions·Node20 내장 시험. 새 의존성 없음.
 
@@ -33,6 +33,7 @@
 - [x] 네트워크 없는 실제 Git 임시 저장소에서301파일·갈라진 base/전진한 head·외부 도구 미실행·없는 commit 실패 시험을 먼저 작성한다. `gh`는 관찰된 HTTP406 실패로 stub한다.
 - [x] `node --test test/ai-review-diff.test.mjs` RED 확인 후 fetch-depth0·Git3점 diff·외부 도구 차단을 연결하고 GREEN을 확인한다.
 - [x] `npm run lint`, `npm test`, `npm run build`와 현재 통합304파일의 로컬 diff를 검증한다. 앱 소스 미변경이므로 직전 Java404 결과와 새 원격 CI를 구분한다.
+- [x] PR 자동 리뷰의 강제 푸시 지적을 새 원격/clone으로 RED 재현하고, 명시 fetch·자격정보 미저장·고정 SHA 비교를 GREEN 검증한다.
 - [ ] 자체 전체 검토→새 전체 검토1회→유효 지적 전부 수정→PR/정확 head CI·AI·사람 피드백0→승인된 develop 병합·통합 PR20 자동 리뷰 복구를 검증한다.
 
 **Expected:** GitHub diff API 호출 없이 전체 Git 변경을 수집하고 실패·빈 리뷰를 성공으로 숨기지 않는다. 앱 범위나 실제 인수 기준은 줄이지 않는다.
