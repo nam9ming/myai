@@ -35,6 +35,8 @@ PC는 원문/AI/수정값3열, 좁은 화면은 세로로 표시합니다. JSON 
 
 `valid`는 명시된 schema/hash/reference 검사의 통과입니다. 사실 정확도·실제 사람 검토·사용권·독립 정답표 인증이 아닙니다. 무효/부재 항목은 원래 DB 행과 `invalid/code/field`를 남깁니다. D05의 `failed`와 archive 무결성 `valid`는 동시에 성립할 수 있습니다.
 
+D05의 `archive_validation`, `database_validation`, 각 artifact의 검증을 구별합니다. archive 전체 검증은 통과했으나 DB 등록값과 다르면, 전체 상태는 `invalid`로 두고 안전하게 검증한 원출력은 계속 표시합니다. 이 원출력을 등록 일치·승인 자료로 간주하지 않습니다. 크기는 실제 archive 파일을 먼저 확인하며, 불일치한 DB receipt의 크기를 사실로 사용하지 않습니다.
+
 사건이 없는 사람 검토도 `documents[].imports`에 인계 원본·경고·변경 기록을 표시합니다. 저장된 비공개 반려 인계는 미상/부분값을 그대로 검사하며, 승인·공개는 완전한 필수 검토를 계속 요구합니다.
 
 ## 공개 미리보기

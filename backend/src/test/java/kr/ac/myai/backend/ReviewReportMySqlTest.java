@@ -114,6 +114,48 @@ class ReviewReportMySqlTest {
     }
 
     @Test
+    void registeredRowMismatchKeepsEveryIndependentlyVerifiedArchiveArtifact() throws Exception {
+        for (boolean api : List.of(false, true)) {
+            var source = fixtures.source(false); fixtures.register(source); String run = UUID.randomUUID().toString();
+            Path archive = fixtures.archive(source, run);
+            if (api) archive = ExtractionArchiveReaderTest.apiArchive(root.resolve("mismatched-api"), archive.resolve(run).resolve("input.json"), run,
+                    SourceReviewFixtures.document(source).path("preprocessing_version").asText());
+            extractions.importRun(run, archive, "synthetic-registrant");
+            Path registered = Path.of(jdbc.queryForObject("SELECT raw_ref FROM extraction_runs WHERE run_id=?", String.class, run));
+            if (api) {
+                var receipt = (ObjectNode) mapper.readTree(jdbc.queryForObject("SELECT receipt_json FROM extraction_runs WHERE run_id=?", String.class, run));
+                ((ObjectNode) receipt.path("artifacts").path("attempt-1.output")).put("size", 8 * 1024 * 1024 + 1);
+                jdbc.update("UPDATE extraction_runs SET receipt_json=? WHERE run_id=?", receipt.toString(), run);
+            } else jdbc.update("UPDATE extraction_runs SET status='failed',output_sha256=? WHERE run_id=?", "0".repeat(64), run);
+            var before = database(); var files = files();
+            var extraction = byRun(reports.build(UUID.fromString(SourceReviewFixtures.version(source)), root, null), run);
+            assertThat(extraction.path("validation").path("status").asText()).isEqualTo("invalid");
+            assertThat(extraction.path("archive_validation").path("status").asText()).isEqualTo("valid");
+            assertThat(extraction.path("database_validation").path("status").asText()).isEqualTo("invalid");
+            for (String artifact : api ? List.of("attempt-1.prompt", "attempt-1.output", "attempt-1.response", "attempt-1.exchange") : List.of("attempt-1.prompt", "attempt-1.output")) {
+                var value = extraction.path("artifacts").path(artifact);
+                assertThat(value.path("validation").path("status").asText()).isEqualTo("valid");
+                assertThat(value.path("text").asText()).isEqualTo(Files.readString(registered.resolve(artifact)));
+            }
+            assertThat(database()).isEqualTo(before); assertThat(files()).isEqualTo(files);
+        }
+    }
+
+    @Test
+    void oversizedRegisteredArtifactFailsBeforeReadingOrRepairingTheArchive() throws Exception {
+        var source = fixtures.source(false); fixtures.register(source); String run = UUID.randomUUID().toString();
+        extractions.importRun(run, fixtures.archive(source, run), "synthetic-registrant");
+        Path registered = Path.of(jdbc.queryForObject("SELECT raw_ref FROM extraction_runs WHERE run_id=?", String.class, run));
+        Path output = registered.resolve("attempt-1.output");
+        Files.setPosixFilePermissions(output, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+        Files.writeString(output, "x".repeat(8 * 1024 * 1024 + 1));
+        var before = database(); var files = files();
+        assertThatThrownBy(() -> reports.build(UUID.fromString(SourceReviewFixtures.version(source)), root, null))
+                .isInstanceOfSatisfying(PublicationException.class, ex -> assertThat(ex.code()).isEqualTo("REPORT_TOO_LARGE"));
+        assertThat(database()).isEqualTo(before); assertThat(files()).isEqualTo(files);
+    }
+
+    @Test
     void mutableRegisteredParentIsRejectedWithoutCreatingAnotherFrozenArchiveInPreview() throws Exception {
         var source = fixtures.source(false); fixtures.register(source); String run = UUID.randomUUID().toString();
         extractions.importRun(run, fixtures.archive(source, run), "synthetic-registrant");

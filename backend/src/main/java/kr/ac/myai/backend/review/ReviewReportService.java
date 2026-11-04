@@ -121,17 +121,18 @@ public class ReviewReportService {
         for (var row : saved.path("extractions")) {
             var extraction = mapper.createObjectNode(); extraction.set("database", row);
             var artifacts = extraction.putObject("artifacts");
+            extraction.putObject("archive_validation").put("status", "not_checked");
+            extraction.putObject("database_validation").put("status", "not_checked");
             extraction.set("validation", inspect(() -> {
-                if (row.path("receipt_json").isTextual()) {
-                    var receipt = parse(row.path("receipt_json"));
-                    for (var artifact : receipt.path("artifacts")) if (artifact.path("size").isIntegralNumber()
-                            && artifact.path("size").asLong() > ARTIFACT_LIMIT) throw error("REPORT_TOO_LARGE", "artifact");
-                }
                 String ref = row.path("raw_ref").textValue(); check(ref != null, "raw_ref"); Path path = Path.of(ref);
                 check(path.isAbsolute() && path.getFileName() != null && path.getFileName().toString().equals(row.path("run_id").asText()), "raw_ref");
+                checkArchiveSizes(path);
                 var run = archives.readSealed(row.path("run_id").asText(), path.getParent());
-                check(run.directory().equals(path), "raw_ref"); compareRun(row, run, originals);
+                check(run.directory().equals(path), "raw_ref");
+                extraction.putObject("archive_validation").put("status", "valid").put("checked_at", Instant.now().toString())
+                        .put("scope", "봉인·원본 전체 검증이며 DB 등록 일치와 별개입니다.");
                 extraction.set("receipt", run.receipt()); extraction.set("metadata", run.metadata());
+                extraction.set("database_validation", inspect(() -> { compareRun(row, run, originals); return null; }));
                 for (var artifact : run.receipt().path("artifacts").properties()) {
                     String name = artifact.getKey();
                     check(Set.of("input.json", "metadata.json").contains(name)
@@ -145,8 +146,11 @@ public class ReviewReportService {
                     }));
                 }
                 for (var item : artifacts) if (item.path("validation").path("status").asText().equals("invalid")) throw error("REPORT_ARTIFACT_INVALID", "artifacts");
+                check(extraction.path("database_validation").path("status").asText().equals("valid"), "database_reference");
                 return null;
             }));
+            if (extraction.path("archive_validation").path("status").asText().equals("not_checked"))
+                extraction.set("archive_validation", extraction.path("validation").deepCopy());
             budget.addRemainder(extraction, artifacts); extractions.add(extraction);
         }
         var events = report.putArray("events"); var grouped = new LinkedHashMap<String, ObjectNode>();
@@ -347,6 +351,21 @@ public class ReviewReportService {
         try { result.put("encoding", "utf-8").put("text", StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString()); }
         catch (CharacterCodingException ex) { result.put("encoding", "base64").put("base64", Base64.getEncoder().encodeToString(bytes)); }
         return result;
+    }
+
+    private void checkArchiveSizes(Path directory) {
+        try {
+            check(directory.normalize().equals(directory) && directory.toRealPath().equals(directory)
+                    && Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS), "raw_ref");
+            var names = new ArrayList<>(List.of("identity.json", "receipt.json", "input.json", "metadata.json"));
+            for (int attempt = 1; attempt <= 3; attempt++) for (String suffix : List.of("prompt", "output", "response", "exchange"))
+                names.add("attempt-" + attempt + "." + suffix);
+            for (String name : names) {
+                Path file = directory.resolve(name);
+                if (Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS) && Files.size(file) > ARTIFACT_LIMIT)
+                    throw error("REPORT_TOO_LARGE", "artifact");
+            }
+        } catch (IOException | SecurityException ex) { throw error("REPORT_FILE_UNAVAILABLE", "raw_ref"); }
     }
 
     private Path canonicalDirectory(Path path) {
