@@ -78,16 +78,24 @@ Task3은 새 클래스 부재의 compiler RED 뒤 실제202개 중201통과/1실
 
 **Files:** Create `backend/src/test/java/kr/ac/myai/backend/ExtractionUploadMySqlTest.java`, `backend/src/test/java/kr/ac/myai/backend/ExtractionUploadJarMySqlTest.java`, `contracts/extraction-upload.md`, `backend/docs/extraction-upload.md`. Modify `contracts/local-management-api.md`, `backend/README.md`, `backend/TASK.md`, `processing/README.md`, `processing/TASK.md`, `backend/docs/backup-recovery.md`, `backend/docs/review-report.md`와 이전 단계 종료 기록.
 
-- [ ] RED→GREEN: 실제 MySQL·JAR HTTP에서1·3시도·failed/빈/invalidUTF8·5MiB 경계·20MiB prompt·중복/경합·DB rollback·봉인 후 재-finalize를 기존 실제 Python으로 대조한다. 전체 D05 원본·오류·측정값을 보존하며 D06/공개는0으로 유지한다.
-- [ ] 실제 JAR에서 인증 전 multipart parsing/공용 원문 임시파일0·chunked/한도 오류와 자식 import/verify/freeze의 keyless 환경을 검증한다. 실제 자격정보 대신 합성 marker를 사용한다.
-- [ ] 작은 정상/실패 archive의 S10 전체 원본과 큰 prompt의 기존8MiB 보고서 거부를 대조한다. staging/extraction/source root와 DB를 같은 경로로 복원한 뒤 정확 재등록·기존 공개본 불변을 확인한다.
-- [ ] 실제 CLI 명령·명시 metadata/미상·새 HTTP/기존 CLI 한도·완료/중단 UUID·정확 재시도·private 보존/백업·오류·S10 경계·미완료를 한국어로 문서화한다. curl은 `--noproxy '*'`로 합성 proxy/direct 검증한다.
-- [ ] 전체 Java/MySQL test+bootJar, Python630 기존 전체 회귀, Node lint/test/build·계약 검증을 실행하고 실제 count/버전/exit/skip·원본 proof를 기록한다. CI 기존20분·모든 시험/산출물을 유지한다. 시간 초과 시 실제 원인을 확인한 뒤 수정한다.
-- [ ] Commit: `test: verify extraction upload integration`
+- [x] RED→GREEN: 실제 MySQL·JAR HTTP에서1·3시도·failed/빈/invalidUTF8·5MiB 경계·20MiB prompt·중복/경합·DB rollback·봉인 후 재-finalize를 기존 실제 Python으로 대조한다. 전체 D05 원본·오류·측정값을 보존하며 업로드의 D06/공개 변경은0으로 유지한다.
+- [x] 실제 JAR에서 인증 전 multipart parsing/관찰된 공용 원문 임시파일0·chunked/한도 오류와 자식 import/freeze 안의 verify도 같은 keyless 환경임을 검증한다. 별도 verify-sealed/check-draft는 Task1의 실제 자식 시험으로 대조한다. 실제 자격정보 대신 합성 marker를 사용한다.
+- [x] 작은 정상/실패 archive의 S10 전체 원본과 큰 prompt의 기존8MiB 보고서 거부를 대조한다. staging/extraction/source root와 DB를 같은 경로로 복원한 뒤 정확 재등록·기존 공개본 불변을 확인한다.
+- [x] 실제 CLI 명령·명시 metadata/미상·새 HTTP/기존 CLI 한도·완료/중단 UUID·정확 재시도·private 보존/백업·오류·S10 경계·미완료를 한국어로 문서화한다. curl은 `--noproxy '*'`로 합성 proxy/direct 검증한다.
+- [x] 전체 Java/MySQL test+bootJar, Python630 기존 전체 회귀, Node lint/test/build·계약 검증을 실행하고 실제 count/버전/exit/skip·원본 proof를 기록한다. CI 기존20분·모든 시험/산출물을 유지한다. 시간 초과 시 실제 원인을 확인한 뒤 수정한다.
+- [x] Commit: `test: verify extraction upload integration`
+
+Task4 첫 실제 MySQL/JAR15개에서는13통과·2실패였다. 신규 경로의 전체21MiB 초과가 기존 SOURCE_UPLOAD_TOO_LARGE로 반환된 유효 문제를 실제 매핑 HandlerMethod로 구분해 수정했다. 다른 실패는 시험용 trigger의 MySQL SUPER 권한 요구였으며, 전용 schema의 새 run 하나만 거부하는 CHECK로 바꿨다. 실제 CHECK는 내부 DB500, 중복 SQL은409, 분류된 접속 오류는503으로 구별하고 각 rollback·동일 재시도를 검증했다. 누락 part의 기존 INVALID_REQUEST422도 유지했다.
+
+신규/기존 업로드 MySQL·실제 JAR/API30개가 실패/오류/skip0이다. 공동 복구2개는 기존 전체 SQL·DDL·data dump·공개/내보내기·재기동·음성 대조를 유지하고, 백업 전 staging/put/finalize와 새 서버·원래 경로 복원 후 실제 저장된 control/stage의 re-finalize를 확인했다. S10 작은 정상/실패 전체 원본과20MiB prompt 거부도 대조했다.
+
+사용 안내의 bash5fence는 설정3값만 시험용으로 바꿔 실행했다. control의 실제 hash·배타 생성/덮어쓰기 거부, 프록시 대조1회와 문서4요청·4재전송의 프록시 추가0, D05/전체 원본·봉인·DB 불변·keyless를 확인했다. 실제 키·API·실자료·운영 서버는 사용하지 않았다. servlet 임시파일은2ms 관찰0과21MiB 메모리 threshold 범위의 증거이며 전원 중단 내구성 인수가 아니다.
+
+최종 로컬 전체 Java/MySQL은782개·59클래스·실패/오류/skip0·JAR 빌드7분3초이며 시험 중305개 source fingerprint가 같았다. Python3.13의630개/344.978초, Node24.21.0의34개·린트415파일·계약9개·정적 HTML build도 종료0이다. 정적 HTML build를 Flutter 앱 빌드로 표시하지 않는다. 실행은 기존 격리 run-mysql.py의 `./backend/gradlew -p backend test bootJar --no-daemon`, `python3.13 -m unittest discover -s processing/tests -v`, `npm run lint`, `npm test`, `npm run build`, `python3.13 contracts/validate_examples.py`다. 사용자 ignore/AGENTS·main·기존 서비스는 보존했다. 단계 전체 리뷰·원격 CI/AI·병합/통합은 아래 최종 gate에 남아 있다.
 
 ## 최종 게이트
 
-- [ ] 모든 호출부·환경·metadata/원본·기존 API·생성/조회/복구/오류·문서/계약의 전체 자체 검토, 유효 minor 포함 수정·재검증을 마친다.
+- [x] 모든 호출부·환경·metadata/원본·기존 API·생성/조회/복구/오류·문서/계약의 전체 자체 검토, 유효 minor 포함 수정·재검증을 마친다.
 - [ ] 새 문맥의 전체 브랜치 코드 리뷰1회 후 유효 지적을 전부 고치고 회귀·전체 자체 검토한다. 재리뷰를 추가하지 않는다.
 - [ ] PR→정확 head CI/AI 원문/새 사람 피드백→유효 미해결0→비main 병합·통합 검증·판단/비용 인계·비공개 증거 동결을 완료한다. main은 사람이 병합한다.
 

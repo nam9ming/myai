@@ -1,5 +1,7 @@
 # Python AI·계산 작업
 
+기존 수동 import/freeze를 [Java 로컬 결과 파일 업로드](../backend/docs/extraction-upload.md)에 연결합니다. 새로운 AI 실행이나 Python 의미 검증 복제 없이 시도1~3의 원본·실패를 보존합니다. CLI 기존 한도는 유지하며 실제 DB/JAR·복구·전체 회귀와 단계 종료는 [계획](../docs/superpowers/plans/2026-11-05-extraction-result-upload.md)에서 확인합니다.
+
 [G02 장문 분할](../contracts/chunked-extraction.md)은 block 계획·이전1block 문맥·v3 부분 근거·문서 cycle/실제 호출 분리·원출력 전체 보관·D08 첫/최종 평가·Java/사람 인계로 연결합니다. 기존 작은 v1 실행·큰 실패 원출력은 보존합니다. 전체 결합8MiB 초과나 일부 실패를 문서 성공으로 표시하지 않으며, 교차 chunk 사건 관계는 실제 사람 검토 대상입니다. 실제 장문 API·40문서/독립 gold·90%·승인/공개 인수와 합성 기능 검증은 구별합니다.
 
 현재 구현: C01~C10·calc-v1·Spring 연결과 [OpenAI API 실행·추출 검증·원본 보관](../contracts/extraction-run.md). 개발 단계는 기존 코드리뷰 OpenAI 키를 사용합니다. 공식 공사·행사·교통 개발 공지3건은 v1에서 근거 불일치로 실패했고 원본을 보존했습니다. 블록 hash·문자 수를 제공한 v2 비교 실행은 각각1회 기계 검증을 통과해 사건1건씩을 추출했습니다. 새 전용 MySQL8.4.13에 기존 D05 실패3/성공3과 개발 구역·사전 후보를 연결한 D06 숨김 초안3을 실제 JAR로 저장했습니다. 원래 미배정 초안·AI 원출력은 그대로 보존하며 후보를 확정하거나 사람 검토본으로 바꾸지 않았습니다. 실제 사람 검토본 전달·독립 정답표 평가는 미완료입니다. D06 숨김 초안 생성·Java 저장과 사람 검토 다음 revision 연결은 [안내](../backend/docs/ai-review-draft.md)를 따릅니다. 아래 전체 요구를 유지하며 합성 시험을 실제 처리 건수로 세지 않습니다.

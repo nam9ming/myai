@@ -8,6 +8,10 @@ import kr.ac.myai.backend.extraction.ExtractionArchiveReader;
 import kr.ac.myai.backend.extraction.ExtractionException;
 import kr.ac.myai.backend.importing.ImportException;
 import kr.ac.myai.backend.importing.ReviewedImportReader;
+import kr.ac.myai.backend.local.ExtractionUploadService;
+import kr.ac.myai.backend.local.ExtractionUploadStore;
+import kr.ac.myai.backend.local.LocalManagementService;
+import kr.ac.myai.backend.local.LocalRequestStore;
 import kr.ac.myai.backend.publication.PublicationCommand;
 import kr.ac.myai.backend.publication.PublicationCommandReader;
 import kr.ac.myai.backend.service.ExtractionImportService;
@@ -24,6 +28,7 @@ import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.env.MockEnvironment;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -178,7 +183,7 @@ class DatabaseRecoveryTest {
                 .put("same_absolute_materials_root", materials.toString()).put("all_tables_equal", true)
                 .put("missing_materials_reimport_rejected", true).put("public_http_and_export_equal", true)
                 .put("restart_rows_unchanged", true).put("data_dump_bytes_equal", true)
-                .put("relocated_materials_reimport_rejected", true));
+                .put("relocated_materials_reimport_rejected", true).put("manual_upload_staging_replayed", true));
         System.out.println("Synthetic database recovery proof: " + proof);
     }
 
@@ -239,11 +244,67 @@ class DatabaseRecoveryTest {
         var query = (ObjectNode) mapper.readTree(PythonProbe.REPO.resolve("contracts/examples/matches-request.json").toFile());
         query.put("mode", "replay").put("case_id", caseId).put("snapshot_id", first)
                 .put("point_id", request.path("points").get(0).path("point_id").asText()).put("selection", "needs_check");
-        return new Seed(validated, failed, goodArchive, failedArchive, handoff, revision, event, caseId, first, query);
+
+        // 기존 D05를 같은 원본 bytes로 HTTP 서비스 경로에 연결해 원래 행·공개 이력을 보존한다.
+        Path requests = directory(materials.resolve("requests"));
+        Path canonical = goodArchive.resolve(validated);
+        byte[] uploadInput = Files.readAllBytes(canonical.resolve("input.json"));
+        byte[] uploadMetadata = Files.readAllBytes(canonical.resolve("metadata.json"));
+        String inputHash = sha(uploadInput);
+        byte[] control = mapper.createObjectNode().put("schema_version", "extraction-import-request-v1")
+                .put("run_id", validated).put("expected_input_hash", inputHash).toString().getBytes(StandardCharsets.UTF_8);
+        JsonNode rowsBeforeUpload = database(jdbc), canonicalBeforeUpload = fileTree(goodArchive);
+        var uploads = uploadService(application, materials, goodArchive, handoff.directory());
+        assertThat(uploads.initialize(control, uploadMetadata, uploadInput).state()).isEqualTo("staged");
+        uploads.put(validated, 1, "prompt", Files.readAllBytes(canonical.resolve("attempt-1.prompt")));
+        uploads.put(validated, 1, "output", Files.readAllBytes(canonical.resolve("attempt-1.output")));
+        var finalized = uploads.finalizeUpload(validated, control);
+        assertThat(finalized.requestSha256()).isEqualTo(sha(control));
+        assertThat(finalized.data()).isInstanceOfSatisfying(ExtractionImportService.Result.class, result -> {
+            assertThat(result.runId()).isEqualTo(validated);
+            assertThat(result.status()).isEqualTo("validated");
+            assertThat(result.alreadyRegistered()).isTrue();
+            assertThat(result.reviewRequired()).isTrue();
+            assertThat(result.metadataSha256()).isEqualTo(sha(uploadMetadata));
+        });
+        var staged = new ExtractionUploadStore(requests.toString(), application.getBean(ReviewedImportReader.class))
+                .ready(validated, inputHash);
+        assertThat(staged.attempts()).isEqualTo(1);
+        assertThat(staged.artifacts()).extracting(ExtractionUploadStore.Artifact::name)
+                .containsExactly("control.json", "metadata.json", "input.json", "attempt-1.prompt", "attempt-1.output");
+        assertThat(staged.control()).isEqualTo(control);
+        assertThat(Files.readAllBytes(requests.resolve(sha(control) + ".json"))).isEqualTo(control);
+        assertThat(database(jdbc)).isEqualTo(rowsBeforeUpload);
+        assertThat(fileTree(goodArchive)).isEqualTo(canonicalBeforeUpload);
+        return new Seed(validated, failed, goodArchive, failedArchive, handoff, revision, event, caseId, first, query,
+                sha(control), staged.directory());
     }
 
-    private void verifyPrivateReplay(ServletWebServerApplicationContext application, Seed seed, Path materials) {
+    private void verifyPrivateReplay(ServletWebServerApplicationContext application, Seed seed, Path materials) throws Exception {
         var jdbc = application.getBean(JdbcTemplate.class);
+        String inputHash = jdbc.queryForObject("SELECT input_sha256 FROM extraction_runs WHERE run_id=?", String.class, seed.validatedRun());
+        Path requests = materials.resolve("requests");
+        var staged = new ExtractionUploadStore(requests.toString(), application.getBean(ReviewedImportReader.class))
+                .ready(seed.validatedRun(), inputHash);
+        assertThat(staged.directory()).isEqualTo(seed.uploadBundle());
+        assertThat(staged.runId()).isEqualTo(seed.validatedRun());
+        assertThat(staged.expectedInputHash()).isEqualTo(inputHash);
+        // 복원된 flat 요청과 staging의 실제 bytes를 읽는다. Seed에 원문을 보관해 대체하지 않는다.
+        byte[] control = Files.readAllBytes(requests.resolve(seed.uploadControlSha256() + ".json"));
+        assertThat(sha(control)).isEqualTo(seed.uploadControlSha256());
+        assertThat(staged.control()).isEqualTo(control);
+        JsonNode rowsBeforeUpload = database(jdbc), filesBeforeUpload = fileTree(materials);
+        var finalized = uploadService(application, materials, seed.validatedArchive(), seed.handoff().directory())
+                .finalizeUpload(seed.validatedRun(), control);
+        assertThat(finalized.requestSha256()).isEqualTo(seed.uploadControlSha256());
+        assertThat(finalized.data()).isInstanceOfSatisfying(ExtractionImportService.Result.class, result -> {
+            assertThat(result.runId()).isEqualTo(seed.validatedRun());
+            assertThat(result.status()).isEqualTo("validated");
+            assertThat(result.alreadyRegistered()).isTrue();
+            assertThat(result.reviewRequired()).isTrue();
+        });
+        assertThat(database(jdbc)).isEqualTo(rowsBeforeUpload);
+        assertThat(fileTree(materials)).isEqualTo(filesBeforeUpload);
         for (String run : List.of(seed.validatedRun(), seed.failedRun())) {
             Path stored = Path.of(jdbc.queryForObject("SELECT raw_ref FROM extraction_runs WHERE run_id=?", String.class, run));
             assertThat(application.getBean(ExtractionArchiveReader.class).read(run, stored.getParent()).directory()).isEqualTo(stored);
@@ -254,6 +315,22 @@ class DatabaseRecoveryTest {
                 .importFile(seed.handoff().file(), materials, seed.handoff().directory(), "synthetic-recovery-replay");
         assertThat(replay.alreadyImported()).isTrue();
         assertThat(replay.revisionIds()).containsExactly(seed.handoffRevision());
+    }
+
+    private ExtractionUploadService uploadService(ServletWebServerApplicationContext application, Path materials,
+                                                   Path archive, Path handoffRoot) {
+        var json = application.getBean(ReviewedImportReader.class);
+        String requests = materials.resolve("requests").toString();
+        var environment = new MockEnvironment().withProperty("myai.local-api.source-root", materials.toString())
+                .withProperty("myai.local-api.extraction-root", archive.toString())
+                .withProperty("myai.local-api.handoff-root", handoffRoot.toString())
+                .withProperty("myai.local-api.actor", "synthetic-recovery-upload");
+        var management = new LocalManagementService(json, application.getBean(PublicationCommandReader.class),
+                application.getBean(ReviewedImportService.class), application.getBean(ExtractionImportService.class),
+                application.getBean(HumanHandoffImportService.class), application.getBean(PublicationService.class),
+                new LocalRequestStore(requests), environment);
+        return new ExtractionUploadService(management, application.getBean(ExtractionArchiveReader.class),
+                new ExtractionUploadStore(requests, json), json, archive.toString());
     }
 
     private JsonNode publicResponses(ServletWebServerApplicationContext application, Seed seed) throws Exception {
@@ -478,5 +555,5 @@ class DatabaseRecoveryTest {
 
     private record Seed(String validatedRun, String failedRun, Path validatedArchive, Path failedArchive,
                         SourceReviewFixtures.Handoff handoff, String handoffRevision, String eventId,
-                        String caseId, String snapshotId, ObjectNode query) { }
+                        String caseId, String snapshotId, ObjectNode query, String uploadControlSha256, Path uploadBundle) { }
 }
