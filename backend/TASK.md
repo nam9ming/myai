@@ -1,5 +1,7 @@
 # 백엔드·DB 작업
 
+S10의 파일 방식 [로컬 검토 보고서](docs/review-report.md)를 추가했다. 원문·모든 D05 시도·현재/과거 D06·사람 수정·승인/공개 이력·오류·명시 preview를 private HTML로 비교한다. 읽기 전용 capture·sealed 검증·비웹 기동·private 출력을 적용하며 기계 검사와 실제 사람 검토/공개를 구별한다. 실제 자료·기기 인수와 운영 승인은 후속 작업이다.
+
 구현한 기능과 실행 명령, 미완료 범위는 [README](README.md)에 기록합니다. 합성 API·초기 스키마·비공개 검토본 import와 로컬 승인·미리보기·공개·복구·snapshot JSON 내보내기를 구현했습니다. 공개 API는 DB snapshot을 조회하며 matches를 실제 Python 계산에 연결했습니다. [import 규격](docs/reviewed-import.md)·[승인·공개·내보내기 안내](docs/review-publication.md)·[공개 조회 안내](docs/public-snapshot-api.md)와 README의 Python 설정을 따릅니다.
 
 D03 선등록·D05 archive 검증/등록·D06 실행 참조는 [연결 안내](docs/extraction-run-import.md)를 따른다. Python OpenAI 개발용 실행의 api archive도 같은 경로로 등록하며 Java가 직접 AI를 호출하지 않는다. D06 숨김 초안과 검토 승격은 [초안 안내](docs/ai-review-draft.md)를 따른다. 개발용 실제 3건은 새 전용 시험 DB에서 D03 3문서/3버전·기존 D05 실패3/성공3·후보 연결 D06 숨김 초안3 저장을 확인했다. 구역·사전 후보와 원문 이용 검토는 미확정이며, 실제 사람 검토·독립 평가·승인/공개·배포는 후속 작업이다.
