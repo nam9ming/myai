@@ -103,7 +103,7 @@ public class ApiExceptionHandler implements ResponseBodyAdvice<Object> {
 
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
     public ResponseEntity<ErrorResponse> unsupportedMedia() {
-        return response(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "UNSUPPORTED_MEDIA_TYPE", "application/json 요청을 사용해 주세요.", List.of());
+        return response(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "UNSUPPORTED_MEDIA_TYPE", "이 경로에서 지원하는 Content-Type을 사용해 주세요.", List.of());
     }
 
     @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
