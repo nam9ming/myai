@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import kr.ac.myai.backend.controller.ApiExceptionHandler;
 import kr.ac.myai.backend.controller.PublicNoticeController;
 import kr.ac.myai.backend.dto.MatchRequest;
+import kr.ac.myai.backend.logging.PublicRequestLogFilter;
 import kr.ac.myai.backend.service.PublicNoticeService;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -43,25 +44,25 @@ class DatabaseErrorResponseTest {
 
     @ParameterizedTest
     @MethodSource("retryableFailures")
-    void unavailableStorageReturnsSafeRetryable503(RuntimeException failure) throws Exception {
-        assertResponse(failure, 503, "DATABASE_UNAVAILABLE", true);
+    void unavailableStorageReturnsSafeRetryable503(RuntimeException failure, CapturedOutput output) throws Exception {
+        assertResponse(failure, 503, "DATABASE_UNAVAILABLE", true, output);
     }
 
     @ParameterizedTest
     @MethodSource("permanentFailures")
-    void permanentSqlErrorsReturn500AndLogRequestId(RuntimeException failure, CapturedOutput output) throws Exception {
-        String requestId = assertResponse(failure, 500, "INTERNAL_ERROR", false);
-        assertThat(output.getAll()).contains(requestId, failure.getClass().getSimpleName());
+    void permanentSqlErrorsReturnSafe500WithOneRequestLog(RuntimeException failure, CapturedOutput output) throws Exception {
+        assertResponse(failure, 500, "INTERNAL_ERROR", false, output);
     }
 
-    private String assertResponse(RuntimeException failure, int expectedStatus, String code, boolean retryable) throws Exception {
+    private void assertResponse(RuntimeException failure, int expectedStatus, String code, boolean retryable, CapturedOutput output) throws Exception {
         var service = new PublicNoticeService() {
             public JsonNode config(String mode, UUID caseId) { throw failure; }
             public JsonNode matches(MatchRequest query) { throw failure; }
             public JsonNode event(UUID eventId, UUID snapshotId) { throw failure; }
         };
         var mvc = MockMvcBuilders.standaloneSetup(new PublicNoticeController(service)).setControllerAdvice(new ApiExceptionHandler())
-                .setMessageConverters(new MappingJackson2HttpMessageConverter(mapper)).build();
+                .setMessageConverters(new MappingJackson2HttpMessageConverter(mapper))
+                .addFilters(new PublicRequestLogFilter()).build();
         var response = mvc.perform(get("/api/v1/config")).andReturn().getResponse();
         assertThat(response.getStatus()).isEqualTo(expectedStatus);
         var json = mapper.readTree(response.getContentAsString(StandardCharsets.UTF_8));
@@ -71,6 +72,17 @@ class DatabaseErrorResponseTest {
         assertThat(json.toString()).doesNotContain(PRIVATE_DETAIL, "PRIVATE_SQL_DETAIL", "SQLException", "stack_trace");
         String requestId = json.path("request_id").asText();
         assertThat(UUID.fromString(requestId)).isNotNull();
-        return requestId;
+        assertThat(response.getHeader("X-Request-ID")).isEqualTo(requestId);
+        var lines = output.getAll().lines().filter(line -> line.contains("public_request ")).toList();
+        assertThat(lines).hasSize(1);
+        JsonNode log = mapper.readTree(lines.getFirst().substring(lines.getFirst().indexOf("public_request ") + "public_request ".length()));
+        assertThat(log.size()).isEqualTo(5);
+        assertThat(log.path("request_id").textValue()).isEqualTo(requestId);
+        assertThat(log.path("error_code").textValue()).isEqualTo(code);
+        assertThat(log.path("latency_ms").longValue()).isNotNegative();
+        assertThat(log.path("snapshot_id").isNull()).isTrue();
+        assertThat(log.path("rules_version").isNull()).isTrue();
+        assertThat(output.getAll()).doesNotContain(PRIVATE_DETAIL, "PRIVATE_SQL_DETAIL", "SQLException",
+                failure.getClass().getSimpleName(), "stack_trace", "at kr.ac.myai");
     }
 }
