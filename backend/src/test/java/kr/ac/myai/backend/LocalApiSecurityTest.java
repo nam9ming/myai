@@ -76,7 +76,7 @@ class LocalApiSecurityTest {
         appender.stop();
     }
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "valid auth scheme [{index}]")
     @ValueSource(strings = {"Bearer", "bearer", "BEARER"})
     void exactTokenAndActualSocketPortReachDomainWithoutReadingBody(String scheme) throws Exception {
         var request = request();
@@ -120,7 +120,7 @@ class LocalApiSecurityTest {
         denied(request, 403, "LOCAL_API_FORBIDDEN");
     }
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "authorization rejection [{index}]")
     @NullAndEmptySource
     @ValueSource(strings = {"Basic SYNTHETIC_PRIVATE_CREDENTIAL", "Bearer", "Bearer wrong", "Bearer SYNTHETIC_LOCAL_TOKEN_0123456789_abcdef ", "Bearer SYNTHETIC_LOCAL_TOKEN_0123456789_abcdeg", "bearer sYNTHETIC_LOCAL_TOKEN_0123456789_abcdef"})
     void malformedOrMissingTokenStopsBeforeBodyAndDomain(String authorization) throws Exception {
