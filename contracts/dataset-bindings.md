@@ -20,6 +20,8 @@ snapshot_ref는 extraction `freeze` 결과의 `RUN_ID` 또는 `registered/RECEIP
 
 모든 실행을 기존 `verify_run`으로 오프라인 재검증한다. 실패 원출력·최대3시도의 요청/응답을 포함한 전체 artifact hash를 확인하고 파일0400·실행 디렉터리0500·정확한 파일 목록을 요구한다. 변경 가능 원본을 입력하면 검사기가 freeze/chmod로 고치지 않고 거부한다. 준비 단계에서 별도로 `processing.extraction freeze RUN_ID --root ROOT`를 수행한다.
 
+[장문 archive-v2](chunked-extraction.md)도 같은 경로로 대조한다. 최대3회는 문서 전체 cycle이며 실제 HTTP 전송 시도는 receipt.total_calls다. chunk-plan·모든 subrequest·전체 파생 output을 함께 검사/보관하고, 실패나 일부 성공을 새 문서·전체 성공으로 세지 않는다.
+
 ## 실행·출력
 
 ```sh

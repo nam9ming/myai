@@ -31,6 +31,7 @@ python3.13 -m venv .venv
 | `extraction/prompt.py`, `metadata.py` | 고정 프롬프트·문서/블록/hash 제약·D05 제공값 검증 |
 | `extraction/archive.py`, `__main__.py` | 비공개 준비/수동 가져오기/무결성 검증·실패 원출력 보존 |
 | `extraction/api.py` | 고정 OpenAI Responses API·최대3시도·요청/응답/전송 상태 보관·오프라인 재검증 |
+| `extraction/chunks.py`, `chunk_archive.py` | 장문 block 계획·원문 근거/ID 보존·문서 cycle/실제 호출 분리·v2 원본 전체 재검증 |
 | `extraction/rules.py`, `rule_runs.py` | 고정 키워드/날짜/지명 기준선·AI와 분리한 규칙 실행 원본 보관 |
 | `extraction/draft.py` | 검증된 원출력→숨김 검토 초안·안정 ID·근거 hash 변환·미상 보존 |
 | `evaluation/dataset.py`, `storage.py`, `__main__.py` | D08 문서/사건 연결·분할 검증·비공개 manifest 불변 보관·CLI |
@@ -253,6 +254,14 @@ python3.13 -m processing.extraction rules-verify RUN_UUID
 출력은 기존8필드 채점기와 D08 선택/최초·재시험 동결의 `method=rules`에 연결합니다. 사건/생성 의미 판정 annotation은 사람이 제공하며,1회 실행이므로 first/final annotation이 같아야 합니다. 선택한 모든 실행의 규칙/프로필 버전·SHA가 같아야 하고, policy에는 프로필 검토자·실행 전 고정 시각·development_only/holdout_feedback/unknown 선언을 남깁니다. initial은 development_only만 받으며 holdout_feedback 재시험은 의미 피드백·노출 표시가 필요합니다. 신원·실제 사전 고정의 진실성은 인증하지 않습니다.
 
 위 평가 CLI를 그대로 사용합니다. 보관본은6파일 규칙 원본·gold·initial 전체를 포함하며 원래 경로 없이 재검증합니다. 기존 AI 평가 형식/바이트도 유지합니다. 세 방법의 짝지은 개선/악화 비교는 아래 별도 CLI를 사용합니다. 실제 지명 검토·독립 정답·40건 평가를 수행한 결과가 아닙니다. Windows와 전원 중단 내구성은 미검증이며 POSIX 권한은 WORM이 아닙니다.
+
+## 장문 API 분할
+
+기존 `run` 명령은 전체 v2 첫 요청 body가131072bytes를 넘으면 [prompt-v3/archive-v2 분할](../contracts/chunked-extraction.md)을 사용합니다. 원문 block을 자르지 않고 연속 core와 이전1block을 보내며, token 한도와 구별한 팀 body 예산·4096bytes 피드백 여유를 적용합니다. 단일 block과 필수 문맥 자체가 초과하면 API를 호출하지 않고 원본·계획·실패를 보관합니다.
+
+metadata.attempts는 최대3개의 문서 cycle이고, 실제 호출 수는 receipt.total_calls입니다. 각 cycle에서 chunk마다1요청만 하며 retryable 실패이면 전체 새 cycle을 실행합니다. 모든 실제 요청/응답/실패와 전체 파생 결과를 남기고 사용량 미상은 합계null입니다. 기존 작은 API 요청·수동 import·v1/v2 프롬프트와 보관 bytes는 유지합니다.
+
+전송하지 않은 block 인용과 문서 전체 not_stated 추정을 거부합니다. chunk 사이 사건·일정·장소를 임의로 합치지 않으며, v2 직접 draft/check-draft는 `CHUNK_DRAFT_REVIEW_REQUIRED`입니다. 실제 사람이 전체 관계를 확인한 human-review/handoff를 사용합니다. D08은 `api-document-cycle-v1`·`prompt-v2-or-v3` 정책으로 첫/최종 전체 문서 결과를 평가하고 기존 정책은 v1만 받습니다. 기계 검증을 실제 사람 검토·40문서 정확도 성과로 표시하지 않습니다.
 
 ## 실제 입력 길이 진단
 

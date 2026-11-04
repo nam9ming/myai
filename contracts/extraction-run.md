@@ -2,6 +2,8 @@
 
 Python3.13 표준 라이브러리로 `manual_import`와 OpenAI `api` 실행을 지원합니다. 네트워크 호출은 명시적인 `run`만 수행하며 `verify/freeze/draft/check-draft`와 계산 CLI·Java 공개 조회는 AI를 호출하지 않습니다. Python은 DB를 쓰지 않습니다. 입력·원출력·프롬프트·메타데이터는 비공개 기록이며, 공개 snapshot으로 직접 전달하지 않습니다.
 
+장문 API는 [분할 계약](chunked-extraction.md)의 prompt-v3/archive-v2를 사용합니다. 아래 단일 요청·attempt 파일 설명은 archive-v1 기준입니다. v2는 최대3개의 문서 cycle 안에서 각 chunk를1회씩 호출하고, 실제 subrequest와 전체 파생 결과를 구별합니다. 기존 v1 보관본·큰 실패 원출력의 검증/보존은 유지합니다.
+
 ## 입력·검증
 
 - 입력은 [ai-input-v1.json](schemas/ai-input-v1.json)의 정확한5키입니다. `data_kind`는 로컬 합성/실제 구분이며 모델 자료에는 넣지 않습니다. 제목·블록은 NFC·LF 전처리가 끝난 텍스트여야 합니다. 게시일 미상은 null이며 현재 시각으로 채우지 않습니다.

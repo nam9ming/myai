@@ -32,19 +32,19 @@
 **Files:** `processing/extraction/chunks.py` 신규, `prompt.py` 수정, `processing/tests/test_extraction_chunks.py` 신규. 소유 worker1.
 **Interfaces:** `plan_chunks(document, model, input_sha256, *, request_limit=131072)`→계약 plan dict; `chunk_document(document, chunk)`→기존 입력5키의 부분집합; `chunk_request_bytes(document, model, chunk, error_path=None)`→실제 v3 request bytes; `validate_chunk_output(content, document)`→기존 parse_output+부분 문맥 검사; `assemble_outputs(document, plan, outputs)`→문서 전체 파생 output dict. `outputs`는 plan 순서의 validated chunk output dict 목록.
 
-- [ ] RED: 강제 작은 예산의2+chunk·core 전체 coverage·정확한 인접1block·원문 ID/hash/emoji offset·계획 재현성/경계·단일 oversized block requires_review를 assert한다.
-- [ ] RED: v1/v2 byte 고정, v3 범위/metadata·외부 block 인용/전체 not_stated/경고 누락 거부, 같은 local ID remap·사건 임의 융합 없음·전부 사건 없음/일부 사건 없음 경고를 assert한다.
-- [ ] GREEN: 위 순수 함수를 구현하고 해당 unittest를 실행한다. 모델 호출·키·DB·파일 쓰기를 넣지 않는다.
-- [ ] 전체 입력8MiB의 다수 블록에서 불필요한 반복 직렬화를 피하고, 계약/부모 caller와 signature를 맞춘 뒤 커밋한다.
+- [x] RED: 강제 작은 예산의2+chunk·core 전체 coverage·정확한 인접1block·원문 ID/hash/emoji offset·계획 재현성/경계·단일 oversized block requires_review를 assert한다.
+- [x] RED: v1/v2 byte 고정, v3 범위/metadata·외부 block 인용/전체 not_stated/경고 누락 거부, 같은 local ID remap·사건 임의 융합 없음·전부 사건 없음/일부 사건 없음 경고를 assert한다.
+- [x] GREEN: 위 순수 함수를 구현하고 해당 unittest를 실행한다. 모델 호출·키·DB·파일 쓰기를 넣지 않는다.
+- [x] 전체 입력8MiB의 다수 블록에서 불필요한 반복 직렬화를 피하고, 계약/부모 caller와 signature를 맞춘 뒤 커밋한다.
 
 ### Task 2: API cycle·v2 원본 보관·오프라인 재검증
 
 **Files:** `processing/extraction/chunk_archive.py` 신규, `api.py`, `archive.py`, 필요 CLI, `processing/tests/test_chunked_extraction.py`. 부모 소유.
 **Interfaces:** 기존 `run_api`/`verify_run`/`freeze_run`/`verify_sealed_run` 반환/종료는 유지한다. v2 exact receipt/artifact는 새 계약에 고정한다. 큰 새 입력에서만 분할 실행하고 완료 ID는 저장 형식으로 키 없이 재사용한다.
 
-- [ ] RED: 실제 모의 transport 다중chunk 호출·cycle 첫 실패/최종 성공·모든 cycle 실패·영구 오류 뒤 미시도·계획 불가 호출0·실제 total_calls/nullable usage·전체 파생 output을 assert한다.
-- [ ] GREEN: 기존 request/response 검사·archive 쓰기/identity·freeze를 재사용하고 v2에서만 확장한다. chunk마다 중첩 재시도하지 않는다.
-- [ ] RED→GREEN: 정확한 plan/요청/응답/실행 순서/receipt·전체 output 재계산, artifact 누락/추가/변조·동시ID/중단·원본 보존·봉인 무쓰기를 검사한다.
+- [x] RED: 실제 모의 transport 다중chunk 호출·cycle 첫 실패/최종 성공·모든 cycle 실패·영구 오류 뒤 미시도·계획 불가 호출0·실제 total_calls/nullable usage·전체 파생 output을 assert한다.
+- [x] GREEN: 기존 request/response 검사·archive 쓰기/identity·freeze를 재사용하고 v2에서만 확장한다. chunk마다 중첩 재시도하지 않는다.
+- [x] RED→GREEN: 정확한 plan/요청/응답/실행 순서/receipt·전체 output 재계산, artifact 누락/추가/변조·동시ID/중단·원본 보존·봉인 무쓰기를 검사한다.
 - [ ] v1 전체 회귀와 새 CLI subprocess를 실행한다. 실제 외부 API 없이 통과한 뒤 커밋한다.
 
 ### Task 3: Java 등록·보고서·사람 인계
@@ -52,16 +52,16 @@
 **Files:** `ExtractionArchiveReader.java`, `HumanHandoffArchiveReader.java`, `ReviewReportService.java`와 관련 backend test. 소유 worker2.
 **Interfaces:** v2도 metadata attempts/receipt.attempts.size는1~3이며 마지막 `attempt-N.output`은 전체 파생 출력이다. v1 exact branch 유지. 새 `ExtractionArchiveReader.artifactNames(JsonNode)`는 버전별 exact names·v2 chunk status/attempted 구조를 검증해 반환한다.
 
-- [ ] RED→GREEN: 실제 Python v2 봉인 생성→Java reader의 validated/failed·재사용·참조변조·마지막 output hash를 검사한다. 기존 DB CHECK/VerifiedExtraction 변경이나 migration은 필요가 입증되지 않으면 추가하지 않는다.
-- [ ] RED→GREEN: 보고서 모든 subrequest와 파생 output 표시·8MiB/artifact/64MiB 전체 한도·악성 파일명/누락 거부, v2 부모의 실제 human-review/handoff 인계를 검사한다.
-- [ ] parent의 Python 생성기가 준비되면 실제 관련 Java/MySQL/JAR 시험을 부모가 단독 실행한다. worker는 Git·Gradle·Docker를 실행하지 않는다.
+- [x] RED→GREEN: 실제 Python v2 봉인 생성→Java reader의 validated/failed·재사용·참조변조·마지막 output hash를 검사한다. 기존 DB CHECK/VerifiedExtraction 변경이나 migration은 필요가 입증되지 않으면 추가하지 않는다.
+- [x] RED→GREEN: 보고서 모든 subrequest와 파생 output 표시·8MiB/artifact/64MiB 전체 한도·악성 파일명/누락 거부, v2 부모의 실제 human-review/handoff 인계를 검사한다.
+- [x] parent의 Python 생성기가 준비되면 실제 관련 Java/MySQL/JAR 시험을 부모가 단독 실행한다. worker는 Git·Gradle·Docker를 실행하지 않는다.
 
 ### Task 4: 평가·직접 초안 경계·전체 통합
 
 **Files:** Python `draft.py`, evaluation `records.py`/관련 tests, `contracts/chunked-extraction.md`·기존 계약/README/TASK. 부모 소유.
 **Interfaces:** v2 직접 draft는 `CHUNK_DRAFT_REVIEW_REQUIRED`; 실제 사람 검토는 기존 전체 first/final/changes·handoff 경로. 새 평가 policy `api-document-cycle-v1`은 v1 단일 요청/v2 분할의 전체 문서 cycle을 허용하며 기존 policy는 v1만 받는다.
 
-- [ ] RED→GREEN: 직접 v2 draft 거부·사람 수정/인계 성공, 첫 실패/최종 성공과 전체 실패·누락/중복 분모, 혼합 버전 policy·원본 동결/이전 v1 bytes를 검사한다.
+- [x] RED→GREEN: 직접 v2 draft 거부·사람 수정/인계 성공, 첫 실패/최종 성공과 전체 실패·누락/중복 분모, 혼합 버전 policy·원본 동결/이전 v1 bytes를 검사한다.
 - [ ] Python 전체·Java/MySQL 전체·실제 합성 JAR·계약/Node/lint/build 실행, 전체 호출부/실패/원본 보존 자체 검토를 완료한다.
 - [ ] fresh 전체 검토1회→유효 minor 포함 수정·재검증→PR→정확 head CI/AI/새 사람 피드백→develop 병합·통합 gates→비공개 실행 증거 동결을 완료한다.
 

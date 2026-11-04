@@ -1,6 +1,6 @@
 # 장문 분할 추출
 
-구현 중인 `extraction-archive-v2` 계약이다. 기존 [archive-v1](extraction-run.md)·prompt-v1/v2 바이트/재검증은 유지한다. 실제 API 결과·사람 검토 성과를 뜻하지 않는다.
+장문 분할의 `extraction-archive-v2` 계약이다. 기존 [archive-v1](extraction-run.md)·prompt-v1/v2 바이트/재검증은 유지한다. 실제 API 결과·사람 검토 성과를 뜻하지 않는다.
 
 ## 실행과 분할 계획
 
@@ -36,15 +36,17 @@ metadata는 기존 정확한 키를 유지하고 `attempts=문서 cycle 수(1~3)
 
 결합은 모든 chunk의 local item/occurrence/location/evidence ID와 참조를 결정적으로 namespace하고 원문 전체로 다시 검증한다. 같은 제목·날짜·주소·근거만으로 사건/occurrence를 융합·삭제하지 않는다. 전체 warning에는 `CHUNK_RELATIONS_REQUIRE_REVIEW`를 남긴다. 일부 chunk의 NO_EVENT_FOUND는 다른 chunk에 item이 있으면 전체 warning에서 제거하며, 모든 coverage가 성공하고 모두 사건0개일 때만 전체 NO_EVENT_FOUND를 남긴다. 원래 chunk output bytes는 변경하지 않는다.
 
+원출력은 파일별 hash를 대조해 순차로 결합하고, 각 chunk 뒤 최종 warning을 포함한 canonical 전체 결과8MiB를 검사한다. 초과는 CHUNK_OUTPUT_LIMIT·review·재시도 불가인 문서 실패다. 이미 실행한 모든 chunk의 원출력은 보존하며 전체 실패 output은 빈 bytes로 남긴다. 일부 성공을 완성 문서로 내보내거나, 모든 chunk의 decoded 출력 객체를 무제한 메모리에 쌓지 않는다.
+
 실제 호출 전체의 공급자 usage를 합산하고 한 호출이라도 미상이면 합계null이다. 호출0이면 usage0/0이며 실제 시작/종료 시각을 남긴다. 모델 세부버전·금액·통화는 추정하지 않는다. exchange 시각 순서·metadata 시작/끝·요청/응답·결합 결과를 오프라인으로 재계산한다.
 
 ## v2 archive exact 구조
 
-identity의 키는 기존7키와 같으며 format_version만 extraction-archive-v2다. receipt는 기존12키에 `chunk_plan_sha256,total_calls`를 더한다. total_calls는 모든 cycle에서 실제 attempted=true인 HTTP 호출 수다. receipt.attempts는1~3개이며 각 항목은 기존 `attempt,status,error_code,error_path,failure_kind,retryable`에 `chunks`를 더한다.
+identity의 키는 기존7키와 같으며 format_version만 extraction-archive-v2다. receipt는 기존12키에 `chunk_plan_sha256,total_calls`를 더한다. total_calls는 모든 cycle에서 실제 attempted=true인 HTTP 전송 시도 수이며 서버 수신·과금 완료를 인증하지 않는다. receipt.attempts는1~3개이며 각 항목은 기존 `attempt,status,error_code,error_path,failure_kind,retryable`에 `chunks`를 더한다.
 
 각 chunks 항목은 정확히 `chunk_id,attempted,status,error_code,error_path,failure_kind,retryable`다. attempted=false는 status=not_attempted, error_code=CHUNK_REQUEST_LIMIT(계획 불가) 또는 CHUNK_NOT_ATTEMPTED(선행 영구 실패), error_path=null, failure_kind=review,retryable=false다. 실제 요청 body 초과도 attempted=false·CHUNK_REQUEST_LIMIT이다. attempted=true 결과5키는 실제 검사에서 재계산한다.
 
-artifact 집합은 정확히 input.json·metadata.json·chunk-plan.json, 각 cycle의 attempt-N.prompt/output, 각 attempted subrequest의4파일이다. 전체 파일의 size/SHA·canonical identity/receipt·순서·계획·cycle 결과를 재검증하며 누락/추가/변조를 거부한다. 기존 freeze/봉인·읽기 전용 verify-sealed를 그대로 사용하고 archive-v1 검사를 완화하지 않는다. 파일8MiB·보고서 전체64MiB 초과는 기존 명시 오류이며 잘라 성공으로 표시하지 않는다.
+artifact 집합은 정확히 input.json·metadata.json·chunk-plan.json, 각 cycle의 attempt-N.prompt/output, 각 attempted subrequest의4파일이다. 전체 파일의 size/SHA·canonical identity/receipt·순서·계획·cycle 결과를 재검증하며 누락/추가/변조를 거부한다. 기존 freeze/봉인·읽기 전용 verify-sealed를 그대로 사용하고 archive-v1 검사를 완화하지 않는다. 입력·metadata·검증 출력/전체 파생 결과는8MiB다. 파생 plan은 유효한 입력보다 커질 수 있어 전체 canonical 계획을 재생성하고 실제 파일의 전체 size/SHA를 stream 대조한다. 보고서의 파일당8MiB·전체64MiB 초과는 기존 명시 오류이며 원본을 잘라 성공으로 표시하지 않는다.
 
 ## Java·사람 검토·평가
 
@@ -52,4 +54,4 @@ Java는 v1/v2 exact 이름을 구분하고 마지막 attempt-N.output hash를 �
 
 v2 직접 ai-draft/check-draft는 CHUNK_DRAFT_REVIEW_REQUIRED로 거부한다. 실제 사람 검토자가 전체 원문·모든 chunk·교차 chunk 관계를 확인한 human-review/handoff는 기존 경로로 저장할 수 있다. 사람 결과를 자동 결과에 끼워 넣지 않는다.
 
-D08 새 `api-document-cycle-v1` policy는 v1 단일 요청/v2 분할의 첫·최종 전체 문서 cycle을 평가한다. 기존 api-structure-retry-v1은 v1만 허용한다. first_raw 이름은 기존 인터페이스이며 v2에서 첫 cycle의 파생 결과임을 명시한다. 전체 실패/미시도·누락·중복 분모와 최초/재시험·원본을 유지한다. 실제 독립 gold·40문서/20·20/90%·사람/권리/기기/D09·운영/main 인수는 별도다.
+D08 새 `api-document-cycle-v1` policy는 prompt_version을 `prompt-v2-or-v3`으로 명시하고, v1의 prompt-v2 단일 요청/v2의 prompt-v3 분할을 고정된 선택 규칙으로 평가한다. 다른 provider/model/schema는 기존처럼 정확히 일치해야 한다. 기존 api-structure-retry-v1은 v1만 허용한다. first_raw 이름은 기존 인터페이스이며 v2에서 첫 cycle의 파생 결과임을 명시한다. 전체 실패/미시도·누락·중복 분모와 최초/재시험·원본을 유지한다. 실제 독립 gold·40문서/20·20/90%·사람/권리/기기/D09·운영/main 인수는 별도다.
