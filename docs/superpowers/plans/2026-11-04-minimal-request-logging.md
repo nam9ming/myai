@@ -34,9 +34,9 @@
 
 **Interfaces:** `PublicRequestLogContext.requestId()` → String; `selected(String snapshotId,String rulesVersion)`은 실제 선택본, `response(String snapshotId,String rulesVersion)`은 선택본이 아직 없을 때만 응답 metadata, `error(String code)`는 오류 코드. 모두 static이며 상태는 filter가 만든 request attribute에만 존재한다. 요청 밖 setter는 noop, ID는 기존 handler용 새 UUID fallback이다. 필터는 public no-arg 생성자이며 Servlet web context에서만 component로 등록한다.
 
-- [ ] ID 생성·헤더/외부ID무시·정확1회 compact JSON·시간≥0·성공null·예외fallback·연속 요청·요청 밖·Unicode/제어값·본문 미노출 시험부터 작성한다. 부모가 새 class/method 부재 RED를 확인한다.
-- [ ] 플랫폼 필터·request attribute·기존 Jackson/SLF4J만 사용해 구현한다. 요청 body/경로/주소를 읽거나 response wrapper를 만들지 않는다. 부모가 집중 시험 GREEN을 확인한다.
-- [ ] 소유 파일만 부모 검토/커밋 대상으로 전달한다. DB/Docker/Gradle/Git·외부 API·private 자료 접근은 부모만 수행한다.
+- [x] ID 생성·헤더/외부ID무시·정확1회 compact JSON·시간≥0·성공null·예외fallback·연속 요청·요청 밖·Unicode/제어값·본문 미노출 시험부터 작성한다. 부모가 새 class/method 부재 RED를 확인한다.
+- [x] 플랫폼 필터·request attribute·기존 Jackson/SLF4J만 사용해 구현한다. 요청 body/경로/주소를 읽거나 response wrapper를 만들지 않는다. 부모가 집중 시험 GREEN을 확인한다.
+- [x] 소유 파일만 부모 검토/커밋 대상으로 전달한다. DB/Docker/Gradle/Git·외부 API·private 자료 접근은 부모만 수행한다.
 
 ### Task 2: 오류·응답 관찰
 
@@ -44,8 +44,8 @@
 
 **Interfaces:** Task1의4개 public static 메서드만 사용한다. 기존 `ErrorResponse` record/JSON shape를 유지하고 UUID 생성·중복 protocol/Throwable 로그를 공통 상태로 옮긴다. 기존 advice에 `ResponseBodyAdvice<Object>`를 구현해 ErrorResponse.code와 JsonNode의 snapshot_id/data.rules_version만 관찰한다. body 객체는 그대로 반환한다.
 
-- [ ] 정상·domain/DB/일반/잘못된 입력·퇴역 오류·없는/비정상 metadata·기존 선택본 보존·private cause 미노출 시험부터 작성한다. 부모가 RED를 확인한다.
-- [ ] 공통 ID·필드 관찰을 연결한다. 오류 응답 메시지/상태/필드/재시도 의미는 유지한다. 필터 포함 MockMvc에서 로그1회·동일 ID·본문/stack 미노출 GREEN을 확인한다.
+- [x] 정상·domain/DB/일반/잘못된 입력·퇴역 오류·없는/비정상 metadata·기존 선택본 보존·private cause 미노출 시험부터 작성한다. 부모가 RED를 확인한다.
+- [x] 공통 ID·필드 관찰을 연결한다. 오류 응답 메시지/상태/필드/재시도 의미는 유지한다. 필터 포함 MockMvc에서 로그1회·동일 ID·본문/stack 미노출 GREEN을 확인한다.
 
 ### Task 3: 실제 선택 버전·웹 연결·전체 검증
 
@@ -53,8 +53,8 @@
 
 **Interfaces:** `PublicRequestLogContext.selected(snapshot_id,rules_version)`만 실제 load/active 성공 직후 호출한다. 일반 load/envelope/history 루프에 넣지 않는다. HTTP 응답 JSON은 수정하지 않고 CORS exposedHeaders에 X-Request-ID만 추가한다.
 
-- [ ] fixture 정상/422/413/CORS와 실제 서비스 계산 protocol 실패·재현 목록/history/retired 경계에서 metadata 보존·null·ID와1회 로그를 먼저 시험해 RED 확인한다.
-- [ ] 세 선택 지점과 CORS를 연결하고 코드/문서에 로그 범위·알 수 없는 값·운영 보존 정책 미확정을 기록한다.
+- [x] fixture 정상/422/413/CORS와 실제 서비스 계산 protocol 실패·재현 목록/history/retired 경계에서 metadata 보존·null·ID와1회 로그를 먼저 시험해 RED 확인한다.
+- [x] 세 선택 지점과 CORS를 연결하고 코드/문서에 로그 범위·알 수 없는 값·운영 보존 정책 미확정을 기록한다.
 - [ ] 부모가 Java/MySQL·계약/Node/lint/build 및 필요한 Python 회귀를 실행한다. 저자 전체 리뷰 후 새 whole reviewer1명에게 전체 브랜치 검토를 맡긴다. 유효 지적은 minor 포함 모두 수정·RED→GREEN, PR 제출 후 정확 head CI/AI/사람 피드백을 확인해 미해결0을 유지한다.
 - [ ] 승인된 develop 병합·통합 PR20 검증·인계 기록 후 다음 남은 요구를 점검한다. main/배포·실자료/운영 인수 완료로 표시하지 않는다.
 

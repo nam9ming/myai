@@ -9,6 +9,7 @@ import kr.ac.myai.backend.calculation.PythonCalculator;
 import kr.ac.myai.backend.calculation.CalculationResponse;
 import kr.ac.myai.backend.exception.ApiException;
 import kr.ac.myai.backend.importing.ImportException;
+import kr.ac.myai.backend.logging.PublicRequestLogContext;
 import kr.ac.myai.backend.publication.PublicationContent;
 import kr.ac.myai.backend.publication.PublicationException;
 import kr.ac.myai.backend.repository.PublicSnapshotRepository;
@@ -50,6 +51,7 @@ public class SnapshotNoticeService implements PublicNoticeService {
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public JsonNode config(String mode, UUID caseId) {
         JsonNode snapshot = active(mode, caseId);
+        PublicRequestLogContext.selected(snapshot.path("snapshot_id").textValue(), snapshot.path("rules_version").textValue());
         var data = content.select(snapshot, "created_at data_kind timezone window_days radius_m document_count event_count mode case_id anchor_date reference_instant knowledge_cutoff history_fidelity collection_range last_check_min last_check_max rules_version dictionary_version");
         data.put("server_now", Instant.now().toString());
         data.set("area", content.select(snapshot.path("area"), "area_id name description"));
@@ -82,6 +84,7 @@ public class SnapshotNoticeService implements PublicNoticeService {
 
     private CalculationInput calculationInput(MatchRequest query) {
         JsonNode snapshot = query.snapshotId() == null ? active(query.mode(), query.caseId()) : load(query.snapshotId().toString(), true);
+        PublicRequestLogContext.selected(snapshot.path("snapshot_id").textValue(), snapshot.path("rules_version").textValue());
         if (!snapshot.path("mode").asText().equals(query.mode()) || !Objects.equals(snapshot.path("case_id").textValue(), query.caseId() == null ? null : query.caseId().toString())) {
             throw ApiException.invalid("snapshot_id", "선택한 모드·사례와 같은 snapshot을 사용해 주세요.");
         }
@@ -110,6 +113,7 @@ public class SnapshotNoticeService implements PublicNoticeService {
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public JsonNode event(UUID eventId, UUID snapshotId) {
         JsonNode snapshot = load(snapshotId.toString(), true);
+        PublicRequestLogContext.selected(snapshot.path("snapshot_id").textValue(), snapshot.path("rules_version").textValue());
         JsonNode facts = findEvent(snapshot, eventId.toString());
         if (facts == null) throw new ApiException(HttpStatus.NOT_FOUND, "EVENT_NOT_FOUND", "공개 사건을 찾을 수 없습니다.", "event_id");
         ObjectNode event = publicEvent(snapshot, facts);

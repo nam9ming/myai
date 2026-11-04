@@ -1,22 +1,30 @@
 package kr.ac.myai.backend;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import kr.ac.myai.backend.calculation.PythonCalculator;
 import kr.ac.myai.backend.controller.ApiExceptionHandler;
+import kr.ac.myai.backend.controller.PublicNoticeController;
 import kr.ac.myai.backend.dto.MatchRequest;
 import kr.ac.myai.backend.exception.ApiException;
 import kr.ac.myai.backend.importing.ReviewedImportReader;
 import kr.ac.myai.backend.publication.PublicationContent;
 import kr.ac.myai.backend.repository.PublicSnapshotRepository;
 import kr.ac.myai.backend.service.SnapshotNoticeService;
+import kr.ac.myai.backend.logging.PublicRequestLogFilter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.http.MediaType;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.nio.file.Path;
 import java.time.*;
@@ -26,6 +34,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 
 @ExtendWith(OutputCaptureExtension.class)
 class SnapshotCalculationTest {
@@ -131,12 +140,89 @@ class SnapshotCalculationTest {
     @Test
     void protocolErrorLogsOnlySafePublicRequestId(CapturedOutput output) throws Exception {
         Path probe = PythonProbe.realEngine(root, "response['private_path']='PRIVATE_PATH'");
-        var service = service(CalculationFixtures.snapshot(mapper), calculator(probe), fixed); var q = query();
-        var error = (ApiException) catchThrowable(() -> service.matches(q));
-        var response = new ApiExceptionHandler().domain(error);
-        assertThat(response.getStatusCode().value()).isEqualTo(500);
-        assertThat(output.getAll()).contains(response.getBody().requestId(), "CALCULATION_PROTOCOL_ERROR")
+        var snapshot = CalculationFixtures.snapshot(mapper);
+        var service = service(snapshot, calculator(probe), fixed);
+        var response = mvc(service).perform(post("/api/v1/matches").contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsBytes(query()))).andReturn().getResponse();
+        assertThat(response.getStatus()).isEqualTo(500);
+        var body = mapper.readTree(response.getContentAsByteArray());
+        assertThat(body.path("request_id").textValue()).isEqualTo(response.getHeader("X-Request-ID"));
+        var log = requestLog(output, response);
+        assertThat(log.path("error_code").textValue()).isEqualTo("CALCULATION_PROTOCOL_ERROR");
+        assertThat(log.path("snapshot_id")).isEqualTo(snapshot.path("snapshot_id"));
+        assertThat(log.path("rules_version")).isEqualTo(snapshot.path("rules_version"));
+        assertThat(output.getAll())
                 .doesNotContain("PRIVATE_PATH", root.toString());
+    }
+
+    @Test
+    void selectedConfigMetadataSurvivesReplayFailure(CapturedOutput output) throws Exception {
+        var snapshot = CalculationFixtures.snapshot(mapper);
+        var replay = snapshot.deepCopy().put("snapshot_id", UUID.randomUUID().toString()).put("mode", "replay")
+                .put("case_id", UUID.randomUUID().toString()).put("rules_version", "other-rules")
+                .put("anchor_date", "2026-11-02").put("reference_instant", "2026-11-02T12:00:00Z")
+                .put("knowledge_cutoff", "2026-11-02T11:00:00Z").put("history_fidelity", "verified_snapshot");
+        var repository = mock(PublicSnapshotRepository.class);
+        var row = CalculationFixtures.published(snapshot, mapper);
+        var replayRow = CalculationFixtures.published(replay, mapper);
+        when(repository.head("current")).thenReturn(Optional.of(row.snapshot().id()));
+        when(repository.published(row.snapshot().id())).thenReturn(Optional.of(row));
+        when(repository.replayHeads(anyString(), anyString())).thenReturn(java.util.List.of(replayRow.snapshot().id()));
+        when(repository.published(replayRow.snapshot().id())).thenReturn(Optional.of(new PublicSnapshotRepository.Published(
+                replayRow.snapshot(), "invalid-schema", replayRow.createdAt(), replayRow.currentId())));
+        var response = mvc(service(repository, calculator(PythonProbe.REPO), fixed)).perform(get("/api/v1/config"))
+                .andReturn().getResponse();
+        assertThat(response.getStatus()).isEqualTo(500);
+        var log = requestLog(output, response);
+        assertThat(log.path("error_code").textValue()).isEqualTo("SNAPSHOT_INVALID");
+        assertThat(log.path("snapshot_id")).isEqualTo(snapshot.path("snapshot_id"));
+        assertThat(log.path("rules_version")).isEqualTo(snapshot.path("rules_version"));
+    }
+
+    @Test
+    void detailKeepsSelectedRulesInsteadOfHistoricSnapshot(CapturedOutput output) throws Exception {
+        var snapshot = CalculationFixtures.snapshot(mapper);
+        var older = snapshot.deepCopy().put("snapshot_id", UUID.randomUUID().toString()).put("rules_version", "older-rules");
+        String oldRevision = UUID.randomUUID().toString();
+        ((ObjectNode) older.path("event_public_payloads").get(0)).put("revision_id", oldRevision);
+        older.putArray("revision_ids").add(oldRevision);
+        var repository = mock(PublicSnapshotRepository.class);
+        var row = CalculationFixtures.published(snapshot, mapper);
+        var oldRow = CalculationFixtures.published(older, mapper);
+        String eventId = snapshot.path("event_public_payloads").get(0).path("event_id").asText();
+        when(repository.published(row.snapshot().id())).thenReturn(Optional.of(row));
+        when(repository.published(oldRow.snapshot().id())).thenReturn(Optional.of(oldRow));
+        when(repository.history(eventId, "current", row.snapshot().id())).thenReturn(java.util.List.of(
+                new PublicSnapshotRepository.Historic(oldRow.snapshot().id(), oldRevision, fixed.instant(), "publish"),
+                new PublicSnapshotRepository.Historic(row.snapshot().id(), snapshot.path("revision_ids").get(0).asText(), fixed.instant(), "publish")));
+        var response = mvc(service(repository, calculator(PythonProbe.REPO), fixed)).perform(get("/api/v1/events/" + eventId)
+                .param("snapshot_id", row.snapshot().id())).andReturn().getResponse();
+        assertThat(response.getStatus()).isEqualTo(200);
+        var body = mapper.readTree(response.getContentAsByteArray());
+        assertThat(body.path("data").has("rules_version")).isFalse();
+        assertThat(body.path("data").path("event").path("history").size()).isEqualTo(1);
+        var log = requestLog(output, response);
+        assertThat(log.path("snapshot_id")).isEqualTo(snapshot.path("snapshot_id"));
+        assertThat(log.path("rules_version")).isEqualTo(snapshot.path("rules_version"));
+    }
+
+    @Test
+    void retiredSnapshotDoesNotLogUnselectedCurrentId(CapturedOutput output) throws Exception {
+        var snapshot = CalculationFixtures.snapshot(mapper);
+        var row = CalculationFixtures.published(snapshot, mapper);
+        String currentId = UUID.randomUUID().toString();
+        var repository = mock(PublicSnapshotRepository.class);
+        when(repository.published(row.snapshot().id())).thenReturn(Optional.of(new PublicSnapshotRepository.Published(
+                row.snapshot(), row.schemaVersion(), row.createdAt(), currentId)));
+        String eventId = snapshot.path("event_public_payloads").get(0).path("event_id").asText();
+        var response = mvc(service(repository, calculator(PythonProbe.REPO), fixed)).perform(get("/api/v1/events/" + eventId)
+                .param("snapshot_id", row.snapshot().id())).andReturn().getResponse();
+        assertThat(response.getStatus()).isEqualTo(409);
+        assertThat(mapper.readTree(response.getContentAsByteArray()).path("current_snapshot_id").asText()).isEqualTo(currentId);
+        var log = requestLog(output, response);
+        assertThat(log.path("error_code").textValue()).isEqualTo("SNAPSHOT_RETIRED");
+        assertThat(log.path("snapshot_id").isNull()).isTrue();
+        assertThat(log.path("rules_version").isNull()).isTrue();
     }
 
     @Test
@@ -240,9 +326,32 @@ class SnapshotCalculationTest {
         String channel = row.snapshot().mode().equals("current") ? "current" : "replay:" + row.snapshot().caseId();
         when(repository.head(channel)).thenReturn(Optional.of(row.snapshot().id()));
         when(repository.published(row.snapshot().id())).thenReturn(Optional.of(row));
+        return service(repository, calculator, clock);
+    }
+
+    private SnapshotNoticeService service(PublicSnapshotRepository repository, PythonCalculator calculator, Clock clock) {
         var transactions = mock(org.springframework.transaction.PlatformTransactionManager.class);
         when(transactions.getTransaction(any())).thenReturn(new org.springframework.transaction.support.SimpleTransactionStatus());
         return new SnapshotNoticeService(repository, new PublicationContent(json, mapper), mapper, calculator, clock, transactions);
+    }
+
+    private MockMvc mvc(SnapshotNoticeService service) {
+        return MockMvcBuilders.standaloneSetup(new PublicNoticeController(service)).setControllerAdvice(new ApiExceptionHandler())
+                .setMessageConverters(new MappingJackson2HttpMessageConverter(mapper)).addFilters(new PublicRequestLogFilter()).build();
+    }
+
+    private JsonNode requestLog(CapturedOutput output, MockHttpServletResponse response) throws Exception {
+        var logs = new java.util.ArrayList<JsonNode>();
+        for (String line : output.getAll().split("\n")) {
+            int start = line.indexOf("public_request ");
+            if (start >= 0) {
+                var log = mapper.readTree(line.substring(start + "public_request ".length()));
+                if (log.path("request_id").asText().equals(response.getHeader("X-Request-ID"))) logs.add(log);
+            }
+        }
+        assertThat(logs).hasSize(1);
+        assertThat(logs.getFirst().size()).isEqualTo(5);
+        return logs.getFirst();
     }
 
     private PythonCalculator calculator(Path workdir) {
