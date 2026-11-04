@@ -9,6 +9,7 @@
 - 원본과 대상은 운영자가 소유한 전용 개발 MySQL이다. 대상은 **새 서버의 새 빈 폐기 가능 schema**이며 기존 연구실 DB·계정은 사용하지 않는다.
 - DB와 파일을 기록하기 **전에** 공개 앱·로컬 import/검토/공개·추출/인계 작업 및 다른 세션·예약 작업의 모든 쓰기와 DDL을 중지한다. 백업과 기준값 기록이 끝날 때까지 중지를 유지한다. `--single-transaction`만으로 DB와 파일의 공동 일관성을 보장하지 않는다.
 - D03 원본·성공/실패 D05·사람 인계 중 DB가 참조하는 경로를 명시적으로 선택한다. D05 `raw_ref`와 인계 `directory`는 **같은 실제 절대 경로**로 복원해야 한다. SQL 경로 문자열 치환·symlink 우회·새 identity 발급을 복구로 세지 않는다.
+- [로컬 관리 HTTP](local-management-api.md)를 사용하면 해당 프로세스의 쓰기도 중지하고 `MYAI_LOCAL_API_REQUEST_ROOT`를 별도 선택 root로 백업한다. 요청 root0700·원본 JSON0600·파일명 SHA와 bytes를 보존한다. domain 실패 원본도 포함될 수 있어 요청 파일 수를 DB 성공 건수로 세지 않으며 토큰 환경은 자료 백업에 넣지 않는다.
 - 선택 경로에 D09 pack·사진·JSON/CSV 출력·자격증명이 없어야 한다. `data/private/` 전체를 tar로 묶지 않는다. [D09의 동의·기한·사본 처리](../../contracts/user-study.md#private-pack과-경계)는 별도다.
 - MySQL client 설정 파일은 `[client]`의 host/port/user/password를 운영자가 따로 준비한 **0600 비공개 파일**이다. 백업/proof 밖에 두고 값·env 파일·SQL을 로그나 공개 PR에 붙이지 않는다. SQL도 비공개 원문·경로·검토 이력을 담는 민감 파일이다.
 

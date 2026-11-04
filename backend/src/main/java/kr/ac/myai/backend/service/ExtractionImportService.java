@@ -2,6 +2,7 @@ package kr.ac.myai.backend.service;
 
 import kr.ac.myai.backend.extraction.ExtractionArchiveReader;
 import kr.ac.myai.backend.extraction.ExtractionException;
+import kr.ac.myai.backend.extraction.VerifiedExtraction;
 import kr.ac.myai.backend.handoff.HandoffReference;
 import kr.ac.myai.backend.handoff.HumanHandoffArchiveReader;
 import kr.ac.myai.backend.handoff.VerifiedHandoff;
@@ -44,7 +45,22 @@ public class ExtractionImportService {
 
     public Result importRun(String runId, Path root, String actor) {
         validateActor(actor);
+        return register(archives.read(runId, root), actor);
+    }
+
+    public Result importRun(String runId, Path root, String actor, String expectedInputHash) {
+        validateActor(actor);
+        if (expectedInputHash == null || !expectedInputHash.matches("[0-9a-f]{64}")) {
+            throw new ExtractionException("EXTRACTION_VALIDATION_ERROR", "expected_input_hash", false);
+        }
         var run = archives.read(runId, root);
+        if (!expectedInputHash.equals(run.inputSha256())) {
+            throw new ExtractionException("EXTRACTION_VALIDATION_ERROR", "expected_input_hash", false);
+        }
+        return register(run, actor);
+    }
+
+    private Result register(VerifiedExtraction run, String actor) {
         try {
             try {
                 return transaction.execute(status -> {

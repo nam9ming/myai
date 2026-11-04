@@ -52,7 +52,18 @@ public class HumanHandoffImportService {
     public ReviewedImportService.ImportResult importFile(Path file, Path sourceRoot, Path handoffRoot, String actor) {
         try {
             ExtractionImportService.validateActor(actor);
-            byte[] bytes = read(file);
+            return importBytes(read(file), sourceRoot, handoffRoot, actor);
+        } catch (ExtractionException ex) {
+            throw new ImportException("IMPORT_VALIDATION_ERROR", "인계 원본·실행 환경·담당자 설정을 검증할 수 없습니다.", "human_handoffs");
+        } catch (IOException | IllegalArgumentException ex) {
+            throw new ImportException("IMPORT_VALIDATION_ERROR", "인계 입력·원문·보관 경로를 읽고 검증할 수 없습니다.", "file");
+        }
+    }
+
+    public ReviewedImportService.ImportResult importBytes(byte[] bytes, Path sourceRoot, Path handoffRoot, String actor) {
+        try {
+            ExtractionImportService.validateActor(actor);
+            check(bytes != null && bytes.length > 0 && bytes.length <= LIMIT, "file");
             JsonNode request = reader.parseJson(bytes);
             shape(request, "schema_version handoff_ref receipt_sha256 reason revisions");
             check(request.path("schema_version").asText().equals("human-handoff-import-v1"), "schema_version");
@@ -128,7 +139,7 @@ public class HumanHandoffImportService {
             throw new ImportException("IMPORT_DATABASE_UNAVAILABLE", "DB 연결과 상태를 확인해 주세요.", null);
         } catch (ExtractionException ex) {
             throw new ImportException("IMPORT_VALIDATION_ERROR", "인계 원본·실행 환경·담당자 설정을 검증할 수 없습니다.", "human_handoffs");
-        } catch (IOException | IllegalArgumentException ex) {
+        } catch (IllegalArgumentException ex) {
             throw new ImportException("IMPORT_VALIDATION_ERROR", "인계 입력·원문·보관 경로를 읽고 검증할 수 없습니다.", "file");
         }
     }

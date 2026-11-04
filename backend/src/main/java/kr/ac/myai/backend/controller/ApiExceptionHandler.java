@@ -14,6 +14,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.RecoverableDataAccessException;
@@ -65,7 +67,7 @@ public class ApiExceptionHandler implements ResponseBodyAdvice<Object> {
         return response(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_REQUEST", "요청 형식과 필수 필드를 확인해 주세요.", List.of());
     }
 
-    @ExceptionHandler(NoResourceFoundException.class)
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
     public ResponseEntity<ErrorResponse> notFound() {
         return response(HttpStatus.NOT_FOUND, "NOT_FOUND", "요청 경로를 찾을 수 없습니다.", List.of());
     }
@@ -78,6 +80,12 @@ public class ApiExceptionHandler implements ResponseBodyAdvice<Object> {
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
     public ResponseEntity<ErrorResponse> unsupportedMedia() {
         return response(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "UNSUPPORTED_MEDIA_TYPE", "application/json 요청을 사용해 주세요.", List.of());
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
+    public ResponseEntity<ErrorResponse> notAcceptable() {
+        return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).contentType(MediaType.APPLICATION_JSON).body(new ErrorResponse(
+                new ErrorDetail("NOT_ACCEPTABLE", "application/json 응답을 허용해 주세요.", List.of(), false), PublicRequestLogContext.requestId()));
     }
 
     @ExceptionHandler(Exception.class)

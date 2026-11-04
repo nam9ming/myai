@@ -8,8 +8,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.util.Arrays;
+import java.util.HexFormat;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -23,6 +27,56 @@ class ReviewedImportReaderTest {
     void fixture() throws Exception {
         input = (ObjectNode) mapper.readTree(Path.of("examples/reviewed-import.json").toFile());
         Files.copy(Path.of("examples/synthetic-source.txt"), root.resolve("synthetic-source.txt"));
+    }
+
+    @Test
+    void byteInputMatchesFileAndHashesOriginalWhitespace() throws Exception {
+        var compact = reader.read(input.toString().getBytes(StandardCharsets.UTF_8), root);
+        for (String text : java.util.List.of(input.toString(), " \n" + input.toPrettyString() + "\n ")) {
+            byte[] content = text.getBytes(StandardCharsets.UTF_8);
+            var fromBytes = reader.read(content, root);
+            assertThat(reader.read(Files.write(root.resolve("batch.json"), content), root)).isEqualTo(fromBytes);
+            assertThat(fromBytes.inputSha256()).isEqualTo(HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content)));
+            assertThat(fromBytes.documents()).isEqualTo(compact.documents());
+            assertThat(fromBytes.events()).isEqualTo(compact.events());
+        }
+        assertThat(reader.read((" " + input).getBytes(StandardCharsets.UTF_8), root).inputSha256())
+                .isNotEqualTo(compact.inputSha256());
+    }
+
+    @Test
+    void rejectsMalformedAndInvalidUtf8ThroughBothEntryPoints() throws Exception {
+        rejected(new byte[0]);
+        rejected("{".getBytes(StandardCharsets.UTF_8));
+        rejected(new byte[] {'{', '"', (byte) 0xc3, '(', '"', ':', '0', '}'});
+    }
+
+    @Test
+    void acceptsEightMiBButRejectsOneMoreByteThroughBothEntryPoints() throws Exception {
+        byte[] json = input.toString().getBytes(StandardCharsets.UTF_8);
+        byte[] atLimit = Arrays.copyOf(json, 8 * 1024 * 1024);
+        Arrays.fill(atLimit, json.length, atLimit.length, (byte) ' ');
+        var batch = reader.read(atLimit, root);
+        assertThat(batch.events()).hasSize(1);
+        assertThat(reader.read(Files.write(root.resolve("batch.json"), atLimit), root)).isEqualTo(batch);
+        byte[] overLimit = Arrays.copyOf(atLimit, atLimit.length + 1);
+        overLimit[overLimit.length - 1] = ' ';
+        rejected(overLimit);
+    }
+
+    @Test
+    void rejectsRevisionMismatchThroughBothEntryPoints() throws Exception {
+        ((ObjectNode) input.path("events").get(0)).put("expected_revision_no", 1);
+        rejected();
+    }
+
+    @Test
+    void newInputCannotUseStoredApprovalValidation() throws Exception {
+        ((ObjectNode) input.path("events").get(0).path("revision")).put("review_status", "approved")
+                .put("publication_intent", "public").put("reviewer_id", "synthetic-reviewer")
+                .put("reviewed_at", "2026-11-02T02:00:00Z");
+        assertThat(reader.validateStored(input, root).events().getFirst().reviewStatus()).isEqualTo("approved");
+        rejected();
     }
 
     @Test
@@ -251,6 +305,7 @@ class ReviewedImportReaderTest {
         var batch = reader.read(write(), root);
         assertThat(batch.schemaVersion()).isEqualTo("source-import-v1");
         assertThat(batch.documents()).hasSize(1); assertThat(batch.events()).isEmpty();
+        assertThat(reader.read(Files.readAllBytes(root.resolve("batch.json")), root)).isEqualTo(batch);
     }
 
     @Test
@@ -293,10 +348,8 @@ class ReviewedImportReaderTest {
         ((ObjectNode) input.path("events").get(0).path("revision")).put("classification", "candidate");
         rejected();
         fixtureReset();
-        Files.writeString(root.resolve("batch.json"), input.toString().replace("\"data_kind\":\"synthetic\"", "\"data_kind\":\"synthetic\",\"data_kind\":\"real\""));
-        assertThatThrownBy(() -> reader.read(root.resolve("batch.json"), root)).isInstanceOf(ImportException.class);
-        Files.writeString(root.resolve("batch.json"), input + "{}");
-        assertThatThrownBy(() -> reader.read(root.resolve("batch.json"), root)).isInstanceOf(ImportException.class);
+        rejected(input.toString().replace("\"data_kind\":\"synthetic\"", "\"data_kind\":\"synthetic\",\"data_kind\":\"real\"").getBytes(StandardCharsets.UTF_8));
+        rejected((input + "{}").getBytes(StandardCharsets.UTF_8));
     }
 
     @Test
@@ -485,8 +538,18 @@ class ReviewedImportReaderTest {
     }
 
     private void rejected() throws Exception {
-        Path file = write();
-        assertThatThrownBy(() -> reader.read(file, root)).isInstanceOf(ImportException.class);
+        rejected(input.toString().getBytes(StandardCharsets.UTF_8));
+    }
+
+    private void rejected(byte[] content) throws Exception {
+        Path file = Files.write(root.resolve("batch.json"), content);
+        var fileError = catchThrowableOfType(() -> reader.read(file, root), ImportException.class);
+        var byteError = catchThrowableOfType(() -> reader.read(content, root), ImportException.class);
+        assertThat(fileError).isNotNull();
+        assertThat(byteError).isNotNull();
+        assertThat(byteError.code()).isEqualTo(fileError.code());
+        assertThat(byteError.field()).isEqualTo(fileError.field());
+        assertThat(byteError.getMessage()).isEqualTo(fileError.getMessage());
     }
 
     private void fixtureReset() throws Exception {

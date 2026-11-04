@@ -6,6 +6,8 @@ Java 21 / Spring Boot **3.5.16** / Gradle Wrapper **8.14.3** / MySQL **8.4.13**.
 
 ## 구현 범위
 
+- [로컬 관리 HTTP API](docs/local-management-api.md)는 전용 `local-api` 프로필에서 문서·D05·검토 수정/승인·preview/publish/rollback을 기존 서비스에 연결한다. loopback·실행 토큰·동일 Origin, 원입력 bytes 보관과 공개/관리 경계를 적용하고 전체 회귀·격리 MySQL·실제 합성 JAR로 검증했다. 독립 전체 리뷰·PR 상태는 [계획](../docs/superpowers/plans/2026-11-04-local-management-api.md)에서 추적한다. txt/pdf 새 업로드·관리 UI는 후속 범위다.
+
 - [최소 요청 로그](docs/request-logging.md)는 요청별 서버 UUID·오류 코드·처리시간·확인된 snapshot/rules 버전만 기록한다. `X-Request-ID` 헤더와 오류 본문의 ID를 연결하며 본문·URI·IP·예외 stack은 기록하지 않는다. 운영 수집·접근·보존 정책은 배포 때 확정한다.
 
 - S10의 [비공개 로컬 검토 보고서](docs/review-report.md)는 원문/모든 AI 시도/현재·과거 수정값·오류·승인·공개 이력과 명시 preview를 비교한다. `local-review-report`는 DB·원본을 변경하지 않고 private HTML과 안전한 receipt를 저장한다. 수정·승인·공개는 기존 파일 명령을 사용한다.
