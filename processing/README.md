@@ -4,6 +4,8 @@ Java의 [S10 로컬 검토 보고서](../backend/docs/review-report.md)는 이�
 
 C01~C10 순수 계산과 `calc-v1` CLI, Spring 공개 matches 연결, OpenAI 추출·수동 원출력 보관 CLI를 구현했습니다. 실제 API 연결 결과는 각 실행의 receipt로 확인하며, 합성 연결 시험을 실제 공지 처리·품질 평가로 세지 않습니다. 공개 API·DB는 Spring이 맡으며 계산 CLI는 AI·네트워크·DB를 호출하거나 사용자 조건을 저장하지 않습니다. 서버의 Python 실행 파일·작업 경로는 [백엔드 안내](../backend/README.md#python-계산-연결)를 따릅니다.
 
+T09의 [독립 거리 기준값 시험](../docs/superpowers/specs/2026-11-05-independent-distance-oracles-design.md)은 고정 합성 좌표·별도 계산한 기대 거리로 점·선분의 오차0.01m와500m 경계를 확인합니다. 이 수치 오차는 검색 반경에 더하지 않습니다.
+
 ## 설치·실행
 
 Python **3.13**을 사용합니다. 로컬 확인 버전은 **3.13.5**이며 외부 Python 의존성은 없습니다. Asia/Seoul을 제공하는 시스템 시간대 자료가 필요합니다. 로컬 macOS에서 검증하고 CI는 Linux에서 실행합니다. Windows 실행은 미검증입니다.
