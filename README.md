@@ -2,7 +2,7 @@
 
 안성맞춘팀의 모바일 우선 웹앱 프로젝트입니다. **전체 개발 명세 v1.1: Flutter Web·Dart / Spring Boot·Java / MySQL / Python AI·계산**으로 확정했습니다. 공사·행사·교통 변경 공지를 가게 위치·영업시간과 비교하고 적용 조건·근거·원문을 확인합니다.
 
-**현재 저장소 상태: 팀 작업을 시작하기 위한 문서·인터페이스 예제·참고 시제품입니다. 실제 프런트·백엔드·AI 서비스는 아직 구현하지 않았습니다.**
+**현재 저장소 상태: 백엔드 공개 API·MySQL·검토본 import·승인/미리보기/공개/복구·snapshot JSON 내보내기, Python C01~C10 계산 CLI와 [AI 추출 검증·원출력 기록](contracts/extraction-run.md)·[D03/D05 DB 연결](backend/docs/extraction-run-import.md)·[숨김 검토 초안](backend/docs/ai-review-draft.md)을 구현했습니다. 공개 matches는 실제 Python 계산에 연결하며 실행 파일·작업 경로 설정이 필요합니다. 실제 개발20문서의 AI 실행과 [비공개 검토 보고서](backend/docs/review-report.md#실제-개발-자료의-검토-인계-준비)를 확인했습니다. 실제 프런트 연결·사람 검토/승인·실자료 독립 평가·운영 배포는 미완료입니다. 참고 HTML과 예제는 합성 자료입니다.**
 
 ## 이번 목표
 
@@ -52,7 +52,7 @@ docs/wednesday-plan.md    # 수요일까지 작업 순서·완료 기준
 
 ## 기술·배포 기준
 
-- 확정 구성은 Flutter Web·Dart, Spring Boot·Java, MySQL, Python AI·계산입니다. 구현 기준은 Flutter stable(번들 Dart), JDK21·Spring Boot3.5.x·Gradle Wrapper, MySQL8.4 LTS, Python3.13입니다. 실제 버전·실행 명령·의존성은 담당자가 구현하면서 고정하고 해당 폴더 README에 남깁니다. 현재는 실행 가능한 앱 스캐폴드가 없습니다.
+- 확정 구성은 Flutter Web·Dart, Spring Boot·Java, MySQL, Python AI·계산입니다. 구현 기준은 Flutter stable(번들 Dart), JDK21·Spring Boot3.5.x·Gradle Wrapper, MySQL8.4 LTS, Python3.13입니다. 백엔드·Python 실행 명령은 각 README에 기록했고, Flutter는 구현 시 해당 README에 남깁니다.
 - 수동 수집 → AI 일괄 추출 → 사람 검토 → 저장 → 웹 표시 흐름을 유지합니다. 사용자 조회마다 실시간 AI 호출을 전제하지 않습니다.
 - 희망 배포 주소는 `https://aise.hknu.ac.kr/myai/team/`입니다. **현재 배포되었다는 뜻이 아닙니다.** 연구실 소개/관리 서비스는 수정하지 않았습니다.
 - Flutter 웹 빌드 자산과 Spring API를 같은 하위 경로 아래에서 사용할 수 있게 설계합니다. 외부 API 주소 후보는 `/myai/team/api/v1/...`, 내부 API 계약은 `/api/v1/...`입니다. 실제 프록시 구성은 서버 환경 확인 후 결정합니다.
@@ -67,14 +67,16 @@ docs/wednesday-plan.md    # 수요일까지 작업 순서·완료 기준
 - 샘플 JSON과 HTML은 모두 가상 자료입니다. 실제 확보 공지나 실증 결과로 집계하지 않습니다.
 - 개인정보가 포함된 원래 신청서, 실제 평가 기록, 비밀키·서버 인증정보는 올리지 않습니다.
 - 협업 방식은 [CONTRIBUTING.md](CONTRIBUTING.md)를 따릅니다.
+- 백엔드 합성 API 실행·MySQL 준비·검증과 미완료 범위는 [backend/README.md](backend/README.md)를 따릅니다.
 
 ## 개발 인프라
 
 `ai-lounge-infra`의 CI·PR/이슈 템플릿·AI 리뷰·디스코드 알림·보드 동기화를 적용합니다.
 **Flutter Web·Spring Boot·MySQL·Python 설계는 그대로 유지하며**, Node.js20+는 자동화 도구에만 사용합니다.
 
-현재 로컬 확인은 `npm run lint`, `npm test`, `npm run build`입니다. 계약 JSON과 인프라를 검증하고
-기존 합성 HTML 시제품을 패키징합니다. 앱 자체의 빌드·API·DB 연결 검증을 대신하지 않습니다.
+공통 로컬 확인은 `npm run lint`, `npm test`, `npm run build`입니다. 계약 JSON과 인프라를 검증하고
+기존 합성 HTML 시제품을 패키징합니다. 백엔드는 `cd backend && ./gradlew test bootJar`로 별도 검증합니다.
+Python은 `python3.13 -m unittest discover -s processing/tests -v`로 별도 검증합니다. CI는 Python 계산·CLI와 전용 MySQL·실제 Python을 포함한 백엔드 검증도 실행합니다. 전체 앱·실자료 평가 완료를 뜻하지 않습니다. Spring 실행 전 Python 설정은 [백엔드 안내](backend/README.md#python-계산-연결)를 따릅니다.
 기존 디스코드·보드를 공유하되 시크릿은 myai에도 등록해야 합니다. 공개 프리뷰는 기본 비활성화입니다.
 설정·권한·연결 확인은 [개발 인프라 적용 안내](docs/development-infra.md)를 따릅니다.
 AI 코드 리뷰는 `OPENAI_API_KEY` 시크릿으로 OpenAI API를 사용합니다. 기본 모델은 `gpt-6.1-sol`이며

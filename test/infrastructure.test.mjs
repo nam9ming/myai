@@ -1,8 +1,9 @@
 import test from "node:test";
+import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { devNull, tmpdir } from "node:os";
 import { join } from "node:path";
 
 test("프리뷰 빌드는 기존 산출물을 지우고 공개 시제품 HTML만 내보낸다", (t) => {
@@ -51,5 +52,68 @@ test("린트는 Git 제외 자료를 읽지 않고 공개 파일의 토큰 패�
     const leaked = lint();
     assert.equal(leaked.status, 1);
     assert.match(leaked.stderr, label);
+  }
+});
+
+test("사실 전용 상세 예제의 계산값·근거·출처 불일치를 거부한다", async (t) => {
+  const root = mkdtempSync(join(tmpdir(), "myai-contracts-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, "contracts/examples"), { recursive: true });
+  mkdirSync(join(root, "backend/examples"), { recursive: true });
+  const folder = new URL("../contracts/examples/", import.meta.url);
+  for (const name of readdirSync(folder)) copyFileSync(new URL(name, folder), join(root, "contracts/examples", name));
+  copyFileSync(new URL("../contracts/validate_examples.py", import.meta.url), join(root, "contracts/validate_examples.py"));
+  copyFileSync(new URL("../backend/examples/reviewed-import.json", import.meta.url), join(root, "backend/examples/reviewed-import.json"));
+  const file = join(root, "contracts/examples/event-facts-response.json");
+  const original = readFileSync(file, "utf8");
+  const validate = () => spawnSync("python3", [join(root, "contracts/validate_examples.py")], { encoding: "utf8" });
+  assert.equal(validate().status, 0);
+  for (const [label, mutate] of [
+    ["I02 계산값", (event) => { event.classification = "candidate"; }],
+    ["잘못된 인용", (event) => { event.evidence[0].quote = "원문에 없는 문장"; }],
+    ["미상과 빈 배열 혼동", (event) => { event.exceptions = []; }],
+    ["미등록 문서 버전", (event) => { event.source_refs[0].document_version_id = "00000000-0000-4000-8000-000000000000"; }],
+    ["FieldValue 상태", (event) => { event.field_values.exceptions.knowledge = "invalid_enum"; }],
+    ["FieldValue 필수 키", (event) => { delete event.field_values.exceptions.reason; }],
+    ["FieldValue 필드 누락", (event) => { delete event.field_values.exceptions; }],
+    ["생애 상태 근거", (event) => { event.lifecycle_evidence_ids = ["missing-evidence"]; }],
+    ["취소 근거 누락", (event) => { event.lifecycle = "cancelled"; event.lifecycle_evidence_ids = []; }],
+    ["snapshot UUID", (_, envelope) => { envelope.snapshot_id = "invalid-id"; }],
+    ["revision UUID", (event) => { event.revision_id = "invalid-id"; }],
+    ["응답 시각", (_, envelope) => { envelope.generated_at = "invalid-time"; }],
+  ]) {
+    await t.test(label, () => {
+      const broken = JSON.parse(original);
+      mutate(broken.data.event, broken);
+      writeFileSync(file, JSON.stringify(broken));
+      assert.equal(validate().status, 1);
+    });
+  }
+});
+
+test("autocrlf 설정이 달라도 합성 원문·import 입력 바이트를 보존한다", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "myai-eol-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, "backend/examples"), { recursive: true });
+  copyFileSync(new URL("../backend/.gitattributes", import.meta.url), join(root, "backend/.gitattributes"));
+  const paths = ["backend/examples/synthetic-source.txt", "backend/examples/reviewed-import.json"];
+  const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
+  const expected = new Map();
+  for (const path of paths) {
+    const source = new URL("../" + path, import.meta.url);
+    expected.set(path, hash(readFileSync(source)));
+    copyFileSync(source, join(root, path));
+  }
+  const env = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: devNull, GIT_ATTR_NOSYSTEM: "1" };
+  for (const key of ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"]) delete env[key];
+  const git = (...args) => execFileSync("git", ["-c", "core.attributesFile=" + devNull, ...args], { cwd: root, env });
+  git("init", "--quiet");
+  git("-c", "core.autocrlf=false", "add", ".");
+  for (const autocrlf of ["false", "true"]) {
+    for (const path of paths) rmSync(join(root, path));
+    git("-c", "core.autocrlf=" + autocrlf, "checkout", "--", ...paths);
+    for (const path of paths) assert.equal(hash(readFileSync(join(root, path))), expected.get(path), `${path}: autocrlf=${autocrlf}`);
+    const input = JSON.parse(readFileSync(join(root, paths[1]), "utf8"));
+    assert.equal(hash(readFileSync(join(root, paths[0]))), input.documents[0].raw_sha256);
   }
 });

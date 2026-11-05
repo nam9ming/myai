@@ -1,0 +1,11 @@
+{
+  "data_kind": "synthetic",
+  "document_version_id": "30000000-0000-4000-8000-000000000001",
+  "title": "OpenAI 개발 연결 합성 시험",
+  "published_date": null,
+  "blocks": [{
+    "block_id": "b1",
+    "page": null,
+    "text": "이 문서는 API 연결을 확인하기 위한 합성 문자열이다. 실제 공지나 일정은 포함하지 않는다."
+  }]
+}

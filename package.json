@@ -6,7 +6,7 @@
   "description": "myai 협업 파이프라인 도구; 애플리케이션 스택과 분리",
   "scripts": {
     "lint": "node scripts/lint.mjs",
-    "test": "node --test test/ && python3 contracts/validate_examples.py",
+    "test": "node --test test/*.test.mjs && python3 contracts/validate_examples.py",
     "build": "node scripts/build.mjs"
   },
   "engines": {

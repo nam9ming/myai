@@ -8,7 +8,7 @@
 
 | 워크플로 | 현재 동작 |
 | --- | --- |
-| CI | PR·main 변경 시 JS 린트, 인프라 테스트, 계약 JSON 검증, HTML 패키징·산출물 보관 |
+| CI | PR·main 변경 시 JS 린트, 인프라·계약 검증, JDK21 백엔드·MySQL 시험, HTML/JAR 산출물 보관 |
 | Preview | `ENABLE_PREVIEW=true`일 때 내부 PR의 합성 HTML 시제품을 Pages에 발행 |
 | AI Review | OpenAI API로 PR 변경분 리뷰·코멘트, `OPENAI_API_KEY`가 없으면 생략 |
 | Notify / PR Notify | CI·Preview 결과와 PR 상태를 기존 디스코드 채널로 전송 |
@@ -16,7 +16,7 @@
 | Weekly Report | 금요일 18:00 KST에 myai 활동을 기존 주간·발주처 채널로 전송 |
 | Ping | 사람이 실행할 때 선택 채널에 연결 확인 메시지 전송 |
 
-현재 Flutter·Spring·Python 서비스 스캐폴드는 없다. CI 성공은 앱 빌드·DB 연결·성능 시험의 완료를 뜻하지 않는다. 앱 구현 시 실제 빌드·테스트 명령을 각 README와 CI에 추가한다. `npm run build`는 `docs/reference/meeting-demo.html` 하나만 `dist/index.html`로 복사한다. 가상 자료 표시를 유지하고 비공개 자료·저장소 전체를 배포하지 않는다.
+현재 Spring 백엔드 기초·합성 API·MySQL 스키마가 있다. CI의 `check`에서 MySQL8.4 전용 테스트 DB와 JDK21을 사용해 백엔드 시험·JAR 빌드를 실행한다. CI의 DB 비밀번호는 실행 ID로 만든 일회성 테스트 값이며 실서비스 자격증명이 아니다. Flutter·Python 서비스와 실제 import·공개·계산 연결은 미구현이므로 CI 성공을 전체 앱·성능 시험 완료로 표현하지 않는다. `npm run build`는 기존 합성 HTML 하나만 패키징한다.
 
 ## 로컬 확인
 
@@ -60,6 +60,10 @@ bash scripts/set-secret.sh PROJECT_TOKEN nam9ming/myai
 코드 리뷰는 `OPENAI_API_KEY`와 OpenAI Responses API를 사용한다. 기본 모델은 `gpt-6.1-sol`이며 저장소 변수 `OPENAI_REVIEW_MODEL`로 변경한다. SDK 의존성은 추가하지 않는다. 요청에는 기본 브랜치의 팀 규칙과 최대 60000자의 PR diff를 보내고 `store=false`를 사용한다. 부분 검토·API 오류·빈 응답·미완료 응답은 명시하며 최종 승인은 사람이 한다. 모델 응답 예산은 추론 토큰을 포함해 최대 8192토큰이며 요청 제한 시간은 120초다. API 비용은 등록한 OpenAI 키에 청구된다. [OpenAI 텍스트 생성 문서](https://developers.openai.com/api/docs/guides/text), [모델 문서](https://developers.openai.com/api/docs/models/gpt-6.1-sol).
 
 리뷰 스크립트는 비밀값 보호를 위해 기본 브랜치에서 읽는다. 기본 브랜치가 이전 Anthropic 버전이면 실행을 생략하며, OpenAI 리뷰 자동화는 main 반영 후 새 PR 또는 추가 커밋에서 확인한다.
+
+diff는 전체 Git 이력에서 PR 이벤트의 고정 `base.sha...head.sha`를 merge-base 기준으로 수집한다. GitHub diff API의300파일 한도를 사용하지 않으며, 기본 브랜치 checkout을 유지하고 PR head 코드를 실행하지 않는다. 외부 diff 드라이버·textconv도 차단한다. 전체 이력 다운로드 비용은 늘지만 모델에 전달하는 앞60000자 부분 검토 한도는 그대로다. 로컬 회귀 시험에는 기존 Git과 Bash가 필요하다. [checkout 이력 설정](https://github.com/actions/checkout#fetch-all-history-for-all-tags-and-branches)·[Git diff 기준](https://git-scm.com/docs/git-diff)을 따른다.
+
+강제 푸시·브랜치 삭제 뒤에도 이벤트 SHA를 비교할 수 있도록 base/head 커밋을 명시적으로 fetch한다. 인증은 그 명령에만 GitHub CLI credential helper를 지정해 `GH_TOKEN`으로 처리하며 자격정보를 Git 설정 파일에 저장하지 않는다. 서버에서도 커밋이 사라져 fetch가 실패하면 리뷰 생성을 중단한다. [GitHub CLI 인증 안내](https://cli.github.com/manual/gh_auth_setup-git)를 따른다.
 
 주간 리포트는 기존 Anthropic 구성을 유지한다. `ANTHROPIC_API_KEY`가 없으면 원본 활동 목록을 사용하며, 요약 모델은 `ANTHROPIC_SUMMARY_MODEL`로 변경한다. `OPENAI_API_KEY`만 등록해도 주간 리포트의 AI 요약이 켜지는 것은 아니다.
 

@@ -2,6 +2,8 @@
 from pathlib import Path
 import hashlib
 import json
+from datetime import datetime
+from uuid import UUID
 
 
 def main():
@@ -47,21 +49,66 @@ def main():
         assert hashlib.sha256(text.encode("utf-8")).hexdigest() == evidence["text_sha256"]
         evidence_ids.add(evidence["evidence_id"])
 
-    def fields(value):
+    def field_value(value, allowed_evidence):
+        assert set(value) == {"value", "knowledge", "evidence_ids", "reason"}
+        assert value["knowledge"] in {"known", "not_stated", "ambiguous", "not_applicable"}
+        assert set(value["evidence_ids"]) <= allowed_evidence
+        if value["knowledge"] == "known":
+            assert value["value"] is not None and value["evidence_ids"]
+        else:
+            assert value["value"] is None and value["reason"]
+
+    def fields(value, allowed_evidence):
         if isinstance(value, dict):
+            for key in ["evidence_ids", "lifecycle_evidence_ids"]:
+                if key in value:
+                    assert set(value[key]) <= allowed_evidence
+            if value.get("lifecycle") == "cancelled":
+                assert value["lifecycle_evidence_ids"]
             if set(value) == {"value", "knowledge", "evidence_ids", "reason"}:
-                assert set(value["evidence_ids"]) <= evidence_ids
-                if value["knowledge"] == "known":
-                    assert value["value"] is not None and value["evidence_ids"]
-                else:
-                    assert value["value"] is None and value["reason"]
+                field_value(value, allowed_evidence)
+            for field in value.get("field_values", {}).values():
+                field_value(field, allowed_evidence)
             for child in value.values():
-                fields(child)
+                fields(child, allowed_evidence)
         elif isinstance(value, list):
             for child in value:
-                fields(child)
+                fields(child, allowed_evidence)
 
-    fields(extraction["items"])
+    fields(extraction["items"], evidence_ids)
+    facts = data["event-facts-response"]
+    assert set(facts) == {"schema_version", "snapshot_id", "generated_at", "data"}
+    assert facts["schema_version"] == "api-v1" and facts["data"]["data_kind"] == "synthetic"
+    event = facts["data"]["event"]
+    for identifier in [facts["snapshot_id"], event["revision_id"]]:
+        assert str(UUID(identifier)) == identifier
+    assert facts["generated_at"].endswith("Z")
+    datetime.fromisoformat(facts["generated_at"].replace("Z", "+00:00"))
+    assert not {"classification", "reason_codes", "distance_m", "distance_basis", "time_overlap_minutes", "matched_occurrence_ids"} & event.keys()
+    assert event["area_membership"] in {"verified", "uncertain"}
+    reviewed = json.loads((folder.parent.parent / "backend/examples/reviewed-import.json").read_text(encoding="utf-8"))
+    documents = {doc["document_version_id"]: doc for doc in reviewed["documents"]}
+    refs = {ref["document_version_id"]: ref for ref in event["source_refs"]}
+    assert len(refs) == len(event["source_refs"]) and set(refs) == set(event["source_version_ids"])
+    for version, ref in refs.items():
+        doc = documents[version]
+        assert ref["document_id"] == doc["document_id"] and ref["url"] == doc["official_url"] and ref["is_fixture"]
+    citations = {item["evidence_id"] for item in event["evidence"]}
+    assert len(citations) == len(event["evidence"])
+    for item in event["evidence"]:
+        doc = documents[item["document_version_id"]]
+        text = next(block["text"] for block in doc["block_index"] if block["block_id"] == item["block_id"])
+        assert text[item["start_char"]:item["end_char"]] == item["quote"]
+        assert item["text_sha256"] == doc["text_sha256"] == hashlib.sha256(doc["cleaned_text"].encode("utf-8")).hexdigest()
+        assert item["source_document_id"] == doc["document_id"] and item["document_version_id"] in refs and item["is_fixture"]
+    fields(event, citations)
+    assert set(event["field_values"]) == {"applicability", "exceptions", "route_names", "stop_names", "directions"}
+    for name, value in event["field_values"].items():
+        assert event[name] == value["value"]
+    for location in event["locations"]:
+        assert set(location["field_values"]) == {"name", "address"}
+        for name, value in location["field_values"].items():
+            assert location[name] == value["value"]
     print(f"PASS: {len(data)} JSON files; config/request/selection/detail/source/AI evidence consistent (synthetic only).")
 
 

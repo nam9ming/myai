@@ -1,0 +1,51 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.5.16'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'kr.ac.myai'
+version = '0.1.0'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.flywaydb:flyway-core'
+    runtimeOnly 'org.flywaydb:flyway-mysql'
+    runtimeOnly 'com.mysql:mysql-connector-j'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('processResources') {
+    from('../contracts/examples') {
+        include 'config-response.json', 'matches-request.json', 'matches-response.json',
+                'event-response.json', 'public-events.json'
+        into 'fixtures'
+    }
+}
+
+tasks.named('test') {
+    dependsOn tasks.named('bootJar')
+    useJUnitPlatform()
+    inputs.files(fileTree('examples'), file('../contracts/examples/event-facts-response.json'))
+    inputs.files(fileTree('../processing') { include '__init__.py', 'matching/**/*.py', 'extraction/**/*.py', 'evaluation/**/*.py', 'tests/**/*.py', 'examples/*.json' })
+    inputs.files(file('../contracts/examples/ai-input.json'), file('../contracts/examples/ai-extraction.json'))
+    inputs.property('calculatorPython', System.getenv('MYAI_PYTHON_EXECUTABLE') ?: 'python3.13')
+    inputs.property('mysqlTestsEnabled', System.getenv('MYAI_MYSQL_TESTS') == 'true')
+    outputs.upToDateWhen { System.getenv('MYAI_MYSQL_TESTS') != 'true' }
+    testLogging {
+        events 'passed', 'skipped', 'failed'
+    }
+}
