@@ -75,16 +75,25 @@ void main() {
       ).readAsStringSync(),
     );
     await mount(tester, '/nearby', 390, browser: browser);
-    expect(find.text('내 주변에서 무슨 일이?'), findsOneWidget);
+    expect(find.byType(DraggableScrollableSheet), findsOneWidget);
+    await tapText(tester, '올려서 보기');
+    expect(
+      tester.getSize(find.byType(DraggableScrollableSheet)).height,
+      greaterThan(700),
+    );
     expect(find.text('홈'), findsWidgets);
-    expect(find.text('내 주변'), findsOneWidget);
+    expect(find.text('내 주변'), findsNWidgets(2));
     expect(find.text('안성천 주말 작은 음악회'), findsOneWidget);
-    await tapText(tester, '지도에서 자세히 보기');
+    await tester.ensureVisible(find.text('지도에서 자세히 보기').first);
+    await tester.tap(find.text('지도에서 자세히 보기').first);
+    await tester.pumpAndSettle();
     expect(find.text('선택 해제'), findsOneWidget);
     await tapText(tester, '선택 해제');
     browser.responder = (url, method, body) async =>
         const HttpResult(503, 'unavailable');
-    await tapText(tester, '새로고침');
+    await tester.tap(find.byTooltip('새로고침'));
+    await tester.pumpAndSettle();
+    await tapText(tester, '올려서 보기');
     expect(find.text('소식을 불러오지 못했어요'), findsOneWidget);
     expect(find.text('안성천 주말 작은 음악회'), findsNothing);
     expect(tester.takeException(), isNull);
