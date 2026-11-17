@@ -22,11 +22,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CyclicBarrier;
@@ -47,10 +52,23 @@ class CitizenReviewMySqlTest {
     @Autowired JdbcTemplate jdbc;
     @TempDir Path root;
     final ObjectMapper mapper = new ObjectMapper();
+    final Set<String> ownedSnapshots = new HashSet<>();
+    boolean testDatabaseVerified;
+
+    @DynamicPropertySource
+    static void testDatabase(DynamicPropertyRegistry registry) {
+        String url = System.getenv("DB_URL");
+        if (url == null || !url.startsWith("jdbc:mysql://")
+                || !Set.of("/myai_test", "/myai_citizen_test").contains(URI.create(url.substring(5)).getRawPath())) {
+            throw new IllegalStateException("시민 검토 시험은 전용 myai_test 또는 myai_citizen_test DB_URL이 필요합니다.");
+        }
+        registry.add("spring.datasource.url", () -> url);
+    }
 
     @BeforeEach
     void sources() throws Exception {
-        clearPublishedData();
+        assertThat(jdbc.queryForObject("SELECT DATABASE()", String.class)).isIn("myai_test", "myai_citizen_test");
+        testDatabaseVerified = true;
         for (String name : List.of("citizen-source.txt", "synthetic-source.txt")) {
             Files.copy(Path.of("examples/" + name), root.resolve(name));
         }
@@ -58,10 +76,37 @@ class CitizenReviewMySqlTest {
 
     @AfterEach
     void clearPublishedData() {
-        jdbc.update("DELETE FROM publication_audits");
-        jdbc.update("DELETE FROM publication_heads");
-        jdbc.update("DELETE FROM snapshot_revisions");
-        jdbc.update("DELETE FROM snapshots");
+        if (!testDatabaseVerified) return;
+        for (String id : ownedSnapshots) {
+            jdbc.update("DELETE FROM publication_audits WHERE after_snapshot_id = ?", id);
+            jdbc.update("DELETE FROM publication_heads WHERE snapshot_id = ?", id);
+            jdbc.update("DELETE FROM snapshot_revisions WHERE snapshot_id = ?", id);
+            jdbc.update("DELETE FROM snapshots WHERE snapshot_id = ?", id);
+        }
+        ownedSnapshots.clear();
+    }
+
+    @Test
+    void cleanupDeletesOnlyOwnedSnapshotAndPreservesAnotherPublishedChannel() throws Exception {
+        var unrelated = publishReplayFixture();
+        var owned = publishReplayFixture();
+        var canonical = jdbc.queryForList("SELECT canonical_json, checksum FROM snapshots WHERE snapshot_id = ?", unrelated.snapshotId());
+        var head = jdbc.queryForList("SELECT * FROM publication_heads WHERE snapshot_id = ?", unrelated.snapshotId());
+        var audits = jdbc.queryForList("SELECT * FROM publication_audits WHERE after_snapshot_id = ?", unrelated.snapshotId());
+        var revisions = jdbc.queryForList("SELECT * FROM snapshot_revisions WHERE snapshot_id = ?", unrelated.snapshotId());
+        assertThat(revisions).hasSize(1);
+        assertThat(canonical).hasSize(1); assertThat(head).hasSize(1); assertThat(audits).hasSize(1);
+        ownedSnapshots.remove(unrelated.snapshotId());
+        clearPublishedData();
+        ownedSnapshots.add(unrelated.snapshotId());
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM snapshots WHERE snapshot_id = ?", Long.class, owned.snapshotId())).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM publication_heads WHERE snapshot_id = ?", Long.class, owned.snapshotId())).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM publication_audits WHERE after_snapshot_id = ?", Long.class, owned.snapshotId())).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM snapshot_revisions WHERE snapshot_id = ?", Long.class, owned.snapshotId())).isZero();
+        assertThat(jdbc.queryForList("SELECT canonical_json, checksum FROM snapshots WHERE snapshot_id = ?", unrelated.snapshotId())).isEqualTo(canonical);
+        assertThat(jdbc.queryForList("SELECT * FROM publication_heads WHERE snapshot_id = ?", unrelated.snapshotId())).isEqualTo(head);
+        assertThat(jdbc.queryForList("SELECT * FROM publication_audits WHERE after_snapshot_id = ?", unrelated.snapshotId())).isEqualTo(audits);
+        assertThat(jdbc.queryForList("SELECT * FROM snapshot_revisions WHERE snapshot_id = ?", unrelated.snapshotId())).isEqualTo(revisions);
     }
 
     @ParameterizedTest
@@ -263,14 +308,9 @@ class CitizenReviewMySqlTest {
     void legacyPublishAndPreviewRejectCitizenRevisionWithoutChangingLegacyBytes() throws Exception {
         var legacy = fresh(false); var old = read(legacy); importer.importBatch(old, "importer");
         var legacyApproval = publication.execute(decision(legacy, "approve", 1, false), root, "approver");
-        var request = (ObjectNode) mapper.readTree(Path.of("examples/publish.json").toFile());
-        String area = legacy.path("events").get(0).path("area_id").asText();
-        ((ObjectNode) request.path("area")).put("area_id", area);
-        for (JsonNode point : request.path("points")) ((ObjectNode) point).put("area_id", area).put("point_id", UUID.randomUUID().toString());
-        var versions = jdbc.queryForList("SELECT lock_version FROM publication_heads WHERE channel_key = 'current'", Long.class);
-        if (versions.isEmpty()) request.putNull("expected_head_version"); else request.put("expected_head_version", versions.getFirst());
-        request.putArray("revision_ids").add(legacyApproval.revisionId());
+        var request = replayRequest(legacy, legacyApproval.revisionId());
         var published = publication.execute(commands.read(request.toString().getBytes(StandardCharsets.UTF_8)), root, "publisher");
+        ownedSnapshots.add(published.snapshotId());
         String oldSnapshot = jdbc.queryForObject("SELECT canonical_json FROM snapshots WHERE snapshot_id = ?", String.class, published.snapshotId());
         var input = fresh(true); importer.importBatch(read(input), "importer");
         var approved = publication.execute(decision(input, "approve", 1, true), root, "approver");
@@ -289,7 +329,29 @@ class CitizenReviewMySqlTest {
         assertThat(payload(old.events().getFirst().revisionId())).isEqualTo(old.events().getFirst().payloadJson());
         assertThat(mapper.readTree(payload(old.events().getFirst().revisionId())).has("schema_version")).isFalse();
         assertThat(jdbc.queryForObject("SELECT canonical_json FROM snapshots WHERE snapshot_id = ?", String.class, published.snapshotId())).isEqualTo(oldSnapshot);
-        assertThat(jdbc.queryForObject("SELECT snapshot_id FROM publication_heads WHERE channel_key = 'current'", String.class)).isEqualTo(published.snapshotId());
+        assertThat(jdbc.queryForObject("SELECT snapshot_id FROM publication_heads WHERE channel_key = ?", String.class,
+                "replay:" + request.path("case_id").asText())).isEqualTo(published.snapshotId());
+    }
+
+    private PublicationService.Result publishReplayFixture() throws Exception {
+        var input = fresh(false); importer.importBatch(read(input), "importer");
+        var approved = publication.execute(decision(input, "approve", 1, false), root, "approver");
+        var request = replayRequest(input, approved.revisionId());
+        var published = publication.execute(commands.read(request.toString().getBytes(StandardCharsets.UTF_8)), root, "publisher");
+        ownedSnapshots.add(published.snapshotId());
+        return published;
+    }
+
+    private ObjectNode replayRequest(ObjectNode input, String revision) throws Exception {
+        var request = (ObjectNode) mapper.readTree(Path.of("examples/publish.json").toFile());
+        String area = input.path("events").get(0).path("area_id").asText();
+        ((ObjectNode) request.path("area")).put("area_id", area);
+        for (JsonNode point : request.path("points")) ((ObjectNode) point).put("area_id", area).put("point_id", UUID.randomUUID().toString());
+        request.put("mode", "replay").put("case_id", UUID.randomUUID().toString()).put("anchor_date", "2026-11-02")
+                .put("reference_instant", "2026-11-02T03:00:00Z").put("knowledge_cutoff", "2026-11-02T03:00:00Z")
+                .put("history_fidelity", "reconstructed").putNull("expected_head_version");
+        request.putArray("revision_ids").add(revision);
+        return request;
     }
 
     private String importAttempt(ReviewedBatch batch, CyclicBarrier barrier) throws Exception {
