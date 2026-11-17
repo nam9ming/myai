@@ -329,3 +329,8 @@ proof는 `MYAI_RECOVERY_PROOF_ROOT/<UUID>` 또는 테스트 작업 디렉터리�
 이 시험은 같은 UID의 POSIX/tar 경계와 합성 복구를 다룬다. 실제 운영 정책·새 서버의 원래 경로 확보·백업 접근/보존·계정/grants·binlog/PITR·Windows/WORM·전원 중단 내구성·실자료 승인/40문서/D09·main 병합/배포는 완료하지 않는다. CI 산출물14일을 DB 백업 보존기간으로 쓰지 않는다.
 
 표준 동작 근거: [MySQL8.4 mysqldump](https://dev.mysql.com/doc/refman/8.4/en/mysqldump.html), [SQL 형식 dump 복원](https://dev.mysql.com/doc/refman/8.4/en/reloading-sql-format-dumps.html).
+## V5 시민 공개본의 백업·이전 경계
+
+[시민 공개본](citizen-publication.md)의 V5는 기존 snapshots의 버전 열 제약만 확장하며 V1~V4와 과거 canonical/hash/행을 보존한다. 새 백업에는 적용한 Flyway 버전과 V5를 함께 기록한다. 아래의 V3/V4 실제 복원 기록·기존 SQL 원본을 V5 실행 기록으로 다시 표시하지 않는다.
+
+기존 V4 full SQL은 원본 그대로 새 빈 전용 DB에 복원한 뒤 새 코드의 V5 적용을 별도로 확인한다. 새 V5 백업의 nullable 시민 버전을 V4 스키마에 임의 주입하거나, 복구를 위해 과거본에 가짜 rules/dictionary를 채우지 않는다. 공개 head rollback은 D07의 불변 공개본 선택이며 DB 스키마 downgrade와 다르다. 운영 적용은 기존 백업/접근·사람 검토 절차를 따른다.

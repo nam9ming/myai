@@ -1,6 +1,8 @@
 # 검토 승인·공개·복구
 
-검토본 import 이후의 작업을 `local-publication` 일회성 명령으로 실행한다. 기존 Java21·Spring Boot·MySQL 구성을 사용하며 HTTP 관리 API는 추가하지 않는다. 공개 API는 DB snapshot을 조회하며 matches는 Python 계산에 연결한다.
+아래 명령·5지점·구역·규칙/사전·snapshot-v1은 기존 소상공인 규격이다. [시민 공개본](citizen-publication.md)은 별도 버전/채널을 사용하며 이 기존 규격에 시민 revision을 섞지 않는다.
+
+검토본 import 이후의 작업을 `local-publication` 일회성 명령으로 실행한다. HTTP 연결은 [로컬 관리 API](local-management-api.md)를 따른다. 기존 공개 API는 DB snapshot을 조회하며 matches는 Python 계산에 연결한다.
 
 ## 작업 흐름
 

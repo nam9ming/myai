@@ -21,6 +21,51 @@ class PublicationCommandReaderTest {
     @TempDir Path root;
     final ObjectMapper mapper = new ObjectMapper();
 
+    @Test
+    void citizenPublicationUsesPointFreeCommandsAndCannotMakeReviewDecisions() throws Exception {
+        var input = mapper.createObjectNode().put("schema_version", "citizen-publication-command-v1")
+                .put("action", "preview").put("reason", "합성 시민 공개 검토").put("data_kind", "synthetic")
+                .putNull("expected_head_version");
+        input.putArray("revision_ids").add("20000000-0000-4000-8000-000000000007");
+        for (String action : java.util.List.of("preview", "publish")) {
+            input.put("action", action);
+            var command = read(input);
+            assertThat(command.action()).isEqualTo(action);
+            assertThat(command.schemaVersion()).isEqualTo("citizen-publication-command-v1");
+            assertThat(command).isNotInstanceOf(PublicationCommand.Publish.class);
+        }
+        for (String field : java.util.List.of("points", "area", "rules_version", "dictionary_version")) {
+            var extra = input.deepCopy().putNull(field); rejected(extra);
+        }
+        rejected(input.deepCopy().put("action", "approve"));
+        rejected(input.deepCopy().put("action", "reject"));
+        var rollback = mapper.createObjectNode().put("schema_version", "citizen-publication-command-v1")
+                .put("action", "rollback").put("reason", "합성 시민 공개 복구")
+                .put("snapshot_id", "20000000-0000-4000-8000-000000000007").put("expected_head_version", 0);
+        assertThat(read(rollback).action()).isEqualTo("rollback");
+        rejected(rollback.putNull("expected_head_version"));
+    }
+
+    @Test
+    void citizenPublicationBoundsVersionsAndRevisionSelectionWithoutCoercion() throws Exception {
+        var input = fixture("citizen-publish");
+        input.put("expected_head_version", Long.MAX_VALUE - 1);
+        assertThat(read(input)).isInstanceOf(PublicationCommand.CitizenPublish.class);
+        rejected(input.deepCopy().put("expected_head_version", Long.MAX_VALUE));
+        rejected(input.deepCopy().put("expected_head_version", -1));
+        rejected(input.deepCopy().put("expected_head_version", "0"));
+        rejected(input.deepCopy().put("expected_head_version", 0.5));
+        var duplicate = input.deepCopy();
+        duplicate.withArray("revision_ids").add(duplicate.path("revision_ids").get(0));
+        rejected(duplicate);
+        var tooMany = input.deepCopy();
+        var ids = tooMany.putArray("revision_ids");
+        for (int i = 0; i < 1001; i++) ids.add(java.util.UUID.randomUUID().toString());
+        rejected(tooMany);
+        input.putArray("revision_ids");
+        assertThat(read(input)).isInstanceOf(PublicationCommand.CitizenPublish.class);
+    }
+
     private PublicationCommand read(ObjectNode node) throws Exception {
         byte[] content = node.toString().getBytes(StandardCharsets.UTF_8);
         Path file = Files.write(root.resolve("command.json"), content);

@@ -35,7 +35,9 @@ class UserStudyMaterialTest {
         var transactions = mock(PlatformTransactionManager.class);
         when(repository.published(published.snapshot().id())).thenReturn(Optional.of(published));
         when(transactions.getTransaction(any())).thenAnswer(call -> new SimpleTransactionStatus());
-        var service = new SnapshotExportService(repository, new PublicationContent(new ReviewedImportReader(), mapper), transactions);
+        var content = new PublicationContent(new ReviewedImportReader(), mapper);
+        var service = new SnapshotExportService(repository, content, transactions,
+                new kr.ac.myai.backend.publication.CitizenPublicationContent(content, mapper));
         var exported = service.export(UUID.fromString(published.snapshot().id()), root);
         Path file = root.resolve(exported.fileName()); byte[] original = Files.readAllBytes(file);
         String script = """

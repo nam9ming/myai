@@ -101,7 +101,7 @@ public class ReviewReportRepository {
     }
 
     public ObjectNode previewBaseline(String channel) {
-        if (channel == null || !channel.matches("current|replay:[0-9a-f-]{36}")) throw error("REPORT_PREVIEW_INVALID", "channel");
+        if (channel == null || !channel.matches("current|replay:[0-9a-f-]{36}|citizen:current")) throw error("REPORT_PREVIEW_INVALID", "channel");
         return reads.execute(status -> {
             long[] bytes = {0};
             var result = mapper.createObjectNode().put("isolation", "REPEATABLE_READ").put("read_only", true)

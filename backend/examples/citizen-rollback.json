@@ -1,0 +1,7 @@
+{
+  "schema_version": "citizen-publication-command-v1",
+  "action": "rollback",
+  "reason": "합성 시민 공개본 복구: 실제 공개 ID와 head 번호로 교체",
+  "snapshot_id": "20000000-0000-4000-8000-000000000010",
+  "expected_head_version": 0
+}

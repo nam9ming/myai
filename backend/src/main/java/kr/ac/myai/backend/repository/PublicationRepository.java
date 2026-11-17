@@ -85,8 +85,15 @@ public class PublicationRepository {
     }
 
     public void insertSnapshot(Snapshot snapshot, List<Revision> revisions, Instant createdAt) {
-        jdbc.update("INSERT INTO snapshots(snapshot_id, mode, case_id, schema_version, rules_version, dictionary_version, canonical_json, checksum, metadata_json, created_at, data_kind) VALUES (?, ?, ?, 'snapshot-v1', ?, ?, ?, ?, '{}', ?, ?)",
-                snapshot.id(), snapshot.mode(), snapshot.caseId(), snapshot.rulesVersion(), snapshot.dictionaryVersion(), snapshot.canonical(), snapshot.checksum(), Timestamp.from(createdAt), snapshot.kind());
+        insertSnapshot(snapshot, revisions, createdAt, "snapshot-v1");
+    }
+
+    public void insertSnapshot(Snapshot snapshot, List<Revision> revisions, Instant createdAt, String schema) {
+        if (!java.util.Set.of("snapshot-v1", "citizen-snapshot-v1").contains(schema)) {
+            throw new PublicationException("PUBLICATION_VALIDATION_ERROR", "지원하지 않는 공개본 규격입니다.", "schema_version");
+        }
+        jdbc.update("INSERT INTO snapshots(snapshot_id, mode, case_id, schema_version, rules_version, dictionary_version, canonical_json, checksum, metadata_json, created_at, data_kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '{}', ?, ?)",
+                snapshot.id(), snapshot.mode(), snapshot.caseId(), schema, snapshot.rulesVersion(), snapshot.dictionaryVersion(), snapshot.canonical(), snapshot.checksum(), Timestamp.from(createdAt), snapshot.kind());
         for (var revision : revisions) jdbc.update("INSERT INTO snapshot_revisions(snapshot_id, event_id, revision_id) VALUES (?, ?, ?)", snapshot.id(), revision.eventId(), revision.id());
     }
 

@@ -46,10 +46,14 @@ public class PublicationCommandReader {
             JsonNode input = json.parseJson(content);
             check(input.isObject(), "file");
             String schema = input.path("schema_version").asText();
-            check(input.path("schema_version").isTextual() && Set.of("publication-command-v1", "citizen-review-command-v1").contains(schema), "schema_version");
+            check(input.path("schema_version").isTextual() && Set.of("publication-command-v1", "citizen-review-command-v1", "citizen-publication-command-v1").contains(schema), "schema_version");
             check(!schema.equals("citizen-review-command-v1") || Set.of("approve", "reject").contains(input.path("action").asText()), "action");
             validateScalars(input);
-            Class<? extends PublicationCommand> type = switch (input.path("action").asText()) {
+            Class<? extends PublicationCommand> type = schema.equals("citizen-publication-command-v1") ? switch (input.path("action").asText()) {
+                case "publish", "preview" -> PublicationCommand.CitizenPublish.class;
+                case "rollback" -> PublicationCommand.CitizenRollback.class;
+                default -> throw invalid("action");
+            } : switch (input.path("action").asText()) {
                 case "approve", "reject" -> PublicationCommand.Decision.class;
                 case "publish", "preview" -> PublicationCommand.Publish.class;
                 case "rollback" -> PublicationCommand.Rollback.class;
@@ -61,6 +65,8 @@ public class PublicationCommandReader {
             if (command instanceof PublicationCommand.Decision decision) {
                 check(new HashSet<>(decision.evidenceIds()).size() == decision.evidenceIds().size(), "evidence_ids");
                 check(decision.action().equals("reject") || !decision.evidenceIds().isEmpty(), "evidence_ids");
+            } else if (command instanceof PublicationCommand.CitizenPublish publish) {
+                check(new HashSet<>(publish.revisionIds()).size() == publish.revisionIds().size(), "revision_ids");
             } else if (command instanceof PublicationCommand.Publish publish) {
                 context(publish.mode(), publish.caseId() == null);
                 check(new HashSet<>(publish.revisionIds()).size() == publish.revisionIds().size(), "revision_ids");

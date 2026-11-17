@@ -1,0 +1,8 @@
+{
+  "schema_version": "citizen-publication-command-v1",
+  "action": "preview",
+  "reason": "합성 시민 공개본 검토: 실제 승인 결과의 revision_id로 교체",
+  "data_kind": "synthetic",
+  "revision_ids": ["20000000-0000-4000-8000-000000000007"],
+  "expected_head_version": null
+}

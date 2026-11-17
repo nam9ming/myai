@@ -28,9 +28,24 @@ public class PublicSnapshotRepository {
                        s.rules_version, s.dictionary_version, s.schema_version, s.created_at, h.snapshot_id
                 FROM snapshots s
                 LEFT JOIN publication_heads h ON h.channel_key = IF(s.mode = 'current', 'current', CONCAT('replay:', s.case_id))
-                WHERE s.snapshot_id = ? AND EXISTS (
+                WHERE s.snapshot_id = ? AND s.schema_version <> 'citizen-snapshot-v1' AND EXISTS (
                     SELECT 1 FROM publication_audits a WHERE a.after_snapshot_id = s.snapshot_id
                     AND a.channel_key = IF(s.mode = 'current', 'current', CONCAT('replay:', s.case_id)) AND a.action = 'publish')
+                """, (row, i) -> new Published(new PublicationRepository.Snapshot(row.getString(1), row.getString(2), row.getString(3),
+                        row.getString(4), row.getString(5), row.getString(6), row.getString(7), row.getString(8)),
+                        row.getString(9), row.getTimestamp(10).toInstant(), row.getString(11)), id).stream().findFirst();
+    }
+
+    public Optional<Published> citizenPublished(String id) {
+        return jdbc.query("""
+                SELECT s.snapshot_id, s.mode, s.case_id, s.canonical_json, s.checksum, s.data_kind,
+                       s.rules_version, s.dictionary_version, s.schema_version, s.created_at, h.snapshot_id
+                FROM snapshots s
+                LEFT JOIN publication_heads h ON h.channel_key = 'citizen:current'
+                WHERE s.snapshot_id = ? AND s.schema_version = 'citizen-snapshot-v1'
+                  AND s.mode = 'current' AND s.case_id IS NULL AND EXISTS (
+                    SELECT 1 FROM publication_audits a WHERE a.after_snapshot_id = s.snapshot_id
+                    AND a.channel_key = 'citizen:current' AND a.action = 'publish')
                 """, (row, i) -> new Published(new PublicationRepository.Snapshot(row.getString(1), row.getString(2), row.getString(3),
                         row.getString(4), row.getString(5), row.getString(6), row.getString(7), row.getString(8)),
                         row.getString(9), row.getTimestamp(10).toInstant(), row.getString(11)), id).stream().findFirst();

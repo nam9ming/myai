@@ -238,6 +238,26 @@ class LocalManagementServiceTest {
     }
 
     @Test
+    void pointFreeCitizenPublicationRetainsWritesButNotPreviewRequests() throws Exception {
+        var input = mapper.createObjectNode().put("schema_version", "citizen-publication-command-v1")
+                .put("action", "preview").put("reason", "합성 시민 공개")
+                .put("data_kind", "synthetic").putNull("expected_head_version");
+        input.putArray("revision_ids");
+        when(publication.execute(any(), eq(sources), eq(actor))).thenAnswer(invocation -> {
+            var command = (PublicationCommand) invocation.getArgument(0);
+            assertThat(command.schemaVersion()).isEqualTo("citizen-publication-command-v1");
+            if (command.action().equals("preview")) {
+                try (var files = Files.list(requests)) { assertThat(files.toList()).isEmpty(); }
+            } else retained(bytes(input));
+            return new PublicationService.Result(command.action(), null, null, otherId, "a".repeat(64), null, null);
+        });
+        assertThat(service.publish(bytes(input)).data()).isInstanceOf(PublicationService.Result.class);
+        input.put("action", "publish");
+        assertThat(service.publish(bytes(input)).requestSha256()).isEqualTo(hash(bytes(input)));
+        verifyNoInteractions(imports, extractions, handoffs);
+    }
+
+    @Test
     void publishAndRollbackPreserveTheirOriginalCommandsBeforeDomainWork() throws Exception {
         for (String name : List.of("publish", "rollback")) {
             byte[] body = bytes(fixture(name));
