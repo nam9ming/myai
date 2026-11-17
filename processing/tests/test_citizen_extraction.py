@@ -53,6 +53,15 @@ class CitizenExtractionTest(unittest.TestCase):
         self.assertIsNone(item['cost']['value'])
         self.assertIn('무료', {str(item['cost']['value']) for item in result['items']})
 
+    def test_living_fixture_preserves_explicit_nonapplication_for_period_and_method(self):
+        item = next(item for item in self.output['items'] if item['categories']['value'] == ['living'])
+        evidence = next(entry for entry in self.output['evidence'] if entry['evidence_id'] == 'e5')
+        self.assertIn('별도 신청은 해당하지 않습니다', evidence['quote'])
+        for name in ('application_period', 'application_method'):
+            with self.subTest(field=name):
+                self.assertEqual(item[name], dict(value=None, knowledge='not_applicable', evidence_ids=['e5'],
+                                                  reason='원문에 별도 신청 비해당 명시'))
+
     def test_unknown_values_and_known_empty_array_remain_distinct(self):
         item = self.output['items'][0]
         item['categories'].update(value=None, knowledge='ambiguous', reason='분류 미상')

@@ -9,6 +9,8 @@ import kr.ac.myai.backend.importing.ReviewedImportReader;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -115,6 +117,31 @@ class CitizenExtractionArchiveTest {
         Path probe = helper.probe("print(" + JSON.writeValueAsString(packet.toString()) + ")");
         var reader = new ExtractionArchiveReader(new ReviewedImportReader(), PythonProbe.PYTHON, probe.toString(), 10_000);
         invalid(() -> reader.readSealed(fixture.run(), directory.getParent()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"directory_555", "file_444", "extra_file", "extra_directory", "extra_symlink"})
+    void rejectsNonExactCitizenSealAndUnlistedEntriesWithoutRepairEvenWhenHelperClaimsSuccess(String defect) throws Exception {
+        var fixture = fixture(root.toRealPath(), (byte[]) null); importManual(reader(), fixture);
+        var frozen = reader().read(fixture.run(), fixture.archive()); Path directory = frozen.directory();
+        if (defect.equals("directory_555")) Files.setPosixFilePermissions(directory, PosixFilePermissions.fromString("r-xr-xr-x"));
+        else if (defect.equals("file_444")) Files.setPosixFilePermissions(directory.resolve("metadata.json"), PosixFilePermissions.fromString("r--r--r--"));
+        else {
+            Files.setPosixFilePermissions(directory, PosixFilePermissions.fromString("rwx------"));
+            Path extra = directory.resolve("unlisted");
+            if (defect.equals("extra_file")) Files.writeString(extra, "합성 미등록 파일");
+            else if (defect.equals("extra_directory")) Files.createDirectory(extra);
+            else Files.createSymbolicLink(extra, fixture.input());
+            Files.setPosixFilePermissions(directory, PosixFilePermissions.fromString("r-x------"));
+        }
+        var packet = JSON.createObjectNode().put("protocol_version", "extraction-registration-v1").put("snapshot_ref", fixture.run());
+        packet.set("receipt", frozen.receipt());
+        var helper = new ExtractionArchiveReaderTest(); helper.root = root;
+        Path probe = helper.probe("print(" + JSON.writeValueAsString(packet.toString()) + ")");
+        var reader = new ExtractionArchiveReader(new ReviewedImportReader(), PythonProbe.PYTHON, probe.toString(), 10_000);
+        var before = tree(directory);
+        try { invalid(() -> reader.readSealed(fixture.run(), directory.getParent())); }
+        finally { assertThat(tree(directory)).isEqualTo(before); }
     }
 
     static ExtractionArchiveReader reader() { return new ExtractionArchiveReader(new ReviewedImportReader(), PythonProbe.PYTHON, PythonProbe.REPO.toString(), 20_000); }

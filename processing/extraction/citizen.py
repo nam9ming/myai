@@ -56,8 +56,12 @@ def output_schema():
     evidence = obj(dict(evidence_id=string(), block_id=string(), quote=string(),
                         start_char={'type': 'integer', 'minimum': 0}, end_char={'type': 'integer', 'minimum': 0},
                         text_sha256=string(HASH)))
-    return document(dict(schema_version={'const': SCHEMA_VERSION}, document_version_id=string(UUID),
-                         items=array(item), evidence=array(evidence), warnings=array(string())), 'extract-citizen-v1.json')
+    result = document(dict(schema_version={'const': SCHEMA_VERSION}, document_version_id=string(UUID),
+                           items=array(item), evidence=array(evidence), warnings=array(string())), 'extract-citizen-v1.json')
+    result['allOf'] = [
+        {'if': {'properties': {'items': {'maxItems': 0}}},
+         'then': {'properties': {'warnings': {'contains': {'const': 'NO_EVENT_FOUND'}}}}}]
+    return result
 
 
 def _field(value, kind, evidence, path):

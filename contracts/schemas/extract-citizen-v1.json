@@ -1684,5 +1684,25 @@
     "evidence",
     "warnings"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "items": {
+            "maxItems": 0
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "warnings": {
+            "contains": {
+              "const": "NO_EVENT_FOUND"
+            }
+          }
+        }
+      }
+    }
+  ]
 }

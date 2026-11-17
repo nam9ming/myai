@@ -483,9 +483,11 @@
       },
       "application_method": {
         "value": null,
-        "knowledge": "not_stated",
-        "evidence_ids": [],
-        "reason": "원문에 해당 값이 명시되지 않음"
+        "knowledge": "not_applicable",
+        "evidence_ids": [
+          "e5"
+        ],
+        "reason": "원문에 별도 신청 비해당 명시"
       },
       "preparation": {
         "value": null,

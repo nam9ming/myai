@@ -99,7 +99,9 @@ def main():
         assert set(item) == {"local_item_id", "title", "categories"} | raw_fields
         assert item["local_item_id"] not in item_ids
         item_ids.add(item["local_item_id"])
-        assert item["title"]["value"] is None or type(item["title"]["value"]) is str
+        for name in {"title", "categories"} | raw_fields:
+            field_value(item[name], citizen_evidence)
+        assert item["title"]["value"] is None or type(item["title"]["value"]) is str and item["title"]["value"].strip()
         selected = item["categories"]["value"]
         if selected is None:
             assert item["categories"]["knowledge"] == "ambiguous"
@@ -110,6 +112,8 @@ def main():
         for name in raw_fields:
             raw = item[name]["value"]
             assert raw is None or type(raw) is str or type(raw) is list
+            if type(raw) is str:
+                assert raw.strip()
             if type(raw) is list:
                 assert all(type(entry) is str and entry.strip() for entry in raw) and len(raw) == len(set(raw))
     fields(citizen_output["items"], citizen_evidence)

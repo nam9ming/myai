@@ -55,6 +55,8 @@ RUN_ID·봉인 부모 경로와 private 파일은 실제 결과로 바꾼다. im
 
 [기존 archive-v1](extraction-run.md)의 파일 집합·identity/receipt·1~3시도·정확 재실행·충돌·symlink 방어·0400/0500 봉인을 유지한다. 실제 prompt/metadata/output 원래 bytes와 모든 실패를 보관하고, 마지막 출력의 기계 검증 상태를 실행 상태로 쓴다. 검증용 JSON8MiB 초과·비UTF-8 실패도 원출력 전체를 보존한다. 성공도 `review_required=true`다. CLI manual prompt의 기존 한도와 [HTTP 업로드](../backend/docs/extraction-upload.md)의 metadata64KiB/prompt20MiB/output5MiB 한도를 구별한다. 봉인은 전자서명·WORM·실제 사람 승인이 아니다.
 
+시민 봉인본의 파일 집합은 receipt의 artifacts와 `identity.json/receipt.json`뿐이며 디렉터리0500·일반 파일0400을 정확히 요구한다. 재사용·verify-sealed·Java 판독·사람 수정 부모가 같은 조건을 적용한다. 봉인 전 canonical은 같은 파일 집합의0700/0600만 허용한다. 다른 권한이나 추가 파일/디렉터리/링크가 있으면 원본을 chmod하거나 항목을 버려 복구하지 않고 오류로 남긴다. 기존 family의 봉인 판정은 변경하지 않는다.
+
 ## 사람 수정·Java 연결·기존 평가 격리
 
 [human-review-v1](human-review.md)은 부모 metadata의 family로 이전/수정후 출력 전체를 검사한다. 전체 changes 감사·원래 review bytes·부모 D05 전체·실패 상태를 유지한다. 실패 부모는 `before=null`, `after=수정후 전체 출력` 기록이 필요하며 새 family로 바꿔 수정할 수 없다. 검토자·basis·시각은 제공자의 선언이다. 합성 check-review CLI 시험의600초는 `review_duration_ns=600000000000`, `human_verification=declared_only`이며 실제 사람 작업시간 측정이 아니다.

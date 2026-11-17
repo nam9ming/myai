@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -189,6 +190,47 @@ class CitizenExtractionArchiveTest(unittest.TestCase):
                 with self.assertRaises(ExtractionError) as caught:
                     reviews.check_review(json.dumps(changed).encode(), self.root)
                 self.assertEqual(caught.exception.code, expected)
+
+    def test_citizen_sealed_reuse_rejects_nonprivate_modes_and_extra_entries_without_repair(self):
+        for alteration in ('directory-mode', 'file-mode', 'extra-file', 'extra-directory', 'extra-link'):
+            with self.subTest(alteration=alteration):
+                self.root = self.work / alteration
+                self.record(); _, folder = self.frozen()
+                if alteration == 'directory-mode':
+                    folder.chmod(0o555)
+                elif alteration == 'file-mode':
+                    (folder / 'metadata.json').chmod(0o444)
+                else:
+                    folder.chmod(0o700)
+                    extra = folder / 'unlisted'
+                    if alteration == 'extra-file':
+                        extra.write_bytes(b'preserve unlisted synthetic bytes'); extra.chmod(0o400)
+                    elif alteration == 'extra-directory':
+                        extra.mkdir(mode=0o500)
+                    else:
+                        extra.symlink_to(self.source)
+                    folder.chmod(0o500)
+                before = self.image(folder)
+                for operation in (verify_sealed_run, freeze_run):
+                    with self.subTest(operation=operation.__name__):
+                        with self.assertRaises(ExtractionError) as caught:
+                            operation(self.run_id, folder.parent)
+                        self.assertEqual(caught.exception.kind, 'archive')
+                        self.assertEqual(self.image(folder), before)
+
+    def test_citizen_freeze_does_not_silently_drop_unlisted_canonical_files(self):
+        self.record(); folder = self.root / self.run_id
+        (folder / 'unlisted').write_bytes(b'preserve all original synthetic bytes')
+        before = self.image(folder)
+        with self.assertRaises(ExtractionError) as caught:
+            freeze_run(self.run_id, self.root)
+        self.assertEqual(caught.exception.kind, 'archive')
+        self.assertEqual(self.image(folder), before)
+
+    def image(self, folder):
+        return {path.name: (path.lstat().st_mode,
+                path.read_bytes() if stat.S_ISREG(path.lstat().st_mode) else None)
+                for path in [folder, *folder.iterdir()]}
 
 
 if __name__ == '__main__':

@@ -159,6 +159,19 @@ public class ExtractionArchiveReader {
             sealed(directory);
             for (String name : names) sealed(directory.resolve(name));
             sealed(directory.resolve("identity.json")); sealed(directory.resolve("receipt.json"));
+            if (info.path("schema_version").asText().equals("extract-citizen-v1")) {
+                var expected = new HashSet<>(names); expected.addAll(Set.of("identity.json", "receipt.json"));
+                var actual = new HashSet<String>();
+                try (var files = Files.list(directory)) { files.forEach(file -> actual.add(file.getFileName().toString())); }
+                require(actual.equals(expected));
+                require(Files.getPosixFilePermissions(directory, LinkOption.NOFOLLOW_LINKS)
+                        .equals(Set.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_EXECUTE)));
+                for (String name : expected) {
+                    Path file = directory.resolve(name);
+                    require(Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)
+                            && Files.getPosixFilePermissions(file, LinkOption.NOFOLLOW_LINKS).equals(Set.of(PosixFilePermission.OWNER_READ)));
+                }
+            }
             return new VerifiedExtraction(directory, source, info, receipt, new String(metadata, StandardCharsets.UTF_8),
                     new String(savedReceipt, StandardCharsets.UTF_8), ReviewedImportReader.sha256(savedReceipt));
         } catch (PythonProcess.Failure ex) {
