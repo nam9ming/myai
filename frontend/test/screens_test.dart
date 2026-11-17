@@ -32,16 +32,21 @@ Future<AppState> mount(
   final state = AppState(prototype(), browser ?? FakeBrowser(), mode: mode);
   await state.reload();
   await tester.pumpWidget(
-    MediaQuery(
-      data: MediaQueryData(
-        textScaler: TextScaler.linear(scale),
-        disableAnimations: tester
-            .binding
-            .platformDispatcher
-            .accessibilityFeatures
-            .disableAnimations,
+    MediaQuery.fromView(
+      view: tester.view,
+      child: Builder(
+        builder: (context) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(scale),
+            disableAnimations: tester
+                .binding
+                .platformDispatcher
+                .accessibilityFeatures
+                .disableAnimations,
+          ),
+          child: YeogiApp(state: state),
+        ),
       ),
-      child: YeogiApp(state: state),
     ),
   );
   await tester.pumpAndSettle();

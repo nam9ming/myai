@@ -51,9 +51,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     height: 4,
                     margin: const EdgeInsets.only(right: 6),
                     decoration: BoxDecoration(
-                      color: group >= i
-                          ? const Color(0xff6a8051)
-                          : const Color(0xffedf0e5),
+                      color: group >= i ? Palette.orange : Palette.soft,
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
@@ -71,14 +69,20 @@ class _OnboardingPageState extends State<OnboardingPage> {
             ),
           AnimatedSwitcher(
             duration: Duration(milliseconds: reducedMotion(context) ? 0 : 320),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
             transitionBuilder: (child, a) => FadeTransition(
               opacity: a,
-              child: SlideTransition(
-                position: Tween(
-                  begin: const Offset(0, .03),
-                  end: Offset.zero,
-                ).animate(a),
+              child: AnimatedBuilder(
+                animation: a,
                 child: child,
+                builder: (_, child) => Transform.translate(
+                  offset: Offset(
+                    0,
+                    reducedMotion(context) ? 0 : (1 - a.value) * 6,
+                  ),
+                  child: child,
+                ),
               ),
             ),
             child: Column(
@@ -155,12 +159,12 @@ class _OnboardingPageState extends State<OnboardingPage> {
                             horizontal: 9,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xfff2f5e9),
+                            color: const Color(0xfffff1e9),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
                             c,
-                            style: type(11, color: const Color(0xff6e7e5d)),
+                            style: type(11, color: const Color(0xffa54a2b)),
                           ),
                         ),
                     ],
@@ -184,7 +188,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
                             width: (c.maxWidth - 8) / 2,
                             child: UiButton(
                               e.value,
-                              green: true,
                               leftAligned: true,
                               selected: draft.interests.contains(e.key),
                               onTap: () => setState(() {
@@ -261,19 +264,17 @@ class _OnboardingPageState extends State<OnboardingPage> {
             clipBehavior: Clip.antiAlias,
             child: small
                 ? form
-                : IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(child: _story()),
-                        Expanded(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(minHeight: 560),
-                            child: form,
-                          ),
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: _story()),
+                      Expanded(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 560),
+                          child: form,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
           ),
         ),
@@ -313,16 +314,16 @@ class _OnboardingPageState extends State<OnboardingPage> {
     height: 65,
     margin: const EdgeInsets.only(top: 9, bottom: 20),
     decoration: BoxDecoration(
-      color: const Color(0xffedf2e5),
+      color: const Color(0xfffff1e9),
       borderRadius: BorderRadius.circular(20),
     ),
     child: Center(
-      child: UiIcon(icon, size: 29, color: const Color(0xff627950)),
+      child: UiIcon(icon, size: 29, color: const Color(0xffc0522c)),
     ),
   );
   Widget _primary(String label, VoidCallback? tap) => SizedBox(
     width: double.infinity,
-    child: UiButton(label, primary: true, green: true, onTap: tap),
+    child: UiButton(label, primary: true, onTap: tap),
   );
   Widget _secondary(String label, VoidCallback tap) =>
       Center(child: UiButton(label, quiet: true, onTap: tap));
@@ -337,7 +338,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 width: (c.maxWidth - 8) / 2,
                 child: UiButton(
                   item,
-                  green: true,
                   leftAligned: true,
                   selected: selected == item,
                   onTap: () => tap(item),
@@ -357,14 +357,14 @@ class _OnboardingPageState extends State<OnboardingPage> {
       for (final item in items)
         UiButton(
           item,
-          green: true,
           selected: item == selected || item == '선택 안 함' && selected.isEmpty,
           onTap: () => tap(item),
         ),
     ],
   );
   Widget _story() => Container(
-    color: const Color(0xffedf0e2),
+    constraints: const BoxConstraints(minHeight: 620),
+    color: const Color(0xfffff1e9),
     padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 39),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -375,14 +375,14 @@ class _OnboardingPageState extends State<OnboardingPage> {
           children: [
             Text(
               'A LITTLE CLOSER TO YOUR NEIGHBORHOOD',
-              style: type(9, color: const Color(0xff6e7958), spacing: 1.3),
+              style: type(9, color: const Color(0xffa54a2b), spacing: 1.3),
             ),
             const SizedBox(height: 22),
             Text(
               '흩어져 있던 소식이\n나에게 필요한 정보로.',
               style: type(
                 28,
-                color: const Color(0xff33442e),
+                color: const Color(0xff623b2a),
                 weight: FontWeight.w600,
                 spacing: -1.3,
               ),
@@ -390,57 +390,180 @@ class _OnboardingPageState extends State<OnboardingPage> {
             const SizedBox(height: 17),
             Text(
               '배우고 싶은 것부터 챙겨야 할 지원까지.\n여기에서, 나에게 맞는 소식을 만나요.',
-              style: type(12, color: const Color(0xff78816b), height: 1.9),
+              style: type(12, color: const Color(0xff886553), height: 1.9),
             ),
           ],
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 40),
-          child: Row(
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 36),
+          child: Wrap(
+            spacing: 18,
+            runSpacing: 24,
             children: [
-              for (final (i, icon, label, color, angle) in [
-                (0, 'pin', '가까운 소식', const Color(0xfffafbf6), -.1),
-                (1, 'leaf', '새로운 기회', const Color(0xffe1e7b7), .12),
-                (2, 'book', '배우는 일상', const Color(0xffeedcc6), -.05),
-              ])
-                Expanded(
-                  child: Transform.translate(
-                    offset: Offset(0, i == 1 ? -25 : 0),
-                    child: Transform.rotate(
-                      angle: angle,
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        padding: const EdgeInsets.fromLTRB(6, 24, 6, 16),
-                        decoration: BoxDecoration(
-                          color: color,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Column(
-                          children: [
-                            UiIcon(
-                              icon,
-                              size: 34,
-                              color: const Color(0xff526145),
-                            ),
-                            const SizedBox(height: 15),
-                            Text(
-                              label,
-                              style: type(11, color: const Color(0xff526145)),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+              _StoryCard(
+                'pin',
+                '가까운 소식',
+                '우리 동네 행사부터 생활·교통 안내까지, 선택한 지역의 소식을 한곳에서 살펴보세요.',
+                Color(0xfffffdf9),
+                Color(0xffa54a2b),
+                -.06,
+              ),
+              _StoryCard(
+                'leaf',
+                '새로운 기회',
+                '새롭게 열리는 모집과 참여 기회를 모아 보고, 관심 있는 소식을 발견해보세요.',
+                Color(0xffffdfc6),
+                Color(0xff9c492b),
+                .06,
+              ),
+              _StoryCard(
+                'book',
+                '배우는 일상',
+                '취미 수업과 교육 프로그램을 살펴보고, 일상에 더하고 싶은 배움을 찾아보세요.',
+                Color(0xffeedcc6),
+                Color(0xff79543b),
+                -.04,
+              ),
+              _StoryCard(
+                'gift',
+                '챙기는 혜택',
+                '지원사업과 생활 혜택의 대상·신청 기간을 확인하고, 필요한 정보를 챙겨보세요.',
+                Color(0xfffff7ed),
+                Color(0xffa54a2b),
+                .05,
+              ),
             ],
           ),
         ),
         Text(
           '지역과 관심사는 언제든 바꿀 수 있어요.',
-          style: type(10, color: const Color(0xff7a826e)),
+          style: type(10, color: const Color(0xff886553)),
         ),
       ],
     ),
   );
+}
+
+class _StoryCard extends StatefulWidget {
+  final String icon, label, description;
+  final Color background, foreground;
+  final double angle;
+  const _StoryCard(
+    this.icon,
+    this.label,
+    this.description,
+    this.background,
+    this.foreground,
+    this.angle,
+  );
+  @override
+  State<_StoryCard> createState() => _StoryCardState();
+}
+
+class _StoryCardState extends State<_StoryCard> {
+  final tooltip = GlobalKey<TooltipState>();
+  bool hovered = false, focused = false;
+  @override
+  Widget build(BuildContext context) {
+    final active = hovered || focused;
+    final motion = !reducedMotion(context);
+    final duration = Duration(milliseconds: motion ? 180 : 0);
+    return Focus(
+      onFocusChange: (value) {
+        setState(() => focused = value);
+        if (value) {
+          tooltip.currentState?.ensureTooltipVisible();
+        } else {
+          Tooltip.dismissAllToolTips();
+        }
+      },
+      child: MouseRegion(
+        onEnter: (_) => setState(() => hovered = true),
+        onExit: (_) => setState(() => hovered = false),
+        child: Tooltip(
+          key: tooltip,
+          message: '${widget.label}\n${widget.description}',
+          waitDuration: Duration.zero,
+          exitDuration: Duration.zero,
+          preferBelow: false,
+          verticalOffset: 18,
+          constraints: const BoxConstraints(maxWidth: 240),
+          padding: const EdgeInsets.all(15),
+          textStyle: type(12, color: const Color(0xff654b3f), height: 1.8),
+          decoration: BoxDecoration(
+            color: const Color(0xfffffdfb),
+            border: Border.all(color: const Color(0xffedcbb8)),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x1c713520),
+                blurRadius: 24,
+                offset: Offset(0, 8),
+              ),
+            ],
+          ),
+          child: AnimatedContainer(
+            duration: duration,
+            curve: Curves.easeOutCubic,
+            transform: Matrix4.translationValues(
+              0,
+              active && motion ? -6 : 0,
+              0,
+            ),
+            child: AnimatedScale(
+              scale: active && motion ? 1.04 : 1,
+              duration: duration,
+              child: Transform.rotate(
+                angle: widget.angle,
+                child: Container(
+                  width: 138,
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 20,
+                    horizontal: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: widget.background,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: focused ? Palette.focus : const Color(0x22a54a2b),
+                      width: focused ? 2 : 1,
+                    ),
+                    boxShadow: active
+                        ? const [
+                            BoxShadow(
+                              color: Color(0x249b4a25),
+                              blurRadius: 20,
+                              offset: Offset(0, 10),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      UiIcon(
+                        widget.icon,
+                        size: 30,
+                        color: widget.foreground,
+                        strokeWidth: 1.35,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        widget.label,
+                        style: type(
+                          12,
+                          color: widget.foreground,
+                          weight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

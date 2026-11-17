@@ -34,6 +34,39 @@ void main() {
     expect(find.text('퇴근 후, 나를 위한 생활 도예'), findsOneWidget);
     expect(find.byType(SaveButton), findsWidgets);
   });
+  testWidgets('온보딩 카드는 호버와 초점에서 설명을 표시한다', (tester) async {
+    await mount(tester, '/start', 1440);
+    for (final label in ['가까운 소식', '새로운 기회', '배우는 일상', '챙기는 혜택']) {
+      expect(find.text(label), findsOneWidget);
+    }
+    final card = find.text('챙기는 혜택');
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(tester.getCenter(card));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('지원사업과 생활 혜택의 대상·신청 기간'), findsOneWidget);
+    expect(
+      tester
+          .widgetList<AnimatedScale>(find.byType(AnimatedScale))
+          .any((w) => w.scale == 1.04),
+      isTrue,
+    );
+    await mouse.moveTo(Offset.zero);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('지원사업과 생활 혜택의 대상·신청 기간'), findsNothing);
+    final tooltip = find
+        .ancestor(of: card, matching: find.byType(Tooltip))
+        .first;
+    final focus = find
+        .ancestor(of: tooltip, matching: find.byType(Focus))
+        .first;
+    Focus.of(tester.element(tooltip)).requestFocus();
+    await tester.pumpAndSettle();
+    expect(find.textContaining('지원사업과 생활 혜택의 대상·신청 기간'), findsOneWidget);
+    expect(focus, findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('온보딩 이전 단계로 돌아가도 지역 선택을 보존한다', (tester) async {
     final state = await mount(tester, '/start', 390);
     await tapText(tester, '경기도');

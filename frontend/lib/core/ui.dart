@@ -93,13 +93,19 @@ TextStyle type(
 
 class UiIcon extends StatelessWidget {
   final String name;
-  final double size;
+  final double size, strokeWidth;
   final Color? color;
-  const UiIcon(this.name, {super.key, this.size = 20, this.color});
+  const UiIcon(
+    this.name, {
+    super.key,
+    this.size = 20,
+    this.strokeWidth = 1.7,
+    this.color,
+  });
   @override
   Widget build(BuildContext context) => ExcludeSemantics(
     child: SvgPicture.string(
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${_hex(color ?? Palette.ink)}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="${iconPaths[name] ?? iconPaths['info']}"/></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${_hex(color ?? Palette.ink)}" stroke-width="$strokeWidth" stroke-linecap="round" stroke-linejoin="round"><path d="${iconPaths[name] ?? iconPaths['info']}"/></svg>',
       width: size,
       height: size,
     ),

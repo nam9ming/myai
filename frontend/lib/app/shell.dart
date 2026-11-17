@@ -110,7 +110,7 @@ class _AppShellState extends State<AppShell> {
           builder: (context) => Scaffold(
             body: Column(
               children: [
-                if (!onboard)
+                if (!onboard && !state.isPrototype)
                   Container(
                     width: double.infinity,
                     color: const Color(0xfff4f6ed),
@@ -126,16 +126,6 @@ class _AppShellState extends State<AppShell> {
                           : '공개 자료 조회 · 제공 범위와 원문을 확인해주세요',
                       textAlign: TextAlign.center,
                       style: type(10, color: const Color(0xff71805d)),
-                    ),
-                  ),
-                if (state.storageFailed)
-                  Container(
-                    width: double.infinity,
-                    color: const Color(0xfffff4dd),
-                    padding: const EdgeInsets.all(10),
-                    child: Text(
-                      '브라우저에 저장할 수 없어 현재 화면에서만 유지됩니다. 저장 설정을 확인해주세요.',
-                      style: type(12, color: const Color(0xff85612b)),
                     ),
                   ),
                 _header(context, onboard),
@@ -466,7 +456,9 @@ class _AppShellState extends State<AppShell> {
             style: type(11, color: Palette.sub),
           ),
           Text(
-            '신청 조건과 일정은 실제 원문에서 확인해야 합니다. 설정과 관심정보는 이 브라우저에 저장됩니다.',
+            widget.state.storageFailed
+                ? '신청 조건과 일정은 실제 원문에서 확인해주세요. 설정과 관심정보는 이번 방문 동안만 유지됩니다.'
+                : '신청 조건과 일정은 실제 원문에서 확인해야 합니다. 설정과 관심정보는 이 브라우저에 저장됩니다.',
             style: type(11, color: Palette.sub),
           ),
           UiButton(

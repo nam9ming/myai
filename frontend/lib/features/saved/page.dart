@@ -25,9 +25,11 @@ class SavedPage extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionHeading(
+        SectionHeading(
           '관심정보',
-          description: '다시 보고 싶은 소식을 모아두세요. 저장은 이 브라우저에서 유지됩니다.',
+          description: app.storageFailed
+              ? '다시 보고 싶은 소식을 모아두세요. 이번 방문 동안만 유지되며 새로고침하면 초기화됩니다.'
+              : '다시 보고 싶은 소식을 모아두세요. 저장은 이 브라우저에서 유지됩니다.',
         ),
         Row(
           children: [

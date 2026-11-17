@@ -153,6 +153,14 @@ class _SettingsPageState extends State<SettingsPage> {
                 ],
               ),
             ),
+            if (app.storageFailed)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Text(
+                  '설정과 관심정보는 이번 방문 동안만 유지되며 새로고침하면 초기화됩니다.',
+                  style: type(11, color: Palette.sub),
+                ),
+              ),
             const SizedBox(height: 24),
             Wrap(
               spacing: 12,

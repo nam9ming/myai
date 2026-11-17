@@ -159,6 +159,7 @@ class NoticeDetailPage extends StatefulWidget {
 class _NoticeDetailPageState extends State<NoticeDetailPage> {
   Future<Notice?>? pending;
   final contentKey = GlobalKey(), summaryKey = GlobalKey();
+  RenderBox? contentBox, summaryBox;
   @override
   void didUpdateWidget(NoticeDetailPage oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -231,6 +232,14 @@ class _NoticeDetailPageState extends State<NoticeDetailPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [summary, const SizedBox(height: 20), body],
               );
+            // 재배치 중 비활성화된 요소를 읽지 않도록 레이아웃 이후 참조한다.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              final left = contentKey.currentContext?.findRenderObject();
+              final right = summaryKey.currentContext?.findRenderObject();
+              contentBox = left is RenderBox ? left : null;
+              summaryBox = right is RenderBox ? right : null;
+            });
             final position = Scrollable.of(context).position;
             return Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -244,14 +253,17 @@ class _NoticeDetailPageState extends State<NoticeDetailPage> {
                   child: ListenableBuilder(
                     listenable: position,
                     builder: (_, child) {
-                      final leftBox = contentKey.currentContext
-                              ?.findRenderObject(),
-                          rightBox = summaryKey.currentContext
-                              ?.findRenderObject();
-                      final left = leftBox is RenderBox && leftBox.hasSize
+                      final leftBox = contentBox, rightBox = summaryBox;
+                      final left =
+                              leftBox != null &&
+                                  leftBox.attached &&
+                                  leftBox.hasSize
                               ? leftBox.size.height
                               : 0.0,
-                          right = rightBox is RenderBox && rightBox.hasSize
+                          right =
+                              rightBox != null &&
+                                  rightBox.attached &&
+                                  rightBox.hasSize
                               ? rightBox.size.height
                               : 0.0;
                       final offset = (position.pixels - 60).clamp(
