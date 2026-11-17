@@ -19,6 +19,10 @@ public final class HumanReviewChanges {
     private HumanReviewChanges() { }
 
     public static void record(JsonNode previous, ObjectNode next, String actor, Instant at, String reason) {
+        record(previous, next, actor, at, reason, FIELDS);
+    }
+
+    public static void record(JsonNode previous, ObjectNode next, String actor, Instant at, String reason, List<String> fields) {
         if (actor == null || actor.isBlank() || at == null || reason == null || reason.isBlank()) throw conflict();
         String time = at.truncatedTo(ChronoUnit.MICROS).toString();
         var revision = next.withObject("revision");
@@ -29,7 +33,7 @@ public final class HumanReviewChanges {
         var citations = new LinkedHashSet<String>();
         evidence(previous).forEach(citations::add);
         evidence(next).forEach(citations::add);
-        for (String field : FIELDS) add(changes, previous.path("revision").path(field), revision.path(field), field, actor, time, reason, citations);
+        for (String field : fields) add(changes, previous.path("revision").path(field), revision.path(field), field, actor, time, reason, citations);
         for (String field : List.of("event", "evidence")) add(changes, previous.path(field), next.path(field), field, actor, time, reason, citations);
     }
 
@@ -47,6 +51,10 @@ public final class HumanReviewChanges {
     }
 
     public static void validate(JsonNode previous, JsonNode next, boolean generatedHandoff) {
+        validate(previous, next, generatedHandoff, FIELDS);
+    }
+
+    public static void validate(JsonNode previous, JsonNode next, boolean generatedHandoff, List<String> fields) {
         var revision = next.path("revision");
         Map<String, List<JsonNode>> records = new HashMap<>();
         String reviewer = revision.path("reviewer_id").textValue();
@@ -62,7 +70,7 @@ public final class HumanReviewChanges {
                 continue;
             }
             String path = change.path("field_path").asText();
-            if (!matches(change, value(previous, path), value(next, path), reviewer, at)) throw conflict();
+            if (!matches(change, value(previous, path, fields), value(next, path, fields), reviewer, at)) throw conflict();
             JsonNode citations = change.path("evidence_ids");
             if (!citations.isArray() || citations.isEmpty() && !generatedHandoff) throw conflict();
             var unique = new LinkedHashSet<String>();
@@ -71,7 +79,7 @@ public final class HumanReviewChanges {
             }
             records.computeIfAbsent(path, ignored -> new ArrayList<>()).add(change);
         }
-        for (String field : FIELDS) {
+        for (String field : fields) {
             covered(previous.path("revision").path(field), revision.path(field), field, records, reviewer, at);
         }
         covered(previous.path("event"), next.path("event"), "event", records, reviewer, at);
@@ -113,9 +121,9 @@ public final class HumanReviewChanges {
         return result;
     }
 
-    private static JsonNode value(JsonNode payload, String path) {
+    private static JsonNode value(JsonNode payload, String path, List<String> fields) {
         if (path.equals("event") || path.equals("evidence")) return payload.path(path);
-        if (!path.startsWith("event.") && !FIELDS.contains(path.split("\\.", -1)[0])) throw conflict();
+        if (!path.startsWith("event.") && !fields.contains(path.split("\\.", -1)[0])) throw conflict();
         JsonNode value = payload.path(path.startsWith("event.") ? "event" : "revision");
         String local = path.startsWith("event.") ? path.substring(6) : path;
         for (String name : local.split("\\.", -1)) {

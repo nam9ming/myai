@@ -300,7 +300,7 @@ public class ReviewReportService {
 
     private ObjectNode envelope(JsonNode payload, Map<String, JsonNode> documents) {
         JsonNode revision = payload.path("revision"); boolean draft = revision.path("origin").asText().equals("ai_draft");
-        var envelope = mapper.createObjectNode().put("schema_version", draft ? "ai-draft-import-v1" : "reviewed-import-v1").put("data_kind", payload.path("data_kind").asText());
+        var envelope = mapper.createObjectNode().put("schema_version", draft ? "ai-draft-import-v1" : ReviewedImportReader.schemaForPayload(payload)).put("data_kind", payload.path("data_kind").asText());
         if (draft) envelope.set("originating_run_id", revision.path("originating_run_ids").path(0));
         if (payload.has("human_handoffs")) envelope.set("human_handoffs", payload.path("human_handoffs"));
         var sources = envelope.putArray("documents");
