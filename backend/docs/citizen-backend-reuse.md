@@ -6,6 +6,8 @@
 
 ## Java·DB: 기능별 판정
 
+아래 표는 조사 당시 기준이다. 이후 [시민 검토](citizen-review.md)·[공개](citizen-publication.md)·[목록/상세·이력](../../contracts/citizen-api.md)을 추가했다. 이번 [시민 수동 추출](../../contracts/citizen-extraction.md)은 기존 원문 입력·봉인 보관·Python 사람 수정 선언·Java D05/S10을 재사용하고 출력 family와 기존 평가 격리를 보완한다. 시민 D06/Java 사람 인계·검색/정규화·실제 화면/사람 인수는 후속이며, 합성 소프트웨어 검증과 실제 품질은 구별한다. 새 단계의 실제 실행·리뷰/PR 증거는 각 계획을 따른다.
+
 | 사용자 기능 | 현재 동작·구현 근거 | 판정·시민 확장 영향 | 관련 시험 정의 |
 | --- | --- | --- | --- |
 | 설정·자료 버전 | [공개 controller](../src/main/java/kr/ac/myai/backend/controller/PublicNoticeController.java#L22)와 [snapshot 조회](../src/main/java/kr/ac/myai/backend/service/SnapshotNoticeService.java#L52)가 공개 head·checksum·현재/과거 문맥을 확인한다 | 재사용하되 기존 설정의 단일 구역·5지점·14일/500m는 시민 공통 설정과 분리 | [PublicApiTest](../src/test/java/kr/ac/myai/backend/PublicApiTest.java), [PublicationMySqlTest](../src/test/java/kr/ac/myai/backend/PublicationMySqlTest.java) |

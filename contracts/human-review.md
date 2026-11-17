@@ -1,6 +1,6 @@
 # 사람 수정후 추출 원본 v1
 
-동일 문서의 AI 자동값과 사람 수정값을 구분해 보관하는 비공개 계약이다. 기존 `extract-schema-v1`의 FieldValue·근거 검증과 frozen D05 전체 원본을 재사용한다. D06의 일부 필드는 개별 knowledge를 평탄화하므로 D06만 보고 추출값을 역변환하지 않는다. 사람 수정값을 독립 gold나 AI 자동 성능으로 표시하지 않는다.
+동일 문서의 AI 자동값과 사람 수정값을 구분해 보관하는 비공개 계약이다. 부모 metadata에 명시된 `extract-schema-v1` 또는 [extract-citizen-v1](citizen-extraction.md)의 FieldValue·근거 검증과 frozen D05 전체 원본을 재사용한다. 출력 자체의 선언으로 family를 바꾸지 않는다. D06의 일부 필드는 개별 knowledge를 평탄화하므로 D06만 보고 추출값을 역변환하지 않는다. 사람 수정값을 독립 gold나 AI 자동 성능으로 표시하지 않는다.
 
 ## 입력
 
@@ -12,7 +12,7 @@ UTF-8 JSON의 최상위 키는 다음6개다. 전체8MiB·깊이100 한도를 �
 | review_id | 새 UUID. 수정 검토마다 별도 ID를 사용한다. |
 | source | `run_id`, `snapshot_ref`, `receipt_sha256` |
 | review | `reviewed_by`, `started_at`, `finished_at`, `basis`, `note` |
-| output | 동일 원본 입력에 대해 검증되는 수정후 `extract-schema-v1` 출력 전체 |
+| output | 동일 원본 입력·부모 metadata family로 검증되는 수정후 출력 전체 |
 | changes | 아래 형식의 실제 전후 변경 기록 배열 |
 
 source는 D05의 UUID 또는 `registered/HASH/UUID` 참조다. 정확한 canonical receipt SHA·등록 경로의 HASH·실제 파일/권한을 대조하며 API/수동 D05의 성공/실패 원본을 모두 보존한다. 규칙 원본을 D05로 취급하지 않는다. 원본 데이터 구분(real/synthetic)과 모델·실행 모드·실패 상태는 변경하지 않는다.
@@ -48,6 +48,8 @@ python3.13 -m processing.evaluation verify-review "$REVIEW_REF"
 stdout은 ID/hash/data_kind·상태·건수·선언 소요시간 요약 또는 receipt JSON 한 건이다. 실제 수정값·검토자·검토 시각·이유·절대 경로는 비공개 파일에만 둔다. 성공0, 입력 오류2, 보관 손상/충돌3, I/O5, 내부 오류1이다. 오류 시 stdout은 비어 있고 stderr에는 고정 코드만 쓴다. 키·AI·네트워크·DB 호출과 새 의존성은 없다.
 
 ## 현재 범위
+
+시민 family는 Python의 check/freeze/verify-review와 전체 수정 감사·실패 부모 보관까지 지원한다. Java의 시민 human-review 표시/저장·D06 전달은 G5다. 기존 사람 인계는 `HANDOFF_SCHEMA_UNSUPPORTED`, D08 직접/사람 수정후 평가는 `EVALUATION_SCHEMA_UNSUPPORTED`로 시민 family를 기존 투영·8필드 채점 전에 거부한다. 아래 D08·D06 연결 설명은 기존 extract-schema-v1 대상이며 새 점수나 시민 승인/공개 완료를 뜻하지 않는다.
 
 `declared_reviewed`/`human_verification=declared_only`는 제공된 선언·참조·형식을 검사했다는 뜻이다. 실제 사람 판독·신원·독립 gold·승인·공개를 인증하지 않는다. 검토 원본 보관은 D06 DB 저장과 별개이며 [D08 평가](extraction-evaluation.md)는 human_reviewed 뷰·최초/재시험·전체 출처 동결과 선언 소요시간을 연결한다. 세 방법의 짝지은 개선/악화 비교와 [Java D06 인계](../backend/docs/human-handoff-import.md)를 연결했으며 실제 선별 성능은 후속 검증이다. 실제40문서 평가·blind holdout도 미완료다. POSIX 권한은 WORM이 아니며 Windows·전원 중단 내구성은 미검증이다.
 

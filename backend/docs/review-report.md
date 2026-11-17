@@ -4,6 +4,8 @@
 
 ## 실행
 
+[시민 수동 D05](../../contracts/citizen-extraction.md)도 같은 보고서에서 metadata와 모든 원출력·실패 원본을 읽는다.12개 원문 사실과 code point 근거는 artifact 내용으로 보존하며 비용/자격/모집을 계산하지 않는다. 시민 Python human-review 선언은 별도 보관 단계이고, 그 수정값의 Java D06 표시/저장·승인은 아직 연결하지 않았다. 보고서의 archive 검증 통과는 실제 AI 정확도·사람 검토/승인이 아니다.
+
 저장소 루트에서 Java21·MySQL8.4·Python3.13 환경을 준비합니다. DB는 `DB_URL/DB_USERNAME/DB_PASSWORD`, Python은 `MYAI_PYTHON_EXECUTABLE/MYAI_PYTHON_WORKDIR` 설정을 따릅니다. 비밀번호·키를 명령 인자나 문서에 넣지 않습니다. AI API는 호출하지 않습니다.
 
 ```bash

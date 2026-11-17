@@ -2,6 +2,8 @@
 
 [독립 정답표](gold-archive.md)와 D05 AI 원출력·[규칙 실행 원본](rule-baseline.md)·[사람 수정 원본](human-review.md)의 비공개 평가 계약이다. [평가 기준](../docs/spec/05_시험과인수기준.md) B의 문서 내 사건 슬롯×8필드 단위를 유지한다. 정답·관계·의미 판정의 진실성을 기계 인증하지 않는다. 실제 독립 gold·40문서 평가는 별도로 필요하다.
 
+[시민 extract-citizen-v1](citizen-extraction.md)은 이 기존8필드 평가의 대상이 아니다. 직접 선택한 성공/실패 D05와 시민 부모의 human-review 원본 모두 `EVALUATION_SCHEMA_UNSUPPORTED`로 채점기·분모 계산 전에 거부한다. 사람 수정 보관이 가능해도 기존 유형·일정/장소 대응으로 투영하거나 새 점수를 만들지 않는다. 새 평가 기준은 별도로 정하며 아래3유형·8필드 판정과 과거 원본은 유지한다.
+
 ## 문서 채점
 
 `score_document(input_bytes, gold_bytes, prediction_bytes, annotation_bytes, instructions)`는 검증된 `ai-input-v1`와 독립 gold/예측 `extract-schema-v1`, 고정 판정 지침을 받는다. 상세 field_results/생성 오류·검토 목록은 **비공개 결과**이며 CLI에는 summary만 출력한다.
@@ -54,8 +56,8 @@ gold 비기재/모호 셀에 알려진 값을 넣거나 대응한 미상 occurre
 | policy(ai_auto) | `provider`, `model_label`, `prompt_version`, `schema_version`, `retry_policy_version` |
 | policy(rules) | `rule_version`, `profile_version`, `profile_sha256`, `schema_version`, `retry_policy_version`, `profile_reviewed_by`, `profile_locked_at`, `profile_basis` |
 | policy(human_reviewed) | `schema_version`, `review_schema_version` |
-| documents[](ai_auto/rules) | `document_version_id`, `run_id`, `snapshot_ref`, `receipt_sha256`, `first_annotation`, `final_annotation` |
-| documents[](human_reviewed) | `document_version_id`, `review_id`, `review_ref`, `receipt_sha256`, `annotation` |
+| `documents[]` (`ai_auto/rules`) | `document_version_id`, `run_id`, `snapshot_ref`, `receipt_sha256`, `first_annotation`, `final_annotation` |
+| `documents[]` (`human_reviewed`) | `document_version_id`, `review_id`, `review_ref`, `receipt_sha256`, `annotation` |
 
 method=ai_auto의 기존 `api-structure-retry-v1` 정책은 archive-v1만 받으며 provider/model_label/prompt_version/schema_version이 모든 선택 실행과 일치해야 한다. [장문 분할](chunked-extraction.md)의 `api-document-cycle-v1`은 prompt_version=`prompt-v2-or-v3`을 명시하고 archive-v1/prompt-v2와 archive-v2/prompt-v3을 고정 규칙으로 선택한다. provider/model_label/schema_version 일치는 계속 요구한다. preprocessing_version은 실행별 원본을 보존한다. 모든 gold 버전을 한 번씩, 버전마다 한 D05를 명시한다. 성공 실행을 자동 선택하지 않는다. 첫 raw와 마지막 자동 결과를 모두 기록하고 기본 view는 final_auto다. v2의 first_raw는 첫 전체 문서 cycle의 파생 결과이며, attempt_count/source_attempt도 문서 cycle이다. 실제 HTTP 호출 수는 함께 보관한 원본 receipt.total_calls에서 확인한다. manual_import를 AI 자동 성능으로 표시하지 않는다.
 

@@ -2,6 +2,8 @@
 
 동결 [manifest](dataset-manifest.md)의 입력 hash를 실제 `ai-input-v1` 바이트·[D05 보관본](extraction-run.md)에 대조하는 **비공개 읽기 전용 계약**이다. 원문을 수정하거나 AI·키·네트워크·DB·freeze를 호출하지 않는다.
 
+이 D08 연결은 기존 `extract-schema-v1` 대상이다. [시민 extract-citizen-v1](citizen-extraction.md)의 성공/실패 원본은 보관·검증하되 bindings에서는 `BINDING_SCHEMA_UNSUPPORTED`로 거부한다. 같은 입력/문서 참조라도 시민 실행을 기존3유형의 연결·8필드 평가 실적으로 집계하지 않는다. 새 분야·자료·분모 기준은 별도다.
+
 ## 연결 명세
 
 UTF-8 JSON 한 건, 최대8MiB·깊이100. 중복 키·잘못된 Unicode·추가 키를 거부한다. 모든 키가 필수다.

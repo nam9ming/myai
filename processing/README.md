@@ -36,6 +36,7 @@ python3.13 -m venv .venv
 | `matching/engine.py` | occurrence별 3값 결합·최신성·취소·재현·정렬·동시간 묶음 |
 | `matching/__main__.py` | stdin 한 건·stdout 한 건, 안전한 실패 종료 |
 | `extraction/schema.py`, `validation.py` | AI 입력/출력 구조·knowledge·근거·참조·시간 순서 검증 |
+| `extraction/citizen.py` | 시민5분야·title/categories·12개 원문 사실, 별도 수동 출력 schema·프롬프트 |
 | `extraction/prompt.py`, `metadata.py` | 고정 프롬프트·문서/블록/hash 제약·D05 제공값 검증 |
 | `extraction/archive.py`, `__main__.py` | 비공개 준비/수동 가져오기/무결성 검증·실패 원출력 보존 |
 | `extraction/api.py` | 고정 OpenAI Responses API·최대3시도·요청/응답/전송 상태 보관·오프라인 재검증 |
@@ -80,7 +81,25 @@ python3.13 -m processing.extraction verify 71fb66f0-e610-4f9c-8f26-4bb77655ee8c
 
 첫 명령은 합성 입력의 프롬프트만 생성합니다. 가져오기에는 실제 제공한 프롬프트·원출력과 새 run_id의 메타데이터를 준비합니다. 기본 저장 위치는 Git 제외 `data/private/extraction-runs`입니다. 같은 ID의 원본을 덮어쓰지 않으며 실패·과다 출력도 전부 보존합니다. 마지막 출력이 기계 검증을 통과해도 `review_required=true`이며 사람 승인과 다릅니다. 종료 코드·1~3시도·복구·hash 대상·미상 제공값 처리 등은 [실행 기록 계약](../contracts/extraction-run.md)을 따릅니다.
 
+## 시민 수동 추출·보관
+
+[extract-citizen-v1](../contracts/citizen-extraction.md)은 기존 ai-input-v1·manual archive-v1을 재사용하는 별도 family입니다. title/categories와12개 원문 사실을 FieldValue로 보존하며 분류 미상은 null+ambiguous입니다. 날짜·무료·자격·모집/취소·일정 대응을 추론하지 않습니다. 작성자의 기술 계약이며 실제 팀원·Flutter 최종 합의나 새 평가 기준을 대신하지 않습니다.
+
+```sh
+python3.13 -B -m processing.extraction prepare \
+  --input contracts/examples/citizen-ai-input.json \
+  --schema-version extract-citizen-v1
+```
+
+기본 `data/private/extraction-runs/prepared/extract-citizen-v1/<input_sha256>/`에 input.json/prompt.json을 만듭니다. 옵션은 prepare에만 있으며 생략 시 기존 prepared/<input_sha256>·prompt-v1 bytes는 유지합니다. 생성 템플릿 citizen-prompt-v1과 실제 수동 prompt_version 선언을 구별하고 실제 prompt/metadata/output bytes를 보관합니다. import는 metadata의 `schema_version=extract-citizen-v1`, `execution_mode=manual_import`로 선택하며 기존1~3시도·실패 전체·freeze/verify-sealed를 재사용합니다. 시민 API·archive-v2/chunk·새 provider/규칙 실행은 추가하지 않습니다.
+
+사람 수정은 부모 family에 맞는 Python check/freeze/verify-review와 전체 changes·실패 부모 보관까지입니다. 합성 CLI의600초 선언은 declared_only이며 실제 사람 검토 실적이 아닙니다. Java D05/S10은 새 raw/실패/metadata를 판독하고 시민 human-review 표시/저장·D06 인계·승인/공개는 다음 G5입니다. 기존 draft/check-draft·human-handoff·D08 bindings/직접 및 사람 수정후 평가는 시민 family를 각각 `DRAFT_SCHEMA_UNSUPPORTED/HANDOFF_SCHEMA_UNSUPPORTED/BINDING_SCHEMA_UNSUPPORTED/EVALUATION_SCHEMA_UNSUPPORTED`로 거부합니다. 실패 실행 등의 기존 선행 거부도 유지하며 기존8필드 분모를 바꾸지 않습니다.
+
+합성 parser·실제 CLI·archive/review·legacy 거부 시험과 실제 공식자료 정확도·사람 인수는 구별합니다. 전체 Python/Java·실제 DB/HTTP·원격 MySQL8.4 결과는 [G4 계획](../docs/superpowers/plans/2026-11-18-citizen-extraction.md)에서 확인합니다. 현재 검증되지 않은 운영·실자료 성과를 처리 건수에 더하지 않습니다.
+
 ## OpenAI 개발용 추출
+
+이 절은 기존3유형 extract-schema-v1의 개발 API입니다. 시민 family는 위 수동 보관 경로를 사용합니다.
 
 사용자 결정에 따라 개발 단계에서는 코드리뷰와 같은 OpenAI 키를 사용합니다. 로컬은 `OPENAI_API_KEY` 환경변수, GitHub는 기존 Actions Secret을 사용합니다. GitHub Secret을 로컬로 꺼내는 기능은 없습니다. 키를 인자·JSON·Git에 넣지 않습니다.
 

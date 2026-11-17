@@ -90,9 +90,11 @@ I03은 [계산·API 명세](../docs/spec/04_계산규칙과기술설계.md)에 �
 
 ## AI → 검토 → 저장
 
+시민5분야의 [extract-citizen-v1](citizen-extraction.md)은 기존 입력·근거·manual archive-v1을 재사용하는 별도 출력 family다. title/categories와12개 원문 사실을 FieldValue로 보존하며 분류 미상은 null+ambiguous다. Python의 사람 수정 보관과 Java D05/S10 원본 판독까지 연결하고, Java 시민 human-review/D06·새 평가 분모는 후속 G5/별도 기준이다. 기존 draft/handoff/D08은 시민 family를 명시 거부해 원래3유형·8필드 규격에 섞지 않는다. 기술 계약은 작성자 검토안이며 실제 팀원·Flutter 최종 합의가 아니다.
+
 시민 원문 표현의 Java 수동 입력은 [시민 내부 검토 규격](../backend/docs/citizen-review.md)으로 분리한다. 기존 AI schema·Python 출력과 공개 `api-v1` JSON은 변경하지 않으며, 이 내부 규격을 최종 Flutter 조회 계약으로 간주하지 않는다.
 
-[시민 불변 공개본](../backend/docs/citizen-publication.md)은 `citizen-snapshot-v1`·별도 채널의 공개용 기록/파일 전달 규격이다. 기존 snapshot-v1·Python 계산과 분리하며 새 시민 조회 API로 구현된 것은 아니다.
+[시민 불변 공개본](../backend/docs/citizen-publication.md)은 `citizen-snapshot-v1`·별도 채널의 공개용 기록/파일 전달 규격이다. 기존 snapshot-v1·Python 계산과 분리하며 [시민 목록·상세](citizen-api.md)에서 읽는다. 추출 원출력을 그 공개본으로 직접 사용하지 않는다.
 
 [ai-extraction.json](examples/ai-extraction.json)은 `extract-schema-v1` 형식의 **가상 추출 원출력**입니다. 같은 폴더의 [ai-input.json](examples/ai-input.json)에 대응합니다.
 
