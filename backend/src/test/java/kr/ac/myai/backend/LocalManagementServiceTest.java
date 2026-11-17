@@ -145,6 +145,45 @@ class LocalManagementServiceTest {
     }
 
     @Test
+    void citizenInputUsesTheSamePrivateRequestStoreAndExactEventRoute() throws Exception {
+        Files.copy(Path.of("examples/citizen-source.txt"), sources.resolve("citizen-source.txt"));
+        var input = fixture("citizen-reviewed-import");
+        byte[] body = bytes(input);
+        invalid(() -> service.review(eventId, body));
+        noRequestsOrDomainCalls();
+        when(imports.importBatch(any(), eq(actor))).thenAnswer(invocation -> {
+            var batch = (kr.ac.myai.backend.importing.ReviewedBatch) invocation.getArgument(0);
+            assertThat(batch.schemaVersion()).isEqualTo("citizen-reviewed-import-v1");
+            assertThat(batch.events().getFirst().id()).isEqualTo(otherId);
+            assertThat(mapper.readTree(batch.events().getFirst().payloadJson()).path("revision").path("cost").path("value").isNull()).isTrue();
+            retained(body);
+            return imported;
+        });
+        assertThat(service.review(otherId, body).data()).isEqualTo(imported);
+        assertThat(service.reviews(body).requestSha256()).isEqualTo(hash(body));
+        verifyNoInteractions(extractions, handoffs, publication);
+    }
+
+    @Test
+    void citizenDecisionCannotEnterPublishOrMismatchedEventRoutes() throws Exception {
+        var command = fixture("approve").put("schema_version", "citizen-review-command-v1").put("event_id", otherId);
+        invalid(() -> service.review(eventId, bytes(command)));
+        invalid(() -> service.publish(bytes(command)));
+        invalid(() -> service.reviews(bytes(command)));
+        noRequestsOrDomainCalls();
+        var decision = new PublicationService.Result("approve", otherId, eventId, null, null, null, null);
+        when(publication.execute(any(PublicationCommand.Decision.class), eq(sources), eq(actor))).thenAnswer(invocation -> {
+            var parsed = (PublicationCommand.Decision) invocation.getArgument(0);
+            assertThat(parsed.schemaVersion()).isEqualTo("citizen-review-command-v1");
+            assertThat(parsed.eventId().toString()).isEqualTo(otherId);
+            retained(bytes(command));
+            return decision;
+        });
+        assertThat(service.review(otherId, bytes(command)).data()).isEqualTo(decision);
+        verifyNoInteractions(imports, extractions, handoffs);
+    }
+
+    @Test
     void multiEventHandoffUsesExplicitBatchRouteAndPreservesTheCompleteRequest() throws Exception {
         var request = handoffRequest();
         request.withArray("revisions").addObject().put("event_id", otherId)

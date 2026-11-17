@@ -89,6 +89,9 @@ public class PublicationService {
         var original = repository.current(command.eventId().toString());
         conflict(original.number() == command.expectedRevisionNo(), "expected_revision_no");
         JsonNode payload = content.payload(original);
+        String family = ReviewedImportReader.schemaForPayload(payload);
+        content.check(command.schemaVersion().equals(family.equals(ReviewedImportReader.CITIZEN_IMPORT_VERSION)
+                ? "citizen-review-command-v1" : "publication-command-v1"), "schema_version");
         var knownEvidence = new HashSet<String>();
         payload.path("evidence").forEach(item -> knownEvidence.add(item.path("evidence_id").asText()));
         content.check(knownEvidence.containsAll(command.evidenceIds()), "evidence_ids");
@@ -128,7 +131,9 @@ public class PublicationService {
         var events = new ArrayList<ReviewedBatch.Event>();
         for (var revision : revisions) {
             conflict(revision.currentId().equals(revision.id()) && revision.status().equals("approved") && revision.intent().equals("public"), "revision_ids");
-            var payload = content.payload(revision); var sources = documents(payload, documents);
+            var payload = content.payload(revision);
+            content.check(ReviewedImportReader.schemaForPayload(payload).equals("reviewed-import-v1"), "revision_ids");
+            var sources = documents(payload, documents);
             // shortcut: 사건별 원문 재검증은 소규모 수동 배치용이며 대량 공개 시 공통 원문 검증을 합친다.
             events.add(content.validate(payload, sources, root));
         }

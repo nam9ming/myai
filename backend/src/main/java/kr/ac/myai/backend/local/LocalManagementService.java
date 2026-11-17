@@ -86,7 +86,7 @@ public class LocalManagementService {
     public Result review(String eventId, byte[] body) {
         return execute(body, input -> {
             check(eventId != null && eventId.matches(UUID), "event_id");
-            if (schema(input).equals("publication-command-v1")) {
+            if (Set.of("publication-command-v1", "citizen-review-command-v1").contains(schema(input))) {
                 var command = commands.read(body);
                 check(command instanceof PublicationCommand.Decision, "action");
                 var decision = (PublicationCommand.Decision) command;
@@ -103,7 +103,7 @@ public class LocalManagementService {
     }
 
     private Object reviewed(JsonNode input, byte[] body, String eventId) {
-        if (schema(input).equals("reviewed-import-v1")) {
+        if (Set.of("reviewed-import-v1", ReviewedImportReader.CITIZEN_IMPORT_VERSION).contains(schema(input))) {
             var batch = json.read(body, sourceRoot);
             check(eventId == null || batch.events().size() == 1 && eventId.equals(batch.events().getFirst().id()), "event_id");
             requests.retain(body);

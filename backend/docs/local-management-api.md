@@ -37,6 +37,8 @@ DB 환경변수는 기존 안내대로 별도 제공한다. `.env` 파일을 작
 
 ## 인증과 호출
 
+[시민 수동 검토](citizen-review.md)의 `citizen-reviewed-import-v1` 배치는 `POST /local/reviews/import`, 사건1건 입력과 `citizen-review-command-v1` 승인/반려는 `PUT /local/events/{id}/review`를 사용한다. 기존 인증·한도·요청 원본 보관을 유지하며 시민 공개 명령은 아직 지원하지 않는다.
+
 모든 경로에 Bearer 토큰, 실제 서버 port의 `Origin: http://127.0.0.1:<port>`, 같은 Host가 필요하다. `localhost`·다른 port·누락/`null` Origin·중복 인증 헤더는 허용하지 않는다. 실제 HTTP port80에서만 기본 port 생략과 `:80`을 동등하게 취급한다. forwarded 헤더로 실제 socket·Host 검사를 대체할 수 없다.
 
 같은 셸에서 서버 기동 후 합성 문서만 등록하는 예다. 인증 없는 `/local/documents` 요청의401 응답으로 먼저 기동을 확인할 수 있다. 같은 원문 파일이 준비된 source root와 연결해야 한다.

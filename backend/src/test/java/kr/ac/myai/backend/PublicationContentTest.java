@@ -27,6 +27,25 @@ class PublicationContentTest {
     final PublicationContent content = new PublicationContent(reader, mapper);
 
     @Test
+    void validatesCitizenFactsUsingTheirOwnEnvelopeAndRawLocationFieldValue() throws Exception {
+        var envelope = (ObjectNode) mapper.readTree(Path.of("examples/citizen-reviewed-import.json").toFile());
+        Files.copy(Path.of("examples/citizen-source.txt"), root.resolve("citizen-source.txt"));
+        var batch = reader.read(envelope.toString().getBytes(StandardCharsets.UTF_8), root);
+        var payload = (ObjectNode) mapper.readTree(batch.events().getFirst().payloadJson());
+        ((ObjectNode) payload.path("revision")).put("review_status", "approved").put("publication_intent", "public");
+        var document = batch.documents().getFirst();
+        var row = new PublicationRepository.Document(document.id(), document.versionId(), document.versionNo(),
+                document.textSha256(), document.metadataJson(), document.privateContentRef());
+        var validated = content.validate(payload, List.of(new kr.ac.myai.backend.source.SourceView(row)), root);
+        var revision = mapper.readTree(validated.payloadJson()).path("revision");
+        assertThat(revision.path("application_period").path("value").asText()).isEqualTo("2026-11-20~2026-11-25");
+        assertThat(revision.path("occurrences").path("value").asText()).isEqualTo("2026-12-01~2026-12-02");
+        assertThat(revision.path("locations").path("value").asText()).isEqualTo("가상시민센터");
+        assertThat(revision.path("cost").path("value").isNull()).isTrue();
+        assertThat(revision.path("cost").path("knowledge").asText()).isEqualTo("not_stated");
+    }
+
+    @Test
     void validatesPrivateProofWithoutLeakingItIntoPublicSnapshot() throws Exception {
         var envelope = (ObjectNode) mapper.readTree(Path.of("examples/reviewed-import.json").toFile());
         Files.copy(Path.of("examples/synthetic-source.txt"), root.resolve("synthetic-source.txt"));

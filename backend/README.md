@@ -133,6 +133,8 @@ Java는 고정 인자 `-m processing.matching`과 JSON stdin만 사용한다. �
 
 ## 검토 JSON 로컬 import
 
+시민 5분야의 원문 표현 입력·수정 감사·승인/반려는 [시민 수동 검토](docs/citizen-review.md)의 별도 내부 버전을 사용한다. 공개 snapshot·시민 조회·Python 추출은 후속 범위다.
+
 DB를 준비한 뒤 저장소 루트에서 실행한다.
 
 ```bash

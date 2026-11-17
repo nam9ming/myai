@@ -36,7 +36,8 @@ public class PublicationContent {
 
     public ReviewedBatch.Event validate(JsonNode payload, List<SourceView> documents, Path root) {
         check(root != null, "source_root");
-        var envelope = mapper.createObjectNode().put("schema_version", "reviewed-import-v1").put("data_kind", payload.path("data_kind").asText());
+        String schema = ReviewedImportReader.schemaForPayload(payload);
+        var envelope = mapper.createObjectNode().put("schema_version", schema).put("data_kind", payload.path("data_kind").asText());
         if (payload.has("human_handoffs")) envelope.set("human_handoffs", payload.path("human_handoffs"));
         var sources = envelope.putArray("documents");
         for (var view : documents) {
@@ -58,7 +59,7 @@ public class PublicationContent {
         event.put("expected_revision_no", payload.path("revision").path("revision_no").asLong() - 1);
         envelope.putArray("events").add(event);
         var validated = json.validateStored(envelope, root).events().getFirst();
-        for (JsonNode location : payload.path("revision").path("locations")) {
+        if (schema.equals("reviewed-import-v1")) for (JsonNode location : payload.path("revision").path("locations")) {
             if (!location.path("checked_at").isNull()) check(!Instant.parse(location.path("checked_at").asText()).isAfter(Instant.now()), "locations.checked_at");
         }
         for (JsonNode change : payload.path("revision").path("human_overrides")) {

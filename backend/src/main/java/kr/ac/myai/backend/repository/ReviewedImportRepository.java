@@ -129,6 +129,7 @@ public class ReviewedImportRepository {
     private void append(ReviewedBatch.Event event, String kind, String actor, String action, String reason, String evidenceJson, boolean generatedHandoff) {
         var states = jdbc.queryForList("SELECT e.current_review_revision_id, e.lock_version, r.revision_no, r.payload_json, r.payload_sha256 FROM events e LEFT JOIN event_revisions r ON r.revision_id = e.current_review_revision_id WHERE e.event_id = ?", event.id());
         var next = json(event.payloadJson());
+        String family = ReviewedImportReader.schemaForPayload(next);
         String before = null;
         long lockVersion = 0;
         if (states.isEmpty()) {
@@ -142,6 +143,7 @@ public class ReviewedImportRepository {
             String previousJson = (String) state.get("payload_json");
             require(ReviewedImportReader.sha256(previousJson.getBytes(java.nio.charset.StandardCharsets.UTF_8)).equals(state.get("payload_sha256")), "payload_sha256");
             var previous = json(previousJson);
+            require(ReviewedImportReader.schemaForPayload(previous).equals(family), "schema_version");
             require(previous.path("data_kind").asText().equals(kind), "data_kind");
             var oldProofs = previous.path("human_handoffs");
             var newProofs = next.path("human_handoffs");
@@ -160,7 +162,10 @@ public class ReviewedImportRepository {
                         && event.sourceVersionIds().containsAll(strings(previous.path("revision").path("source_version_ids"))),
                         "events.revision.originating_run_ids");
             }
-            if (action.equals("import") && (hadRuns || next.has("human_handoffs"))) HumanReviewChanges.validate(previous, next, generatedHandoff);
+            if (action.equals("import")) {
+                if (family.equals(ReviewedImportReader.CITIZEN_IMPORT_VERSION)) HumanReviewChanges.validate(previous, next, false, ReviewedImportReader.CITIZEN_FIELDS);
+                else if (hadRuns || next.has("human_handoffs")) HumanReviewChanges.validate(previous, next, generatedHandoff);
+            }
             lockVersion = ((Number) state.get("lock_version")).longValue();
         }
         require(lockVersion < Long.MAX_VALUE, "events.lock_version");

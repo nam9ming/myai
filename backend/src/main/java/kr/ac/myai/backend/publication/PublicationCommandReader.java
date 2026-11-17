@@ -45,7 +45,9 @@ public class PublicationCommandReader {
         try {
             JsonNode input = json.parseJson(content);
             check(input.isObject(), "file");
-            check(input.path("schema_version").isTextual() && input.path("schema_version").asText().equals("publication-command-v1"), "schema_version");
+            String schema = input.path("schema_version").asText();
+            check(input.path("schema_version").isTextual() && Set.of("publication-command-v1", "citizen-review-command-v1").contains(schema), "schema_version");
+            check(!schema.equals("citizen-review-command-v1") || Set.of("approve", "reject").contains(input.path("action").asText()), "action");
             validateScalars(input);
             Class<? extends PublicationCommand> type = switch (input.path("action").asText()) {
                 case "approve", "reject" -> PublicationCommand.Decision.class;

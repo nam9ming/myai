@@ -54,6 +54,25 @@ class ReviewReportMySqlTest {
     @AfterEach void cleanup() throws Exception { ExtractionArchiveReaderTest.unseal(root); }
 
     @Test
+    void citizenFactsRemainValidInReadOnlySourceReviewReport() throws Exception {
+        Files.copy(Path.of("examples/citizen-source.txt"), root.resolve("citizen-source.txt"));
+        var ids = new HashMap<String, String>();
+        String text = java.util.regex.Pattern.compile("20000000-0000-4000-8000-[0-9]{12}")
+                .matcher(Files.readString(Path.of("examples/citizen-reviewed-import.json")))
+                .replaceAll(match -> ids.computeIfAbsent(match.group(), ignored -> UUID.randomUUID().toString()));
+        var input = (ObjectNode) mapper.readTree(text);
+        var batch = importInput(input);
+        var before = database();
+        var report = reports.build(UUID.fromString(batch.documents().getFirst().versionId()), root, null);
+        var saved = report.path("events").get(0).path("revisions").get(0);
+        assertThat(saved.path("validation").path("status").asText()).isEqualTo("valid");
+        assertThat(saved.path("payload").path("schema_version").asText()).isEqualTo("citizen-revision-v1");
+        assertThat(saved.path("payload").path("revision").path("application_period").path("value").asText()).isEqualTo("2026-11-20~2026-11-25");
+        assertThat(saved.path("payload").path("revision").path("cost").path("value").isNull()).isTrue();
+        assertThat(database()).isEqualTo(before);
+    }
+
+    @Test
     void chunkedCyclesRegisterAndExposeEverySubrequestThroughHumanHandoffReport() throws Exception {
         var source = fixtures.source(false);
         ChunkedArchiveFixtures.enlarge(SourceReviewFixtures.document(source), "block_index");

@@ -37,6 +37,24 @@ class PublicationCommandReaderTest {
     }
 
     @Test
+    void acceptsCitizenApprovalAndRejectionWithoutOpeningPublicationActions() throws Exception {
+        var input = fixture("approve");
+        input.put("schema_version", "citizen-review-command-v1");
+        var approved = (PublicationCommand.Decision) read(input);
+        assertThat(approved.schemaVersion()).isEqualTo("citizen-review-command-v1");
+        assertThat(approved.action()).isEqualTo("approve");
+        input.put("action", "reject");
+        assertThat(((PublicationCommand.Decision) read(input)).action()).isEqualTo("reject");
+        for (String action : java.util.List.of("publish", "preview", "rollback")) {
+            var unsupported = fixture(action.equals("rollback") ? "rollback" : "publish");
+            unsupported.put("schema_version", "citizen-review-command-v1").put("action", action);
+            rejected(unsupported);
+        }
+        input.put("action", "approve").putArray("evidence_ids");
+        rejected(input);
+    }
+
+    @Test
     void byteInputMatchesAllFileCommandShapesIncludingWhitespace() throws Exception {
         try (var factory = Validation.buildDefaultValidatorFactory()) {
             var reader = new PublicationCommandReader(new ReviewedImportReader(), factory.getValidator());

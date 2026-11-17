@@ -31,6 +31,40 @@ class HumanReviewChangesTest {
     }
 
     @Test
+    void explicitCitizenFieldsRequireAnAuditForCostAndCategories() throws Exception {
+        var fields = java.util.List.of("title", "categories", "cost");
+        var before = payload();
+        before.withObject("revision").putArray("categories").add("education");
+        before.withObject("revision").set("cost", mapper.readTree("{\"value\":null,\"knowledge\":\"not_stated\",\"evidence_ids\":[],\"reason\":\"미기재\"}"));
+        var after = before.deepCopy();
+        after.withObject("revision").putArray("categories").add("support");
+        ((ObjectNode) after.path("revision").path("cost")).put("knowledge", "ambiguous").put("reason", "비용 확인 필요");
+        record(after, "categories", before.path("revision").path("categories"), after.path("revision").path("categories"));
+        assertThatThrownBy(() -> HumanReviewChanges.validate(before, after, false, fields)).isInstanceOf(ImportException.class);
+        record(after, "cost", before.path("revision").path("cost"), after.path("revision").path("cost"));
+        assertThatCode(() -> HumanReviewChanges.validate(before, after, false, fields)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void citizenRecordingKeepsRemovedEvidenceAndHistoricalPrefix() {
+        var fields = java.util.List.of("title", "categories", "cost");
+        var before = payload();
+        before.withObject("revision").putArray("categories").add("education");
+        before.withObject("revision").put("cost", "미상");
+        record(before, "title", "이전 제목", "AI 초안");
+        var after = before.deepCopy();
+        after.withObject("revision").putArray("categories").add("living");
+        after.withObject("revision").put("cost", "비용 확인 필요");
+        after.putArray("evidence").addObject().put("evidence_id", "e2").put("quote", "새 근거");
+        HumanReviewChanges.record(before, after, "editor", Instant.parse("2026-11-03T01:00:00Z"), "원문 재검토", fields);
+        var changes = after.path("revision").path("human_overrides");
+        assertThat(changes.findValuesAsText("field_path")).containsExactly("title", "categories", "cost", "evidence");
+        assertThat(changes.get(0)).isEqualTo(before.path("revision").path("human_overrides").get(0));
+        assertThat(changes.get(1).path("evidence_ids")).isEqualTo(mapper.valueToTree(java.util.List.of("e1", "e2")));
+        assertThatCode(() -> HumanReviewChanges.validate(before, after, false, fields)).doesNotThrowAnyException();
+    }
+
+    @Test
     void recordsActualCoarseDiffAndOperatorWhilePreservingHistoryAndEvidenceUnion() {
         var before = payload();
         before.withObject("revision").putArray("types").add("event");
