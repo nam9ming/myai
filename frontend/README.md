@@ -116,3 +116,9 @@ CanvasKit와 앱을 내려받는 동안 정적 로딩 화면이 표시됩니다.
 `python tool/compress_web_assets.py build/web`는 JavaScript와 CanvasKit의 gzip 사본을 생성합니다. 현대 브라우저의 표준 `DecompressionStream`으로 압축을 풀며, 고정 Flutter 3.50.0의 `window.flutterCanvasKit` 초기화 훅과 `buildConfig.builds[].mainJsPath`를 사용합니다. 원본 SDK 파일은 수정하지 않습니다. 해당 훅을 사용하는 최적화는 SDK 버전을 올릴 때 브라우저 검사를 다시 해야 합니다. 미지원 브라우저·압축 파일 실패 시 원본 경로로 복귀하고, 디버그 실행은 원본 로더를 사용합니다. 압축 JavaScript는 같은 문서에서 만든 Blob URL로 실행하며 원래 문서의 자산 경로와 CSP를 유지합니다. CSP에서 Blob 스크립트를 차단하는 환경에는 주소의 해시 앞에 `?startup=raw`를 붙여 원본 로딩 모드를 사용합니다. 오류 화면에서 재시도할 때도 이 모드로 복귀합니다. CEHUB의 공용 서버 설정은 변경하지 않습니다.
 
 본문 글꼴은 정적 preload로 먼저 요청해 엔진과 병렬로 받습니다. 브라우저 검사에서 실제 요청이 한 번인지 확인합니다.
+
+압축/원본/미지원/손상된 압축 경로와 모션 감소·지연·오류 안내 검사는 Playwright가 있는 별도 도구 환경에서 실행합니다. 앱의 npm 의존성을 추가하지 않습니다.
+
+```bash
+PLAYWRIGHT_MODULE=/path/to/playwright node tool/check_startup.cjs build/web /tmp/yeogi-startup-check
+```
