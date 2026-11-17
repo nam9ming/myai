@@ -37,7 +37,7 @@ DB 환경변수는 기존 안내대로 별도 제공한다. `.env` 파일을 작
 
 ## 인증과 호출
 
-[시민 수동 검토](citizen-review.md)의 `citizen-reviewed-import-v1` 배치는 `POST /local/reviews/import`, 사건1건 입력과 `citizen-review-command-v1` 승인/반려는 `PUT /local/events/{id}/review`를 사용한다. 기존 인증·한도·요청 원본 보관을 유지하며 시민 공개 명령은 아직 지원하지 않는다.
+[시민 수동 검토](citizen-review.md)의 입력/승인은 기존 검토 경로를 사용하고, [시민 공개본](citizen-publication.md)의 `citizen-publication-command-v1` preview/publish/rollback은 `POST /local/publish`를 사용한다. 시민 공개는 지점/구역 없는 별도 채널이며 기존 인증·한도·요청 원본 보관과 preview 무쓰기를 유지한다.
 
 모든 경로에 Bearer 토큰, 실제 서버 port의 `Origin: http://127.0.0.1:<port>`, 같은 Host가 필요하다. `localhost`·다른 port·누락/`null` Origin·중복 인증 헤더는 허용하지 않는다. 실제 HTTP port80에서만 기본 port 생략과 `:80`을 동등하게 취급한다. forwarded 헤더로 실제 socket·Host 검사를 대체할 수 없다.
 
@@ -59,9 +59,9 @@ curl --fail-with-body --noproxy '*' \
 | POST `/local/documents` | `application/json`의 `source-import-v1`. 문서만 등록하며 사건·공개본을 만들지 않는다. |
 | POST `/local/documents` | `multipart/form-data`의 metadata/file 두 part. [업로드 계약](../../contracts/source-upload.md)에 따라 txt/pdf/json 원문을 보존하고 pending/unchecked D03와 기존5키 Python 입력을 준비한다. |
 | POST `/local/extractions/import` | `extraction-import-request-v1`의 `run_id`·`expected_input_hash`. 지정 root의 전체 보관본과 입력 SHA를 확인한 뒤 D05를 저장한다. 실패 실행도 실패로 보존한다. |
-| PUT `/local/events/{id}/review` | 사건1개의 `reviewed-import-v1`/`human-handoff-import-v1`, 또는 `publication-command-v1` approve/reject. URL과 JSON 사건ID가 같아야 한다. |
-| POST `/local/reviews/import` | 다중 사건을 포함한 기존 검토/사람 인계 배치 전체. 동결한 인계 이미지를 잘라서 보내지 않는다. |
-| POST `/local/publish` | `publication-command-v1` preview/publish/rollback. 기존 revision·head 번호·근거·확인/사용권·공개 조건을 그대로 검사한다. |
+| PUT `/local/events/{id}/review` | 사건1개의 기존 검토/인계 또는 시민 수동 입력. 승인/반려는 기존 `publication-command-v1` 또는 시민 `citizen-review-command-v1`. URL과 JSON 사건ID가 같아야 한다. |
+| POST `/local/reviews/import` | 기존 검토/사람 인계 또는 `citizen-reviewed-import-v1` 배치 전체. 동결한 인계 이미지를 잘라서 보내지 않는다. |
+| POST `/local/publish` | 기존 `publication-command-v1` 또는 시민 `citizen-publication-command-v1` preview/publish/rollback. 각 계열의 revision·head·근거·확인/사용권·공개 조건을 검사한다. |
 
 승인과 공개는 별도 명령이다. AI 초안을 직접 승인하거나 미검토 자료를 자동 공개하지 않는다. `preview`는 요청 파일과 DB를 변경하지 않는다. 공개 서버에는 `/local`이 없고, 관리 서버에는 `/api/v1`·`/health`가 없다.
 

@@ -11,6 +11,7 @@ import kr.ac.myai.backend.handoff.HandoffReference;
 import kr.ac.myai.backend.handoff.HumanHandoffArchiveReader;
 import kr.ac.myai.backend.importing.ImportException;
 import kr.ac.myai.backend.importing.ReviewedImportReader;
+import kr.ac.myai.backend.publication.CitizenPublicationContent;
 import kr.ac.myai.backend.publication.PublicationCommand;
 import kr.ac.myai.backend.publication.PublicationCommandReader;
 import kr.ac.myai.backend.publication.PublicationContent;
@@ -35,6 +36,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.*;
 import java.util.function.Supplier;
 
@@ -48,6 +51,7 @@ public class ReviewReportService {
     private final ObjectMapper mapper;
     private final ReviewedImportReader json;
     private final PublicationContent content;
+    private final CitizenPublicationContent citizens;
     private final SourceReviewRepository sources;
     private final ExtractionArchiveReader archives;
     private final HumanHandoffArchiveReader handoffs;
@@ -59,11 +63,13 @@ public class ReviewReportService {
     public ReviewReportService(ReviewReportRepository repository, ObjectMapper mapper, ReviewedImportReader json,
                                PublicationContent content, SourceReviewRepository sources, ExtractionArchiveReader archives,
                                HumanHandoffArchiveReader handoffs, PublicationCommandReader commands, PublicationService publication,
-                               ExtractionImportService extractions, ExtractionRunRepository extractionRuns) {
+                               ExtractionImportService extractions, ExtractionRunRepository extractionRuns,
+                               CitizenPublicationContent citizens) {
         this.repository = repository; this.mapper = mapper; this.json = json; this.content = content;
         this.sources = sources; this.archives = archives; this.handoffs = handoffs; this.commands = commands; this.publication = publication;
         this.extractions = extractions;
         this.extractionRuns = extractionRuns;
+        this.citizens = citizens;
     }
 
     public ObjectNode build(UUID documentVersionId, Path sourceRoot, Path optionalPreviewRequest) {
@@ -187,9 +193,7 @@ public class ReviewReportService {
         for (var row : report.path("publication").path("snapshots")) {
             var snapshot = (ObjectNode) row;
             snapshot.set("validation", inspect(() -> {
-                var value = new PublicationRepository.Snapshot(row.path("snapshot_id").asText(), row.path("mode").asText(), row.path("case_id").textValue(),
-                        row.path("canonical_json").asText(), row.path("checksum").asText(), row.path("data_kind").asText(), row.path("rules_version").asText(), row.path("dictionary_version").asText());
-                content.verifySnapshot(value, value.mode().equals("current") ? "current" : "replay:" + value.caseId()); return null;
+                verifyPublication(row, publicationChannel(row)); return null;
             }));
         }
         var preview = report.putObject("preview");
@@ -197,12 +201,30 @@ public class ReviewReportService {
         else {
             var result = inspect(() -> {
                 var command = commands.read(optionalPreviewRequest);
-                if (!(command instanceof PublicationCommand.Publish request) || !request.action().equals("preview")) throw error("REPORT_PREVIEW_INVALID", "action");
+                if (!command.action().equals("preview")) throw error("REPORT_PREVIEW_INVALID", "action");
+                List<UUID> selected;
+                String channel;
+                boolean citizen;
+                if (command instanceof PublicationCommand.Publish request) {
+                    selected = request.revisionIds(); citizen = false;
+                    channel = request.mode().equals("current") ? "current" : "replay:" + request.caseId();
+                } else if (command instanceof PublicationCommand.CitizenPublish request) {
+                    selected = request.revisionIds(); citizen = true;
+                    channel = CitizenPublicationContent.CHANNEL;
+                } else throw error("REPORT_PREVIEW_INVALID", "action");
                 var related = new HashSet<String>(); saved.path("revisions").forEach(row -> related.add(row.path("revision_id").asText()));
-                if (request.revisionIds().stream().noneMatch(id -> related.contains(id.toString()))) throw error("REPORT_PREVIEW_INVALID", "revision_ids");
-                var value = publication.execute(request, sourceRoot, "local-review-report");
+                boolean relevant = selected.stream().anyMatch(id -> related.contains(id.toString()));
+                if (!relevant && citizen && selected.isEmpty()) {
+                    var current = repository.previewBaseline(channel);
+                    if (current.path("status").asText().equals("present")) {
+                        var baseline = verifyPublication(current.path("snapshot"), channel);
+                        relevant = eventRevisions(content.parse(baseline.canonical()), true).values().stream().anyMatch(related::contains);
+                    }
+                }
+                if (!relevant) throw error("REPORT_PREVIEW_INVALID", "revision_ids");
+                var value = publication.execute(command, sourceRoot, "local-review-report");
                 preview.set("result", mapper.valueToTree(value)); preview.put("is_publication", false);
-                preview.set("summary", previewSummary(request, value.preview())); return null;
+                preview.set("summary", previewSummary(channel, citizen, value.preview())); return null;
             });
             preview.setAll(result); preview.put("same_snapshot_as_capture", false);
         }
@@ -210,13 +232,12 @@ public class ReviewReportService {
         return report;
     }
 
-    private ObjectNode previewSummary(PublicationCommand.Publish request, JsonNode proposed) {
+    private ObjectNode previewSummary(String channel, boolean citizen, JsonNode proposed) {
         var summary = mapper.createObjectNode().put("status", "unknown")
                 .put("change_basis", "event_id별 revision_id 변경 수이며 사실 필드의 차이나 향후 공개 결과를 확정하지 않습니다.");
         for (String key : List.of("new_events", "revision_changed", "removed_events", "unchanged_events", "cancelled_events")) summary.putNull(key);
         var baseline = summary.putObject("baseline");
         baseline.put("status", "unknown").put("same_snapshot_as_capture", false);
-        String channel = request.mode().equals("current") ? "current" : "replay:" + request.caseId();
         baseline.put("channel_key", channel);
         baseline.set("validation", inspect(() -> {
             var read = repository.previewBaseline(channel); baseline.set("database", read);
@@ -228,14 +249,12 @@ public class ReviewReportService {
                 JsonNode row = read.path("snapshot");
                 baseline.put("snapshot_id", row.path("snapshot_id").asText()).put("checksum", row.path("checksum").asText());
                 baseline.set("head_version", read.path("head").path("lock_version"));
-                var snapshot = new PublicationRepository.Snapshot(row.path("snapshot_id").asText(), row.path("mode").asText(), row.path("case_id").textValue(),
-                        row.path("canonical_json").asText(), row.path("checksum").asText(), row.path("data_kind").asText(), row.path("rules_version").asText(), row.path("dictionary_version").asText());
-                content.verifySnapshot(snapshot, channel);
-                check(row.path("schema_version").asText().equals("snapshot-v1"), "schema_version");
-                previous = eventRevisions(content.parse(snapshot.canonical()));
+                var snapshot = verifyPublication(row, channel);
+                check(citizen == row.path("schema_version").asText().equals(CitizenPublicationContent.SCHEMA_VERSION), "schema_version");
+                previous = eventRevisions(content.parse(snapshot.canonical()), citizen);
                 baseline.put("status", "present");
             }
-            var current = eventRevisions(proposed);
+            var current = eventRevisions(proposed, citizen);
             int added = 0, changed = 0, unchanged = 0;
             for (var event : current.entrySet()) {
                 if (!previous.containsKey(event.getKey())) added++;
@@ -244,9 +263,10 @@ public class ReviewReportService {
             }
             int removed = 0, cancelled = 0;
             for (String event : previous.keySet()) if (!current.containsKey(event)) removed++;
-            for (var event : proposed.path("event_public_payloads")) if (event.path("lifecycle").asText().equals("cancelled")) cancelled++;
+            if (!citizen) for (var event : proposed.path("event_public_payloads")) if (event.path("lifecycle").asText().equals("cancelled")) cancelled++;
             summary.put("status", "available").put("new_events", added).put("revision_changed", changed)
                     .put("removed_events", removed).put("unchanged_events", unchanged).put("cancelled_events", cancelled);
+            if (citizen) summary.putNull("cancelled_events");
             return null;
         }));
         if (baseline.path("validation").path("status").asText().equals("invalid")) baseline.put("status", "unknown");
@@ -284,17 +304,40 @@ public class ReviewReportService {
         return imported;
     }
 
-    private Map<String, String> eventRevisions(JsonNode snapshot) {
-        check(snapshot.path("event_public_payloads").isArray(), "event_public_payloads");
+    private PublicationRepository.Snapshot verifyPublication(JsonNode row, String channel) {
+        var snapshot = new PublicationRepository.Snapshot(row.path("snapshot_id").asText(), row.path("mode").asText(), row.path("case_id").textValue(),
+                row.path("canonical_json").asText(), row.path("checksum").asText(), row.path("data_kind").asText(),
+                row.path("rules_version").textValue(), row.path("dictionary_version").textValue());
+        if (row.path("schema_version").asText().equals(CitizenPublicationContent.SCHEMA_VERSION)) {
+            check(channel.equals(CitizenPublicationContent.CHANNEL), "channel");
+            citizens.verifySnapshot(snapshot, row.path("schema_version").asText(),
+                    LocalDateTime.parse(row.path("created_at").asText().replace(' ', 'T')).toInstant(ZoneOffset.UTC));
+        } else {
+            check(row.path("schema_version").asText().equals("snapshot-v1"), "schema_version");
+            content.verifySnapshot(snapshot, channel);
+        }
+        return snapshot;
+    }
+
+    private String publicationChannel(JsonNode row) {
+        if (row.path("schema_version").asText().equals(CitizenPublicationContent.SCHEMA_VERSION)) {
+            return CitizenPublicationContent.CHANNEL;
+        }
+        return row.path("mode").asText().equals("current") ? "current" : "replay:" + row.path("case_id").asText();
+    }
+
+    private Map<String, String> eventRevisions(JsonNode snapshot, boolean citizen) {
+        String field = citizen ? "notices" : "event_public_payloads", count = citizen ? "notice_count" : "event_count";
+        check(snapshot.path(field).isArray(), field);
         var result = new LinkedHashMap<String, String>();
-        for (var event : snapshot.path("event_public_payloads")) {
+        for (var event : snapshot.path(field)) {
             String id = event.path("event_id").textValue(), revision = event.path("revision_id").textValue();
             check(id != null && id.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
                     && revision != null && revision.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
                     && result.putIfAbsent(id, revision) == null, "event_public_payloads");
         }
-        check(snapshot.path("event_count").isIntegralNumber() && snapshot.path("event_count").canConvertToInt()
-                && snapshot.path("event_count").intValue() == result.size(), "event_count");
+        check(snapshot.path(count).isIntegralNumber() && snapshot.path(count).canConvertToInt()
+                && snapshot.path(count).intValue() == result.size(), count);
         return result;
     }
 

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import kr.ac.myai.backend.importing.ReviewedImportReader;
 import kr.ac.myai.backend.publication.PublicationContent;
+import kr.ac.myai.backend.publication.CitizenPublicationContent;
 import kr.ac.myai.backend.publication.PublicationException;
 import kr.ac.myai.backend.repository.PublicSnapshotRepository;
 import kr.ac.myai.backend.repository.PublicationRepository;
@@ -28,7 +29,8 @@ class SnapshotExportTest {
     final ObjectMapper mapper = new ObjectMapper();
     final PublicSnapshotRepository repository = mock(PublicSnapshotRepository.class);
     final PlatformTransactionManager transactions = mock(PlatformTransactionManager.class);
-    final SnapshotExportService service = new SnapshotExportService(repository, new PublicationContent(new ReviewedImportReader(), mapper), transactions);
+    final PublicationContent content = new PublicationContent(new ReviewedImportReader(), mapper);
+    final SnapshotExportService service = new SnapshotExportService(repository, content, transactions, new CitizenPublicationContent(content, mapper));
     PublicSnapshotRepository.Published published;
     UUID id;
 
@@ -52,6 +54,24 @@ class SnapshotExportTest {
         reset(transactions); when(transactions.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
         var modified = Files.getLastModifiedTime(file);
         assertThat(service.export(id, root).alreadyExported()).isTrue(); assertThat(Files.getLastModifiedTime(file)).isEqualTo(modified);
+        assertFiles(result.fileName());
+    }
+
+    @Test
+    void exportsPointFreeCitizenSnapshotWithoutReserializingItsBytes() throws Exception {
+        var snapshot = mapper.createObjectNode().put("schema_version", "citizen-snapshot-v1")
+                .put("snapshot_id", id.toString()).put("created_at", "2026-11-18T00:00:00Z")
+                .put("data_kind", "synthetic").put("mode", "current").putNull("case_id")
+                .put("channel_key", "citizen:current").put("timezone", "Asia/Seoul").put("notice_count", 0);
+        snapshot.putArray("revision_ids"); snapshot.putArray("notices"); snapshot.putArray("sources");
+        String canonical = " \n" + snapshot.toPrettyString() + "\n";
+        var row = new PublicationRepository.Snapshot(id.toString(), "current", null, canonical,
+                ReviewedImportReader.sha256(canonical.getBytes(StandardCharsets.UTF_8)), "synthetic", null, null);
+        when(repository.published(id.toString())).thenReturn(Optional.of(new PublicSnapshotRepository.Published(
+                row, "citizen-snapshot-v1", java.time.Instant.parse("2026-11-18T00:00:00Z"), id.toString())));
+        var result = service.export(id, root);
+        assertThat(Files.readAllBytes(root.resolve(result.fileName()))).isEqualTo(canonical.getBytes(StandardCharsets.UTF_8));
+        assertThat(service.export(id, root).alreadyExported()).isTrue();
         assertFiles(result.fileName());
     }
 

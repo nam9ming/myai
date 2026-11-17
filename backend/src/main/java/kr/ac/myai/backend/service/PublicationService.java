@@ -42,13 +42,15 @@ public class PublicationService {
     private final TransactionTemplate previewTransaction;
     private final ExtractionImportService extractions;
     private final SourceReviewRepository sourceReviews;
+    private final CitizenPublicationService citizens;
 
     public PublicationService(PublicationRepository repository, ReviewedImportRepository reviews, PublicationContent content,
                               ObjectMapper mapper, PlatformTransactionManager manager, ExtractionImportService extractions,
-                              SourceReviewRepository sourceReviews) {
+                              SourceReviewRepository sourceReviews, CitizenPublicationService citizens) {
         this.repository = repository; this.reviews = reviews; this.content = content; this.mapper = mapper;
         this.extractions = extractions;
         this.sourceReviews = sourceReviews;
+        this.citizens = citizens;
         this.transaction = new TransactionTemplate(manager);
         this.transaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.previewTransaction = new TransactionTemplate(manager);
@@ -61,6 +63,9 @@ public class PublicationService {
     public Result execute(PublicationCommand command, Path sourceRoot, String actor) {
         content.check(actor != null && !actor.isBlank() && actor.length() <= 128 && actor.chars().noneMatch(Character::isISOControl), "actor");
         try {
+            if (command instanceof PublicationCommand.CitizenPublish || command instanceof PublicationCommand.CitizenRollback) {
+                return citizens.execute(command, sourceRoot, actor);
+            }
             if (command instanceof PublicationCommand.Decision decision) return decide(decision, sourceRoot, actor);
             if (command instanceof PublicationCommand.Publish publish) return publish(publish, sourceRoot, actor);
             return rollback((PublicationCommand.Rollback) command, actor);

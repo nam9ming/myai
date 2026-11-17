@@ -120,7 +120,7 @@ public class LocalManagementService {
 
     public Result publish(byte[] body) {
         return execute(body, input -> {
-            check(schema(input).equals("publication-command-v1"), "schema_version");
+            check(Set.of("publication-command-v1", "citizen-publication-command-v1").contains(schema(input)), "schema_version");
             var command = commands.read(body);
             check(!(command instanceof PublicationCommand.Decision), "action");
             if (!command.action().equals("preview")) requests.retain(body);

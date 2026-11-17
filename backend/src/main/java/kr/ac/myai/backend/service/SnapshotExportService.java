@@ -5,6 +5,7 @@ import kr.ac.myai.backend.importing.ImportException;
 import kr.ac.myai.backend.importing.ReviewedImportReader;
 import kr.ac.myai.backend.publication.PublicationContent;
 import kr.ac.myai.backend.publication.PublicationException;
+import kr.ac.myai.backend.publication.CitizenPublicationContent;
 import kr.ac.myai.backend.repository.PublicSnapshotRepository;
 import kr.ac.myai.backend.repository.PublicationRepository;
 import org.springframework.context.annotation.Profile;
@@ -50,10 +51,13 @@ public class SnapshotExportService {
 
     private final PublicSnapshotRepository repository;
     private final PublicationContent content;
+    private final CitizenPublicationContent citizens;
     private final TransactionTemplate reads;
 
-    public SnapshotExportService(PublicSnapshotRepository repository, PublicationContent content, PlatformTransactionManager transactions) {
+    public SnapshotExportService(PublicSnapshotRepository repository, PublicationContent content,
+                                 PlatformTransactionManager transactions, CitizenPublicationContent citizens) {
         this.repository = repository; this.content = content; reads = new TransactionTemplate(transactions);
+        this.citizens = citizens;
         reads.setReadOnly(true); reads.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
         reads.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
@@ -78,10 +82,15 @@ public class SnapshotExportService {
     }
 
     private PublicationRepository.Snapshot read(String id) {
-        var published = repository.published(id).orElseThrow(() -> error("EXPORT_NOT_FOUND", "이미 공개한 snapshot ID를 지정해 주세요."));
+        var published = repository.published(id).or(() -> repository.citizenPublished(id))
+                .orElseThrow(() -> error("EXPORT_NOT_FOUND", "이미 공개한 snapshot ID를 지정해 주세요."));
         var row = published.snapshot();
         try {
             content.check(row.id().equals(id), "snapshot_id");
+            if (published.schemaVersion().equals(CitizenPublicationContent.SCHEMA_VERSION)) {
+                citizens.verifySnapshot(row, published.schemaVersion(), published.createdAt());
+                return row;
+            }
             content.verifySnapshot(row, row.mode().equals("current") ? "current" : "replay:" + row.caseId());
             // 공통 parser의8MiB 상한을 먼저 적용해 최초 쓰기와 재사용 범위를 맞춘다.
             JsonNode snapshot = content.parse(row.canonical());

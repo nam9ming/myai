@@ -31,6 +31,16 @@ public sealed interface PublicationCommand {
                     @NotBlank @Pattern(regexp = "current|replay") String mode, UUID caseId, @NotNull UUID snapshotId,
                     @NotNull @Min(0) @Max(Long.MAX_VALUE - 1) Long expectedHeadVersion) implements PublicationCommand { }
 
+    record CitizenPublish(@NotBlank String schemaVersion, @NotBlank String action,
+                          @NotBlank @Size(max = 4000) String reason,
+                          @NotBlank @Pattern(regexp = "synthetic|real") String dataKind,
+                          @NotNull @Size(max = 1000) List<@NotNull UUID> revisionIds,
+                          @Min(0) @Max(Long.MAX_VALUE - 1) Long expectedHeadVersion) implements PublicationCommand { }
+
+    record CitizenRollback(@NotBlank String schemaVersion, @NotBlank String action,
+                           @NotBlank @Size(max = 4000) String reason, @NotNull UUID snapshotId,
+                           @NotNull @Min(0) @Max(Long.MAX_VALUE - 1) Long expectedHeadVersion) implements PublicationCommand { }
+
     record Area(@NotNull UUID areaId, @NotBlank @Size(max = 255) String name, @NotBlank @Size(max = 4000) String description) { }
 
     record Point(@NotNull UUID pointId, @NotNull UUID areaId, @NotBlank @Size(max = 255) String label,
