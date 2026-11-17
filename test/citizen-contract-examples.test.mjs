@@ -10,6 +10,8 @@ const cases = [
   ["시민 상세가 목록과 다른 공개본이면 계약 검증이 실패한다", (value) => { value.snapshot_id = "90000000-0000-4000-8000-000000000001"; }],
   ["미확인 최초 이력에 이전 상태를 만들면 계약 검증이 실패한다", (value) => { value.data.history.entries[0].before = {}; }],
   ["시민 공개 이력에 비공개 검토자를 추가하면 계약 검증이 실패한다", (value) => { value.data.history.entries[0].actor = "synthetic-reviewer"; }],
+  ["남은 이력이 없는데 다음 페이지 커서를 만들면 계약 검증이 실패한다", (value) => { value.data.history.window.next_before_version = 1; }],
+  ["조회 불가 이력에 정상 페이지와 항목을 남기면 계약 검증이 실패한다", (value) => { value.data.history.status = "unavailable"; }],
 ];
 
 for (const [name, mutate, file = "citizen-detail-response.json"] of cases) {

@@ -60,6 +60,9 @@ class CitizenSnapshotMigrationTest {
 
             assertThat(history).hasSize(4);
             assertThatThrownBy(() -> insert(jdbc, "citizen-snapshot-v1", null, null)).isInstanceOf(DataIntegrityViolationException.class);
+            Flyway.configure().dataSource(database.url(), database.username(), database.password()).target("5").load().migrate();
+            var historyThroughV5 = jdbc.queryForList("SELECT * FROM flyway_schema_history WHERE version IN ('1','2','3','4','5') ORDER BY installed_rank");
+            assertThat(historyThroughV5).hasSize(5);
             Flyway.configure().dataSource(database.url(), database.username(), database.password()).load().migrate();
 
             assertThat(jdbc.queryForList("SELECT * FROM snapshots ORDER BY snapshot_id")).isEqualTo(before);
@@ -68,6 +71,11 @@ class CitizenSnapshotMigrationTest {
             assertThat(jdbc.queryForList("SELECT * FROM publication_audits ORDER BY audit_id")).isEqualTo(audits);
             assertThat(jdbc.queryForList("SELECT * FROM flyway_schema_history WHERE version IN ('1','2','3','4') ORDER BY installed_rank")).isEqualTo(history);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE version='5' AND success=1", Long.class)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE version='6' AND success=1", Long.class)).isEqualTo(1);
+            assertThat(jdbc.queryForList("SELECT * FROM flyway_schema_history WHERE version IN ('1','2','3','4','5') ORDER BY installed_rank")).isEqualTo(historyThroughV5);
+            assertThat(jdbc.queryForList("SELECT COLUMN_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() "
+                    + "AND TABLE_NAME='publication_audits' AND INDEX_NAME='ix_publication_version' AND NON_UNIQUE=1 ORDER BY SEQ_IN_INDEX", String.class))
+                    .containsExactly("channel_key", "head_version", "audit_id");
             content.verifySnapshot(repository.snapshot(legacy.id()), "current");
             insert(jdbc, "citizen-snapshot-v1", null, null);
             for (String schema : List.of("snapshot-v1", "legacy-other-version")) {

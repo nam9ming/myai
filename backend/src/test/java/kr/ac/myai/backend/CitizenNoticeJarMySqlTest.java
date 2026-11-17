@@ -88,8 +88,33 @@ class CitizenNoticeJarMySqlTest {
                 var detail = json(jar.get("/api/v1/citizen/notices/" + eventId + "?snapshot_id=" + citizenId, false), 200);
                 assertThat(detail.path("data").path("notice")).isEqualTo(expectedNotice);
                 assertThat(detail.path("data").path("sources")).isEqualTo(expectedSources);
-                assertThat(detail.path("data").path("history").path("entries").findValuesAsText("kind"))
+                var history = detail.path("data").path("history");
+                assertThat(keys(history)).containsExactlyInAnyOrder("scope", "completeness", "status", "window", "entries", "error");
+                assertThat(history.path("status").asText()).isEqualTo("available"); assertThat(history.path("error").isNull()).isTrue();
+                assertThat(history.path("window").path("from_version").asLong(-1)).isZero();
+                assertThat(history.path("window").path("to_version").asLong(-1)).isEqualTo(3);
+                assertThat(history.path("window").path("has_more").asBoolean()).isFalse();
+                assertThat(history.path("entries").findValuesAsText("kind"))
                         .containsExactly("first_observed", "changed", "withdrawn", "restored");
+                String detailPath = "/api/v1/citizen/notices/" + eventId + "?snapshot_id=" + citizenId;
+                var newest = json(jar.get(detailPath + "&history_limit=2", false), 200).path("data");
+                assertThat(newest.path("notice")).isEqualTo(expectedNotice);
+                assertThat(newest.path("sources")).isEqualTo(expectedSources);
+                var latestHistory = newest.path("history");
+                assertThat(latestHistory.path("status").asText()).isEqualTo("available");
+                assertThat(latestHistory.path("window").path("from_version").asLong(-1)).isEqualTo(2);
+                assertThat(latestHistory.path("window").path("to_version").asLong(-1)).isEqualTo(3);
+                assertThat(latestHistory.path("window").path("has_more").asBoolean()).isTrue();
+                assertThat(latestHistory.path("window").path("next_before_version").asLong(-1)).isEqualTo(2);
+                assertThat(latestHistory.path("window").path("limit").asInt(-1)).isEqualTo(2);
+                assertThat(latestHistory.path("entries").findValuesAsText("kind")).containsExactly("withdrawn", "restored");
+                var older = json(jar.get(detailPath + "&history_limit=2&history_before_version=2", false), 200).path("data");
+                assertThat(older.path("notice")).isEqualTo(expectedNotice);
+                assertThat(older.path("history").path("status").asText()).isEqualTo("available");
+                assertThat(older.path("history").path("window").path("from_version").asLong(-1)).isZero();
+                assertThat(older.path("history").path("window").path("to_version").asLong(-1)).isEqualTo(1);
+                assertThat(older.path("history").path("window").path("has_more").asBoolean()).isFalse();
+                assertThat(older.path("history").path("entries").findValuesAsText("kind")).containsExactly("first_observed", "changed");
                 var config = json(jar.get("/api/v1/config", false), 200);
                 assertThat(config.path("snapshot_id").asText()).isEqualTo(legacyId);
                 var request = (ObjectNode) mapper.readTree(Path.of("../contracts/examples/matches-request.json").toFile());
@@ -183,6 +208,10 @@ class CitizenNoticeJarMySqlTest {
 
     private JsonNode json(HttpResponse<String> response, int status) throws Exception {
         assertThat(response.statusCode()).as(response.body()).isEqualTo(status); return mapper.readTree(response.body());
+    }
+
+    private java.util.Set<String> keys(JsonNode node) {
+        var result = new HashSet<String>(); node.fieldNames().forEachRemaining(result::add); return result;
     }
 
     private Map<String, String> files(Path directory) throws Exception {

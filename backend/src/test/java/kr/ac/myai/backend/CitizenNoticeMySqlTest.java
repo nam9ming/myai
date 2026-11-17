@@ -217,9 +217,10 @@ class CitizenNoticeMySqlTest {
         fixtures.rollback(first.snapshotId(), 3);
         var detail = ok(detail(CitizenNoticeFixtures.event(input), first.snapshotId()));
         var history = detail.path("data").path("history");
-        assertThat(keys(history)).containsExactlyInAnyOrder("scope", "completeness", "entries");
+        assertThat(keys(history)).containsExactlyInAnyOrder("scope", "completeness", "status", "window", "entries", "error");
         assertThat(history.path("scope").asText()).isEqualTo("same_data_kind_published_snapshots");
         assertThat(history.path("completeness").asText()).isEqualTo("unknown");
+        assertWindow(history, 0, 4, false, null, 1000);
         var entries = history.path("entries"); assertThat(entries).hasSize(4);
         assertThat(entries.findValuesAsText("kind")).containsExactly("first_observed", "changed", "withdrawn", "restored");
         assertThat(entries.get(0).path("before").isNull()).isTrue();
@@ -263,7 +264,7 @@ class CitizenNoticeMySqlTest {
     }
 
     @Test
-    void thousandAndOneActualAuditRowsFailExplicitlyInsteadOfTruncatingHistory() throws Exception {
+    void thousandAndOneActualAuditRowsKeepFactsAvailableWithBoundedHistory() throws Exception {
         var input = fixtures.citizen("education", false); String approved = fixtures.approve(input, true);
         var published = fixtures.publish(List.of(approved), null);
         var rows = new ArrayList<Object[]>();
@@ -272,9 +273,11 @@ class CitizenNoticeMySqlTest {
         jdbc.batchUpdate("INSERT INTO publication_audits(audit_id, channel_key, action, before_snapshot_id, after_snapshot_id, head_version, reason, actor, happened_at) "
                 + "VALUES (?, 'citizen:current', 'rollback', ?, ?, ?, '합성 이력 한도 시험', 'synthetic-history', ?)", rows);
         assertThat(jdbc.update("UPDATE publication_heads SET lock_version=1000 WHERE channel_key='citizen:current' AND snapshot_id=? AND lock_version=0", published.snapshotId())).isEqualTo(1);
-        var error = error(detail(CitizenNoticeFixtures.event(input), published.snapshotId()), 503, "CITIZEN_HISTORY_TOO_LARGE");
-        assertThat(error.path("error").path("retryable").asBoolean()).isFalse();
-        assertThat(error.has("data")).isFalse();
+        var data = ok(detail(CitizenNoticeFixtures.event(input), published.snapshotId())).path("data");
+        assertThat(data.path("notice").path("revision_id").asText()).isEqualTo(approved);
+        var history = data.path("history");
+        assertWindow(history, 1, 1000, true, 1L, 1000);
+        assertThat(history.path("entries")).isEmpty();
     }
 
     @Test
@@ -334,8 +337,106 @@ class CitizenNoticeMySqlTest {
         jdbc.update("UPDATE publication_heads SET lock_version=1000 WHERE channel_key='citizen:current'");
         var input = fixtures.citizen("education", false); String approved = fixtures.approve(input, true);
         var selected = fixtures.publish(List.of(approved), 1000L);
-        var failure = error(detail(CitizenNoticeFixtures.event(input), selected.snapshotId()), 503, "CITIZEN_HISTORY_TOO_LARGE");
-        assertThat(failure.path("error").path("retryable").asBoolean()).isFalse();
+        var data = ok(detail(CitizenNoticeFixtures.event(input), selected.snapshotId())).path("data");
+        assertThat(data.path("notice").path("revision_id").asText()).isEqualTo(approved);
+        var history = data.path("history");
+        assertThat(history.path("status").asText()).isEqualTo("available");
+        var window = history.path("window");
+        assertThat(window.path("from_version").asLong(-1)).isEqualTo(2);
+        assertThat(window.path("to_version").asLong(-1)).isEqualTo(1001);
+        assertThat(window.path("has_more").asBoolean()).isTrue();
+        assertThat(window.path("next_before_version").asLong(-1)).isEqualTo(2);
+        assertThat(window.path("limit").asInt(-1)).isEqualTo(1000);
+        var entries = history.path("entries");
+        assertThat(entries).isNotEmpty();
+        assertThat(entries.get(entries.size() - 1).path("kind").asText()).isEqualTo("observed");
+    }
+
+    @Test
+    void newestAndOlderHistoryWindowsPreserveFourRecordedStatesAndBoundaryContext() throws Exception {
+        var input = fixtures.citizen("education", false);
+        String original = fixtures.approve(input, true);
+        var first = fixtures.publish(List.of(original), null);
+        var states = new ArrayList<JsonNode>(); states.add(fixtures.canonical(first.snapshotId()).path("notices").get(0));
+        var latest = first;
+        for (int version = 1; version <= 3; version++) {
+            String revised = fixtures.editTitleAndApprove(input, "합성 시민 공지 검토 " + version);
+            latest = fixtures.publish(List.of(revised), (long) version - 1);
+            states.add(fixtures.canonical(latest.snapshotId()).path("notices").get(0));
+        }
+        String path = detail(CitizenNoticeFixtures.event(input), latest.snapshotId());
+        var newest = ok(path + "&history_limit=2").path("data");
+        assertThat(newest.path("notice")).isEqualTo(states.get(3));
+        var recent = newest.path("history"); assertWindow(recent, 2, 3, true, 2L, 2);
+        var recentEntries = recent.path("entries"); assertThat(recentEntries).hasSize(2);
+        assertThat(recentEntries.findValuesAsText("kind")).containsExactly("changed", "changed");
+        assertThat(recentEntries.get(0).path("before").path("notice")).isEqualTo(states.get(1));
+        assertThat(recentEntries.get(0).path("after").path("notice")).isEqualTo(states.get(2));
+        assertThat(recentEntries.get(1).path("before").path("notice")).isEqualTo(states.get(2));
+        assertThat(recentEntries.get(1).path("after").path("notice")).isEqualTo(states.get(3));
+        long cursor = recent.path("window").path("next_before_version").longValue();
+        var older = ok(path + "&history_limit=2&history_before_version=" + cursor).path("data");
+        assertThat(older.path("notice")).isEqualTo(states.get(3));
+        var earlier = older.path("history"); assertWindow(earlier, 0, 1, false, null, 2);
+        var olderEntries = earlier.path("entries"); assertThat(olderEntries).hasSize(2);
+        assertThat(olderEntries.findValuesAsText("kind")).containsExactly("first_observed", "changed");
+        assertThat(olderEntries.get(0).path("before").isNull()).isTrue();
+        assertThat(olderEntries.get(0).path("after").path("notice")).isEqualTo(states.get(0));
+        assertThat(olderEntries.get(1).path("before").path("notice")).isEqualTo(states.get(0));
+        assertThat(olderEntries.get(1).path("after").path("notice")).isEqualTo(states.get(1));
+        assertThat(ok(path + "&history_before_version=4&history_limit=2").path("data").path("history")).isEqualTo(recent);
+    }
+
+    @Test
+    void invalidHistoryCursorsAndLimitsAreRejectedAndListDoesNotAcceptHistoryQueries() throws Exception {
+        var input = fixtures.citizen("living", false);
+        var selected = fixtures.publish(List.of(fixtures.approve(input, true)), null);
+        String path = detail(CitizenNoticeFixtures.event(input), selected.snapshotId());
+        for (String query : List.of("history_before_version=0", "history_before_version=-1", "history_before_version=2", "history_before_version=",
+                "history_before_version=9223372036854775808", "history_before_version=1&history_before_version=1",
+                "history_limit=0", "history_limit=1001", "history_limit=-1", "history_limit=", "history_limit=2&history_limit=2")) {
+            error(path + "&" + query, 422, "INVALID_REQUEST");
+        }
+        for (String query : List.of("history_limit=1", "history_before_version=1")) error("/api/v1/citizen/notices?" + query, 422, "INVALID_REQUEST");
+        var valid = ok(path + "&history_before_version=1&history_limit=1").path("data");
+        assertThat(valid.path("notice").path("event_id").asText()).isEqualTo(CitizenNoticeFixtures.event(input));
+        assertWindow(valid.path("history"), 0, 0, false, null, 1);
+    }
+
+    @Test
+    void oversizedBoundedHistoryPreservesCurrentFactsAndReturnsExplicitUnavailableHistory() throws Exception {
+        var input = fixtures.citizen("support", false); String approved = fixtures.approve(input, true);
+        var first = fixtures.publish(List.of(approved), null); var selected = fixtures.publish(List.of(approved), 0L);
+        var expected = fixtures.canonical(selected.snapshotId());
+        for (String id : List.of(first.snapshotId(), selected.snapshotId())) {
+            String text = " ".repeat(5 * 1024 * 1024) + fixtures.canonicalText(id);
+            jdbc.update("UPDATE snapshots SET canonical_json=?, checksum=? WHERE snapshot_id=?", text,
+                    ReviewedImportReader.sha256(text.getBytes(java.nio.charset.StandardCharsets.UTF_8)), id);
+        }
+        var data = ok(detail(CitizenNoticeFixtures.event(input), selected.snapshotId()) + "&history_limit=1").path("data");
+        assertThat(data.path("notice")).isEqualTo(expected.path("notices").get(0));
+        assertThat(data.path("sources")).isEqualTo(expected.path("sources"));
+        var history = data.path("history");
+        assertThat(keys(history)).containsExactlyInAnyOrder("scope", "completeness", "status", "window", "entries", "error");
+        assertThat(history.path("scope").asText()).isEqualTo("same_data_kind_published_snapshots");
+        assertThat(history.path("completeness").asText()).isEqualTo("unknown");
+        assertThat(history.path("status").asText()).isEqualTo("unavailable");
+        assertThat(history.path("window").isNull()).isTrue(); assertThat(history.path("entries").isNull()).isTrue();
+        assertThat(keys(history.path("error"))).containsExactlyInAnyOrder("code", "retryable");
+        assertThat(history.path("error").path("code").asText()).isEqualTo("CITIZEN_HISTORY_TOO_LARGE");
+        assertThat(history.path("error").path("retryable").asBoolean()).isFalse();
+        assertThat(ok("/api/v1/citizen/notices").path("data").path("notices").get(0)).isEqualTo(expected.path("notices").get(0));
+    }
+
+    private void assertWindow(JsonNode history, long from, long to, boolean hasMore, Long next, int limit) {
+        assertThat(keys(history)).containsExactlyInAnyOrder("scope", "completeness", "status", "window", "entries", "error");
+        assertThat(history.path("status").asText()).isEqualTo("available"); assertThat(history.path("error").isNull()).isTrue();
+        var window = history.path("window");
+        assertThat(keys(window)).containsExactlyInAnyOrder("from_version", "to_version", "has_more", "next_before_version", "limit");
+        assertThat(window.path("from_version").asLong(-1)).isEqualTo(from); assertThat(window.path("to_version").asLong(-1)).isEqualTo(to);
+        assertThat(window.path("has_more").asBoolean()).isEqualTo(hasMore); assertThat(window.path("limit").asInt(-1)).isEqualTo(limit);
+        if (next == null) assertThat(window.path("next_before_version").isNull()).isTrue();
+        else assertThat(window.path("next_before_version").asLong(-1)).isEqualTo(next);
     }
 
     private URI uri(String path) { return URI.create("http://127.0.0.1:" + port + path); }

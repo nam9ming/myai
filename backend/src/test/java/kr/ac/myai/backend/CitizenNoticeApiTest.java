@@ -146,6 +146,22 @@ class CitizenNoticeApiTest {
     }
 
     @Test
+    void acceptsOnlyCanonicalHistoryPagingOnPinnedDetails() throws Exception {
+        for (String field : new String[] {"history_before_version", "history_limit"}) {
+            for (String value : new String[] {"", "0", "-1", "01", "1.0", "9223372036854775808"})
+                mvc.perform(get(BASE + "/" + EVENT).param("snapshot_id", ID).param(field, value))
+                        .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+            mvc.perform(get(BASE + "/" + EVENT).param("snapshot_id", ID).param(field, "1", "1"))
+                    .andExpect(status().isUnprocessableEntity());
+            mvc.perform(get(BASE).param(field, "1")).andExpect(status().isUnprocessableEntity());
+        }
+        mvc.perform(get(BASE + "/" + EVENT).param("snapshot_id", ID).param("history_limit", "1001"))
+                .andExpect(status().isUnprocessableEntity());
+        mvc.perform(get(BASE + "/" + EVENT).param("snapshot_id", ID).param("history_limit", "1").param("history_before_version", "1"))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.error.code").value("NOTICE_NOT_FOUND"));
+    }
+
+    @Test
     void hasNoPublicationWriteMethod() throws Exception {
         mvc.perform(post(BASE).contentType("application/json").content("{\"private\":true}"))
                 .andExpect(status().isMethodNotAllowed()).andExpect(jsonPath("$.error.code").value("METHOD_NOT_ALLOWED"));

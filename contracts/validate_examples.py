@@ -157,8 +157,14 @@ def main():
     assert notice["application_period"]["value"] != notice["occurrences"]["value"]
     assert notice["cost"]["value"] is None and notice["cost"]["knowledge"] == "not_stated"
     history = citizen_detail["data"]["history"]
-    assert set(history) == {"scope", "completeness", "entries"}
+    assert set(history) == {"scope", "completeness", "status", "window", "entries", "error"}
     assert history["scope"] == "same_data_kind_published_snapshots" and history["completeness"] == "unknown"
+    assert history["status"] == "available" and history["error"] is None
+    window = history["window"]
+    assert set(window) == {"from_version", "to_version", "has_more", "next_before_version", "limit"}
+    assert all(type(window[name]) is int for name in ["from_version", "to_version", "limit"])
+    assert type(window["has_more"]) is bool
+    assert window == {"from_version": 0, "to_version": 0, "has_more": False, "next_before_version": None, "limit": 1000}
     assert len(history["entries"]) == 1
     entry = history["entries"][0]
     assert set(entry) == {"kind", "snapshot_id", "published_at", "action", "before", "after"}

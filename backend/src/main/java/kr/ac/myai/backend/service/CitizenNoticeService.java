@@ -48,6 +48,12 @@ public class CitizenNoticeService {
     }
 
     public JsonNode notice(UUID eventId, UUID snapshotId) {
+        return notice(eventId, snapshotId, null, PublicSnapshotRepository.MAX_CITIZEN_HISTORY);
+    }
+
+    public JsonNode notice(UUID eventId, UUID snapshotId, Long beforeVersion, int limit) {
+        if (limit < 1 || limit > PublicSnapshotRepository.MAX_CITIZEN_HISTORY) throw ApiException.invalid("history_limit", "이력 개수는1~1000을 사용해 주세요.");
+        if (beforeVersion != null && beforeVersion <= 0) throw ApiException.invalid("history_before_version", "양의 정수 버전을 지정해 주세요.");
         if (eventId == null) throw ApiException.invalid("event_id", "시민 공지 ID를 지정해 주세요.");
         if (snapshotId == null) throw ApiException.invalid("snapshot_id", "목록과 같은 공개본을 지정해 주세요.");
         var reads = new Reads();
@@ -57,8 +63,17 @@ public class CitizenNoticeService {
         var data = shared.select(selected, "created_at data_kind mode timezone");
         data.set("notice", notice.deepCopy());
         data.set("sources", sources(selected, notice));
-        data.set("history", history(selected, eventId.toString(), reads));
-        return envelope(selected, data);
+        try {
+            data.set("history", history(selected, eventId.toString(), reads, beforeVersion, limit));
+            return envelope(selected, data);
+        } catch (ApiException failure) {
+            if (!failure.code().equals("CITIZEN_HISTORY_TOO_LARGE")) throw failure;
+            var unavailable = mapper.createObjectNode().put("scope", "same_data_kind_published_snapshots").put("completeness", "unknown")
+                    .put("status", "unavailable").putNull("window").putNull("entries");
+            unavailable.putObject("error").put("code", failure.code()).put("retryable", false);
+            data.set("history", unavailable);
+            return envelope(selected, data);
+        }
     }
 
     private JsonNode select(UUID snapshotId, Reads reads) {
@@ -81,33 +96,47 @@ public class CitizenNoticeService {
         return selected;
     }
 
-    private ObjectNode history(JsonNode selected, String eventId, Reads reads) {
+    private ObjectNode history(JsonNode selected, String eventId, Reads reads, Long beforeVersion, int limit) {
         String selectedId = selected.path("snapshot_id").textValue();
-        var recorded = repository.citizenHistory(eventId, selectedId);
+        var recorded = repository.citizenHistory(eventId, selectedId, beforeVersion, limit);
+        if (recorded.headVersion() < 0) throw invalid();
+        if (recorded.endVersion() < 0 || recorded.endVersion() > recorded.headVersion())
+            throw ApiException.invalid("history_before_version", "선택한 공개본까지의 이력 버전을 지정해 주세요.");
+        long start = recorded.startVersion(), end = recorded.endVersion(), base = Math.max(0, start - 1);
         var audits = recorded.audits();
-        if (recorded.headVersion() >= PublicSnapshotRepository.MAX_CITIZEN_HISTORY || audits.size() > PublicSnapshotRepository.MAX_CITIZEN_HISTORY) throw tooLarge();
-        if (recorded.headVersion() < 0 || audits.isEmpty() || audits.getLast().version() != recorded.headVersion()
-                || !selectedId.equals(audits.getLast().snapshotId())) throw invalid();
-        var history = mapper.createObjectNode().put("scope", "same_data_kind_published_snapshots").put("completeness", "unknown");
+        if (start != Math.max(0, end - limit + 1) || audits.size() != end - base + 1
+                || audits.getLast().version() != end
+                || end == recorded.headVersion() && !selectedId.equals(audits.getLast().snapshotId())) throw invalid();
+        var history = mapper.createObjectNode().put("scope", "same_data_kind_published_snapshots").put("completeness", "unknown").put("status", "available");
+        var window = history.putObject("window").put("from_version", start).put("to_version", end)
+                .put("has_more", start > 0).put("limit", limit);
+        if (start > 0) window.put("next_before_version", start); else window.putNull("next_before_version");
         var entries = history.putArray("entries");
+        history.putNull("error");
         ObjectNode previous = null;
-        boolean observed = false;
-        long expectedVersion = 0, outputBytes = 0;
+        boolean observed = false, stateKnown = false;
+        long expectedVersion = base, outputBytes = 0;
         String previousId = null;
         for (var item : audits) {
-            if (item.version() != expectedVersion++ || !Objects.equals(previousId, item.beforeId())) throw invalid();
+            if (item.version() != expectedVersion++ || (item.version() != base || base == 0) && !Objects.equals(previousId, item.beforeId())
+                    || base > 0 && item.version() == base && item.beforeId() == null) throw invalid();
             previousId = item.snapshotId();
-            if (item.snapshotId() == null || item.publishedAt() == null || !("publish".equals(item.action()) || "rollback".equals(item.action()))) throw invalid();
+            if (item.snapshotId() == null || item.publishedAt() == null || !("publish".equals(item.action()) || "rollback".equals(item.action()))
+                    || item.version() == 0 && !"publish".equals(item.action())) throw invalid();
             JsonNode snapshot = reads.historic(item.snapshotId());
             if (item.publishedAt().isBefore(Instant.parse(snapshot.path("created_at").textValue()))) throw invalid();
             JsonNode notice = find(snapshot, eventId);
             String revisionId = notice == null ? null : notice.path("revision_id").textValue();
             if (!Objects.equals(revisionId, item.revisionId())) throw invalid();
             if (!snapshot.path("data_kind").equals(selected.path("data_kind"))) continue;
-            if (!observed && notice == null) continue;
             ObjectNode current = notice == null ? null : state(snapshot, notice);
-            if (!observed || !Objects.equals(previous, current)) {
-                String kind = !observed ? "first_observed" : current == null ? "withdrawn" : previous == null ? "restored" : "changed";
+            if (item.version() < start) {
+                previous = current; observed = current != null; stateKnown = true;
+                continue;
+            }
+            if (!stateKnown && current == null && start == 0) continue;
+            if (!stateKnown || !Objects.equals(previous, current)) {
+                String kind = !observed ? (start == 0 && current != null ? "first_observed" : "observed") : current == null ? "withdrawn" : previous == null ? "restored" : "changed";
                 var entry = mapper.createObjectNode().put("kind", kind).put("snapshot_id", item.snapshotId())
                         .put("published_at", item.publishedAt().toString()).put("action", item.action());
                 entry.set("before", previous);
@@ -117,9 +146,9 @@ public class CitizenNoticeService {
                 entries.add(entry);
             }
             previous = current;
-            observed = true;
+            stateKnown = true;
+            observed |= current != null;
         }
-        if (!observed) throw invalid();
         return history;
     }
 

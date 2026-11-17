@@ -71,7 +71,13 @@ class CitizenNoticeServiceTest {
         head = CURRENT;
         when(repository.head(CitizenPublicationContent.CHANNEL)).thenAnswer(call -> Optional.ofNullable(head));
         when(repository.citizenPublished(anyString())).thenAnswer(call -> Optional.ofNullable(records.get(call.getArgument(0))));
-        when(repository.citizenHistory(anyString(), anyString())).thenAnswer(call -> new PublicSnapshotRepository.CitizenHistory(audits.stream().mapToLong(PublicSnapshotRepository.CitizenHistoric::version).max().orElse(0), audits));
+        when(repository.citizenHistory(anyString(), anyString(), nullable(Long.class), anyInt())).thenAnswer(call -> {
+            long headVersion = audits.stream().mapToLong(PublicSnapshotRepository.CitizenHistoric::version).max().orElse(0);
+            Long before = call.getArgument(2); int limit = call.getArgument(3);
+            long end = before == null ? headVersion : before - 1, start = Math.max(0, end - limit + 1);
+            var page = audits.stream().filter(item -> item.version() >= Math.max(0, start - 1) && item.version() <= end).limit(limit + 2L).toList();
+            return new PublicSnapshotRepository.CitizenHistory(headVersion, start, end, page);
+        });
     }
 
     @Test
@@ -124,7 +130,7 @@ class CitizenNoticeServiceTest {
         assertThat(data.path("sources").get(0).path("document_version_id").asText()).isEqualTo("20000000-0000-4000-8000-000000000002");
         assertThat(result.toString()).doesNotContain("다른 문서", "다른 공개 공지");
         var history = data.path("history");
-        assertThat(fields(history)).containsExactlyInAnyOrder("scope", "completeness", "entries");
+        assertThat(fields(history)).containsExactlyInAnyOrder("scope", "completeness", "status", "window", "entries", "error");
         assertThat(history.path("scope").asText()).isEqualTo("same_data_kind_published_snapshots");
         assertThat(history.path("completeness").asText()).isEqualTo("unknown");
         assertThat(history.path("entries")).hasSize(1);
@@ -298,9 +304,9 @@ class CitizenNoticeServiceTest {
     }
 
     @Test
-    void moreThanOneThousandAuditRowsFailsExplicitlyWithoutRetryAdvice() {
+    void duplicateAuditVersionsCannotMasqueradeAsAValidPage() {
         audits = Collections.nCopies(1001, audit(CURRENT, REVISION, 1, "publish"));
-        tooLarge();
+        error(this::detail, HttpStatus.INTERNAL_SERVER_ERROR, "SNAPSHOT_INVALID");
     }
 
     @Test
@@ -350,13 +356,59 @@ class CitizenNoticeServiceTest {
         tooLarge();
     }
 
+    @Test
+    void pagesBeforeTheSelectedHeadAndUsesOnlyTheVerifiedBoundaryState() throws Exception {
+        var first = payload.deepCopy(); revision(first).put("title", "first");
+        var second = payload.deepCopy(); revision(second).put("title", "second");
+        records.put(PAST, published(PAST, "synthetic", first));
+        records.put(EMPTY, published(EMPTY, "synthetic", second));
+        audits = List.of(audit(PAST, REVISION, 1, "publish"), audit(EMPTY, REVISION, 2, "publish"), audit(CURRENT, REVISION, 3, "publish"));
+        var data = service.notice(UUID.fromString(EVENT), UUID.fromString(CURRENT), null, 1).path("data");
+        assertThat(data.path("notice").path("title").asText()).isEqualTo("합성 시민 공지 😀");
+        var window = data.path("history").path("window");
+        assertThat(window.path("from_version").asLong()).isEqualTo(2);
+        assertThat(window.path("to_version").asLong()).isEqualTo(2);
+        assertThat(window.path("next_before_version").asLong()).isEqualTo(2);
+        assertThat(window.path("has_more").asBoolean()).isTrue();
+        var entry = data.path("history").path("entries").get(0);
+        assertThat(entry.path("kind").asText()).isEqualTo("changed");
+        assertThat(entry.path("before").path("notice").path("title").asText()).isEqualTo("second");
+        var older = service.notice(UUID.fromString(EVENT), UUID.fromString(CURRENT), 1L, 1).path("data");
+        assertThat(older.path("notice")).isEqualTo(data.path("notice"));
+        assertThat(older.path("history").path("window").path("has_more").asBoolean()).isFalse();
+        assertThat(older.path("history").path("entries").get(0).path("kind").asText()).isEqualTo("first_observed");
+        assertThat(older.path("history").path("entries").get(0).path("snapshot_id").asText()).isEqualTo(PAST);
+    }
+
+    @Test
+    void aPageRecordsConfirmedAbsenceWithoutInventingARestorationAcrossDataKinds() throws Exception {
+        records.put(PAST, published(PAST, "synthetic", payload));
+        records.put(OTHER_KIND, published(OTHER_KIND, "real", payload));
+        records.put(EMPTY, published(EMPTY, "synthetic"));
+        audits = List.of(audit(PAST, REVISION, 1, "publish"), audit(OTHER_KIND, REVISION, 2, "publish"),
+                audit(EMPTY, null, 3, "publish"), audit(CURRENT, REVISION, 4, "publish"));
+        var data = service.notice(UUID.fromString(EVENT), UUID.fromString(CURRENT), null, 2).path("data");
+        var entries = data.path("history").path("entries");
+        assertThat(entries).hasSize(2);
+        assertThat(entries.get(0).path("kind").asText()).isEqualTo("observed");
+        assertThat(entries.get(0).path("snapshot_id").asText()).isEqualTo(EMPTY);
+        assertThat(entries.get(0).path("before").isNull()).isTrue();
+        assertThat(entries.get(0).path("after").isNull()).isTrue();
+        assertThat(entries.get(1).path("kind").asText()).isEqualTo("observed");
+        assertThat(entries.get(1).path("after").path("notice").path("event_id").asText()).isEqualTo(EVENT);
+    }
+
     private JsonNode detail() { return service.notice(UUID.fromString(EVENT), UUID.fromString(CURRENT)).path("data"); }
     private void tooLarge() {
-        assertThatThrownBy(this::detail).isInstanceOfSatisfying(ApiException.class, failure -> {
-            assertThat(failure.status()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
-            assertThat(failure.code()).isEqualTo("CITIZEN_HISTORY_TOO_LARGE");
-            assertThat(failure.retryable()).isFalse();
-        });
+        var data = detail();
+        assertThat(data.path("notice").path("event_id").asText()).isEqualTo(EVENT);
+        assertThat(data.path("sources")).isNotEmpty();
+        var history = data.path("history");
+        assertThat(history.path("status").asText()).isEqualTo("unavailable");
+        assertThat(history.path("window").isNull()).isTrue();
+        assertThat(history.path("entries").isNull()).isTrue();
+        assertThat(history.path("error").path("code").asText()).isEqualTo("CITIZEN_HISTORY_TOO_LARGE");
+        assertThat(history.path("error").path("retryable").asBoolean()).isFalse();
     }
     private void error(org.assertj.core.api.ThrowableAssert.ThrowingCallable call, HttpStatus status, String code) {
         assertThatThrownBy(call).isInstanceOfSatisfying(ApiException.class, failure -> {
