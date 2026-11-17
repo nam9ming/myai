@@ -11,12 +11,15 @@ import java.util.Optional;
 @Repository
 @Profile("!fixture")
 public class PublicSnapshotRepository {
+    public static final int MAX_CITIZEN_HISTORY = 1000;
     private final JdbcTemplate jdbc;
 
     public PublicSnapshotRepository(JdbcTemplate jdbc) { this.jdbc = jdbc; }
 
     public record Published(PublicationRepository.Snapshot snapshot, String schemaVersion, Instant createdAt, String currentId) { }
     public record Historic(String snapshotId, String revisionId, Instant publishedAt, String action) { }
+    public record CitizenHistoric(String snapshotId, String revisionId, Instant publishedAt, String action, long version, String beforeId) { }
+    public record CitizenHistory(long headVersion, long startVersion, long endVersion, List<CitizenHistoric> audits) { }
 
     public Optional<String> head(String channel) {
         return jdbc.query("SELECT snapshot_id FROM publication_heads WHERE channel_key = ?", (row, i) -> row.getString(1), channel).stream().findFirst();
@@ -78,5 +81,25 @@ public class PublicSnapshotRepository {
                 ORDER BY a.head_version, a.audit_id
                 """, (row, i) -> new Historic(row.getString(1), row.getString(2), row.getTimestamp(3).toInstant(), row.getString(4)),
                 selectedSnapshot, eventId, channel);
+    }
+
+    public CitizenHistory citizenHistory(String eventId, String selectedSnapshot, Long beforeVersion, int limit) {
+        var head = jdbc.query("SELECT lock_version FROM publication_heads WHERE channel_key='citizen:current' AND snapshot_id=?",
+                (row, i) -> row.getLong(1), selectedSnapshot).stream().findFirst();
+        if (head.isEmpty()) return new CitizenHistory(-1, 0, -1, List.of());
+        long end = beforeVersion == null ? head.get() : beforeVersion - 1;
+        if (beforeVersion != null && beforeVersion <= 0 || end > head.get()) return new CitizenHistory(head.get(), 0, -1, List.of());
+        long start = Math.max(0, end - limit + 1);
+        var audits = jdbc.query("""
+                SELECT a.after_snapshot_id, membership.revision_id, a.happened_at, a.action, a.head_version, a.before_snapshot_id
+                FROM publication_audits a
+                LEFT JOIN snapshot_revisions membership
+                  ON membership.snapshot_id = a.after_snapshot_id AND membership.event_id = ?
+                WHERE a.channel_key = 'citizen:current' AND a.head_version BETWEEN ? AND ?
+                ORDER BY a.head_version, a.audit_id
+                LIMIT ?
+                """, (row, i) -> new CitizenHistoric(row.getString(1), row.getString(2), row.getTimestamp(3).toInstant(), row.getString(4), row.getLong(5), row.getString(6)),
+                eventId, Math.max(0, start - 1), end, limit + 2);
+        return new CitizenHistory(head.get(), start, end, audits);
     }
 }

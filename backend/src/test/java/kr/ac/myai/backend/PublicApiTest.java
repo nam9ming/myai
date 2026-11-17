@@ -47,6 +47,14 @@ class PublicApiTest {
     }
 
     @Test
+    void legacyFixtureDoesNotPretendToServeCitizenPublications() throws Exception {
+        mvc.perform(get("/api/v1/citizen/notices")).andExpect(status().isNotFound()).andExpect(jsonPath("$.error.code").value("NOT_FOUND"));
+        mvc.perform(get("/api/v1/citizen/notices/20000000-0000-4000-8000-000000000004")
+                .param("snapshot_id", "30000000-0000-4000-8000-000000000001")).andExpect(status().isNotFound());
+        mvc.perform(get("/api/v1/config")).andExpect(status().isOk()).andExpect(jsonPath("$.schema_version").value("api-v1"));
+    }
+
+    @Test
     void shouldServeContractMatchesAndAcceptPinnedSnapshot() throws Exception {
         ObjectNode query = (ObjectNode) fixture("matches-request");
         var result = mvc.perform(post("/api/v1/matches").contentType(MediaType.APPLICATION_JSON).content(query.toString()))

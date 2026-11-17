@@ -2,6 +2,8 @@
 
 **구현 경계:** Flutter Web은 API 소비자, Spring Boot는 공개 API·MySQL 관리, Python은 AI·시간/거리 계산입니다. 기존 공개 JSON 계약은 유지합니다. [계산 CLI 연결 계약](calculation-bridge.md)과 [DB 설계](../docs/spec/09_DB설계와트랜잭션.md)를 함께 적용합니다.
 
+[시민 목록·상세 구현 검토안](citizen-api.md)은 별도 `citizen-api-v1` 경로·고정 출처·확보된 공개 이력을 제공합니다. 화면별 최종 계약 대조는 남아 있으며 아래 기존3 API·계산 계약은 유지합니다. 새 합성 응답2개도 기존 예제와 함께 `validate_examples.py`로 검사합니다.
+
 [현행 업무] 김윤기가 기존 백엔드·계약 재사용 범위를 조사하고 이상헌과 화면별 필드/API/오류를 합의합니다. 명묵은 반복 시나리오를 검증하고 남규민은 우선 분야·수집처·개인화·변경추적·일정을 합의합니다. 새 경로·필드·enum은 아래 보완 대상이며 이 문서 변경으로 구현 완료되지 않습니다.
 
 <a id="yeogi-it-contract-agreement"></a>

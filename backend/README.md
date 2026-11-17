@@ -16,6 +16,10 @@ Java 21 / Spring Boot **3.5.16** / Gradle Wrapper **8.14.3** / MySQL **8.4.13**.
 
 관심저장·개인설정은 초기 프런트 브라우저 저장입니다. 계정 동기화·새 인증·알림 발송은 자동 필수 범위가 아닙니다. 기존 원문/AI 원출력/사람 수정/승인/공개 snapshot·실패·revision·출처·불확실성 경계, Python 계산 단일 원본·공개 조회 중 AI 미호출과 로컬 관리 보안을 재사용합니다. 차별화 후보3개의 명칭·내용과 실제 AI 적용 범위는 확인·합의 대상입니다.
 
+## 시민 목록·상세 구현 검토안
+
+[별도 시민 API](../contracts/citizen-api.md)는 `GET /api/v1/citizen/notices`와 `GET /api/v1/citizen/notices/{eventId}?snapshot_id=…`로 같은 시민 공개본의 사실·출처·확보 이력을 읽는다. 지점/영업시간 입력을 요구하지 않으며 Python/AI·원문 파일을 호출하지 않는다. 상세 이력은 버전 커서·개수 한도로 나누며 V6는 공개 감사 범위용 일반 색인만 추가한다. 이력 용량 한도만 초과하면 현재 사실과 출처는200으로 유지하고 조회 불가를 명시한다. 검색·복합 필터·정규화와 실제 Flutter 연동은 후속이다. 작성자 구현 검토안으로 화면별 최종 계약 대조가 남아 있다. [조회 계획](../docs/superpowers/plans/2026-11-18-citizen-query.md)의 실제 검증·리뷰·PR 증빙을 따른다. 기존 fixture 프로필은 아래3 API용이며 시민 조회는 public의 합성 DB로 재현한다.
+
 ## 구현 범위
 
 [기존 구현·계약] 아래 기능·실행 명령은 기존3유형(`construction/event/traffic`)·지점·영업시간 계약의 구현 및 검증 기록입니다. 새5분야 조회·필터 계약이나 시민용 웹 시제품과의 연동 완료를 뜻하지 않습니다.
@@ -177,6 +181,8 @@ java -jar build/libs/myai-backend-0.1.0.jar --spring.profiles.active=fixture
 일반 `test`도 실제 자식 프로세스·archive 시험에 **Python3.13**이 필요하다. 프로세스와 공개 조회의 검증·오류를 시험하며 DB 없는 fixture API·import·공개 명령 검사도 유지한다. `MySqlFoundationTest`·`ReviewedImportMySqlTest`·`PublicationMySqlTest`·`CalculationMySqlTest`·`ExtractionRunMySqlTest`·`HumanHandoffMySqlTest`·`SourceReviewMySqlTest`는 전용 MySQL 테스트 DB와 `MYAI_MYSQL_TESTS=true`일 때 실행한다. 운영·공유 DB에서는 실행하지 않는다. CI는 매 실행 분리된 `myai_test` DB를 준비해 저장·공개·복구·실제 조회와 Python 계산을 검증한다.
 
 `MYAI_MYSQL_TESTS=true`일 때는 외부 DB 상태를 캐시하지 않고 매번 시험을 실행한다. 검토 입력·사실 응답 예제와 실제 호출하는 Python 소스·계산 입력 예제도 Gradle 시험 입력에 포함한다.
+
+전체 회귀의 여러 Spring 문맥과20MiB 원문·64MiB 보고서 경계 시험을 함께 실행하도록 테스트 JVM의 최대 힙을1GiB로 지정한다. Gradle 데몬·실제 JAR의 힙과 별도이며 운영 JVM 옵션을 바꾸지 않는다.
 
 CI의 기존 필수 검사 `check`에서 백엔드 시험과 JAR 빌드도 실행한다. 백엔드 시험이나 빌드가 실패하면 필수 검사도 실패한다. 실행 JAR는 별도 artifact로 보관한다. `CORS_ALLOWED_ORIGIN` 기본값은 `http://localhost:5173`이며 credential·임의 origin을 허용하지 않는다.
 

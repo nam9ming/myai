@@ -23,7 +23,9 @@
 
 [시민 수동 검토](docs/citizen-review.md)는 5분야 원문 표현·근거·미상 상태의 숨김 입력, 수정 감사와 승인/반려를 기존 저장 경계에 연결한다. [계획](../docs/superpowers/plans/2026-11-18-citizen-review.md)의 실제 검증·리뷰·PR 증빙과 시민 공개/조회·Python 후속 범위를 구분한다.
 
-[시민 공개본](docs/citizen-publication.md)은 별도 채널의 미리보기·원자 발행·복구·export/S10을 연결한다. V5의 기존 데이터 보존·전용 DB·실제 SELECT 계정/JAR·전체 회귀·독립/원격 리뷰와 통합 결과는 [공개 작업 계획](../docs/superpowers/plans/2026-11-18-citizen-publication.md)을 따른다. 시민 조회 API·Python 추출은 별도 후속이다.
+[시민 공개본](docs/citizen-publication.md)은 별도 채널의 미리보기·원자 발행·복구·export/S10을 연결한다. V5의 기존 데이터 보존·전용 DB·실제 SELECT 계정/JAR·전체 회귀·독립/원격 리뷰와 통합 결과는 [공개 작업 계획](../docs/superpowers/plans/2026-11-18-citizen-publication.md)을 따른다.
+
+[시민 조회 구현 검토안](../contracts/citizen-api.md)은 목록·상세를 같은 시민 공개본에 연결하고 실제 공개·철회·복구의 전후 상태를 제공한다. 읽기 전용/기존 API·미상 보존과 합성 재현/검증은 [조회 계획](../docs/superpowers/plans/2026-11-18-citizen-query.md)을 따른다. 검색·복합 필터·정규화·Python 시민 추출·실제 화면/사람 인수는 후속이다.
 
 [기존 구현·계약] 다음 실적·명령·한도는 기존3유형 계약의 기록입니다. 현재5분야·새 필터/상세·웹 시제품 연동·실제 품질평가 완료를 뜻하지 않습니다.
 

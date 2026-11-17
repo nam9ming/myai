@@ -62,4 +62,4 @@ HTTP는 기존 [로컬 관리 설정·인증](local-management-api.md)을 그대
 
 `CitizenReviewMySqlTest`의 자동 DB 시험은 연결 전 `DB_URL`의 DB명이 `myai_test` 또는 `myai_citizen_test`인지 확인한다. 운영/공유 DB나 기본 `myai_dev`를 지정하지 않는다. 공개 회귀는 고유 replay 채널을 사용하며 정리는 해당 시험이 만든 snapshot ID로 제한한다. 수동 CLI·앱의 DB명 계약을 변경한 것은 아니다.
 
-[시민 공개본](citizen-publication.md)은 별도 명령과 채널로 미리보기·발행·복구·내보내기를 연결한다. 기존 publication-command-v1의 시민 revision 거부는 유지한다. 시민 목록/상세/검색·필터·정규화된 일정/비용·Python 추출/인계·Flutter 연동·실제 팀원 인수·독립 정확도 평가·운영 배포는 후속 단계다. 합성 시험을 실제 자료 정확도나 최종 계약 합의로 표현하지 않는다.
+[시민 공개본](citizen-publication.md)은 별도 명령과 채널로 미리보기·발행·복구·내보내기를 연결하며 [시민 조회 구현 검토안](../../contracts/citizen-api.md)에서 같은 공개본의 목록·상세·확보 이력을 읽는다. 기존 publication-command-v1의 시민 revision 거부는 유지한다. 검색·복합 필터·정규화된 일정/비용·Python 추출/인계·Flutter 연동·실제 팀원 인수·독립 정확도 평가·운영 배포는 후속 단계다. 합성 시험을 실제 자료 정확도나 최종 계약 합의로 표현하지 않는다.

@@ -63,7 +63,9 @@ test("사실 전용 상세 예제의 계산값·근거·출처 불일치를 거�
   const folder = new URL("../contracts/examples/", import.meta.url);
   for (const name of readdirSync(folder)) copyFileSync(new URL(name, folder), join(root, "contracts/examples", name));
   copyFileSync(new URL("../contracts/validate_examples.py", import.meta.url), join(root, "contracts/validate_examples.py"));
-  copyFileSync(new URL("../backend/examples/reviewed-import.json", import.meta.url), join(root, "backend/examples/reviewed-import.json"));
+  for (const name of ["reviewed-import.json", "citizen-reviewed-import.json"]) {
+    copyFileSync(new URL(`../backend/examples/${name}`, import.meta.url), join(root, "backend/examples", name));
+  }
   const file = join(root, "contracts/examples/event-facts-response.json");
   const original = readFileSync(file, "utf8");
   const validate = () => spawnSync("python3", [join(root, "contracts/validate_examples.py")], { encoding: "utf8" });
