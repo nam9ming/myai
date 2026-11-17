@@ -16,6 +16,10 @@ Java 21 / Spring Boot **3.5.16** / Gradle Wrapper **8.14.3** / MySQL **8.4.13**.
 
 관심저장·개인설정은 초기 프런트 브라우저 저장입니다. 계정 동기화·새 인증·알림 발송은 자동 필수 범위가 아닙니다. 기존 원문/AI 원출력/사람 수정/승인/공개 snapshot·실패·revision·출처·불확실성 경계, Python 계산 단일 원본·공개 조회 중 AI 미호출과 로컬 관리 보안을 재사용합니다. 차별화 후보3개의 명칭·내용과 실제 AI 적용 범위는 확인·합의 대상입니다.
 
+## 시민 목록·상세 구현 검토안
+
+[별도 시민 API](../contracts/citizen-api.md)는 `GET /api/v1/citizen/notices`와 `GET /api/v1/citizen/notices/{eventId}?snapshot_id=…`로 같은 시민 공개본의 사실·출처·확보 이력을 읽는다. 지점/영업시간 입력을 요구하지 않으며 Python/AI·원문 파일을 호출하지 않는다. 검색·복합 필터·정규화와 실제 Flutter 연동은 후속이다. 작성자 구현 검토안으로 화면별 최종 계약 대조가 남아 있다. [조회 계획](../docs/superpowers/plans/2026-11-18-citizen-query.md)의 실제 검증·리뷰·PR 증빙을 따른다. 기존 fixture 프로필은 아래3 API용이며 시민 조회는 public의 합성 DB로 재현한다.
+
 ## 구현 범위
 
 [기존 구현·계약] 아래 기능·실행 명령은 기존3유형(`construction/event/traffic`)·지점·영업시간 계약의 구현 및 검증 기록입니다. 새5분야 조회·필터 계약이나 시민용 웹 시제품과의 연동 완료를 뜻하지 않습니다.

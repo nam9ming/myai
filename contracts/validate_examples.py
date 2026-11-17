@@ -109,7 +109,62 @@ def main():
         assert set(location["field_values"]) == {"name", "address"}
         for name, value in location["field_values"].items():
             assert location[name] == value["value"]
-    print(f"PASS: {len(data)} JSON files; config/request/selection/detail/source/AI evidence consistent (synthetic only).")
+    citizen_list = data["citizen-list-response"]
+    citizen_detail = data["citizen-detail-response"]
+    citizen_input = json.loads((folder.parent.parent / "backend/examples/citizen-reviewed-import.json").read_text(encoding="utf-8"))
+    citizen_documents = {doc["document_version_id"]: doc for doc in citizen_input["documents"]}
+    for envelope in [citizen_list, citizen_detail]:
+        assert set(envelope) == {"schema_version", "snapshot_id", "generated_at", "data"}
+        assert envelope["schema_version"] == "citizen-api-v1"
+        assert str(UUID(envelope["snapshot_id"])) == envelope["snapshot_id"] == citizen_list["snapshot_id"]
+        assert envelope["data"]["data_kind"] == "synthetic" and envelope["data"]["mode"] == "current"
+        assert envelope["data"]["timezone"] == "Asia/Seoul"
+        assert datetime.fromisoformat(envelope["data"]["created_at"].replace("Z", "+00:00")) <= datetime.fromisoformat(envelope["generated_at"].replace("Z", "+00:00"))
+    common = {"created_at", "data_kind", "mode", "timezone", "sources"}
+    assert set(citizen_list["data"]) == common | {"notice_count", "notices"}
+    assert set(citizen_detail["data"]) == common | {"notice", "history"}
+    assert citizen_list["data"]["notice_count"] == len(citizen_list["data"]["notices"]) == 1
+    notice = citizen_detail["data"]["notice"]
+    assert citizen_list["data"]["notices"] == [notice]
+    assert citizen_detail["data"]["sources"] == citizen_list["data"]["sources"]
+    fact_names = set("application_period occurrences regions locations residency_requirement target eligibility application_method preparation cost recruitment lifecycle".split())
+    assert set(notice) == fact_names | {"event_id", "revision_id", "title", "categories", "source_version_ids", "document_links", "relations", "evidence"}
+    assert notice["categories"] and set(notice["categories"]) <= {"education", "support", "culture", "construction_traffic", "living"}
+    assert notice["categories"] == citizen_input["events"][0]["revision"]["categories"]
+    assert len(set(notice["categories"])) == len(notice["categories"])
+    for name in ["event_id", "revision_id"]:
+        assert str(UUID(notice[name])) == notice[name]
+    public_sources = {item["document_version_id"]: item for item in citizen_detail["data"]["sources"]}
+    assert set(public_sources) == set(notice["source_version_ids"])
+    for version, source in public_sources.items():
+        assert set(source) == set("document_id document_version_id publisher official_url title official_number published_date collected_at text_sha256 last_verified_at latest_check_attempt_at check_result checks".split())
+        original = citizen_documents[version]
+        assert source["document_id"] == original["document_id"] and source["official_url"] == original["official_url"]
+        assert source["text_sha256"] == original["text_sha256"] == hashlib.sha256(original["cleaned_text"].encode("utf-8")).hexdigest()
+        assert source["last_verified_at"] == original["last_verified_at"]
+        assert source["latest_check_attempt_at"] == original["latest_check_attempt_at"]
+        for check in source["checks"]:
+            assert set(check) == {"checked_at", "result", "text_sha256"}
+    citations = {item["evidence_id"] for item in notice["evidence"]}
+    assert len(citations) == len(notice["evidence"])
+    for evidence in notice["evidence"]:
+        original = citizen_documents[evidence["document_version_id"]]
+        block = next(item["text"] for item in original["block_index"] if item["block_id"] == evidence["block_id"])
+        assert block[evidence["start_char"]:evidence["end_char"]] == evidence["quote"]
+        assert evidence["text_sha256"] == original["text_sha256"]
+    fields(notice, citations)
+    assert notice["application_period"]["value"] != notice["occurrences"]["value"]
+    assert notice["cost"]["value"] is None and notice["cost"]["knowledge"] == "not_stated"
+    history = citizen_detail["data"]["history"]
+    assert set(history) == {"scope", "completeness", "entries"}
+    assert history["scope"] == "same_data_kind_published_snapshots" and history["completeness"] == "unknown"
+    assert len(history["entries"]) == 1
+    entry = history["entries"][0]
+    assert set(entry) == {"kind", "snapshot_id", "published_at", "action", "before", "after"}
+    assert entry["kind"] == "first_observed" and entry["before"] is None and entry["action"] == "publish"
+    assert entry["snapshot_id"] == citizen_detail["snapshot_id"] and entry["published_at"] == citizen_detail["data"]["created_at"]
+    assert entry["after"] == {"notice": notice, "sources": citizen_detail["data"]["sources"]}
+    print(f"PASS: {len(data)} JSON files; legacy/citizen list/detail/source/AI evidence consistent (synthetic only).")
 
 
 if __name__ == "__main__":

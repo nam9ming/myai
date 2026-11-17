@@ -11,6 +11,7 @@ import java.util.Optional;
 @Repository
 @Profile("!fixture")
 public class PublicSnapshotRepository {
+    public static final int MAX_CITIZEN_HISTORY = 1000;
     private final JdbcTemplate jdbc;
 
     public PublicSnapshotRepository(JdbcTemplate jdbc) { this.jdbc = jdbc; }
@@ -78,5 +79,26 @@ public class PublicSnapshotRepository {
                 ORDER BY a.head_version, a.audit_id
                 """, (row, i) -> new Historic(row.getString(1), row.getString(2), row.getTimestamp(3).toInstant(), row.getString(4)),
                 selectedSnapshot, eventId, channel);
+    }
+
+    public List<Historic> citizenHistory(String eventId, String selectedSnapshot) {
+        return jdbc.query("""
+                SELECT a.after_snapshot_id, membership.revision_id, a.happened_at, a.action
+                FROM publication_heads h JOIN publication_audits a ON a.channel_key = h.channel_key
+                LEFT JOIN snapshot_revisions membership
+                  ON membership.snapshot_id = a.after_snapshot_id AND membership.event_id = ?
+                WHERE h.channel_key = 'citizen:current' AND h.snapshot_id = ?
+                  AND a.head_version <= h.lock_version AND a.head_version >= (
+                    SELECT MIN(first_publication.head_version) FROM publication_audits first_publication
+                    JOIN snapshots initial_snapshot ON initial_snapshot.snapshot_id = first_publication.after_snapshot_id
+                    LEFT JOIN snapshot_revisions initial_member
+                      ON initial_member.snapshot_id = first_publication.after_snapshot_id AND initial_member.event_id = ?
+                    WHERE first_publication.channel_key = h.channel_key AND first_publication.action = 'publish'
+                      AND (initial_member.event_id IS NOT NULL OR JSON_CONTAINS(
+                        JSON_EXTRACT(initial_snapshot.canonical_json, '$.notices[*].event_id'), JSON_QUOTE(?)) = 1))
+                ORDER BY a.head_version, a.audit_id
+                LIMIT ?
+                """, (row, i) -> new Historic(row.getString(1), row.getString(2), row.getTimestamp(3).toInstant(), row.getString(4)),
+                eventId, selectedSnapshot, eventId, eventId, MAX_CITIZEN_HISTORY + 1);
     }
 }

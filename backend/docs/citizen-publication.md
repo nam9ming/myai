@@ -1,6 +1,6 @@
 # 시민 공개본 미리보기·발행·복구
 
-[시민 수동 검토](citizen-review.md)에서 승인한 원문 표현을 별도 불변 공개용 기록으로 묶는다. `citizen:current` 채널과 `citizen-snapshot-v1`을 사용하며 기존 소상공인 `current/replay:*`·5지점·500m·14일·공개 JSON을 보존한다. 이 내부 형식을 최종 Flutter 조회 계약으로 확정한 것은 아니다. 시민 목록/상세/검색 API와 Python 시민 추출은 후속 단계다.
+[시민 수동 검토](citizen-review.md)에서 승인한 원문 표현을 별도 불변 공개용 기록으로 묶는다. `citizen:current` 채널과 `citizen-snapshot-v1`을 사용하며 기존 소상공인 `current/replay:*`·5지점·500m·14일·공개 JSON을 보존한다. [시민 목록·상세 구현 검토안](../../contracts/citizen-api.md)에서 이 공개본과 확보 이력을 읽는다. 최종 Flutter 계약 대조·검색/복합 필터·Python 시민 추출은 후속 단계다.
 
 ## 입력과 실행
 

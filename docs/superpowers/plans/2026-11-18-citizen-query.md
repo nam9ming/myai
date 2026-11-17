@@ -61,15 +61,15 @@
 
 **Interfaces:** 위 ctor/method·DTO/오류·citizenHistory를 그대로 사용한다. 기존 PublicNoticeService·SnapshotNoticeService·PublicSnapshotRepository.history는 변경하지 않는다.
 
-- [ ] `CitizenNoticeMySqlTest.noCitizenHeadIsUnavailableRatherThanEmpty`를 먼저 작성한다. 실제 HTTP GET의 기대는503 PUBLIC_DATA_NOT_READY·안전한 공통 오류이며 현재 경로 미구현의404를 확인한다. 새 class를 참조해 compile 오류를 RED로 대신하지 않는다.
-- [ ] Run: `./gradlew test --tests '*CitizenNoticeMySqlTest.noCitizenHeadIsUnavailableRatherThanEmpty'`를 전용 DB·MYAI_MYSQL_TESTS=true로 실행한다. Expected: 신규 경로404 때문에 assertion FAIL.
-- [ ] controller·시민 이력 SELECT·service와 관련 시험을 구현한다. worker의 새 class 참조 단위시험은 ROOT RED 확인 뒤 승격한다.
-- [ ] `CitizenNoticeServiceTest`는 현재/지정/교체/빈/미등록/계열/손상·5분야/복수분야·12개 사실/출처 고정·최초 미확인/실제 철회·복구·종류 분리·누적8MiB/1001개·membership 손상을 검사한다. 큰 유효 JSON은 허용된 공백 bytes로 구성해 형식 실패와 읽기 한도 실패를 구분한다.
-- [ ] `CitizenNoticeApiTest`는 빈/중복/추가 query·비정규 path/query UUID·snapshot 필수·공통422/404/409/503/500·요청 ID/로그를 검사한다. Expected: `./gradlew test --tests '*CitizenNoticeServiceTest' --tests '*CitizenNoticeApiTest' --tests '*CitizenNoticeMySqlTest'` FAIL/SKIP0.
+- [x] `CitizenNoticeMySqlTest.noCitizenHeadIsUnavailableRatherThanEmpty`를 먼저 작성한다. 실제 HTTP GET의 기대는503 PUBLIC_DATA_NOT_READY·안전한 공통 오류이며 현재 경로 미구현의404를 확인한다. 새 class를 참조해 compile 오류를 RED로 대신하지 않는다.
+- [x] Run: `./gradlew test --tests '*CitizenNoticeMySqlTest.noCitizenHeadIsUnavailableRatherThanEmpty'`를 전용 DB·MYAI_MYSQL_TESTS=true로 실행한다. Expected: 신규 경로404 때문에 assertion FAIL.
+- [x] controller·시민 이력 SELECT·service와 관련 시험을 구현한다. worker의 새 class 참조 단위시험은 ROOT RED 확인 뒤 승격한다.
+- [x] `CitizenNoticeServiceTest`는 현재/지정/교체/빈/미등록/계열/손상·5분야/복수분야·12개 사실/출처 고정·최초 미확인/실제 철회·복구·종류 분리·누적8MiB/1001개·membership 손상을 검사한다. 큰 유효 JSON은 허용된 공백 bytes로 구성해 형식 실패와 읽기 한도 실패를 구분한다.
+- [x] `CitizenNoticeApiTest`는 빈/중복/추가 query·비정규 path/query UUID·snapshot 필수·공통422/404/409/503/500·요청 ID/로그를 검사한다. Expected: `./gradlew test --tests '*CitizenNoticeServiceTest' --tests '*CitizenNoticeApiTest' --tests '*CitizenNoticeMySqlTest'` FAIL/SKIP0.
 
 ### Task 2: 실제 연결·재현 자료
 
-**Files:** DB/JAR worker 시험/fixture, 주 작업자의 기존 PublicApiTest·`contracts/citizen-api.md`·시민 응답 예제2개·기존 validate_examples.py·backend README/TASK/연결 안내.
+**Files:** DB/JAR worker 시험/fixture, 주 작업자의 기존 PublicApiTest·`contracts/citizen-api.md`·시민 응답 예제2개·기존 validate_examples.py·`test/citizen-contract-examples.test.mjs`·기존 `test/infrastructure.test.mjs`의 새 입력 fixture 준비·backend README/TASK/연결 안내.
 
 **Interfaces:** Task1의 경로·공개 envelope·이력/오류를 그대로 소비한다. 고정 예제는 합성 계약 설명이며 현재 DB의 snapshot을 선언하지 않는다.
 
