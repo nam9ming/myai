@@ -134,3 +134,21 @@ class _NearbyMapState extends State<_NearbyMap> {
           },
         );
 }
+
+// 투명한 플랫폼 뷰로 하단 시트/상단 조작의 터치가 native 지도에 전달되지 않게 한다.
+Widget mapTouchPanel({required Widget child}) => Stack(
+  children: [
+    Positioned.fill(
+      child: HtmlElementView.fromTagName(
+        tagName: 'div',
+        onElementCreated: (element) {
+          final host = element as web.HTMLElement;
+          host.style.pointerEvents = 'auto';
+          host.setAttribute('aria-hidden', 'true');
+          host.setAttribute('data-map-touch-panel', '');
+        },
+      ),
+    ),
+    child,
+  ],
+);

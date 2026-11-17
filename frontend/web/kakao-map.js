@@ -36,16 +36,16 @@
   window.myaiMountMap = (host, onMove, onSelect = () => {}) => {
     let disposed = false, map, marker, busy = false, locationRequest = 0;
     host.setAttribute('data-myai-map', '');
-    host.style.cssText = 'width:100%;height:100%;display:flex;flex-direction:column;background:#fafaf7;color:#242724;font:14px system-ui,sans-serif';
+    host.style.cssText = 'width:100%;height:100%;position:relative;background:#fafaf7;color:#242724;font:14px system-ui,sans-serif';
     const toolbar = document.createElement('div');
-    toolbar.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;padding:6px;background:#ffffff';
+    toolbar.style.cssText = 'position:absolute;left:12px;top:116px;z-index:5;display:flex;flex-wrap:wrap;gap:5px;max-width:calc(100% - 24px);font-size:12px';
     const canvas = document.createElement('div');
     canvas.setAttribute('role','region'); canvas.setAttribute('aria-label','카카오 지도');
     canvas.tabIndex = 0;
-    canvas.style.cssText = 'flex:1;min-height:100px;position:relative';
+    canvas.style.cssText = 'position:absolute;inset:0';
     const status = document.createElement('div');
     status.setAttribute('role','status'); status.setAttribute('aria-live','polite');
-    status.style.cssText = 'padding:8px 12px;font-size:12px;background:#ffffff';
+    status.style.cssText = 'position:absolute;left:12px;right:12px;top:170px;z-index:6;padding:8px 12px;border-radius:12px;font-size:12px;background:#fff';
     const message = value => { if (!disposed) { status.textContent = value; status.hidden = !value; } };
     function button(label, action) {
       const button = document.createElement('button');

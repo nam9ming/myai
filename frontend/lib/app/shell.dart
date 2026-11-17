@@ -109,77 +109,81 @@ class _AppShellState extends State<AppShell> {
         region: _region,
         child: Builder(
           builder: (context) => Scaffold(
-            body: Column(
-              children: [
-                if (!onboard && !state.isPrototype)
-                  Container(
-                    width: double.infinity,
-                    color: const Color(0xfff4f6ed),
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 8,
-                      horizontal: 18,
-                    ),
-                    child: Text(
-                      state.isPrototype
-                          ? '예시 데이터로 구성한 시제품입니다 · 기준일 2026.11.16'
-                          : state.mode == 'backend-fixture'
-                          ? '백엔드 합성 자료 · 계약의 고정 예시 조건으로 조회합니다'
-                          : '공개 자료 조회 · 제공 범위와 원문을 확인해주세요',
-                      textAlign: TextAlign.center,
-                      style: type(10, color: const Color(0xff71805d)),
-                    ),
-                  ),
-                _header(context, onboard),
-                if (!onboard) _categories(context),
-                Expanded(
-                  child: Focus(
-                    focusNode: pageFocus,
-                    child: Scrollbar(
-                      controller: scroll,
-                      child: SingleChildScrollView(
-                        controller: scroll,
-                        child: Column(
-                          children: [
-                            TweenAnimationBuilder<double>(
-                              tween: Tween(begin: 0, end: 1),
-                              duration: Duration(
-                                milliseconds: reducedMotion(context) ? 0 : 300,
-                              ),
-                              curve: const Cubic(.22, 1, .36, 1),
-                              builder: (_, v, child) => Opacity(
-                                opacity: v,
-                                child: Transform.translate(
-                                  offset: Offset(0, (1 - v) * 14),
-                                  child: child,
-                                ),
-                              ),
-                              child: onboard
-                                  ? OnboardingPage(
-                                      step:
-                                          int.tryParse(
-                                            route.params['step'] ?? '0',
-                                          ) ??
-                                          0,
-                                    )
-                                  : PageWidth(
-                                      child: Padding(
-                                        padding: EdgeInsets.only(
-                                          top: small ? 27 : 36,
-                                          bottom: 55,
-                                        ),
-                                        child: _page(route),
+            body: route.path == '/nearby'
+                ? _page(route)
+                : Column(
+                    children: [
+                      if (!onboard && !state.isPrototype)
+                        Container(
+                          width: double.infinity,
+                          color: const Color(0xfff4f6ed),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 18,
+                          ),
+                          child: Text(
+                            state.isPrototype
+                                ? '예시 데이터로 구성한 시제품입니다 · 기준일 2026.11.16'
+                                : state.mode == 'backend-fixture'
+                                ? '백엔드 합성 자료 · 계약의 고정 예시 조건으로 조회합니다'
+                                : '공개 자료 조회 · 제공 범위와 원문을 확인해주세요',
+                            textAlign: TextAlign.center,
+                            style: type(10, color: const Color(0xff71805d)),
+                          ),
+                        ),
+                      _header(context, onboard),
+                      if (!onboard) _categories(context),
+                      Expanded(
+                        child: Focus(
+                          focusNode: pageFocus,
+                          child: Scrollbar(
+                            controller: scroll,
+                            child: SingleChildScrollView(
+                              controller: scroll,
+                              child: Column(
+                                children: [
+                                  TweenAnimationBuilder<double>(
+                                    tween: Tween(begin: 0, end: 1),
+                                    duration: Duration(
+                                      milliseconds: reducedMotion(context)
+                                          ? 0
+                                          : 300,
+                                    ),
+                                    curve: const Cubic(.22, 1, .36, 1),
+                                    builder: (_, v, child) => Opacity(
+                                      opacity: v,
+                                      child: Transform.translate(
+                                        offset: Offset(0, (1 - v) * 14),
+                                        child: child,
                                       ),
                                     ),
+                                    child: onboard
+                                        ? OnboardingPage(
+                                            step:
+                                                int.tryParse(
+                                                  route.params['step'] ?? '0',
+                                                ) ??
+                                                0,
+                                          )
+                                        : PageWidth(
+                                            child: Padding(
+                                              padding: EdgeInsets.only(
+                                                top: small ? 27 : 36,
+                                                bottom: 55,
+                                              ),
+                                              child: _page(route),
+                                            ),
+                                          ),
+                                  ),
+                                  if (!onboard) _footer(context),
+                                ],
+                              ),
                             ),
-                            if (!onboard) _footer(context),
-                          ],
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                ),
-              ],
-            ),
             bottomNavigationBar: small && !onboard
                 ? (detail
                       ? DetailActions(

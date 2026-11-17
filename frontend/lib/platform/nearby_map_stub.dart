@@ -6,3 +6,5 @@ Widget nearbyMapView({
   required ValueChanged<String?> onSelect,
   required ValueChanged<Map<String, double>> onBounds,
 }) => const Center(child: Text('지도는 웹 브라우저에서 표시돼요.'));
+
+Widget mapTouchPanel({required Widget child}) => child;

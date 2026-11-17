@@ -14,6 +14,32 @@ class NearbyPage extends StatefulWidget {
 }
 
 class _NearbyPageState extends State<NearbyPage> {
+  final sheet = DraggableScrollableController();
+  @override
+  void dispose() {
+    sheet.dispose();
+    super.dispose();
+  }
+
+  void resizeSheet(double size) {
+    if (sheet.isAttached)
+      sheet.animateTo(
+        size,
+        duration: Duration(milliseconds: reducedMotion(context) ? 1 : 220),
+        curve: Curves.easeOutCubic,
+      );
+  }
+
+  @override
+  void didUpdateWidget(covariant NearbyPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedId != widget.selectedId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) resizeSheet(widget.selectedId == null ? .16 : .4);
+      });
+    }
+  }
+
   NearbyFeed? feed;
   bool busy = false, started = false;
   String? error;
@@ -58,7 +84,6 @@ class _NearbyPageState extends State<NearbyPage> {
           item.lng <= bounds!['east']!);
   @override
   Widget build(BuildContext context) {
-    final small = mobile(context);
     final items = (feed?.items ?? <NearbyNotice>[])
         .where((item) => category == 'all' || item.category == category)
         .toList();
@@ -66,135 +91,210 @@ class _NearbyPageState extends State<NearbyPage> {
     final selected = items
         .where((item) => item.id == widget.selectedId)
         .firstOrNull;
-    final map = ClipRRect(
-      borderRadius: BorderRadius.circular(18),
-      child: SizedBox(
-        height: small ? 350 : 540,
-        child: nearbyMapView(
-          notices: items.map((item) => item.marker).toList(),
-          selectedId: selected?.id,
-          onSelect: select,
-          onBounds: (value) {
-            if (mounted) setState(() => bounds = value);
-          },
-        ),
-      ),
-    );
-    final list = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                '지도 안 소식 ${shown.length}건',
-                style: type(18, weight: FontWeight.w600),
-              ),
+    return LayoutBuilder(
+      builder: (context, constraints) => Stack(
+        children: [
+          Positioned.fill(
+            child: nearbyMapView(
+              notices: items.map((item) => item.marker).toList(),
+              selectedId: selected?.id,
+              onSelect: select,
+              onBounds: (value) {
+                if (mounted) setState(() => bounds = value);
+              },
             ),
-            UiButton(
-              busy ? '조회 중' : '새로고침',
-              quiet: true,
-              onTap: busy ? null : load,
-            ),
-          ],
-        ),
-        if (feed != null)
-          Text(
-            '${feed!.demo ? '예시 소식' : '공개 소식'} · 갱신 ${feed!.updatedAt.toUtc().toIso8601String().replaceFirst('T', ' ').substring(0, 16)} UTC',
-            style: type(11, color: Palette.sub),
           ),
-        const SizedBox(height: 12),
-        if (busy) const LinearProgressIndicator(color: Palette.orange),
-        if (error != null)
-          EmptyPanel('소식을 불러오지 못했어요', error!, action: '다시 조회', onTap: load),
-        if (selected != null) _card(selected, expanded: true),
-        if (!busy && error == null && shown.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
-            child: Text('이 지도 영역에는 소식이 없어요. 지도를 이동하거나 전체 소식을 눌러보세요.'),
-          ),
-        for (final item in shown.where((item) => item.id != selected?.id))
-          _card(item),
-      ],
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                '내 주변에서 무슨 일이?',
-                style: type(
-                  small ? 25 : 32,
-                  weight: FontWeight.w700,
-                  spacing: -1,
-                ),
-              ),
-            ),
-            if (feed?.demo == true)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: Palette.soft,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text('예시', style: type(11, color: Palette.orange)),
-              ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Text(
-          '지도를 움직여 동네 소식을 찾아보세요. 내 주변 보기를 누르면 현재 위치로 이동해요.',
-          style: type(13, color: Palette.sub),
-        ),
-        const SizedBox(height: 20),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              for (final entry in categories.entries)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(
-                      entry.value,
-                      style: type(
-                        12,
-                        color: category == entry.key
-                            ? Palette.orange
-                            : Palette.sub,
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: mapTouchPanel(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: const [
+                            BoxShadow(color: Color(0x15000000), blurRadius: 16),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            IconAction(
+                              'left',
+                              '홈으로 돌아가기',
+                              onTap: () => AppContext.of(context).go('/home'),
+                            ),
+                            Expanded(
+                              child: Text(
+                                '내 주변',
+                                style: type(19, weight: FontWeight.w700),
+                              ),
+                            ),
+                            if (feed?.demo == true)
+                              Text(
+                                '예시',
+                                style: type(11, color: Palette.orange),
+                              ),
+                            IconAction(
+                              'clock',
+                              busy ? '조회 중' : '새로고침',
+                              onTap: busy ? null : load,
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    selected: category == entry.key,
-                    selectedColor: Palette.soft,
-                    onSelected: (_) {
-                      setState(() => category = entry.key);
-                      if (widget.selectedId != null) select(null);
-                    },
+                      const SizedBox(height: 8),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            for (final entry in categories.entries)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 6),
+                                child: ChoiceChip(
+                                  label: Text(
+                                    entry.value,
+                                    style: type(
+                                      12,
+                                      color: category == entry.key
+                                          ? Palette.orange
+                                          : Palette.ink,
+                                    ),
+                                  ),
+                                  backgroundColor: Colors.white,
+                                  selectedColor: Palette.soft,
+                                  selected: category == entry.key,
+                                  onSelected: (_) {
+                                    setState(() => category = entry.key);
+                                    if (widget.selectedId != null) select(null);
+                                  },
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-            ],
+              ),
+            ),
           ),
-        ),
-        const SizedBox(height: 16),
-        if (small) ...[
-          map,
-          const SizedBox(height: 20),
-          list,
-        ] else
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(flex: 3, child: map),
-              const SizedBox(width: 28),
-              Expanded(flex: 2, child: list),
-            ],
+          DraggableScrollableSheet(
+            controller: sheet,
+            initialChildSize: widget.selectedId == null ? .16 : .4,
+            minChildSize: .16,
+            maxChildSize: .86,
+            snap: true,
+            snapSizes: const [.16, .4, .86],
+            builder: (context, controller) => mapTouchPanel(
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0x22000000),
+                      blurRadius: 24,
+                      offset: Offset(0, -4),
+                    ),
+                  ],
+                ),
+                child: ListView(
+                  controller: controller,
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    0,
+                    20,
+                    24 + MediaQuery.paddingOf(context).bottom,
+                  ),
+                  children: [
+                    Center(
+                      child: Container(
+                        key: const ValueKey('nearby-sheet-handle'),
+                        width: 44,
+                        height: 5,
+                        margin: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xffd8dbd5),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            selected == null
+                                ? '지도 안 소식 ${shown.length}건'
+                                : categories[selected.category]!,
+                            style: type(16, weight: FontWeight.w600),
+                          ),
+                        ),
+                        if (selected != null)
+                          IconAction(
+                            'close',
+                            '선택 해제',
+                            onTap: () => select(null),
+                          ),
+                        UiButton(
+                          '올려서 보기',
+                          quiet: true,
+                          onTap: () => resizeSheet(.86),
+                        ),
+                        UiButton(
+                          '접기',
+                          quiet: true,
+                          onTap: () => resizeSheet(.16),
+                        ),
+                      ],
+                    ),
+                    if (busy)
+                      const LinearProgressIndicator(color: Palette.orange),
+                    if (error != null)
+                      EmptyPanel(
+                        '소식을 불러오지 못했어요',
+                        error!,
+                        action: '다시 조회',
+                        onTap: load,
+                      ),
+                    if (selected != null)
+                      _card(selected, expanded: true)
+                    else ...[
+                      Text(
+                        '아이콘을 누르거나 시트를 위로 올려 소식을 확인하세요.',
+                        style: type(12, color: Palette.sub),
+                      ),
+                      const SizedBox(height: 14),
+                      if (!busy && error == null && shown.isEmpty)
+                        Text(
+                          '이 지도 영역에는 소식이 없어요. 지도를 이동해보세요.',
+                          style: type(13, color: Palette.sub),
+                        ),
+                      for (final item in shown) _card(item),
+                    ],
+                    if (feed != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Text(
+                          '${feed!.demo ? "예시 소식" : "공개 소식"} · 갱신 ${feed!.updatedAt.toUtc().toIso8601String().replaceFirst("T", " ").substring(0, 16)} UTC',
+                          style: type(11, color: Palette.sub),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
           ),
-      ],
+        ],
+      ),
     );
   }
 
