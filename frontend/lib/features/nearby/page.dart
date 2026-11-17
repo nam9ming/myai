@@ -95,13 +95,21 @@ class _NearbyPageState extends State<NearbyPage> {
       builder: (context, constraints) => Stack(
         children: [
           Positioned.fill(
-            child: nearbyMapView(
-              notices: items.map((item) => item.marker).toList(),
-              selectedId: selected?.id,
-              onSelect: select,
-              onBounds: (value) {
-                if (mounted) setState(() => bounds = value);
-              },
+            child: ListenableBuilder(
+              listenable: sheet,
+              builder: (context, _) => nearbyMapView(
+                bottomInset:
+                    constraints.maxHeight *
+                    (sheet.isAttached
+                        ? sheet.size
+                        : (widget.selectedId == null ? .16 : .4)),
+                notices: items.map((item) => item.marker).toList(),
+                selectedId: selected?.id,
+                onSelect: select,
+                onBounds: (value) {
+                  if (mounted) setState(() => bounds = value);
+                },
+              ),
             ),
           ),
           Positioned(

@@ -14,6 +14,7 @@ external _MapHandle _mount(
 
 extension type _MapHandle._(JSObject _) implements JSObject {
   external void setNotices(JSString payload);
+  external void setBottomInset(JSNumber pixels);
   external void dispose();
 }
 
@@ -44,11 +45,13 @@ Future<void> _loadScripts() => _scripts ??= (() async {
   }
 })();
 Widget nearbyMapView({
+  double bottomInset = 0,
   required List<Map<String, Object>> notices,
   required String? selectedId,
   required ValueChanged<String?> onSelect,
   required ValueChanged<Map<String, double>> onBounds,
 }) => _NearbyMap(
+  bottomInset: bottomInset,
   notices: notices,
   selectedId: selectedId,
   onSelect: onSelect,
@@ -56,11 +59,13 @@ Widget nearbyMapView({
 );
 
 class _NearbyMap extends StatefulWidget {
+  final double bottomInset;
   final List<Map<String, Object>> notices;
   final String? selectedId;
   final ValueChanged<String?> onSelect;
   final ValueChanged<Map<String, double>> onBounds;
   const _NearbyMap({
+    required this.bottomInset,
     required this.notices,
     required this.selectedId,
     required this.onSelect,
@@ -73,9 +78,14 @@ class _NearbyMap extends StatefulWidget {
 class _NearbyMapState extends State<_NearbyMap> {
   _MapHandle? handle;
   bool failed = false;
-  void sync() => handle?.setNotices(
-    jsonEncode({'items': widget.notices, 'selectedId': widget.selectedId}).toJS,
-  );
+  void sync() {
+    handle?.setBottomInset(widget.bottomInset.toJS);
+    handle?.setNotices(
+      jsonEncode({'items': widget.notices, 'selectedId': widget.selectedId})
+          .toJS,
+    );
+  }
+
   @override
   void didUpdateWidget(covariant _NearbyMap oldWidget) {
     super.didUpdateWidget(oldWidget);

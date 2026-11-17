@@ -243,6 +243,9 @@
     }
     start();
     return {
+      setBottomInset(pixels) {
+        if (!disposed && Number.isFinite(pixels) && pixels >= 0) canvas.style.bottom = Math.min(pixels, host.clientHeight) + 'px';
+      },
       setNotices(payload) {
         if (disposed || payload === lastPayload) return;
         try {

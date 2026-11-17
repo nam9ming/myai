@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 Widget nearbyMapView({
+  double bottomInset = 0,
   required List<Map<String, Object>> notices,
   required String? selectedId,
   required ValueChanged<String?> onSelect,
