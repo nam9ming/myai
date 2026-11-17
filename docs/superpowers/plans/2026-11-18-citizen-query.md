@@ -81,7 +81,7 @@
 
 ### Task 3: 전체 검증·리뷰·develop 반영
 
-**Files:** 전체 변경·해당 작업 기록·PR.
+**Files:** 전체 변경·`backend/build.gradle` 테스트 힙·README 검증 환경·해당 작업 기록·PR.
 
 **Interfaces:** source/CI candidate/develop 전체 tree·실제 자동 코멘트를 대조한다. 이전 PR20 통합 CI는 별도 추적하며 main은 사람이 병합한다.
 

@@ -182,6 +182,8 @@ java -jar build/libs/myai-backend-0.1.0.jar --spring.profiles.active=fixture
 
 `MYAI_MYSQL_TESTS=true`일 때는 외부 DB 상태를 캐시하지 않고 매번 시험을 실행한다. 검토 입력·사실 응답 예제와 실제 호출하는 Python 소스·계산 입력 예제도 Gradle 시험 입력에 포함한다.
 
+전체 회귀의 여러 Spring 문맥과20MiB 원문·64MiB 보고서 경계 시험을 함께 실행하도록 테스트 JVM의 최대 힙을1GiB로 지정한다. Gradle 데몬·실제 JAR의 힙과 별도이며 운영 JVM 옵션을 바꾸지 않는다.
+
 CI의 기존 필수 검사 `check`에서 백엔드 시험과 JAR 빌드도 실행한다. 백엔드 시험이나 빌드가 실패하면 필수 검사도 실패한다. 실행 JAR는 별도 artifact로 보관한다. `CORS_ALLOWED_ORIGIN` 기본값은 `http://localhost:5173`이며 credential·임의 origin을 허용하지 않는다.
 
 기준 문서: [기술 구성](../docs/spec/08_기술구성과연결.md), [DB](../docs/spec/09_DB설계와트랜잭션.md), [공개 계약](../contracts/README.md), [Python CLI](../contracts/calculation-bridge.md).
