@@ -11,6 +11,7 @@ import '../features/notices/list_page.dart';
 import '../features/notices/detail_page.dart';
 import '../features/saved/page.dart';
 import '../features/settings/page.dart';
+import '../features/nearby/page.dart';
 import 'app_context.dart';
 import 'app_state.dart';
 import 'router.dart';
@@ -197,6 +198,7 @@ class _AppShellState extends State<AppShell> {
       step: int.tryParse(route.params['step'] ?? '0') ?? 0,
     ),
     '/home' => const HomePage(),
+    '/nearby' => NearbyPage(selectedId: route.params['id']),
     '/list' => NoticeListPage(query: NoticeQuery.fromParams(route.params)),
     '/search' => NoticeListPage(
       query: NoticeQuery.fromParams(route.params),
@@ -297,6 +299,8 @@ class _AppShellState extends State<AppShell> {
                 IconAction('search', '검색', onTap: () => env.go('/search')),
                 IconAction('bookmark', '관심정보', onTap: () => env.go('/saved')),
                 if (!small)
+                  IconAction('pin', '내 주변', onTap: () => env.go('/nearby')),
+                if (!small)
                   IconAction(
                     'settings',
                     '설정',
@@ -389,6 +393,7 @@ class _AppShellState extends State<AppShell> {
     const entries = [
       ('/home', 'home', '홈'),
       ('/search', 'search', '검색'),
+      ('/nearby', 'pin', '내 주변'),
       ('/saved', 'bookmark', '관심정보'),
       ('/settings', 'settings', '설정'),
     ];
@@ -412,11 +417,22 @@ class _AppShellState extends State<AppShell> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        UiIcon(
-                          e.$2,
-                          color: widget.route.path == e.$1
-                              ? Palette.orange
-                              : Palette.sub,
+                        Container(
+                          padding: EdgeInsets.all(e.$1 == '/nearby' ? 7 : 0),
+                          decoration: BoxDecoration(
+                            color: e.$1 == '/nearby'
+                                ? Palette.orange
+                                : Colors.transparent,
+                            shape: BoxShape.circle,
+                          ),
+                          child: UiIcon(
+                            e.$2,
+                            color: e.$1 == '/nearby'
+                                ? Colors.white
+                                : widget.route.path == e.$1
+                                ? Palette.orange
+                                : Palette.sub,
+                          ),
                         ),
                         const SizedBox(height: 3),
                         Text(

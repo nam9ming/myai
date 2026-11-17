@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "data_kind": "demo",
+  "updated_at": "2026-11-17T00:00:00Z",
+  "items": [
+    {
+      "id": "nearby-demo-1",
+      "category": "event",
+      "title": "안성천 주말 작은 음악회",
+      "lat": 37.0028,
+      "lng": 127.2728,
+      "address": "안성천 산책로 일대",
+      "description": "지도 화면을 확인하기 위한 예시 소식입니다. 실제 운영·모집 일정은 아닙니다.",
+      "start": "2026-11-17",
+      "end": "2026-11-30",
+      "status": "scheduled",
+      "source_url": null
+    },
+    {
+      "id": "nearby-demo-2",
+      "category": "traffic",
+      "title": "중앙로 보행환경 정비 안내",
+      "lat": 37.0082,
+      "lng": 127.274,
+      "address": "중앙로 일대",
+      "description": "지도 화면을 확인하기 위한 예시 소식입니다. 실제 운영·모집 일정은 아닙니다.",
+      "start": "2026-11-17",
+      "end": "2026-11-30",
+      "status": "scheduled",
+      "source_url": null
+    },
+    {
+      "id": "nearby-demo-3",
+      "category": "education",
+      "title": "동네 도서관 저녁 글쓰기",
+      "lat": 37.012,
+      "lng": 127.2711,
+      "address": "안성시립도서관 인근",
+      "description": "지도 화면을 확인하기 위한 예시 소식입니다. 실제 운영·모집 일정은 아닙니다.",
+      "start": "2026-11-17",
+      "end": "2026-11-30",
+      "status": "scheduled",
+      "source_url": null
+    },
+    {
+      "id": "nearby-demo-4",
+      "category": "support",
+      "title": "청년 활동비 상담 창구",
+      "lat": 37.0071,
+      "lng": 127.2802,
+      "address": "안성시청 인근",
+      "description": "지도 화면을 확인하기 위한 예시 소식입니다. 실제 운영·모집 일정은 아닙니다.",
+      "start": "2026-11-17",
+      "end": "2026-11-30",
+      "status": "scheduled",
+      "source_url": null
+    },
+    {
+      "id": "nearby-demo-5",
+      "category": "life",
+      "title": "주말 자원순환 장터",
+      "lat": 37.0035,
+      "lng": 127.2662,
+      "address": "안성시장 인근",
+      "description": "지도 화면을 확인하기 위한 예시 소식입니다. 실제 운영·모집 일정은 아닙니다.",
+      "start": "2026-11-17",
+      "end": "2026-11-30",
+      "status": "scheduled",
+      "source_url": null
+    },
+    {
+      "id": "nearby-demo-6",
+      "category": "event",
+      "title": "가을 동네 사진 산책",
+      "lat": 37.0161,
+      "lng": 127.2787,
+      "address": "안성맞춤대로 일대",
+      "description": "지도 화면을 확인하기 위한 예시 소식입니다. 실제 운영·모집 일정은 아닙니다.",
+      "start": "2026-11-17",
+      "end": "2026-11-30",
+      "status": "scheduled",
+      "source_url": null
+    },
+    {
+      "id": "nearby-demo-7",
+      "category": "education",
+      "title": "공도 생활문화 체험",
+      "lat": 37.0004,
+      "lng": 127.172,
+      "address": "공도읍 일대",
+      "description": "지도 화면을 확인하기 위한 예시 소식입니다. 실제 운영·모집 일정은 아닙니다.",
+      "start": "2026-11-17",
+      "end": "2026-11-30",
+      "status": "scheduled",
+      "source_url": null
+    },
+    {
+      "id": "nearby-demo-8",
+      "category": "traffic",
+      "title": "등하굣길 도로 점검",
+      "lat": 37.0091,
+      "lng": 127.258,
+      "address": "당왕동 일대",
+      "description": "지도 화면을 확인하기 위한 예시 소식입니다. 실제 운영·모집 일정은 아닙니다.",
+      "start": "2026-11-17",
+      "end": "2026-11-30",
+      "status": "scheduled",
+      "source_url": null
+    }
+  ]
+}

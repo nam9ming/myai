@@ -22,6 +22,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/prototype/
+    - assets/markers/
     - assets/posters/
     - assets/fonts/NotoSansKR.woff2
   fonts:

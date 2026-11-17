@@ -1,4 +1,7 @@
 import 'dart:io';
+
+import 'package:yeogi_it/core/browser.dart';
+
 import 'dart:ui' as ui;
 
 import 'package:flutter/rendering.dart';
@@ -61,6 +64,31 @@ Future<void> tapText(WidgetTester tester, String text) async {
 }
 
 void main() {
+  testWidgets('가운데 내 주변 메뉴로 지도 예시·필터·선택·실패 복구를 사용한다', (tester) async {
+    final browser = FakeBrowser();
+    browser.responder = (url, method, body) async => HttpResult(
+      200,
+      File(
+        url == 'nearby-config.json'
+            ? 'web/nearby-config.json'
+            : 'web/nearby-feed.json',
+      ).readAsStringSync(),
+    );
+    await mount(tester, '/nearby', 390, browser: browser);
+    expect(find.text('내 주변에서 무슨 일이?'), findsOneWidget);
+    expect(find.text('홈'), findsWidgets);
+    expect(find.text('내 주변'), findsOneWidget);
+    expect(find.text('안성천 주말 작은 음악회'), findsOneWidget);
+    await tapText(tester, '지도에서 자세히 보기');
+    expect(find.text('선택 해제'), findsOneWidget);
+    await tapText(tester, '선택 해제');
+    browser.responder = (url, method, body) async =>
+        const HttpResult(503, 'unavailable');
+    await tapText(tester, '새로고침');
+    expect(find.text('소식을 불러오지 못했어요'), findsOneWidget);
+    expect(find.text('안성천 주말 작은 음악회'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
   final routes = [
     '/start',
     '/home',

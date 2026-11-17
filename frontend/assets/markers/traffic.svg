@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <style>
+    .light {animation:glow 4s ease-in-out infinite}
+    @keyframes glow {0%,100% {opacity:.55} 50% {opacity:1}}
+    @media (prefers-reduced-motion:reduce) {* {animation:none!important}}
+  </style>
+  <ellipse cx="32" cy="56" rx="19" ry="4" fill="#624730" opacity=".16"/>
+  <g transform="translate(5 3) scale(2.25)" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7 7a5 5 0 0 1 5 -5a5 5 0 0 1 5 5v10a5 5 0 0 1 -5 5a5 5 0 0 1 -5 -5l0 -10" fill="#6a8f87" stroke="#456d65" stroke-width=".8"/>
+    <circle cx="12" cy="7" r="2.3" fill="#f1a59b"/>
+    <circle class="light" cx="12" cy="12" r="2.3" fill="#f6d981"/>
+    <circle cx="12" cy="17" r="2.3" fill="#b6dcb0"/>
+    <circle cx="11.1" cy="11.8" r=".38" fill="#4e5142"/>
+    <circle cx="12.9" cy="11.8" r=".38" fill="#4e5142"/>
+    <path d="M11.3 12.8q.7 .65 1.4 0" fill="none" stroke="#4e5142" stroke-width=".4"/>
+  </g>
+</svg>

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <style>
+    .worker {transform-origin:32px 53px;animation:work 3.4s ease-in-out infinite}
+    .pickaxe {transform-origin:49px 39px;animation:dig 3.4s ease-in-out infinite}
+    .eyes {transform-origin:12px 17.1px;animation:blink 6s infinite}
+    @keyframes work {0%,45%,100% {transform:rotate(0)} 20%,32% {transform:rotate(-4deg)}}
+    @keyframes dig {0%,45%,100% {transform:rotate(0)} 15%,28% {transform:rotate(-28deg)} 21%,34% {transform:rotate(15deg)}}
+    @keyframes blink {0%,93%,97%,100% {transform:scaleY(1)} 95% {transform:scaleY(.15)}}
+    @media (prefers-reduced-motion:reduce) {* {animation:none!important}}
+  </style>
+  <ellipse cx="32" cy="54" rx="23" ry="5" fill="#624730" opacity=".16"/>
+  <g class="worker"><g transform="translate(5 5) scale(2.25)" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 20l5 -15h2l5 15Z" fill="#fa9b47" stroke="#b96d35" stroke-width=".7"/>
+    <path d="M9.4 10l5.2 0M7.8 15l8.4 0" stroke="#fff9ed" stroke-width="2.3"/>
+    <path d="M4 20l16 0" stroke="#b96d35" stroke-width="2.2"/>
+    <g class="eyes"><circle cx="10.2" cy="17.1" r=".65" fill="#413b32"/>
+    <circle cx="13.8" cy="17.1" r=".65" fill="#413b32"/>
+    </g><path d="M11.1 18.2q.9 .9 1.8 0" fill="none" stroke="#413b32" stroke-width=".55"/>
+    <ellipse cx="8.8" cy="17.8" rx=".9" ry=".5" fill="#e47859" opacity=".6"/>
+    <ellipse cx="15.2" cy="17.8" rx=".9" ry=".5" fill="#e47859" opacity=".6"/>
+  </g></g>
+  <g class="pickaxe" stroke-linecap="round">
+    <path d="M48 43l7 -20" stroke="#805c42" stroke-width="3.5"/>
+    <path d="M47 25q8 -6 14 4" fill="none" stroke="#687f85" stroke-width="3.5"/>
+    <circle cx="48" cy="42" r="3" fill="#fa9b47"/>
+  </g>
+</svg>

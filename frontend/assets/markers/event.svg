@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <style>
+    .host {transform-origin:32px 55px;animation:dance 4s ease-in-out infinite}
+    .note {animation:sing 4s ease-in-out infinite}
+    @keyframes dance {0%,50%,100% {transform:rotate(-2deg)} 25%,75% {transform:rotate(3deg) translateY(-2px)}}
+    @keyframes sing {0%,100% {transform:translateY(0);opacity:.55} 50% {transform:translateY(-4px);opacity:1}}
+    @media (prefers-reduced-motion:reduce) {* {animation:none!important}}
+  </style>
+  <ellipse cx="32" cy="56" rx="23" ry="5" fill="#624730" opacity=".16"/>
+  <g class="host"><g transform="translate(5 4) scale(2.25)" stroke="#9c6272" stroke-width=".8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 7h14v14H5Z" fill="#fff0d7"/>
+    <path d="M3 21l18 0" stroke-width="1.8"/>
+    <path d="M3 7v1a3 3 0 0 0 6 0v-1m0 1a3 3 0 0 0 6 0v-1m0 1a3 3 0 0 0 6 0v-1h-18l2 -4h14l2 4Z" fill="#df8ca0"/>
+    <path d="M9 21v-4a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v4" fill="#edc8b1"/>
+    <circle cx="9.8" cy="12" r=".6" fill="#51443e" stroke="none"/>
+    <circle cx="14.2" cy="12" r=".6" fill="#51443e" stroke="none"/>
+    <path d="M11.1 13.2q.9 .8 1.8 0" fill="none" stroke="#51443e" stroke-width=".5"/>
+  </g>
+    <g transform="rotate(-22 53 42)">
+      <path d="M53 39v11" stroke="#66515d" stroke-width="3.5" stroke-linecap="round"/>
+      <rect x="49" y="31" width="8" height="10" rx="4" fill="#8a7284" stroke="#fff7ef"/>
+      <circle cx="52" cy="45" r="3" fill="#edc8b1"/>
+    </g>
+  </g>
+  <path class="note" d="M53 12v9m0 -8l6 -2v8m-6 2c-5 -2 -6 4 -2 3m8 -5c-5 -2 -6 4 -2 3" fill="none" stroke="#c75e80" stroke-width="2" stroke-linecap="round"/>
+</svg>
