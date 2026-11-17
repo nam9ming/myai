@@ -61,13 +61,15 @@ RUN_ID·봉인 부모 경로와 private 파일은 실제 결과로 바꾼다. im
 
 [human-review-v1](human-review.md)은 부모 metadata의 family로 이전/수정후 출력 전체를 검사한다. 전체 changes 감사·원래 review bytes·부모 D05 전체·실패 상태를 유지한다. 실패 부모는 `before=null`, `after=수정후 전체 출력` 기록이 필요하며 새 family로 바꿔 수정할 수 없다. 검토자·basis·시각은 제공자의 선언이다. 합성 check-review CLI 시험의600초는 `review_duration_ns=600000000000`, `human_verification=declared_only`이며 실제 사람 작업시간 측정이 아니다.
 
-이 시민 사람 수정 연결은 **Python 별도 보관본까지**다. Java D05/S10은 새 수동 archive의 원출력·실패·metadata를 판독한다. Java의 시민 human-review 표시/저장·D06 인계·승인/공개 연결은 다음 G5이며 현재 경로가 자동 생성하지 않는다.
+[시민 D06 인계](citizen-human-handoff.md)는 `citizen-human-handoff-v1`6키 선택으로 `citizen-human-handoff-projection-v1`을 만들고 기존 check/freeze/verify-handoff로 전체 이미지를 보관한다. title/categories는 검토 원본에 미상으로 남길 수 있지만 D06 투영에는 known·유효 값·근거가 필요하며 미해결이면 `HANDOFF_CITIZEN_FACTS_UNRESOLVED`다.12사실·known[]/null·배열 순서·실패 부모 상태를 보존한다. 명시 split_group_id는 D06 관계 group이며 D08 배정이 아니고 area/dictionary는 생성하지 않는다.
+
+Java 저장은 별도 `citizen-human-handoff-import-v1` 요청이 등록 출처·전체 이미지·명시 revision/CAS를 대조하는 경로다. Python은 DB revision·승인·공개를 만들지 않으며 투영 JSON은 직접 import 입력이 아니다. Java의 시민 human-review/D06·S10·승인/공개 연결과 전체 검증·반영 상태는 [G5 계획](../docs/superpowers/plans/2026-11-18-citizen-human-handoff.md)을 따른다.
 
 | 기존 경로 | 시민 family의 처리 |
 | --- | --- |
 | legacy `draft/check-draft` | `DRAFT_SCHEMA_UNSUPPORTED`로 기존 D06 투영을 거부. 실패 실행 등 선행 거부 조건은 그대로 유지 |
-| legacy 사람 인계 | `HANDOFF_SCHEMA_UNSUPPORTED` |
+| legacy `human-handoff-v1` 선택 | `HANDOFF_SCHEMA_UNSUPPORTED`; 명시 시민 선택은 위 별도 경로 사용 |
 | D08 실행 연결 | `BINDING_SCHEMA_UNSUPPORTED` |
 | 직접/사람 수정후 8필드 평가 | `EVALUATION_SCHEMA_UNSUPPORTED`, 기존 채점기·8필드 분모에 전달하기 전에 거부 |
 
-새 점수·gold/D09·실자료 평가를 만들지 않는다. 기존3유형 실제 처리 수·실패·과거 보관본과 평가 기준은 보존한다. parser·실제 prepare/import/review CLI·원래 경로 제거 후 봉인 재검증·legacy guard의 합성 시험과 실제 공식자료 정확도·사람 승인·운영 인수는 구별한다. 전체 Python/Java·DB·원격 MySQL8.4 검증 결과와 미완료는 [G4 계획](../docs/superpowers/plans/2026-11-18-citizen-extraction.md)을 따른다. 미확정 사업·자료·평가 사항은 [별도 기록](../backend/docs/citizen-open-items.md)에서 관리한다.
+새 점수·gold/D09·실자료 평가를 만들지 않는다. 기존3유형 실제 처리 수·실패·과거 보관본과 평가 기준은 보존한다. parser·실제 prepare/import/review CLI·원래 경로 제거 후 봉인 재검증·legacy guard의 합성 시험과 실제 공식자료 정확도·사람 승인·운영 인수는 구별한다. 전체 Python/Java·DB·원격 MySQL8.4 검증 결과와 미완료는 [G4 추출 계획](../docs/superpowers/plans/2026-11-18-citizen-extraction.md)과 [G5 인계 계획](../docs/superpowers/plans/2026-11-18-citizen-human-handoff.md)을 따른다. 미확정 사업·자료·평가 사항은 [별도 기록](../backend/docs/citizen-open-items.md)에서 관리한다.

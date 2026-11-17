@@ -2,6 +2,8 @@
 
 [human-review-v1](human-review.md)의 수정값을 D06의 사실 구조로 투영하고 전체 검토/부모 원본과 함께 보관한다. **투영 JSON은 Java local-import의 직접 입력이 아니다.** summary는 status=projection_only, backend_import_supported=false, review_required=true를 유지한다. 실제 DB 저장은 별도 [human-handoff-import-v1 인계 요청](../backend/docs/human-handoff-import.md)이 전체 이미지를 선택하고 등록 출처·명시 revision을 검증한 뒤 처리한다.
 
+아래8키 선택·시간/장소 투영은 기존 `extract-schema-v1` 대상이다. [시민 인계](citizen-human-handoff.md)는 별도 `citizen-human-handoff-v1`6키 선택·`citizen-human-handoff-projection-v1`·Java `citizen-human-handoff-import-v1`을 사용한다. 같은 CLI·archive wrapper를 재사용하되 기존 선택에 시민 부모를 넣으면 `HANDOFF_SCHEMA_UNSUPPORTED`다.
+
 ## 선택 입력
 
 human-handoff-v1은 아래8개 키만 받는다. source에는 D03 문서1개·빈 evidence/events의 source-import-v1 JSON 객체를 그대로 넣는다.
@@ -31,6 +33,8 @@ events는 event_id·구역/문서 연결/관계/분할 정보와 facts를 담는
 기존 AI 초안의 사실 투영을 재사용하되 사람 수정 output.json을 입력으로 사용한다. 부분 시간·명시 초·반복/모호 관계·중복 문자열·장소 대응 미상·빈 사건을 보존하며 시간/장소를 임의 확정하지 않는다. 장소 geometry/확인자/시각은 null, coverage는 unknown, 지역은 uncertain이다. 투영에서 평탄화되는 title/types/location.kind의 knowledge·사유와 warnings는 원래 output.json에 보존한다. facts만으로 원래 knowledge를 복원한다고 가정하지 않는다.
 
 같은 부모의 다른 review는 같은 사건 ID를 가질 수 있다. 실제 revision 배치·현재 검토본 충돌·과거 수정 보존은 Java 인계 요청이 처리한다. 일반 reader는 이 투영 schema를 거부하며 전용 인계도 needs_review/hidden만 만든다. 기존 사람 보정은 자동 병합하지 않는다.
+
+시민 context는 명시 split_group_id만 담으며 area/dictionary를 요구하거나 생성하지 않는다. group은 D06 관계 선언이며 D08 배정이 아니다. title/categories 미해결은 `HANDOFF_CITIZEN_FACTS_UNRESOLVED`로 전체 인계를 거부한다.12개 원문 사실·known[]/null·실패 부모와 전체 review/source 이미지를 보존하고 기존 시간/장소 정규화를 적용하지 않는다. 시민 Java 연결·전체 검증·반영 상태는 [G5 계획](../docs/superpowers/plans/2026-11-18-citizen-human-handoff.md)을 따른다.
 
 ## 명령·보관
 

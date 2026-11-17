@@ -17,11 +17,13 @@
 
 [합의 필요] 차별화 후보3개는 모두 수용하는 원칙이나 정확한 명칭·내용·AI 실행 방식은 미제공입니다. 정보분석·개인화·이해지원·신뢰성4항목은 구체화 제안입니다. 관심저장·개인설정은 초기 프런트 브라우저 저장이며 계정 동기화·새 인증·알림 발송은 자동 필수 범위가 아닙니다.
 
-## 시민 추출 G4·다음 연결
+## 시민 추출·사람 수정 인계
 
 [G4 계획](../docs/superpowers/plans/2026-11-18-citizen-extraction.md)의 [extract-citizen-v1](../contracts/citizen-extraction.md)은5분야·title/categories·12개 원문 사실의 수동 archive-v1과 부모 family에 맞는 Python 사람 수정 보관을 연결합니다. 실제 제공 prompt 라벨/bytes·미상·실패·전체 수정 감사를 보존하며 새 provider/API·chunk·규칙·점수는 만들지 않습니다. 기존 prepare 기본값·추출 원본·3유형/8필드 평가 기준은 유지합니다.
 
-Java D05/S10의 raw/실패/metadata 판독과 시민 human-review/D06 연결을 구별합니다. 후자는 다음 G5이며 현재 사람 승인·공개 완료로 집계하지 않습니다. legacy draft/handoff/D08은 시민 family를 명시 거부하고 직접/사람 수정후 모두 기존8필드 scorer 전에 차단합니다. 상세 오류·실행·보관 경계는 새 계약을 따릅니다.
+[시민 인계](../contracts/citizen-human-handoff.md)는 새6키 `citizen-human-handoff-v1` 선택·split_group_id만 담은 context·`citizen-human-handoff-projection-v1`을 기존 check/freeze/verify-handoff에 연결합니다. title/categories가 미해결이면 전체 인계를 거부하고12개 원문 사실·실제 prompt 라벨·전체 수정/실패 부모 이미지를 보존합니다. split_group_id는 명시 D06 관계 group이며 D08 배정이 아닙니다. area/dictionary나 미상 값을 대신 생성하지 않습니다.
+
+Java의 `citizen-human-handoff-import-v1` 요청은 전체 이미지·등록 출처·명시 revision/CAS를 대조하는 별도 경로입니다. 숨김 검토 revision·승인/공개·S10 연결과 실제 전체 검증 상태는 [G5 계획](../docs/superpowers/plans/2026-11-18-citizen-human-handoff.md)을 따르며 Python 투영 성공을 Java 저장·사람 승인 완료로 집계하지 않습니다. legacy draft/`human-handoff-v1`/D08은 시민 family를 계속 명시 거부하고 직접/사람 수정후 모두 기존8필드 scorer 전에 차단합니다.
 
 합성 CLI·parser/archive/review/guard 검증과 전체 회귀·실제 DB/HTTP·원격 MySQL8.4 결과를 계획에 따로 남깁니다. 새 기술 규격은 작성자 검토안이며 실제 팀원 합의·실자료 평가를 대신하지 않습니다. 미확정 분야별 자료·모델·평가 기준은 [별도 기록](../backend/docs/citizen-open-items.md)에서 관리하며 아래 과거 처리 수와 섞지 않습니다.
 

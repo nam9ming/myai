@@ -1,6 +1,6 @@
 # 사람 수정본의 D06 저장
 
-동결한 [인계 이미지](../../contracts/human-handoff.md)를 읽어 실제 비공개 D06 revision에 저장한다. 투영 JSON을 직접 import하지 않고 local-import의 human-handoff-import-v1 요청으로 선택한다. 원래 사람 검토/D05 이미지와 DB의 등록 D03·D05가 필요하다.
+동결한 [인계 이미지](../../contracts/human-handoff.md)를 읽어 실제 비공개 D06 revision에 저장한다. 투영 JSON을 직접 import하지 않고 local-import의 human-handoff-import-v1 요청으로 선택한다. 원래 사람 검토/D05 이미지와 DB의 등록 D03·D05가 필요하다. 시민5분야는 [별도 시민 계약](../../contracts/citizen-human-handoff.md)의 `citizen-human-handoff-import-v1`을 명시하며 같은5키·명시 revision mapping·명령/HTTP 경로를 재사용한다. 새/기존 family는 교차할 수 없다.
 
 ## 요청·실행
 

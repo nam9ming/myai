@@ -28,7 +28,7 @@
 
 ## 입력·수정·승인
 
-새 입력은 `origin=human`, `originating_run_ids=[]`, `draft/needs_review`·`hidden`이다. 추가/중복 키·잘못된 Unicode·허위 승인 상태·다른 문서의 근거를 거부한다. 저장 payload에만 `schema_version=citizen-revision-v1`을 넣고 기존 payload bytes는 바꾸지 않는다. 동일 사건을 기존 소상공인 계열과 시민 계열 사이에서 전환할 수 없다.
+새 일반 수동 입력은 `origin=human`, `originating_run_ids=[]`, `draft/needs_review`·`hidden`이다. [전용 시민 인계](../../contracts/citizen-human-handoff.md)만 검증한 전체 봉인 proof와 등록 D03/D05를 바탕으로 최초 `ai_reviewed/needs_review/hidden`을 만든다. 일반 JSON으로 최초 AI proof를 추가할 수 없으며 후속 수동 수정은 기존 run/source/proof와 실제 전후 감사를 유지한다. 추가/중복 키·잘못된 Unicode·허위 승인 상태·다른 문서의 근거를 거부한다. 저장 payload에만 `schema_version=citizen-revision-v1`을 넣고 기존 payload bytes는 바꾸지 않는다. 동일 사건을 기존 소상공인 계열과 시민 계열 사이에서 전환할 수 없다.
 
 최초 `human_overrides`는 빈 배열이다. 이후 수정은 새 `revision_id`, 증가한 `revision_no`, 직전 번호 `expected_revision_no`, 검토자·시각과 변경 전후/이유/근거가 필요하다. 과거 감사 prefix를 유지하며 제거된 과거 근거도 전후 근거 합집합과 대조한다. 새 원문 버전은 별도 버전으로 등록한다.
 
@@ -62,4 +62,4 @@ HTTP는 기존 [로컬 관리 설정·인증](local-management-api.md)을 그대
 
 `CitizenReviewMySqlTest`의 자동 DB 시험은 연결 전 `DB_URL`의 DB명이 `myai_test` 또는 `myai_citizen_test`인지 확인한다. 운영/공유 DB나 기본 `myai_dev`를 지정하지 않는다. 공개 회귀는 고유 replay 채널을 사용하며 정리는 해당 시험이 만든 snapshot ID로 제한한다. 수동 CLI·앱의 DB명 계약을 변경한 것은 아니다.
 
-[시민 공개본](citizen-publication.md)은 별도 명령과 채널로 미리보기·발행·복구·내보내기를 연결하며 [시민 조회 구현 검토안](../../contracts/citizen-api.md)에서 같은 공개본의 목록·상세·확보 이력을 읽는다. 기존 publication-command-v1의 시민 revision 거부는 유지한다. 검색·복합 필터·정규화된 일정/비용·Python 추출/인계·Flutter 연동·실제 팀원 인수·독립 정확도 평가·운영 배포는 후속 단계다. 합성 시험을 실제 자료 정확도나 최종 계약 합의로 표현하지 않는다.
+[시민 공개본](citizen-publication.md)은 별도 명령과 채널로 미리보기·발행·복구·내보내기를 연결하며 [시민 조회 구현 검토안](../../contracts/citizen-api.md)에서 같은 공개본의 목록·상세·확보 이력을 읽는다. 기존 publication-command-v1의 시민 revision 거부는 유지한다. [수동 추출/사람 인계](../../contracts/citizen-human-handoff.md)는 별도 family로 연결하며 실제 검증·반영은 각 계획을 따른다. 검색·복합 필터·정규화된 일정/비용·새 추출 API 실행·Flutter 연동·실제 팀원 인수·독립 정확도 평가·운영 배포는 후속 단계다. 합성 시험을 실제 자료 정확도나 최종 계약 합의로 표현하지 않는다.

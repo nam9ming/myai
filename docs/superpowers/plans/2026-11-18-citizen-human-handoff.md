@@ -28,7 +28,7 @@
 - 신규 `evaluation/citizen_handoff.project_output(run_id,source,extracted,split_group_id)->dict`: `{data_kind,documents,evidence,events}` 반환. 기존 UUID5 방식·근거 연결을 사용하고12사실의 evidence ID만 치환한다. title/categories가 known·유효 값·근거를 충족하지 않으면 `HANDOFF_CITIZEN_FACTS_UNRESOLVED`다.
 - wrapper `human-handoff-archive-v1`, summary-v1, HandoffReference3키, check/freeze/verify-handoff·동결/재생성 검증은 유지한다. summary는 projection_only/backend_import_supported=false/review_required=true다. split은 명시 D06 관계 group이며 D08 배정을 뜻하지 않는다.
 - Java `HumanHandoffArchiveReader.read(HandoffReference)`/`read(String,String,Path)` 유지. 새 projection/context와 embedded review/output/parent metadata·receipt를 결합한다. 새 시민은 manual_import/archive-v1만 허용하며 Python은 executeKeyless로 실행한다.
-- `HumanHandoffImportService.importFile(Path,Path,Path,String)`/`importBytes(byte[],Path,Path,String)` 유지. 새 request=`citizen-human-handoff-import-v1`, 동일6키·명시 revisions mapping·expected_revision_no. 전용 경로가 `citizen-reviewed-import-v1` envelope를 만들고 `ReviewedImportReader.prepareHandoff(JsonNode,Path,String,String)`가 새 batch schema를 반환한다.
+- `HumanHandoffImportService.importFile(Path,Path,Path,String)`/`importBytes(byte[],Path,Path,String)` 유지. 새 request=`citizen-human-handoff-import-v1`, 동일5키·명시 revisions mapping·expected_revision_no. 전용 경로가 `citizen-reviewed-import-v1` envelope를 만들고 `ReviewedImportReader.prepareHandoff(JsonNode,Path,String,String)`가 새 batch schema를 반환한다.
 - 새 시민 revision은 기존 marker citizen-revision-v1·ai_reviewed/needs_review/hidden·원 run/source/proof를 보존한다. 일반 import의 최초 AI proof 추가는 막고 기존 proof 뒤 감사된 수정은 허용한다. legacy의 기존 감사된 최초 proof 첨부는 유지한다.
 - `ExtractionRunRepository.handoffParentDirectory/verifiedHandoffParent`만 검증한 시민 family를 허용한다. direct referenceDirectory의 기존 validated legacy 경계는 유지한다. `ExtractionImportService`의 사건별 proof·등록 D03/D05·fingerprint/잠금은 완화하지 않는다.
 - 기존 local-import/POST reviews/import/PUT event review로 dispatch한다. S10 두 family·빈 인계·전체 실패/수정을 판독한다. 기존 시민 approve→preview/publish→export/rollback을 재사용하며 자동 승인은 없다.
@@ -49,10 +49,10 @@
 
 **Interfaces:** 위 Python selection/projection/함수 서명을 생산한다. Task2는 같은 projection과 wrapper를 소비한다. 원본 review·source 전체는 기존 보관기가 복사한다.
 
-- [ ] **Step 1:** 현재 G4 고정 시민 review와 새6키 selection을 실제 check-handoff CLI로 전달하는 시험을 작성한다. 기대 exit0/projection_only인데 기존 header가 거부하는 행동 RED를 기록한다. 누락 모듈/컴파일 실패는 RED가 아니다.
-- [ ] **Step 2:** 명시 schema 분기·D03 helper 분리·최소 raw 사실 투영을 구현한다. metadata로 검증기를 선택하고 old 요청의 시민 거부와 D08 unsupported를 유지한다. unknown title/categories 거부·known[]/배열 순서·5분야·stable ID·실패 부모 상태를 검사한다.
-- [ ] **Step 3:** 실제 freeze/verify-handoff·빈 사건·전체 큰 실패 bytes·원래 review/run 경로 삭제 뒤 검증·old/new ID 충돌·잘못된 family/hash/권한/링크·부분 설치·CLI 비공개 로그 경계를 확인한다. 원래13pin/39파일 및 G4 고정76파일을 현재 코드로 읽고 bytes/mode 불변을 대조한다. expected는 재생성하지 않는다.
-- [ ] **Step 4:** Run `python3.13 -B -m unittest discover -s processing/tests -p 'test_citizen*.py' -v` 및 기존 handoff/review 시험. Expected: 새 성공/실패와 기존 고정 호환 모두 통과. 커밋 `feat: project citizen human handoffs`.
+- [x] **Step 1:** 현재 G4 고정 시민 review와 새6키 selection을 실제 check-handoff CLI로 전달하는 시험을 작성한다. 기대 exit0/projection_only인데 기존 header가 거부하는 행동 RED를 기록한다. 누락 모듈/컴파일 실패는 RED가 아니다.
+- [x] **Step 2:** 명시 schema 분기·D03 helper 분리·최소 raw 사실 투영을 구현한다. metadata로 검증기를 선택하고 old 요청의 시민 거부와 D08 unsupported를 유지한다. unknown title/categories 거부·known[]/배열 순서·5분야·stable ID·실패 부모 상태를 검사한다.
+- [x] **Step 3:** 실제 freeze/verify-handoff·빈 사건·전체 큰 실패 bytes·원래 review/run 경로 삭제 뒤 검증·old/new ID 충돌·잘못된 family/hash/권한/링크·부분 설치·CLI 비공개 로그 경계를 확인한다. 원래13pin/39파일 및 G4 고정76파일을 현재 코드로 읽고 bytes/mode 불변을 대조한다. expected는 재생성하지 않는다.
+- [x] **Step 4:** Run `python3.13 -B -m unittest discover -s processing/tests -p 'test_citizen*.py' -v` 및 기존 handoff/review 시험. Expected: 새 성공/실패와 기존 고정 호환 모두 통과. 커밋 `feat: project citizen human handoffs`.
 
 ### Task 2: 검증한 인계의 Java D06·감사·S10 연결
 
@@ -60,19 +60,19 @@
 
 **Interfaces:** Task1 projection을 기존 archive DTO/public signatures로 반환한다. 새 import request/검증한 projection family를 일치시켜 trusted batch를 만들고 동일 source_kind=human_handoff/result_refs로 저장한다. `HumanReviewChanges.record/validate(...,CITIZEN_FIELDS)`를 재사용한다.
 
-- [ ] **Step 1:** Task1의 실제 frozen archive를 Java 기존 public reader/import에 전달하는 시험을 작성한다. 새 schema gate의 실제 거부 RED를 주 작업자의 Gradle로 관찰한 뒤 생산 코드를 수정한다.
-- [ ] **Step 2:** archive 검증/키 없는 subprocess·schema별 trusted 생성·ordinary 최초 proof 방지·명시 mapping/CAS·원래 proof/audit prefix·사건별 D05 검증을 최소 확장한다. 기존 read/import signatures·legacy 최초 첨부 회귀를 유지한다.
-- [ ] **Step 3:** 전용 DB에서 D03/D05 성공·실패→숨김 D06, 정확 replay·빈 batch·stale/동시 CAS·늦은 감사 rollback·사건/근거/출처/권한 변조·수동 후속 수정의 실제 전후 값을 검증한다. 쓰기 전 시험 소유 UUID 기록·허용 DB 확인, 소유 행만 정리한다.
+- [x] **Step 1:** Task1의 실제 frozen archive를 Java 기존 public reader/import에 전달하는 시험을 작성한다. 새 schema gate의 실제 거부 RED를 주 작업자의 Gradle로 관찰한 뒤 생산 코드를 수정한다.
+- [x] **Step 2:** archive 검증/키 없는 subprocess·schema별 trusted 생성·ordinary 최초 proof 방지·명시 mapping/CAS·원래 proof/audit prefix·사건별 D05 검증을 최소 확장한다. 기존 read/import signatures·legacy 최초 첨부 회귀를 유지한다.
+- [x] **Step 3:** 전용 DB에서 D03/D05 성공·실패→숨김 D06, 정확 replay·빈 batch·stale/동시 CAS·늦은 감사 rollback·사건/근거/출처/권한 변조·수동 후속 수정의 실제 전후 값을 검증한다. 쓰기 전 시험 소유 UUID 기록·허용 DB 확인, 소유 행만 정리한다.
 - [ ] **Step 4:** 실제 JAR CLI/HTTP POST/PUT와 원입력 보관·URL event 불일치·인증/한도·SELECT S10 전체 수정/실패·별도 승인/공개/export/rollback과 private 비노출을 확인한다. 운영·독립 품질 인수로 표현하지 않는다.
 - [ ] **Step 5:** Run 주 작업자만 `./gradlew test --tests '*HumanHandoff*' --tests '*ReviewedImport*' --tests '*Citizen*' --tests '*ReviewReport*' bootJar`. Expected: 가능한 local 검증 통과; Docker 부재는 정확 원격 MySQL8.4 전체 CI로 반드시 보완한다. 커밋 `feat: import citizen human handoffs`.
 
 ### Task 3: 계약·전체 검증·리뷰·develop 반영
 
-**Files:** 신규 `contracts/citizen-human-handoff.md`; 관련 contracts/README.md·human-handoff.md·human-review.md·citizen-extraction.md, backend/processing README/TASK 및 handoff/review/S10/local docs·citizen-open-items.md, G4/G5 계획의 실제 결과만 갱신한다.
+**Files:** 신규 `contracts/citizen-human-handoff.md`; 관련 contracts/README.md·human-handoff.md·human-review.md·citizen-extraction.md, 저장소·backend/processing README/TASK 및 handoff/review/S10/local docs·citizen-open-items.md, G4/G5 계획의 실제 결과만 갱신한다.
 
 **Interfaces:** Task1/2의 실제 버전·명령·제약·합성 재현·검증 결과를 인계한다. 미확정 실제 정책·팀원/Flutter 합의는 open-items다.
 
-- [ ] **Step 1:** 새/기존 family·선행 원문/추출 등록·명시 group/revisions·미상 거부·실패/전후 감사·별도 승인·오류·실행/복구를 문서화한다. G4 PR56의 완료 증빙과 G5 미완료를 구별한다.
+- [x] **Step 1:** 새/기존 family·선행 원문/추출 등록·명시 group/revisions·미상 거부·실패/전후 감사·별도 승인·오류·실행/복구를 문서화한다. G4 PR56의 완료 증빙과 G5 미완료를 구별한다.
 - [ ] **Step 2:** Run 전체 Python, 주 작업자 `./gradlew test bootJar`, npm lint/test/build·계약 validator·변경 Markdown 상대 링크·git diff --check. Expected: 회귀/원본 불변·누락0, Docker/JAR/MySQL8.4는 exact remote head에서도 통과한다.
 - [ ] **Step 3:** 전체 diff·호출자·권한·원본/복구·계약·문서를 자체 검토하고 유효 지적을 RED→GREEN으로 수정한다. fresh 독립 전체 리뷰 정확1회를 수행하고 Minor 포함 유효 지적을 모두 검증·수정한 뒤 전체 자체 검토한다. 커밋 `docs: describe citizen human handoffs`.
 - [ ] **Step 4:** 유효 미해결0에서 develop PR을 제출한다. exact head CI·실제 AI 코멘트·도착한 사람 리뷰/threads를 확인하고 지적은 원인 수정·검증한다. 부분 자동 리뷰를 전체로 쓰지 않는다.
@@ -81,3 +81,12 @@
 ## 계획 자체 검토
 
 G4와 G1~G3 기존 계약을 대조했다. Python projection→archive reader→trusted import→기존 승인/공개·S10의 selector를 모두 범위에 포함했다. backup은 전체 DB/파일 이미지와 generic schema 저장을 재사용하며 새 migration이 없다. 실제 자료/평가·프런트·운영 승인과 분리하고5개 Review Focus를 Task1/2 검증에 연결했다. 실행 중 다른 접점이 확인되면 ledger에 근거와 영향 범위를 기록한다.
+
+
+## 현재 검증·리뷰 기록
+
+- 실제 Python check-handoff의 새 선택 header 거부·Java 새 projection/schema 거부·등록 D03/D05 성공/실패의 새 요청 거부를 관찰한 뒤 확장했다. 테스트용 ref 키 오타로 발생한 사전조건 오류는 행동 RED에서 제외하고 올바른 봉인본으로 다시 확인했다.
+- 후속 일반 시민 수정의 inherited proof가 잘못 legacy로 분류되는 문제를14필드 감사 시험으로 확인·수정했다. 기존 CHECK 주입 시험의 오류 코드 가정도 실제 예외 변환과 대조해 수정했고 전체 행 rollback·정상 재시도 검사는 유지했다. 새 예외 정책은 추가하지 않았다.
+- Python 전체690건/326.242초, 관련 Java138건/6클래스·1분42초·실패/오류/생략0이다. Java는 로컬 MySQL9.6 보충 검증이며 정확8.4 성공으로 쓰지 않는다. 기존 legacy 최초 proof 첨부·인계 전체 회귀를 포함한다.
+- Node46건·lint610파일·계약13JSON·HTML build·변경18문서377개 상대 파일 링크가 통과했다. 이후 문서·시험 추가의 마지막 lint/링크·전체 Java는 진행 중이다.
+- 전체 Java/Docker·실제 JAR/HTTP·SELECT S10·정확 원격 MySQL8.4·독립 전체 리뷰·PR/병합은 아직 완료하지 않았다. main/배포·실제 사람/Flutter·실자료 품질 인수는 별도다.

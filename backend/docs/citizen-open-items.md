@@ -13,4 +13,6 @@
 
 Q ID의 공통 기준은 [결정사항 Q01~Q10](../../docs/spec/07_결정사항과자체점검.md#외부-확인이-필요한-사항과-진행-가능한-작업), 코드 근거는 [재사용 조사](citizen-backend-reuse.md)를 따른다. 새 자료·명시적 결정이 도착하면 해당 항목의 근거와 작업 영향을 갱신한다. 기술상의 통상적인 구현 선택은 기존 규칙 안에서 이유·호환 영향과 함께 기록하며, 실제 팀원 합의가 있었다고 표현하지 않는다.
 
-시민 수동 출력의 `extract-citizen-v1`·프롬프트 준비·원본/실패 보관·Python 수정 선언·Java D05/S10은 [작성자 구현안](../../contracts/citizen-extraction.md)으로 진행한다. 새 provider/API·모델·자료/독립 평가 분모를 확정하지 않는다. 시민 D06/Java 사람 인계는 다음 개발 단계이며, 수동 추출 계약만으로 전체 AI·공개 연결이 끝났다고 집계하지 않는다.
+시민 수동 출력의 `extract-citizen-v1`·프롬프트 준비·원본/실패 보관·Python 수정 선언·Java D05/S10은 [작성자 구현안](../../contracts/citizen-extraction.md)으로 진행한다. 새 provider/API·모델·자료/독립 평가 분모를 확정하지 않는다. [시민 D06/Java 사람 인계](../../contracts/citizen-human-handoff.md)는 명시 기술 계약으로 개발하며 실제 검증·반영은 G5 계획을 따른다. 수동 추출/인계만으로 전체 AI·실자료 품질·사람/Flutter 인수가 끝났다고 집계하지 않는다.
+
+G5의 명시 `split_group_id`는 기존 D06 관계 group 선언이다. 실제 공지별 group·검토 담당/권한은 미확정으로 남기며 가짜 ID로 실자료를 저장하거나 D08 개발/확인 배정을 추정하지 않는다. 작성자 [시민 인계 계약](../../contracts/citizen-human-handoff.md)은 합성 자료로 먼저 검증한다.

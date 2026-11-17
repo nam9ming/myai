@@ -24,7 +24,7 @@ Java 21 / Spring Boot **3.5.16** / Gradle Wrapper **8.14.3** / MySQL **8.4.13**.
 
 [시민 수동 추출 계약](../contracts/citizen-extraction.md)의 `extract-citizen-v1`을 기존 D05 등록·수동 파일 업로드·S10에 연결한다. 원문5키 입력은 재사용하며 metadata의 schema로 출력 검증기를 선택한다. 실제 prompt bytes·제공한 prompt_version 라벨·12개 원문 사실·근거·실패를 보존한다. 새 모델/API·DB migration은 추가하지 않는다.
 
-Python의 별도 사람 수정 선언·감사는 같은 family로 검증한다. 시민 사람 수정값의 Java D06 인계·승인/공개 연결은 다음 단계다. 기존3유형 초안/인계·8필드 평가에 시민 출력을 넣으면 명시 unsupported로 거부한다. 실행·한도는 [D05](docs/extraction-run-import.md)·[업로드](docs/extraction-upload.md), 검증·진행 상태는 [계획](../docs/superpowers/plans/2026-11-18-citizen-extraction.md)을 따른다.
+Python의 별도 사람 수정 선언·감사는 같은 family로 검증한다. [시민 사람 인계](../contracts/citizen-human-handoff.md)는 전체 봉인본을 명시적으로 선택해 숨김 D06·수정 감사·S10과 기존 별도 승인/공개 경로에 연결한다. 실제 검증·원격 반영 상태는 [G5 계획](../docs/superpowers/plans/2026-11-18-citizen-human-handoff.md)을 따른다. 기존3유형 초안/인계·8필드 평가에 시민 출력을 넣으면 명시 unsupported로 거부한다. 실행·한도는 [D05](docs/extraction-run-import.md)·[업로드](docs/extraction-upload.md), 검증·진행 상태는 [계획](../docs/superpowers/plans/2026-11-18-citizen-extraction.md)을 따른다.
 
 ## 구현 범위
 
@@ -143,7 +143,7 @@ Java는 고정 인자 `-m processing.matching`과 JSON stdin만 사용한다. �
 
 ## 검토 JSON 로컬 import
 
-시민5분야 입력·수정 감사·승인/반려는 [시민 수동 검토](docs/citizen-review.md), 지점 없는 불변 공개·복구·파일 전달은 [시민 공개본](docs/citizen-publication.md)의 별도 내부 버전을 사용한다. [시민 조회](../contracts/citizen-api.md)와 [수동 추출 원본](../contracts/citizen-extraction.md)을 별도 family로 연결하며, 시민 D06/Java 사람 인계·검색/정규화·추출 실행 확장은 후속이다.
+시민5분야 입력·수정 감사·승인/반려는 [시민 수동 검토](docs/citizen-review.md), 지점 없는 불변 공개·복구·파일 전달은 [시민 공개본](docs/citizen-publication.md)의 별도 내부 버전을 사용한다. [시민 조회](../contracts/citizen-api.md)와 [수동 추출 원본](../contracts/citizen-extraction.md)을 별도 family로 연결하며, [시민 D06 사람 인계](../contracts/citizen-human-handoff.md)는 전용 요청을 사용한다. 검색/정규화·추출 실행 확장과 실제 화면/사람 인수는 후속이다.
 
 DB를 준비한 뒤 저장소 루트에서 실행한다.
 
