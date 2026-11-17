@@ -466,7 +466,9 @@ class _AppShellState extends State<AppShell> {
           Text('여기:it', style: type(22, weight: FontWeight.w700, spacing: -1)),
           const SizedBox(height: 13),
           Text(
-            widget.state.isPrototype
+            widget.route.path == '/nearby'
+                ? '지도 소식은 각 원문과 자료 갱신 시각을 확인해주세요.'
+                : widget.state.isPrototype
                 ? '안성시 지역정보 서비스 시제품 · 화면의 소식은 모두 예시입니다.'
                 : '공개 자료의 제공 범위·확인 시각과 원문을 함께 확인해주세요.',
             style: type(11, color: Palette.sub),

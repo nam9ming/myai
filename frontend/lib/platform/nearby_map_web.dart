@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:js_interop';
 
-import 'package:flutter/widgets.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:web/web.dart' as web;
 
 @JS('myaiMountMap')
@@ -95,8 +95,8 @@ class _NearbyMapState extends State<_NearbyMap> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text('지도를 불러오지 못했어요.'),
-              GestureDetector(
-                onTap: () => setState(() => failed = false),
+              TextButton(
+                onPressed: () => setState(() => failed = false),
                 child: const Padding(
                   padding: EdgeInsets.all(16),
                   child: Text('지도 다시 시도'),
