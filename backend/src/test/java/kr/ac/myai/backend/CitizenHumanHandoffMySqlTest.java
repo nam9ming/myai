@@ -294,6 +294,60 @@ class CitizenHumanHandoffMySqlTest {
         assertThat(CitizenNoticeFixtures.rows(jdbc)).isEqualTo(before);
     }
 
+    @Test void replacedCitizenCitationKeepsFullHistoryThroughNextManualRevisionAndReport() throws Exception {
+        var fixture = fixture(false, output -> { var item = output.path("items").get(0).deepCopy(); output.putArray("items").add(item); });
+        var first = importHandoff(fixture); String firstId = first.revisionIds().getFirst();
+        String originalJson = jdbc.queryForObject("SELECT payload_json FROM event_revisions WHERE revision_id=?", String.class, firstId);
+        var original = (ObjectNode) mapper.readTree(originalJson); assertThat(original.path("evidence")).hasSize(1);
+        String oldId = original.path("evidence").get(0).path("evidence_id").asText(), newId = UUID.randomUUID().toString();
+        String secondId = UUID.randomUUID().toString(), thirdId = UUID.randomUUID().toString();
+        for (String id : List.of(secondId, thirdId)) assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM event_revisions WHERE revision_id=?", Long.class, id)).isZero();
+        ObjectNode replacement = original.deepCopy(); var revision = (ObjectNode) replacement.path("revision");
+        revision.put("revision_id", secondId).put("revision_no", 2);
+        ((ObjectNode) replacement.path("evidence").get(0)).put("evidence_id", newId);
+        var references = new ArrayList<JsonNode>(); replacement.path("event").path("document_links").forEach(references::add);
+        for (String field : ReviewedImportReader.CITIZEN_FIELDS.subList(2, 14)) references.add(revision.path(field));
+        for (var reference : references) {
+            var ids = ((ObjectNode) reference).withArray("evidence_ids");
+            for (int index = 0; index < ids.size(); index++) if (ids.get(index).asText().equals(oldId)) ids.set(index, mapper.getNodeFactory().textNode(newId));
+        }
+        HumanReviewChanges.record(original, replacement, "synthetic-editor", Instant.now(), "합성 동일 인용의 근거 ID 교체", ReviewedImportReader.CITIZEN_FIELDS);
+        importer.importBatch(reader.read(requestBytes(envelope(fixture, replacement)), root), "synthetic-editor");
+        var second = (ObjectNode) payload(secondId);
+        assertThat(second.path("evidence").findValuesAsText("evidence_id")).containsExactly(newId);
+        assertThat(second.path("evidence").get(0).path("quote")).isEqualTo(original.path("evidence").get(0).path("quote"));
+        JsonNode evidenceChange = null;
+        for (var change : second.path("revision").path("human_overrides")) if (change.path("field_path").asText().equals("evidence")) evidenceChange = change;
+        assertThat(evidenceChange).isNotNull();
+        assertThat(evidenceChange.path("before")).isEqualTo(original.path("evidence"));
+        assertThat(evidenceChange.path("after")).isEqualTo(second.path("evidence"));
+        ObjectNode next = second.deepCopy(); ((ObjectNode) next.path("revision")).put("revision_id", thirdId).put("revision_no", 3).put("title", "합성 후속 제목 수정");
+        HumanReviewChanges.record(second, next, "synthetic-next-editor", Instant.now(), "합성 인용 교체 뒤 후속 수정", ReviewedImportReader.CITIZEN_FIELDS);
+        importer.importBatch(reader.read(requestBytes(envelope(fixture, next)), root), "synthetic-next-editor");
+        var current = payload(thirdId); var history = current.path("revision").path("human_overrides");
+        var previousHistory = second.path("revision").path("human_overrides"); assertThat(history).hasSize(previousHistory.size() + 1);
+        for (int index = 0; index < previousHistory.size(); index++) assertThat(history.get(index)).isEqualTo(previousHistory.get(index));
+        assertThat(current.path("evidence").findValuesAsText("evidence_id")).containsExactly(newId);
+        assertThat(jdbc.queryForObject("SELECT payload_json FROM event_revisions WHERE revision_id=?", String.class, firstId)).isEqualTo(originalJson);
+        var beforeRows = CitizenNoticeFixtures.rows(jdbc); var beforeFiles = CitizenExtractionArchiveTest.tree(root);
+        var report = reports.build(UUID.fromString(version(fixture)), root, null); var reported = report.path("events").get(0).path("revisions");
+        assertThat(reported).hasSize(3);
+        for (var saved : reported) {
+            assertThat(saved.path("validation").path("status").asText()).isEqualTo("valid");
+            assertThat(saved.path("handoff_validation").path("status").asText()).isEqualTo("valid");
+        }
+        assertThat(reported.get(0).path("payload")).isEqualTo(original);
+        assertThat(reported.get(2).path("is_current").asBoolean()).isTrue();
+        assertThat(reported.get(2).path("payload").path("revision").path("human_overrides")).isEqualTo(history);
+        JsonNode reportedEvidenceChange = null;
+        for (var change : reported.get(2).path("payload").path("revision").path("human_overrides"))
+            if (change.path("field_path").asText().equals("evidence")) reportedEvidenceChange = change;
+        assertThat(reportedEvidenceChange).isEqualTo(evidenceChange);
+        assertThat(reportedEvidenceChange.path("before").get(0).path("quote")).isEqualTo(original.path("evidence").get(0).path("quote"));
+        assertThat(CitizenNoticeFixtures.rows(jdbc)).isEqualTo(beforeRows);
+        assertThat(CitizenExtractionArchiveTest.tree(root)).isEqualTo(beforeFiles);
+    }
+
     @Test void lateAuditConstraintFailureRollsBackEntireCitizenHandoff() throws Exception {
         var fixture = fixture(false, output -> { });
         String constraint = "citizen_handoff_" + UUID.randomUUID().toString().replace("-", "");
