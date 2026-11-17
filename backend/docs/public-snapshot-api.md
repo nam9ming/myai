@@ -2,6 +2,8 @@
 
 기본 `public` 프로필은 로컬 명령으로 공개한 불변 snapshot을 조회한다. DB 없이 화면을 연결하는 `fixture` 프로필과 구분한다. 실제 원문 검토·공개는 [승인·공개 안내](review-publication.md)를 따른다.
 
+[기존 구현·계약] 이 문서는3유형(`construction/event/traffic`)·지점·영업시간 기반 `api-v1`의 현재 실행 규격이다. 여기:it의 시민5분야·목록/검색/새 필터·신청기간/진행일정·조건/비용·미확인이력은 [계약 보완·합의](../../contracts/README.md#yeogi-it-contract-agreement) 후 변경하며 이 문서의 기존 경로·필드를 새 기능 완료로 해석하지 않는다.
+
 ## 실행·연결
 
 DB 환경변수를 설정하고 `./backend/gradlew -p backend bootRun`으로 실행한다. `local-import` → `local-publication`의 approve → publish를 마친 뒤 다음 요청을 사용한다.

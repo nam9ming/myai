@@ -1,6 +1,6 @@
 # Spring → Python 계산 CLI 계약 v1
 
-담당: 김윤기(계산 함수·CLI), 강명묵(Java adapter), 남규민(통합 확인). 공개 API I01~I03의 필드·응답은 변경하지 않습니다. Python `rules-v1` 계산 CLI와 Java adapter를 구현했습니다. 실제 실행·시험은 [processing 안내](../processing/README.md), 서버 설정은 [백엔드 안내](../backend/README.md#python-계산-연결)를 따릅니다.
+[기존 구현·계약] Python `rules-v1` 계산 CLI와 Java adapter, 공개 API I01~I03의 기존 입출력 규격입니다. 새5분야·시민용 검색/필터의 최종 계약은 아닙니다. 실제 실행·시험은 [processing 안내](../processing/README.md), 서버 설정은 [백엔드 안내](../backend/README.md#python-계산-연결)를 따릅니다. 현행 김윤기의 백엔드 재사용/변경·상헌 연동·명묵 반복 검증과 새 계약 합의는 [현행 WBS](../docs/spec/10_인원별WBS.md)·[시민용 계약 합의](README.md#yeogi-it-contract-agreement)를 우선합니다.
 
 ## 경계
 

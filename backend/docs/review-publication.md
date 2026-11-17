@@ -90,7 +90,7 @@ canonical JSON은 UTF-8 원문과 별도 SHA-256으로 저장한다. checksum은
 
 rollback은 같은 채널에서 실제 공개했던 snapshot인지, canonical checksum과 저장 문맥이 맞는지 확인한다. 원문 파일이나 계산기를 호출하지 않고 공개 포인터와 감사 기록만 바꾼다. DB의 최신 지점 행을 되돌리는 작업이 아니며 복구 시 기준은 snapshot 안에 고정된 지점·사건이다. DB 스키마 복구와도 구분한다.
 
-공개 API의 config·상세는 DB snapshot을 조회한다. matches는 문맥·지점 검증 후 [설정된 Python](../README.md#python-계산-연결)을 호출한다. 관리 UI·운영 서버 배포·실자료 검수는 미완료다. DB 공개 포인터 전환이나 JSON 파일 저장을 운영 서비스 배포 완료로 표현하지 않는다.
+공개 API의 config·상세는 DB snapshot을 조회한다. matches는 문맥·지점 검증 후 [설정된 Python](../README.md#python-계산-연결)을 호출한다. 운영 서버 배포·실자료 검수는 미완료다. S10은 동등한 [로컬 HTML 보고서](review-report.md)·기존 명령 방식으로 인수할 수 있으며 별도 관리 UI는 추가 합의 대상이다. DB 공개 포인터 전환이나 JSON 파일 저장을 운영 서비스 배포 완료로 표현하지 않는다.
 
 나중의 원문 확인·사용권 이력은 이미 공개한 canonical snapshot·export·rollback 바이트에 덧씌우지 않는다. 새 restricted가 과거 공개본을 자동 철회하지 않는다.
 
