@@ -672,7 +672,7 @@ class CitizenHumanHandoffMySqlTest {
         var document = fixture.source().path("documents").get(0); String hash = document.path("text_sha256").asText();
         request.put("review_id", UUID.randomUUID().toString()).put("document_version_id", version(fixture)).put("expected_review_no", expected)
                 .put("expected_text_sha256", hash).put("use_review", rights);
-        if (check) ((ObjectNode) request.path("check")).put("checked_at", Instant.now().toString()).put("text_sha256", hash);
+        if (check) ((ObjectNode) request.path("check")).put("checked_at", Instant.now().truncatedTo(ChronoUnit.MICROS).toString()).put("text_sha256", hash);
         else request.putNull("check");
         Path file = Files.writeString(root.resolve(UUID.randomUUID() + "-rights.json"), request.toString());
         sources.review(file, check ? root : null, "synthetic-source-reviewer");

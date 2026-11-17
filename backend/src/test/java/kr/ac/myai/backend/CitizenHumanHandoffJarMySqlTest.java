@@ -237,7 +237,7 @@ class CitizenHumanHandoffJarMySqlTest {
     private ProcessBuilder command(RecoveryDatabase database, String username, String password, List<String> options) {
         assertThat(URI.create(database.url().substring(5)).getRawPath()).isEqualTo("/myai_recovery");
         var command = new ArrayList<String>(List.of(Path.of(System.getProperty("java.home"), "bin", "java").toString(), "-Xmx512m", "-jar",
-                Path.of("build/libs/myai-backend-0.1.0.jar").toAbsolutePath().toString(), "--spring.main.banner-mode=off"));
+                Path.of("build/libs/myai-backend-0.1.0.jar").toAbsolutePath().toString(), "--spring.main.banner-mode=off", "--logging.level.root=OFF"));
         command.addAll(options);
         var builder = new ProcessBuilder(command).directory(PythonProbe.REPO.toFile());
         var environment = builder.environment(); environment.clear();
