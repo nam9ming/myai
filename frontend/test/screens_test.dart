@@ -90,7 +90,7 @@ void main() {
     expect(find.text('홈'), findsWidgets);
     expect(find.text('내 주변'), findsNWidgets(2));
     expect(find.text('안성천 주말 작은 음악회'), findsOneWidget);
-    await tester.tap(find.bySemanticsLabel('안성천 주말 작은 음악회, 상세 보기').first);
+    await tapText(tester, '안성천 주말 작은 음악회');
     await tester.pumpAndSettle();
     expect(find.text('소식 안내'), findsOneWidget);
     await tapText(tester, '지도로 돌아가기');
