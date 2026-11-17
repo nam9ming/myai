@@ -152,7 +152,9 @@ public class ExtractionArchiveReader {
                     && source.path("document_version_id").equals(receipt.path("document_version_id"))
                     && source.path("data_kind").equals(receipt.path("data_kind"))
                     && info.path("execution_mode").equals(receipt.path("execution_mode"))
-                    && info.path("schema_version").asText().equals("extract-schema-v1"));
+                    && Set.of("extract-schema-v1", "extract-citizen-v1").contains(info.path("schema_version").asText()));
+            if (info.path("schema_version").asText().equals("extract-citizen-v1")) require(
+                    info.path("execution_mode").asText().equals("manual_import") && receipt.path("format_version").asText().equals("extraction-archive-v1"));
             require(info.path("attempts").isIntegralNumber() && info.path("attempts").asInt() == receipt.path("attempts").size());
             sealed(directory);
             for (String name : names) sealed(directory.resolve(name));

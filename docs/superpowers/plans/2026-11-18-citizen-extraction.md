@@ -61,8 +61,8 @@
 
 **Interfaces:** Task1의 새 수동 metadata/schema와 동일 receipt·봉인 파일을 소비한다. Java worker는 이 파일/시험만 소유한다. 공통 Python/계약 문서·다른 worker 변경을 되돌리지 않는다. 시험 실행은 주 작업자의 Gradle 한 세션으로 한다.
 
-- [ ] **Step 1:** 실제 시민 manual 봉인본을 readSealed/freeze로 읽고 D05 등록·재실행·보고서까지 검사하는 시험을 먼저 작성한다. Task1이 CLI 통과한 뒤 현행 Java schema gate가 EXTRACTION_ARCHIVE_INVALID를 반환하는 행동 RED를 관찰한다. fake Python packet만으로 연결 완료를 주장하지 않는다.
-- [ ] **Step 2:** allowlist2개·시민 manual/archive-v1 제약만 최소 변경한다. metadata/input/document/hash/receipt/0400/0500·정확 파일 집합을 유지한다. unsupported 시민 API/v2·출력/metadata 불일치·원본 변조를 거부한다.
+- [x] **Step 1:** 실제 시민 manual 봉인본을 readSealed/freeze로 읽고 D05 등록·재실행·보고서까지 검사하는 시험을 먼저 작성한다. Task1이 CLI 통과한 뒤 현행 Java schema gate가 EXTRACTION_ARCHIVE_INVALID를 반환하는 행동 RED를 관찰한다. fake Python packet만으로 연결 완료를 주장하지 않는다.
+- [x] **Step 2:** allowlist2개·시민 manual/archive-v1 제약만 최소 변경한다. metadata/input/document/hash/receipt/0400/0500·정확 파일 집합을 유지한다. unsupported 시민 API/v2·출력/metadata 불일치·원본 변조를 거부한다.
 - [ ] **Step 3:** 실제 MySQL D03→성공/실패 D05→정확 재실행→S10 raw/metadata와 기존 HTTP upload/finalize를 검증한다. HTTP metadata64KiB/prompt20MiB/output5MiB, CLI JSON8MiB·큰 실패 보존은 그대로다. D06·승인/공개0·old rows/원문 불변과 Bearer/Host/Origin 거부를 확인한다. Java human-review 연결/G5는 아직 완료 처리하지 않는다.
 - [ ] **Step 4:** Run parent-only `./gradlew test --tests '*Extraction*' --tests '*ReviewReport*' bootJar`에 필요한 전용 DB 환경을 제공한다. Expected: 환경 가능한 시험 성공; Docker daemon 부재는 이름·원인을 기록하고 원격 MySQL8.4 exact head 전체 검사로 보완한다. 커밋 `feat: import citizen extraction archives`.
 

@@ -88,6 +88,46 @@ class ExtractionUploadJarMySqlTest {
     }
 
     @Test
+    void citizenManualUploadsKeepSuccessFailureMetadataLabelsAndExistingStreamBoundaries() throws Exception {
+        var roots = roots(); var jar = start(roots, "local-api");
+        try (jar) {
+            var success = fixture(true, bytes("not-json"), new byte[] {(byte) 0xff}, null);
+            registerSource(jar, success); stage(jar, success);
+            var protectedRows = database(); protectedRows.remove("extraction_runs");
+            finalResult(finalizeUpload(jar, success.run(), success.control()), success, success.control(), "validated", false);
+            originals(roots, success, "validated");
+            var after = database(); after.remove("extraction_runs"); assertThat(after).isEqualTo(protectedRows);
+            assertThat(database.jdbc().queryForObject("SELECT prompt_version FROM extraction_runs WHERE run_id=?", String.class, success.run()))
+                    .isEqualTo(CitizenExtractionArchiveTest.PROMPT_LABEL);
+            assertThat(database.jdbc().queryForObject("SELECT schema_version FROM extraction_runs WHERE run_id=?", String.class, success.run())).isEqualTo("extract-citizen-v1");
+
+            var failed = fixture(true, padded(bytes(PRIVATE), 5 * MIB));
+            failed = new Fixture(failed.run(), failed.control(), padded(failed.metadata(), CONTROL), failed.input(),
+                    List.of(padded(bytes(PRIVATE + " full prompt"), 20 * MIB)), failed.outputs());
+            registerSource(jar, failed); stage(jar, failed);
+            var stagedRows = database(); var stagedFiles = files(roots);
+            var tooLarge = new Fixture(failed.run(), failed.control(), padded(failed.metadata(), CONTROL + 1), failed.input(), failed.prompts(), failed.outputs());
+            error(initialize(jar, tooLarge), 413, null);
+            error(slot(jar, failed.run(), 1, "output", new byte[5 * MIB + 1]), 413, null);
+            error(slot(jar, failed.run(), 1, "prompt", new byte[20 * MIB + 1]), 413, null);
+            error(jar.send(multipartRequest(jar, BASE, false).POST(chunked(bytes("invalid multipart")))), 401, "LOCAL_API_UNAUTHORIZED");
+            error(jar.send(multipartRequest(jar, BASE, true).setHeader("Origin", "http://localhost:" + jar.port)
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(new byte[0]))), 403, "LOCAL_API_FORBIDDEN");
+            error(jar.send(multipartRequest(jar, BASE, true).uri(URI.create("http://localhost:" + jar.port + BASE))
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(new byte[0]))), 403, "LOCAL_API_FORBIDDEN");
+            assertThat(database()).isEqualTo(stagedRows); assertThat(files(roots)).isEqualTo(stagedFiles);
+            finalResult(finalizeUpload(jar, failed.run(), failed.control()), failed, failed.control(), "failed", false);
+            originals(roots, failed, "failed");
+            var beforeReplay = database(); var beforeFiles = files(roots);
+            for (var fixture : List.of(success, failed)) finalResult(finalizeUpload(jar, fixture.run(), fixture.control()), fixture, fixture.control(),
+                    fixture == success ? "validated" : "failed", true);
+            assertThat(database()).isEqualTo(beforeReplay); assertThat(files(roots)).isEqualTo(beforeFiles);
+            noEventsOrPublication(); keyless(roots); jar.awaitLogs();
+        }
+        safeLogs(jar);
+    }
+
+    @Test
     void failedEmptyInvalidUtf8AndExactFiveMibOutputReturn200AndKeepFullTwentyMibPrompt() throws Exception {
         var roots = roots(); var jar = start(roots, "local-api");
         try (jar) {
@@ -412,15 +452,19 @@ class ExtractionUploadJarMySqlTest {
     }
 
     private Fixture fixture(byte[]... outputs) throws Exception {
+        return fixture(false, outputs);
+    }
+    private Fixture fixture(boolean citizen, byte[]... outputs) throws Exception {
         String run = UUID.randomUUID().toString(), version = UUID.randomUUID().toString();
-        var input = (ObjectNode) JSON.readTree(PythonProbe.REPO.resolve("contracts/examples/ai-input.json").toFile()); input.put("document_version_id", version);
+        var input = (ObjectNode) JSON.readTree(PythonProbe.REPO.resolve("contracts/examples/" + (citizen ? "citizen-ai-input" : "ai-input") + ".json").toFile()); input.put("document_version_id", version);
         var metadata = (ObjectNode) JSON.readTree(PythonProbe.REPO.resolve("processing/examples/extraction-metadata.json").toFile());
         metadata.put("run_id", run).put("document_version_id", version).put("attempts", outputs.length);
+        if (citizen) metadata.put("schema_version", "extract-citizen-v1").put("prompt_version", CitizenExtractionArchiveTest.PROMPT_LABEL);
         var prompts = new ArrayList<byte[]>(); var originalOutputs = new ArrayList<byte[]>();
         for (int index = 0; index < outputs.length; index++) {
             prompts.add(bytes(PRIVATE + " prompt " + (index + 1) + " 😀\r\n"));
             if (outputs[index] == null) {
-                var output = (ObjectNode) JSON.readTree(PythonProbe.REPO.resolve("contracts/examples/ai-extraction.json").toFile());
+                var output = (ObjectNode) JSON.readTree(PythonProbe.REPO.resolve("contracts/examples/" + (citizen ? "citizen-ai-extraction" : "ai-extraction") + ".json").toFile());
                 output.put("document_version_id", version); originalOutputs.add(bytes(output.toString()));
             } else originalOutputs.add(outputs[index]);
         }
