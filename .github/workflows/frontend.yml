@@ -42,4 +42,7 @@ jobs:
           python3 tool/verify_sources.py
           flutter test
       - name: 예시 모드 웹 빌드
-        run: flutter build web --dart-define=DATA_MODE=prototype
+        run: |
+          flutter build web --dart-define=DATA_MODE=prototype
+          python3 tool/compress_web_assets.py build/web
+          python3 tool/check_web_build.py build/web

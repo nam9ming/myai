@@ -74,6 +74,7 @@ dart format --output=none --set-exit-if-changed lib test tool
 flutter analyze
 flutter test
 flutter build web --dart-define=DATA_MODE=prototype
+python tool/compress_web_assets.py build/web
 ```
 
 기본 단위·위젯 검증과 별도로 Spring fixture의 실제 HTTP를 확인할 수 있습니다. JDK21을 준비하고 첫 터미널에서 저장소 루트 기준으로 실행합니다.
@@ -107,3 +108,11 @@ flutter test test/screens_test.dart --dart-define=CAPTURE_QA=true --plain-name "
 ## 초기 로딩과 오류 안내
 
 CanvasKit와 앱을 내려받는 동안 정적 로딩 화면이 표시됩니다. 엔진 준비와 앱 실행 단계를 구분하며 실제 `flutter-first-frame` 이벤트에서 로딩 화면을 제거합니다. 12초 이상 걸리면 다시 시도 버튼과 카카오톡 내부 브라우저에서 Safari로 여는 안내를 표시합니다. 로더·스크립트·비동기 초기화 오류는 오류 안내로 전환합니다. 재시도는 페이지를 새로 읽습니다. 서버의 CSP·캐시 설정을 변경하지 않으며 실제 iPhone 카카오톡 앱 검수와 테스트 브라우저 결과를 구분합니다.
+
+### 로딩 화면과 압축 전송
+
+첫 화면이 그려지기 전에는 시스템 글꼴로 로고와 주황색 비정률 로딩 바를 표시합니다. 추가 이미지나 글꼴을 받지 않으며 모션 감소 설정에서는 움직임을 생략합니다. 첫 프레임에서 200ms 페이드로 전환하고, 지연·실패 시 기존 재시도 안내를 유지합니다. 실제 완료 전 퍼센트를 표시하지 않습니다.
+
+`python tool/compress_web_assets.py build/web`는 JavaScript와 CanvasKit의 gzip 사본을 생성합니다. 현대 브라우저의 표준 `DecompressionStream`으로 압축을 풀며, 고정 Flutter 3.50.0의 `window.flutterCanvasKit` 초기화 훅과 `buildConfig.builds[].mainJsPath`를 사용합니다. 원본 SDK 파일은 수정하지 않습니다. 해당 훅을 사용하는 최적화는 SDK 버전을 올릴 때 브라우저 검사를 다시 해야 합니다. 미지원 브라우저·압축 파일 실패 시 원본 경로로 복귀하고, 디버그 실행은 원본 로더를 사용합니다. 압축 JavaScript는 같은 문서에서 만든 Blob URL로 실행하며 원래 문서의 자산 경로와 CSP를 유지합니다. CSP에서 Blob 스크립트를 차단하는 환경에는 주소의 해시 앞에 `?startup=raw`를 붙여 원본 로딩 모드를 사용합니다. 오류 화면에서 재시도할 때도 이 모드로 복귀합니다. CEHUB의 공용 서버 설정은 변경하지 않습니다.
+
+본문 글꼴은 정적 preload로 먼저 요청해 엔진과 병렬로 받습니다. 브라우저 검사에서 실제 요청이 한 번인지 확인합니다.
