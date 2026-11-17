@@ -1,6 +1,27 @@
-# 연결 규격 초안 v0.1
+# 여기:it 연결 계약과 api-v1 기존 규격
 
-**v1.1 구현 주체:** Flutter Web은 API 소비자, Spring Boot는 공개 API·MySQL 관리, Python은 AI·시간/거리 계산입니다. 기존 공개 JSON 계약은 유지합니다. [계산 CLI 연결 계약](calculation-bridge.md)과 [DB 설계](../docs/spec/09_DB설계와트랜잭션.md)를 함께 적용합니다.
+**구현 경계:** Flutter Web은 API 소비자, Spring Boot는 공개 API·MySQL 관리, Python은 AI·시간/거리 계산입니다. 기존 공개 JSON 계약은 유지합니다. [계산 CLI 연결 계약](calculation-bridge.md)과 [DB 설계](../docs/spec/09_DB설계와트랜잭션.md)를 함께 적용합니다.
+
+[현행 업무] 김윤기가 기존 백엔드·계약 재사용 범위를 조사하고 이상헌과 화면별 필드/API/오류를 합의합니다. 명묵은 반복 시나리오를 검증하고 남규민은 우선 분야·수집처·개인화·변경추적·일정을 합의합니다. 새 경로·필드·enum은 아래 보완 대상이며 이 문서 변경으로 구현 완료되지 않습니다.
+
+<a id="yeogi-it-contract-agreement"></a>
+
+## 여기:it 계약 보완·합의 순서
+
+[확정 요구] 대상은 안성시민 전체이며 교육·배움 / 지원·혜택 / 행사·문화 / 공사·교통 / 생활정보5분야와 기존 소상공인 기능을 다룹니다. 기존 `construction/event/traffic`을5분야 enum으로 해석하거나5지점·500m·14일을 전체 시민 조회 제한으로 확대하지 않습니다.
+
+| 보완 대상 | 합의할 의미·경계 |
+| --- | --- |
+| 목록·상세·검색 | 화면별 필수/선택 필드·null·오류, 지역·분야·모집 상태·비용·기간 필터와 정렬, 목록/상세의 동일 자료·버전 연결 |
+| 일정·모집 상태 | 신청 시작/마감과 실제 진행일정을 분리, 미상·상시/접수 여부·기간 경계 및 시간대 정의. 신청 마감이 진행 종료를 뜻하지 않음 |
+| 조건·비용·신청 | 대상·자격/신청조건·신청방법·준비사항·비용·지역·원문을 구분, 비용 미기재를 무료로 변환하거나 연령·관심만으로 자격 확정 금지 |
+| 변경추적·불확실성 | 확보된 변경 전후·근거·확인시점과 미확인 이력을 구분, 이전 자료 부재를 변경 없음으로 확정하지 않음 |
+| 개인정보·개인화 | 관심저장·개인설정은 초기 프런트 브라우저 저장, 저장 범위·초기화 합의. 새 계정·인증·동기화·알림 발송은 자동 필수 계약이 아님 |
+
+1. [기존 구현·계약] 아래3 API·3유형·`point_id`·`weekly_hours`와 계산/오류/공개 snapshot 의미를 기준으로 재사용·부족 필드를 대조합니다.
+2. [합의 필요] 이상헌·김윤기가 화면별 필드/API/오류·검색/필터/정렬을, 남규민과 우선 분야·수집처·개인화·변경추적을 합의합니다. 차별화 후보3개는 모두 수용하는 원칙이나 정확한 명칭·내용은 미제공입니다. 정보분석·개인화·이해지원·신뢰성4항목은 구체화 제안이며3후보를 대체하지 않습니다.
+3. 합의된 필드·상태·API에 대해 기존 소비자·Python CLI·DB·fixture·평가 분모의 영향을 확인하고 `api-v1` 호환 추가 또는 새 버전/전환 방법을 정합니다. 기존 JSON·enum을 문서만으로 바꾸지 않습니다.
+4. 계약·예제·호출자·검증을 함께 변경한 뒤 백엔드 구현 → 프런트 연동 → 명묵의 반복 시나리오 검증 → 원인 수정·인계 순서로 완료를 확인합니다. 실제 실행·자료·품질평가와 합성 연결 시험을 구분합니다.
 
 `public-events.json`과 기존 fixture 응답 예제는 특정 조건에서 계산된 가상 표시용 자료입니다. 좌표·검토 상태·근거 등 전체 D06 입력을 갖춘 원본 DB seed 또는 계산기 입력으로 간주하지 않습니다. 실제 계산 입력은 검토된 D06과 D03/D07을 조립합니다.
 
@@ -9,6 +30,8 @@
 **examples는 모두 합성 자료입니다.** 예제의 거리·지점·날짜·근거·확인값은 가상이고 example.org 링크는 실제 공지가 아닙니다. 이 응답은 화면 연결용이며 실제 지명/원문 검토·AI 실행·거리 계산을 완료한 데이터가 아닙니다.
 
 ## 세 API
+
+[기존 구현·계약] 이 절부터의 API·요청 필드·오류·예제는 현재 유효한 `api-v1`의3유형/지점/영업시간 규격입니다. 새5분야의 목록·검색·필터·신청/진행·비용/조건 계약은 위 합의 후 보완하며 아직 구현된 경로·enum으로 제시하지 않습니다.
 
 장문 AI 입력의 분할·원문 범위·실제 요청/문서 cycle·v2 보관·사람 검토 경계는 [장문 분할 계약](chunked-extraction.md)을 따릅니다. 공개 API·D03 입력·extract-schema-v1은 유지합니다.
 
@@ -20,7 +43,7 @@
 | I02 | POST `/api/v1/matches` | [matches-request.json](examples/matches-request.json) | [matches-response.json](examples/matches-response.json) |
 | I03 | GET `/api/v1/events/{event_id}?snapshot_id=…` | 공개 사건ID·snapshot | 실제 DB 형식: [event-facts-response.json](examples/event-facts-response.json), 기존 fixture: [event-response.json](examples/event-response.json) |
 
-JSON 응답의 공통 껍데기는 `schema_version / snapshot_id / generated_at / data`입니다. 실제 구현 시 `schema_version="api-v1"`로 시작하고 호환성에 영향을 주는 변경을 함께 협의합니다. 예제 response의 `data_kind="synthetic"`는 data 안에 있습니다. 실제 공개자료와 가상자료를 구분하는 표시가 UI까지 이어져야 합니다.
+JSON 응답의 공통 껍데기는 `schema_version / snapshot_id / generated_at / data`입니다. 현재 구현은 `schema_version="api-v1"`이며 호환성에 영향을 주는 변경을 함께 협의합니다. 예제 response의 `data_kind="synthetic"`는 data 안에 있습니다. 실제 공개자료와 가상자료를 구분하는 표시가 UI까지 이어져야 합니다.
 
 ### 조건 요청
 
