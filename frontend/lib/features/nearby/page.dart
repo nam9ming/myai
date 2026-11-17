@@ -234,7 +234,9 @@ class _NearbyPageState extends State<NearbyPage> {
                           child: Text(
                             selected == null
                                 ? '지도 안 소식 ${shown.length}건'
-                                : categories[selected.category]!,
+                                : selected.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                             style: type(16, weight: FontWeight.w600),
                           ),
                         ),
