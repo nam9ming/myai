@@ -69,7 +69,6 @@ function nearbyQueryRect(width, height, fullHeight) {
       .myai-pin:hover .myai-pin-label,.myai-pin:focus-visible .myai-pin-label,
       .myai-pin[aria-pressed=true] .myai-pin-label {display:block}
       .myai-pin:focus-visible {outline:3px solid #ee663b;outline-offset:3px}
-      .myai-pin[aria-pressed=true] {background:#fff1e9;border:2px solid #ee663b}
       .myai-pin[aria-pressed=true] img {width:52px;height:52px;animation:myai-greet .65s ease-out}
       [data-myai-map][data-overview=true] .myai-pin img {width:32px;height:32px}
       [data-myai-map][data-overview=true] .myai-pin[aria-pressed=true] img {width:44px;height:44px}
