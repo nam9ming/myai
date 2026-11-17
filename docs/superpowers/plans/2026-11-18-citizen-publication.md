@@ -56,8 +56,8 @@
 
 **Interfaces:** 위 DTO·insertSnapshot overload·citizenPublished. 기존 Decision·Snapshot·Published·legacy parser 호출 형식은 유지한다.
 
-- [ ] 새 명령과 실제 시민 발행의 실패 시험을 먼저 작성·실행한다. approve/reject·가짜 points/rules·미지원 action을 새 publication schema로 받지 않는다.
-- [ ] DTO/reader·schema 인자 저장·계열별 공개 조회를 연결한다. V5와 V4→V5 이전/원본 보존 시험을 추가한다.
+- [x] 새 명령과 실제 시민 발행의 실패 시험을 먼저 작성·실행한다. approve/reject·가짜 points/rules·미지원 action을 새 publication schema로 받지 않는다.
+- [x] DTO/reader·schema 인자 저장·계열별 공개 조회를 연결한다. V5와 V4→V5 이전/원본 보존 시험을 추가한다.
 - [ ] 같은 DB에서 old rule/dictionary non-null 제약·시민 null·모든 기존 canonical/hash/행과 V1~V4 checksum 보존을 확인한다.
 
 ### Task 2: 공개 투영·무결성
@@ -66,9 +66,9 @@
 
 **Interfaces:** `snapshot(...)`는 기존8인자 Snapshot을 반환하며 versions=null이다. `verifySnapshot(...)`은 DB schema/createdAt·canonical/checksum·current/null case·고정 채널을 결합하고 공개 폐쇄 형식을 검사한다.
 
-- [ ] 5분야·문자열 배열·미상·신청/진행 분리·다대다 출처·정확 공개 필드의 실패 시험을 작성한다.
-- [ ] 기존 select/parse/payload·원문 검증 결과를 재사용해 새 producer/validator만 구현한다. 기존 producer/old payload를 재직렬화하지 않는다.
-- [ ] 내부 필드 주입·범위를 넘는 count·근거/source 불일치·누락/중복·잘못된 schema/channel/hash/DB 시각의 거부와8MiB 한도를 검증한다.
+- [x] 5분야·문자열 배열·미상·신청/진행 분리·다대다 출처·정확 공개 필드의 실패 시험을 작성한다.
+- [x] 기존 select/parse/payload·원문 검증 결과를 재사용해 새 producer/validator만 구현한다. 기존 producer/old payload를 재직렬화하지 않는다.
+- [x] 내부 필드 주입·범위를 넘는 count·근거/source 불일치·누락/중복·잘못된 schema/channel/hash/DB 시각의 거부와8MiB 한도를 검증한다.
 
 ### Task 3: 미리보기·발행·복구
 
@@ -76,9 +76,9 @@
 
 **Interfaces:** 새 Service는 공통 Result를 사용한다. preview는 새 ID/checksum만 반환하고 DB/파일에 쓰지 않는다. publish는 승인된 현행 시민 revision·동일 data_kind만 선택한다. rollback은 같은 시민 채널에서 실제 공개한 불변 row만 사용하며 원문/계산기를 호출하지 않는다.
 
-- [ ] 기존 공개 head와 무관한 시민 preview/publish/rollback 실패 시험을 먼저 실행한다.
-- [ ] 원문 사용권·파일/hash·근거·현재 revision·AI 참조를 기존 경계로 재검사하고 쓰기 직전 잠금/CAS/감사를 적용한다.
-- [ ] SELECT 전용 preview, 승인/원문 변경, 미승인/legacy 혼입, 빈 공개,0→다음 head, 동시 한 승자·늦은 실패 rollback·과거 bytes 보존을 실제 전용 DB에서 검증한다.
+- [x] 기존 공개 head와 무관한 시민 preview/publish/rollback 실패 시험을 먼저 실행한다.
+- [x] 원문 사용권·파일/hash·근거·현재 revision·AI 참조를 기존 경계로 재검사하고 쓰기 직전 잠금/CAS/감사를 적용한다.
+- [x] SELECT 전용 preview, 승인/원문 변경, 미승인/legacy 혼입, 빈 공개,0→다음 head, 동시 한 승자·늦은 실패 rollback·과거 bytes 보존을 실제 전용 DB에서 검증한다.
 
 ### Task 4: 호출자·export·보고서·인계
 
@@ -86,11 +86,19 @@
 
 **Interfaces:** `/local/publish`와 local-publication CLI에 새 schema를 연결한다. export의 파일명/원문 bytes/읽기 전용·충돌 보존을 유지하며 시민 validator를 선택한다. S10의 공개 이력 검증/명시 preview/기준 head 비교는 시민 채널을 사용한다. 변경 집계는 event_id→revision_id의 실제 차이이며 정규화되지 않은 취소 수는 null로 표시한다.
 
-- [ ] 실제 로컬 dispatch·시민 export exact bytes·보고서 검증/preview의 실패 시험을 먼저 추가한다. 기존 public events/config/matches에서 시민 UUID를 legacy로 읽지 않음을 검증한다.
-- [ ] 호출자·오류·형식 분기를 연결하고 기존 legacy allowlist·기록·변경 집계 의미를 보존한다.
-- [ ] Java/DB/계약·Node 검증·필요한 Python 회귀·실제 JAR/SELECT 계정·이전 데이터 보존을 실행하고 전체 변경 자체 검토를 반복한다.
+- [x] 실제 로컬 dispatch·시민 export exact bytes·보고서 검증/preview의 실패 시험을 먼저 추가한다. 기존 public events/config/matches에서 시민 UUID를 legacy로 읽지 않음을 검증한다.
+- [x] 호출자·오류·형식 분기를 연결하고 기존 legacy allowlist·기록·변경 집계 의미를 보존한다.
+- [x] Java/DB/계약·Node 검증·필요한 Python 회귀·실제 JAR/SELECT 계정·이전 데이터 보존을 실행하고 전체 변경 자체 검토를 반복한다.
 - [ ] 계획별 독립 전체 리뷰1회와 모든 유효 지적 수정을 마친 뒤 영어 Conventional Commit·한국어 develop PR을 제출한다. 정확 head의 실제 CI/자동/도착한 사람 의견이 유효 미해결0이면 반영·동일 tree 확인·본인 branch만 정리한다.
 
 ## 인수·다음 작업
 
 이번 단계는 시민 불변 공개·내보내기·복구의 기반이다. 시민 목록/상세·검색/필터·Python 시민 추출/사람 인계·Flutter 실제 연결·실자료/독립 평가·운영 배포는 후속이며 전체 goal을 완료 처리하지 않는다. PR20 main 검토용 통합 CI는 별도 추적하고 기존 신뢰 경계/부분 자동 검토 기록을 보존한다.
+
+## 구현·로컬 검증 기록
+
+2026-11-18 기준 시민 명령·별도 공개/복구·export/S10·V5와 호출자/예제/문서를 구현했다. 최초66개 중 신규27개 RED 후, 최종 관련124개는 실패/생략0이다. 전체 Java955개/66클래스 중939개 통과·16개 환경 실패·생략0이며, Docker 부재9개와 로컬 root/빈 비밀번호 조건7개를 구분했다. 후자7개를 포함한4클래스30개는 전용 제한 계정으로 재실행해 실패/생략0이다. Docker8.4.13의 최종 전체 실행은 정확 head 원격 CI에서 확인한다.
+
+Python3.13 전체632개/323.859초·Node34개·계약9개·린트440파일·정적 빌드·변경 Markdown 로컬 링크167개를 통과했다. 실제 JAR8단계에서는 SELECT 전용 preview/export/S10의 DB 무쓰기와 원문 삭제 뒤 canonical/hash 복구·head2·기존 head0을 확인했다. 이 로컬 MySQL9.6 보충 증거를8.4 실제 Flyway 이전·Docker 시험 증거로 바꾸지 않는다.
+
+독립 전체 리뷰1회는 tracked21+신규11개와 관련 호출자를 검토해 확정 지적0이었다. 자체 검토도 유효 미해결0이며, 원격 CI·실제 AI 코멘트·도착한 사람 의견과 병합/정리는 PR에 추가 기록한다.
