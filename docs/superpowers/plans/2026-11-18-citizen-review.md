@@ -52,30 +52,45 @@
 
 **Interfaces:** 기존 `read(byte[], Path)`·`read(Path, Path)`·`validateStored(JsonNode, Path)` → 기존 `ReviewedBatch`; 기존 문서/근거/관계 검증 재사용. `CITIZEN_FIELDS`는 title/categories와 12개 사실·source_version_ids/originating_run_ids를 포함하는 감사 목록이다.
 
-- [ ] 합성 `backend/examples/citizen-reviewed-import.json`·`citizen-source.txt`를 고정한다.
-- [ ] 각 분야 입력, 신청/진행 및 미상 비용 보존의 실패 시험을 작성한다. 기존 reader의 schema_version 거부 실패를 확인한다.
-- [ ] strict 새 형식과 payload 식별자를 구현한다. 여분 키·잘못된 근거/출처·중복 분류·허위 승인·AI origin·가짜 area/rules를 거부한다.
-- [ ] `./backend/gradlew -p backend test --tests '*CitizenReviewedImportReaderTest' --tests '*ReviewedImportReaderTest'` → 모두 통과.
+- [x] 합성 `backend/examples/citizen-reviewed-import.json`·`citizen-source.txt`를 고정한다.
+- [x] 각 분야 입력, 신청/진행 및 미상 비용 보존의 실패 시험을 작성한다. 기존 reader의 schema_version 거부 실패를 확인한다.
+- [x] strict 새 형식과 payload 식별자를 구현한다. 여분 키·잘못된 근거/출처·중복 분류·허위 승인·AI origin·가짜 area/rules를 거부한다.
+- [x] `./backend/gradlew -p backend test --tests '*CitizenReviewedImportReaderTest' --tests '*ReviewedImportReaderTest'` → 모두 통과.
 
 ### Task 2: 수정 감사·명시 승인/반려
 
 **Interfaces:** `HumanReviewChanges.record(..., List<String> fields)`와 `validate(..., boolean generatedHandoff, List<String> fields)` 추가, 기존 overload는 기존 목록을 유지한다. 기존 Decision/Result·DB 저장 서비스·row lock·source 검증을 사용한다.
 
-- [ ] 새 승인 명령·family 교체 차단·시민 수정 감사에 대한 단위 실패 시험을 먼저 실행한다.
-- [ ] 새 계열의 import는 모든 실제 사실 변경을 감사 검증한다. 같은 event의 legacy↔citizen 변경을 공통 append에서 차단한다.
-- [ ] 새 명령은 승인/반려만 허용하고 명령 family를 저장 payload에 대조한다. 승인 시 원문 권한·파일 hash·근거·시각·CAS를 재검사한다. 기존 공개 명령은 시민 revision을 받지 않는다.
+- [x] 새 승인 명령·family 교체 차단·시민 수정 감사에 대한 단위 실패 시험을 먼저 실행한다.
+- [x] 새 계열의 import는 모든 실제 사실 변경을 감사 검증한다. 같은 event의 legacy↔citizen 변경을 공통 append에서 차단한다.
+- [x] 새 명령은 승인/반려만 허용하고 명령 family를 저장 payload에 대조한다. 승인 시 원문 권한·파일 hash·근거·시각·CAS를 재검사한다. 기존 공개 명령은 시민 revision을 받지 않는다.
 - [ ] `MYAI_MYSQL_TESTS=true` 전용 MySQL8.4 시험에서 5분야 입력→수정→승인/반려, 중복 재시도, 교차 계열, 잘못된 감사, 동시 수정, 배치 후반 실패의 원자성·기존 bytes 보존을 검증한다.
 
 ### Task 3: 실제 로컬 진입점·검토 보고서·인계
 
 **Interfaces:** 기존 `/local/reviews/import`, `/local/events/{id}/review`·`local-import`/`local-publication` CLI·S10 보고서에 새 schema를 연결한다. URL 사건 일치·원래 요청 bytes 보관·기존 오류 계약을 유지한다.
 
-- [ ] 새 입력의 로컬 연결 실패 시험과 시민 revision의 보고서 검증 실패 시험을 먼저 확인한다.
-- [ ] 로컬 dispatch와 보고서 envelope 선택을 연결한다. 새 승인만으로 공개 snapshot/head를 만들지 않는지 시험한다.
-- [ ] 새 내부 규격·curl/CLI·데이터 초기화·분야별 기대 결과·미완료를 한국어로 문서화한다. 실제 팀원/공식자료 평가 완료를 주장하지 않는다.
-- [ ] Node24 lint/test/build·계약 예제·Python 전체·Java 전체/bootJar·전용 MySQL8.4 시험을 실행한다. 전체 diff 자체 검토와 계획별 독립 전체 리뷰1회 후 모든 유효 지적을 수정·관련 재검증한다.
+- [x] 새 입력의 로컬 연결 실패 시험과 시민 revision의 보고서 검증 실패 시험을 먼저 확인한다.
+- [x] 로컬 dispatch와 보고서 envelope 선택을 연결한다. 새 승인만으로 공개 snapshot/head를 만들지 않는지 시험한다.
+- [x] 새 내부 규격·curl/CLI·데이터 초기화·분야별 기대 결과·미완료를 한국어로 문서화한다. 실제 팀원/공식자료 평가 완료를 주장하지 않는다.
+- [x] Node24 lint/test/build·계약 예제·Python 전체·Java 전체/bootJar·전용 MySQL8.4 시험을 실행한다. 전체 diff 자체 검토와 계획별 독립 전체 리뷰1회 후 모든 유효 지적을 수정·관련 재검증한다.
 - [ ] 영어 Conventional Commit으로 기록하고 `develop` 대상 PR을 제출한다. 정확 head의 CI·실제 AI/사람 의견을 확인해 유효 미해결0일 때만 병합·병합 결과 검증·본인 작업 브랜치 정리. 결과는 PR 본문에 남긴다.
 
 ## 후속 단계
 
 시민용 불변 snapshot·독립 head·preview/publish/rollback·export/report 호환을 다음 계획으로 수행한다. 그 뒤 시민 목록/상세와 확정된 검색·필터·Python 인계·같은 공개본의 5분야 수직 인수로 진행한다. 현재 계획 완료를 전체 백엔드·Flutter·실자료 평가·운영 완료로 표현하지 않는다.
+
+## 로컬 수행·자체/독립 검토 결과
+
+구현 기준은 `02607cfed30c39fbd6549b2f4d9030efe0caa1d0`이다. 기존 구현에서 시민 schema·명령·로컬 연결의 behavioral RED를 확인한 뒤 연결했다. 최초 DB 시험은 프로세스 수명 문제로 연결에 실패했으므로 기능 RED에 포함하지 않았고, 격리 서버를 유지한 재실행에서 새 schema 미지원 실패를 확인했다.
+
+- 관련 Java171개가 실패/skip0으로 통과했다. 이후 제거된 과거 근거의 실제 DB 회귀를 추가했다.
+- 전체 로컬 Java는 869개 중862개 통과·7개 실패·skip0이다. 새 시민 reader51개·DB33개는 모두 통과했다. 로컬 MySQL9.6 보충 검증이며 제품 기준8.4 통과로 주장하지 않는다.
+- 실패는 Docker 데몬이 없는 환경의 `DatabaseRecoveryTest` 복원1건, `RecoveryDatabaseTest`4건, `ExtractionUploadJarMySqlTest`·`SourceUploadJarMySqlTest` 초기화 각1건이다. 테스트를 삭제/skip하지 않았으며 정확 head의 MySQL8.4.13/Docker CI 통과를 병합 조건으로 둔다.
+- Python632개/321.416초, Node34개·lint429파일·합성 계약9JSON·HTML build·변경 문서 상대 링크125개가 통과했다.
+- 실제 JAR의 CLI 입력/동일 bytes 재시도와 HTTP 인증·잘못된 사건 경로·승인/반려·시민 공개 명령 차단을 별도 합성 DB에서 확인했다. revision/감사는 각각3개, snapshot/head는0개다.
+- 전체 diff·호출자 자체 검토 뒤 독립 전체 리뷰1회가24개 파일·명세·관련 호출자를 검토했다. Critical/Important/Minor0이다. 독립 리뷰어는 Gradle/앱을 재실행하지 않았으며 원격CI 통과 전 병합 보류로 판정했다.
+
+독립 검토에서 제외한 시민 공개/조회·Python·Flutter는 명시된 후속 단계로 계속 진행한다. 날짜/금액/모집/자격 자동 판정은 별도 사업 규칙이며 미확정 기록을 유지한다. 기계 검사로 실제 원문의 의미·검토자 신원·이용권한을 인증하지 않는다. 관리자가 DB와 checksum을 직접 재작성하는 공격은 이번 입력 API 범위 밖이며 운영 DB 권한 검토를 대신하지 않는다.
+
+후속 source·CI checkout SHA, 실제 자동/사람 리뷰, MySQL8.4 전체 결과·develop 병합/branch 정리는 해당 PR 본문을 최종 증빙으로 사용한다. 이 문서의 미완료 원격 체크를 근거 없이 통과로 변경하지 않는다.
