@@ -76,11 +76,17 @@ void main() {
     );
     await mount(tester, '/nearby', 390, browser: browser);
     expect(find.byType(DraggableScrollableSheet), findsOneWidget);
-    await tapText(tester, '올려서 보기');
-    expect(
-      tester.getSize(find.byType(DraggableScrollableSheet)).height,
-      greaterThan(700),
+    await tester.drag(
+      find.byKey(const ValueKey('nearby-sheet-handle')),
+      const Offset(0, -300),
     );
+    await tester.pumpAndSettle();
+    final sheet = tester
+        .widget<DraggableScrollableSheet>(find.byType(DraggableScrollableSheet))
+        .controller!;
+    expect(sheet.size, greaterThan(.16));
+    await tapText(tester, '올려서 보기');
+    expect(sheet.size, closeTo(.86, .01));
     expect(find.text('홈'), findsWidgets);
     expect(find.text('내 주변'), findsNWidgets(2));
     expect(find.text('안성천 주말 작은 음악회'), findsOneWidget);
