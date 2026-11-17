@@ -126,6 +126,13 @@ public class ReviewedImportRepository {
         return payload;
     }
 
+    public boolean isHandoffRevision(String revisionId) {
+        Long count = jdbc.queryForObject("SELECT COUNT(*) FROM import_batches WHERE source_kind='human_handoff' AND status='succeeded'"
+                        + " AND schema_version IN (?, ?) AND JSON_CONTAINS(result_refs_json, JSON_QUOTE(?), '$.revision_ids')",
+                Long.class, "human-handoff-import-v1", ReviewedImportReader.CITIZEN_HANDOFF_IMPORT_VERSION, revisionId);
+        return count != null && count == 1;
+    }
+
     private void append(ReviewedBatch.Event event, String kind, String actor, String action, String reason, String evidenceJson, boolean generatedHandoff) {
         var states = jdbc.queryForList("SELECT e.current_review_revision_id, e.lock_version, r.revision_no, r.payload_json, r.payload_sha256 FROM events e LEFT JOIN event_revisions r ON r.revision_id = e.current_review_revision_id WHERE e.event_id = ?", event.id());
         var next = json(event.payloadJson());

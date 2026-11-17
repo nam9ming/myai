@@ -184,6 +184,7 @@ public class ReviewReportService {
                     }));
                     budget.add(proof); proofs.add(proof);
                 }
+                for (var proof : proofs) check(proof.path("validation").path("status").asText().equals("valid"), "human_handoffs");
                 return null;
             }));
             budget.addRemainder(revision, proofs); ((ArrayNode) event.path("revisions")).add(revision);

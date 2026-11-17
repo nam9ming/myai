@@ -127,10 +127,11 @@ public class ExtractionImportService {
         var images = new LinkedHashMap<HandoffReference, VerifiedHandoff>();
         for (var event : events) {
             var payload = json.parseJson(event.payloadJson().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            boolean citizen = ReviewedImportReader.CITIZEN_PAYLOAD_VERSION.equals(payload.path("schema_version").asText());
             var proofs = new LinkedHashMap<String, VerifiedHandoff>();
             for (var reference : HandoffReference.list(payload.path("human_handoffs"))) {
                 var image = images.computeIfAbsent(reference, handoffs::read);
-                requireHandoffFamily(image, ReviewedImportReader.CITIZEN_PAYLOAD_VERSION.equals(payload.path("schema_version").asText()));
+                requireHandoffFamily(image, citizen);
                 String run = image.projection().path("parent").path("run_id").asText();
                 boolean hasEvent = false;
                 for (var projected : image.projection().path("events")) hasEvent |= projected.path("event_id").asText().equals(event.id());
@@ -143,7 +144,10 @@ public class ExtractionImportService {
             }
             for (String id : event.originatingRunIds()) {
                 // 사건별 증거를 먼저 검사하며 다른 사건의 run 캐시로 failed를 허용하지 않는다.
-                if (!proofs.containsKey(id)) verifyReference(id, event.sourceVersionIds(), verified, null, readOnly);
+                if (!proofs.containsKey(id)) {
+                    if (citizen) throw new ExtractionException("EXTRACTION_ARCHIVE_INVALID", null, false);
+                    verifyReference(id, event.sourceVersionIds(), verified, null, readOnly);
+                }
             }
         }
         for (var reference : batchHandoffs) {
@@ -175,7 +179,8 @@ public class ExtractionImportService {
                 throw new ExtractionException("EXTRACTION_ARCHIVE_INVALID", null, false);
             }
         if (reference == null || handoff != null) {
-            var run = readOnly ? archives.readSealed(id, directory.getParent()) : archives.read(id, directory.getParent());
+            // 참조는 이미 등록·봉인한 D05만 가리킨다. 재검증에서 freeze/copy를 실행하지 않는다.
+            var run = archives.readSealed(id, directory.getParent());
             repository.checkDocument(run);
             reference = handoff == null ? repository.verifiedReference(run) : repository.verifiedHandoffParent(run, handoff);
             verified.put(id, reference);

@@ -188,6 +188,55 @@ class CitizenHandoffTest(unittest.TestCase):
         self.assertIsNone(value['events'][0]['facts']['cost']['value'])
         self.assertIn('😀', value['evidence'][0]['quote'])
 
+    def test_document_links_include_only_each_items_references_and_keep_full_private_image(self):
+        projected = self.project()['projection']
+        original = json.loads((self.base / 'setup/review_success.json').read_bytes())['output']
+        mapping = {old['evidence_id']: new['evidence_id'] for old, new in zip(original['evidence'], projected['evidence'], strict=True)}
+        self.assertEqual(len(projected['evidence']), 5)
+        for number, (item, event) in enumerate(zip(original['items'], projected['events'], strict=True), 1):
+            references = {key for name, value in item.items() if name != 'local_item_id' for key in value['evidence_ids']}
+            self.assertEqual(references, {f'e{number}'})
+            with self.subTest(item=number):
+                self.assertEqual(event['document_links'][0]['evidence_ids'], [mapping[f'e{number}']])
+        frozen = self.freeze()
+        image = self.handoff_root / frozen['handoff_ref']
+        private_output = image / 'review' / self.request['review_ref'] / 'output.json'
+        self.assertEqual(private_output.read_bytes(), (self.review_root / self.request['review_ref'] / 'output.json').read_bytes())
+        self.assertEqual(json.loads(private_output.read_bytes()), original)
+        self.assertEqual(len(json.loads((image / 'projection.json').read_bytes())['evidence']), 5)
+
+    def test_each_field_contributes_citations_and_links_follow_original_evidence_order(self):
+        from processing.evaluation.citizen_handoff import project_output
+        original = json.loads((self.base / 'setup/review_success.json').read_bytes())['output']
+        run_id = self.manifest['cases']['manual_success']['run_id']
+        for name in original['items'][0]:
+            if name == 'local_item_id': continue
+            value = copy.deepcopy(original)
+            value['items'][0][name]['evidence_ids'] = ['e2']
+            projected = project_output(run_id, self.request['source'], value, SPLIT_ID)
+            expected = [entry['evidence_id'] for entry in projected['evidence'][:2]]
+            with self.subTest(field=name):
+                self.assertEqual(projected['events'][0]['document_links'][0]['evidence_ids'], expected)
+        value = copy.deepcopy(original)
+        value['evidence'] = [value['evidence'][index] for index in (2, 0, 4, 1, 3)]
+        value['items'][0]['title']['evidence_ids'] = ['e2', 'e1']
+        value['items'][0]['categories']['evidence_ids'] = ['e3']
+        value['items'][0]['target']['evidence_ids'] = ['e4']
+        before = copy.deepcopy(value)
+        projected = project_output(run_id, self.request['source'], value, SPLIT_ID)
+        self.assertEqual(projected['events'][0]['document_links'][0]['evidence_ids'],
+                         [projected['evidence'][index]['evidence_id'] for index in (0, 1, 3, 4)])
+        self.assertEqual(value, before)
+
+    def test_known_title_or_categories_without_citations_cannot_form_a_review(self):
+        original = json.loads((self.base / 'setup/review_success.json').read_bytes())
+        for name in ('title', 'categories'):
+            value = copy.deepcopy(original)
+            value['output']['items'][0][name]['evidence_ids'] = []
+            with self.subTest(field=name), self.assertRaises(ExtractionError) as caught:
+                reviews.check_review(archive._json(value), self.base / 'runs', checked_at=PROJECT_AT)
+            self.assertEqual(caught.exception.code, 'HUMAN_REVIEW_OUTPUT_INVALID')
+
     def test_unknown_title_and_categories_are_unresolved_without_altering_review(self):
         for case in ('review_title_unknown', 'review_category_unknown'):
             before = snapshot(self.base)

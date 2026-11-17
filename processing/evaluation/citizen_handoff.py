@@ -26,11 +26,12 @@ def project_output(run_id, source, extracted, split_group_id):
     for item in extracted['items']:
         for name in ('title', 'categories'):
             require(item[name]['knowledge'] == 'known', kind='input', code='HANDOFF_CITIZEN_FACTS_UNRESOLVED')
+        references = {key for name in ('title', 'categories', *FACT_FIELDS) for key in item[name]['evidence_ids']}
         event_id = identity('event', item['local_item_id'])
         facts = dict(event_id=event_id, title=item['title']['value'], categories=list(item['categories']['value']),
                      **{name: field(item[name]) for name in FACT_FIELDS},
                      source_version_ids=[doc['document_version_id']], originating_run_ids=[run_id])
         events.append(dict(event_id=event_id, document_links=[dict(document_id=doc['document_id'], role='original',
-                           evidence_ids=list(evidence_ids.values()))], relations=[], suspected_duplicate_ids=[],
+                           evidence_ids=[mapped for key, mapped in evidence_ids.items() if key in references])], relations=[], suspected_duplicate_ids=[],
                            split_group_id=split_group_id, facts=facts))
     return dict(data_kind=source['data_kind'], documents=source['documents'], evidence=evidence, events=events)

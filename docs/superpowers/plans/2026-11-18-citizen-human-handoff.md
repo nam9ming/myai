@@ -74,7 +74,7 @@
 
 - [x] **Step 1:** 새/기존 family·선행 원문/추출 등록·명시 group/revisions·미상 거부·실패/전후 감사·별도 승인·오류·실행/복구를 문서화한다. G4 PR56의 완료 증빙과 G5 미완료를 구별한다.
 - [ ] **Step 2:** Run 전체 Python, 주 작업자 `./gradlew test bootJar`, npm lint/test/build·계약 validator·변경 Markdown 상대 링크·git diff --check. Expected: 회귀/원본 불변·누락0, Docker/JAR/MySQL8.4는 exact remote head에서도 통과한다.
-- [ ] **Step 3:** 전체 diff·호출자·권한·원본/복구·계약·문서를 자체 검토하고 유효 지적을 RED→GREEN으로 수정한다. fresh 독립 전체 리뷰 정확1회를 수행하고 Minor 포함 유효 지적을 모두 검증·수정한 뒤 전체 자체 검토한다. 커밋 `docs: describe citizen human handoffs`.
+- [x] **Step 3:** 전체 diff·호출자·권한·원본/복구·계약·문서를 자체 검토하고 유효 지적을 RED→GREEN으로 수정한다. fresh 독립 전체 리뷰 정확1회를 수행하고 Minor 포함 유효 지적을 모두 검증·수정한 뒤 전체 자체 검토한다. 커밋 `docs: describe citizen human handoffs`.
 - [ ] **Step 4:** 유효 미해결0에서 develop PR을 제출한다. exact head CI·실제 AI 코멘트·도착한 사람 리뷰/threads를 확인하고 지적은 원인 수정·검증한다. 부분 자동 리뷰를 전체로 쓰지 않는다.
 - [ ] **Step 5:** green/head 지적0인 non-main PR만 expected head로 병합한다. source/실제 CI 후보/병합/develop tree를 비교·사용자 변경 보존 FF·본인 병합 브랜치 정리·main PR20 증빙 갱신 후 전체 goal의 다음 단계로 진행한다. main은 병합하지 않는다.
 
@@ -87,6 +87,25 @@ G4와 G1~G3 기존 계약을 대조했다. Python projection→archive reader→
 
 - 실제 Python check-handoff의 새 선택 header 거부·Java 새 projection/schema 거부·등록 D03/D05 성공/실패의 새 요청 거부를 관찰한 뒤 확장했다. 테스트용 ref 키 오타로 발생한 사전조건 오류는 행동 RED에서 제외하고 올바른 봉인본으로 다시 확인했다.
 - 후속 일반 시민 수정의 inherited proof가 잘못 legacy로 분류되는 문제를14필드 감사 시험으로 확인·수정했다. 기존 CHECK 주입 시험의 오류 코드 가정도 실제 예외 변환과 대조해 수정했고 전체 행 rollback·정상 재시도 검사는 유지했다. 새 예외 정책은 추가하지 않았다.
-- Python 전체690건/326.242초, 관련 Java138건/6클래스·1분42초·실패/오류/생략0이다. Java는 로컬 MySQL9.6 보충 검증이며 정확8.4 성공으로 쓰지 않는다. 기존 legacy 최초 proof 첨부·인계 전체 회귀를 포함한다.
-- Node46건·lint610파일·계약13JSON·HTML build·변경18문서377개 상대 파일 링크가 통과했다. 이후 문서·시험 추가의 마지막 lint/링크·전체 Java는 진행 중이다.
-- 전체 Java/Docker·실제 JAR/HTTP·SELECT S10·정확 원격 MySQL8.4·독립 전체 리뷰·PR/병합은 아직 완료하지 않았다. main/배포·실제 사람/Flutter·실자료 품질 인수는 별도다.
+- 독립 검토 전 첫 검증은 Python 전체690건/326.242초, 관련 Java138건/6클래스·1분42초·실패/오류/생략0이었다. Java는 로컬 MySQL9.6 보충 검증이며 정확8.4 성공으로 쓰지 않는다. 기존 legacy 최초 proof 첨부·인계 전체 회귀를 포함한다.
+- 첫 Node46건·lint610파일·계약13JSON·HTML build·변경18문서377개 상대 파일 링크가 통과했다. 독립 검토 지적을 수정한 최종 결과는 아래에 별도로 기록한다.
+- 독립 전체 리뷰는 `e4a3dea..3409ac6` 4커밋·117파일에 정확히1회 수행했다. Critical1·Important6·Minor3을 모두 유효 지적으로 채택해 아래와 같이 수정했다. 독립 재리뷰는 추가하지 않으며 수정 후 전체 자체 검토·회귀와 정확 원격 CI를 통과해야 PR/병합 단계를 마친다. main/배포·실제 사람/Flutter·실자료 품질 인수는 별도다.
+
+## 독립 전체 리뷰 지적·조치
+
+| 번호·심각도 | 원인·수정 | 재현·검증 |
+| --- | --- | --- |
+| 1 Critical | 문서 전체 근거가 모든 시민 사건에 복사됐다. 항목별14개 FieldValue 참조만 링크/D06/새 공개본에 전달하고 전체 비공개 원본은 유지한다. 후속 인계의 근거 비교도 같은 범위다 | Python5항목·Java reader/과거 저장본 공개의 RED, 실제5사건 중1건만 승인한 snapshot·상세·export와 전체 비공개 원본 보존 GREEN |
+| 2 Important | 시민 proof 없는 legacy 실행이 추가 출처로 허용됐다. 시민 run마다 같은 사건의 시민 proof를 요구한다 | 기존 허용 ROOT2사례, 동일 D03에 실제 등록한 validated legacy 실행의 감사된 추가 거부·DB/원본 불변 GREEN |
+| 3 Important | 사건 없는 일반 시민 JSON이 최초 proof 저장 검사를 우회했다. 빈 시민 인계는 내부 전용 준비 경로만 허용한다 | reader·실제 빈/비어 있지 않은 투영의 일반 요청 RED→거부 GREEN, 전용 빈 인계 유지 |
+| 4 Important | 등록 D05 재검증이 freeze를 실행해 잘못 복원한 권한에서 새 사본을 만들었다. 등록 후 참조는 readSealed만 사용한다 | ROOT2사례, 재실행/새 인계/승인/preview/publish5경로의0700/0600 거부·부모 전체 트리/DB 불변·정상 복원 후 같은 작업 성공 GREEN |
+| 5 Important | 과거 proof와 값이 같으면 사람의 되돌리기 수정도 덮을 수 있었다. 현재 revision이 실제 전용 인계 배치에서 생성됐는지 대조한다 | 인계 A→B→수동 A→전용 C의 ROOT 허용→충돌·전체 DB 불변 GREEN |
+| 6 Important | 큰 실패 원본 검사 중 교체한 루트 receipt/identity를 마지막에 재검사하지 않았다. 반환 직전 원본 bytes와 파일 식별자를 재대조한다 | 실제 파일 스트림 종료 시 bytes/동일 bytes의 inode를 교체하는 결정적 ROOT4사례→거부·자동 복구 없음 GREEN |
+| 7 Important | S10 자식 proof가 invalid여도 revision의 인계 판정은 valid였다. 자식 실패를 상위 상태에 반영한다 | 실제 봉인본 변조 ROOT→자식/상위 invalid·보고서의 DB/파일 무변경 GREEN |
+| 8 Minor | autocrlf 변환과 의도한 CRLF가 고정 원본을 훼손했다. G4 original/manifest/verification만 Git 속성으로 고정한다 | 실제 변환 hash 불일치·범위 diff9오류 RED→78파일 원본 bytes 유지·전체 범위 diff 검사 GREEN. expected 재생성0 |
+| 9 Minor | Gradle이 고정 G4 자료·시민 예제를 test inputs에 포함하지 않았다. fixture tree와2개 시민 예제를 등록한다 | 실제 Gradle task 입력5경로 누락 RED→실제 등록 GREEN. 시험 비활성화/생략 없음 |
+| 10 Minor | review_ref와 receipt hash의 계산 설명을 혼용했다. review_id UTF-8 hash와 receipt 원본 bytes hash를 구별한다 | 실제 reviews.py의 계산과 문서 대조·수정. 동작 변경 없음 |
+
+수정 후 집중 Java223건/8클래스·2분15초·실패/오류/생략0, 전체 Python693건/333.292초가 통과했다. 전체 로컬 Java는1122건 중1111통과·11실패·오류/생략0·6분49초다. 실패11건은 모두 RecoveryDatabase의 Docker 기동 실패이며 새 시민 JAR/HTTP/SELECT S10과 기존 마이그레이션/복구의 해당 내부 시험은 로컬에서 실행하지 못했다. 별도 bootJar는852ms로 성공했다. 로컬 MySQL9.6 보충 검증을8.4·전체 성공으로 표시하지 않는다.
+
+Node46건·lint611파일·계약13JSON·HTML build와 변경 Markdown19개 상대 파일 링크396개, 전체 범위 diff 검사가 통과했다. 고정 G4/legacy 원본을 유지했고 expected 재생성·시험 삭제/생략은 없다. 수정 전체의 호출자·저장/공개·원본/복구·예외·계약·문서를 다시 자체 검토했으며 유효 미해결 지적은0이다. 정확 source의 원격 MySQL8.4/Docker 전체 CI·실제 자동/도착한 사람 리뷰 확인·PR/병합은 다음 gate다.

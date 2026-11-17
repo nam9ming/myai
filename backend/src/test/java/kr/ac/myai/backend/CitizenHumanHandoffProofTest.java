@@ -60,6 +60,44 @@ class CitizenHumanHandoffProofTest {
     }
 
     @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void everyCitizenRunRequiresItsOwnSameEventCitizenProofEvenForValidatedLegacyRuns(boolean appendToValidProof) {
+        var image = image(true); bind(image);
+        String legacyId = "10000000-0000-4000-8000-000000000007";
+        var legacy = legacyRun(legacyId);
+        when(repository.referenceDirectory(legacyId)).thenReturn(root.resolve(legacyId).toString());
+        when(archives.read(legacyId, root)).thenReturn(legacy);
+        when(archives.readSealed(legacyId, root)).thenReturn(legacy);
+        when(repository.verifiedReference(legacy)).thenReturn(new ExtractionRunRepository.Reference(legacyId, DOCUMENT, "9".repeat(64)));
+        var original = event(EVENT, true, image, appendToValidProof);
+        var event = new ReviewedBatch.Event(original.id(), original.revisionId(), original.revisionNo(), original.expectedRevisionNo(),
+                original.payloadJson(), original.payloadSha256(), original.reviewStatus(), original.publicationIntent(), original.reviewerId(),
+                original.reviewedAt(), appendToValidProof ? List.of(RUN, legacyId) : List.of(legacyId), original.sourceVersionIds(), List.of());
+        invalid(() -> service.verifyReferences(List.of(event)));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void alreadyRegisteredParentsUseSealedVerificationWithoutFreezeOrCopy(boolean citizen) {
+        ExtractionRunRepository.Reference reference;
+        ReviewedBatch.Event event;
+        if (citizen) {
+            var image = image(true); reference = bind(image); event = event(EVENT, true, image, true);
+            when(archives.readSealed(RUN, root)).thenReturn(run());
+        } else {
+            var run = legacyRun(RUN); reference = new ExtractionRunRepository.Reference(RUN, DOCUMENT, "9".repeat(64));
+            when(repository.referenceDirectory(RUN)).thenReturn(root.resolve(RUN).toString());
+            when(archives.read(RUN, root)).thenReturn(run);
+            when(archives.readSealed(RUN, root)).thenReturn(run);
+            when(repository.verifiedReference(run)).thenReturn(reference);
+            event = event(EVENT, false, image(false), false);
+        }
+        assertThat(service.verifyReferences(List.of(event))).containsExactly(reference);
+        verify(archives).readSealed(RUN, root);
+        verify(archives, never()).read(RUN, root);
+    }
+
+    @ParameterizedTest
     @ValueSource(strings = {"citizen-human-handoff-import-v1", "citizen-reviewed-import-v1"})
     void citizenBatchRetainsVerifiedProofForBothInitialHandoffAndOrdinaryFollowup(String schema) {
         var image = image(true); var reference = bind(image);
@@ -91,7 +129,7 @@ class CitizenHumanHandoffProofTest {
         var run = run(); var reference = new ExtractionRunRepository.Reference(RUN, DOCUMENT, "d".repeat(64), "e".repeat(64));
         when(handoffs.read(image.reference())).thenReturn(image);
         when(repository.handoffParentDirectory(RUN, image)).thenReturn(root.resolve(RUN).toString());
-        when(archives.read(RUN, root)).thenReturn(run);
+        when(archives.readSealed(RUN, root)).thenReturn(run);
         when(repository.verifiedHandoffParent(run, image)).thenReturn(reference);
         return reference;
     }
@@ -111,6 +149,13 @@ class CitizenHumanHandoffProofTest {
                 .put("document_version_id", DOCUMENT).put("status", "failed").put("data_kind", "synthetic");
         var metadata = mapper.createObjectNode().put("schema_version", "extract-citizen-v1").put("execution_mode", "manual_import");
         return new VerifiedExtraction(root.resolve(RUN), mapper.createObjectNode(), metadata, receipt, metadata.toString(), receipt.toString(), "b".repeat(64));
+    }
+
+    private VerifiedExtraction legacyRun(String id) {
+        var receipt = mapper.createObjectNode().put("format_version", "extraction-archive-v1").put("run_id", id)
+                .put("document_version_id", DOCUMENT).put("status", "validated").put("data_kind", "synthetic");
+        var metadata = mapper.createObjectNode().put("schema_version", "extract-schema-v1").put("execution_mode", "manual_import");
+        return new VerifiedExtraction(root.resolve(id), mapper.createObjectNode(), metadata, receipt, metadata.toString(), receipt.toString(), "b".repeat(64));
     }
 
     private ReviewedBatch.Event event(String id, boolean citizen, VerifiedHandoff image, boolean proof) {

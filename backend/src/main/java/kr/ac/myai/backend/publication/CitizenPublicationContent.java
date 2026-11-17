@@ -59,7 +59,9 @@ public class CitizenPublicationContent {
             var relations = notice.putArray("relations");
             check(facts.path("relations").isArray(), "relations");
             for (var relation : facts.path("relations")) relations.add(shared.select(relation, RELATION_FIELDS));
-            notice.set("evidence", shared.select(payload, "evidence").get("evidence"));
+            var evidenceIds = ReviewedImportReader.citizenEvidenceIds(facts, revision);
+            var evidence = notice.putArray("evidence");
+            for (var item : payload.path("evidence")) if (evidenceIds.contains(item.path("evidence_id").asText())) evidence.add(item.deepCopy());
             for (String sourceId : ids(notice, "source_version_ids", true, true)) used.add(sourceId);
             revisionIds.add(row.id());
             notices.add(notice);

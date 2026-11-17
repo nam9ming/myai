@@ -11,6 +11,7 @@ import kr.ac.myai.backend.publication.PublicationCommand;
 import kr.ac.myai.backend.publication.PublicationCommandReader;
 import kr.ac.myai.backend.publication.PublicationException;
 import kr.ac.myai.backend.review.ReviewReportService;
+import kr.ac.myai.backend.service.CitizenNoticeService;
 import kr.ac.myai.backend.service.ExtractionImportService;
 import kr.ac.myai.backend.service.HumanHandoffImportService;
 import kr.ac.myai.backend.service.PublicationService;
@@ -35,11 +36,13 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -64,6 +67,7 @@ class CitizenHumanHandoffMySqlTest {
     @Autowired SourceReviewService sources;
     @Autowired SnapshotExportService exporter;
     @Autowired ReviewReportService reports;
+    @Autowired CitizenNoticeService notices;
     @Autowired JdbcTemplate jdbc;
     @TempDir Path root;
     final ObjectMapper mapper = new ObjectMapper();
@@ -359,6 +363,247 @@ class CitizenHumanHandoffMySqlTest {
         assertThat(jdbc.queryForObject("SELECT canonical_json FROM snapshots WHERE snapshot_id=?", String.class, published.snapshotId())).isEqualTo(original);
         assertThat(exporter.export(UUID.fromString(published.snapshotId()), exported).alreadyExported()).isTrue();
         assertThat(Files.readString(exported.resolve(export.fileName()))).isEqualTo(original);
+    }
+
+    @Test void eachCitizenRevisionAndApprovedPublicNoticeContainOnlyTheirOwnEvidence() throws Exception {
+        assertThat(jdbc.queryForList("SELECT snapshot_id FROM publication_heads WHERE channel_key='citizen:current'"))
+                .as("기존 시민 공개 head를 덮어쓰지 않는다").isEmpty();
+        var fixture = fixture(false, output -> { });
+        JsonNode review = mapper.readTree(fixture.image().resolve("review")
+                .resolve(fixture.projection().path("review").path("review_ref").asText()).resolve("review.json").toFile());
+        JsonNode originalOutput = review.path("output");
+        assertThat(originalOutput.path("items")).hasSize(5);
+        assertThat(fixture.projection().path("evidence")).hasSize(5);
+        var imported = importHandoff(fixture);
+        var expectedFirst = mapper.createArrayNode();
+        for (int index = 0; index < originalOutput.path("items").size(); index++) {
+            var rawItem = originalOutput.path("items").get(index);
+            Set<String> localIds = new HashSet<>();
+            rawItem.forEach(field -> field.path("evidence_ids").forEach(id -> localIds.add(id.asText())));
+            var expected = mapper.createArrayNode();
+            for (int citation = 0; citation < originalOutput.path("evidence").size(); citation++) {
+                if (localIds.contains(originalOutput.path("evidence").get(citation).path("evidence_id").asText()))
+                    expected.add(fixture.projection().path("evidence").get(citation));
+            }
+            assertThat(expected).hasSize(1);
+            String eventId = fixture.projection().path("events").get(index).path("event_id").asText();
+            String revisionId = jdbc.queryForObject("SELECT current_review_revision_id FROM events WHERE event_id=?", String.class, eventId);
+            var saved = payload(revisionId);
+            assertThat(saved.path("evidence")).as("각 시민 사건에는 해당 항목이 인용한 근거만 저장한다").isEqualTo(expected);
+            var expectedIds = new ArrayList<String>(); expected.forEach(value -> expectedIds.add(value.path("evidence_id").asText()));
+            var actualIds = new ArrayList<String>(); saved.path("event").path("document_links").get(0).path("evidence_ids").forEach(value -> actualIds.add(value.asText()));
+            assertThat(actualIds).containsExactlyInAnyOrderElementsOf(expectedIds);
+            if (index == 0) expectedFirst.addAll(expected);
+        }
+        assertThat(imported.revisionIds()).hasSize(5);
+        sourceReview(fixture, 0, "allowed", true);
+        var approved = publication.execute(decision(fixture, 1), root, "synthetic-first-only-approver");
+        for (int index = 1; index < fixture.projection().path("events").size(); index++)
+            assertThat(jdbc.queryForObject("SELECT r.review_status FROM events e JOIN event_revisions r ON e.current_review_revision_id=r.revision_id WHERE e.event_id=?", String.class,
+                    fixture.projection().path("events").get(index).path("event_id").asText())).isEqualTo("needs_review");
+        var published = publish("publish", List.of(approved.revisionId()), null);
+        String canonical = jdbc.queryForObject("SELECT canonical_json FROM snapshots WHERE snapshot_id=?", String.class, published.snapshotId());
+        var snapshot = mapper.readTree(canonical);
+        assertThat(snapshot.path("notices")).hasSize(1);
+        assertThat(snapshot.path("notices").get(0).path("evidence")).isEqualTo(expectedFirst);
+        var detail = notices.notice(UUID.fromString(fixture.eventId()), UUID.fromString(published.snapshotId()));
+        assertThat(detail.path("data").path("notice").path("evidence")).isEqualTo(expectedFirst);
+        Path exportRoot = Files.createDirectory(root.resolve("first-only-export"));
+        var exported = exporter.export(UUID.fromString(published.snapshotId()), exportRoot);
+        String exportedText = Files.readString(exportRoot.resolve(exported.fileName()));
+        assertThat(exportedText).isEqualTo(canonical);
+        for (int index = 1; index < originalOutput.path("evidence").size(); index++) {
+            String unapprovedQuote = originalOutput.path("evidence").get(index).path("quote").asText();
+            assertThat(canonical).doesNotContain(unapprovedQuote);
+            assertThat(detail.toString()).doesNotContain(unapprovedQuote);
+            assertThat(exportedText).doesNotContain(unapprovedQuote);
+        }
+        assertThat(mapper.readTree(fixture.image().resolve("projection.json").toFile()).path("evidence")).hasSize(5);
+        assertThat(mapper.readTree(fixture.image().resolve("review").resolve(fixture.projection().path("review").path("review_ref").asText())
+                .resolve("review.json").toFile()).path("output")).isEqualTo(originalOutput);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void ordinaryEmptyCitizenImportCannotRegisterHandoffProof(boolean emptyProjection) throws Exception {
+        var fixture = fixture(false, output -> {
+            if (emptyProjection) { output.putArray("items"); output.putArray("warnings").add("NO_EVENT_FOUND"); }
+        });
+        var ordinary = fixture.source().deepCopy().put("schema_version", "citizen-reviewed-import-v1");
+        ordinary.set("evidence", fixture.projection().path("evidence").deepCopy());
+        ordinary.putArray("events");
+        ordinary.putArray("human_handoffs").addObject().put("directory", fixture.image().toString())
+                .put("handoff_ref", fixture.request().path("handoff_ref").asText()).put("receipt_sha256", fixture.request().path("receipt_sha256").asText());
+        byte[] bytes = requestBytes(ordinary);
+        var before = CitizenNoticeFixtures.rows(jdbc);
+        assertThatThrownBy(() -> importer.importBatch(reader.read(bytes, root), "synthetic-ordinary-empty-importer"))
+                .isInstanceOf(ImportException.class);
+        assertThat(CitizenNoticeFixtures.rows(jdbc)).isEqualTo(before);
+        assertThat(importHandoff(fixture).revisionIds()).hasSize(emptyProjection ? 0 : 5);
+    }
+
+    @Test void laterHandoffCannotOverwriteManualFactsThatMatchAnOlderProof() throws Exception {
+        var first = fixture(true, output -> {
+            var item = output.path("items").get(0).deepCopy(); output.putArray("items").add(item);
+        });
+        var firstResult = importHandoff(first);
+        var firstPayload = payload(firstResult.revisionIds().getFirst());
+        String firstTitle = firstPayload.path("revision").path("title").asText();
+        var second = CitizenHandoffFixture.freeze(root, first.source(), first.extraction(), output -> {
+            var item = (ObjectNode) output.path("items").get(0).deepCopy();
+            ((ObjectNode) item.path("title")).put("value", "합성 두 번째 인계 B"); output.putArray("items").add(item);
+        });
+        ((ObjectNode) second.request().path("revisions").get(0)).put("expected_revision_no", 1);
+        var secondResult = importHandoff(second);
+        var previous = (ObjectNode) payload(secondResult.revisionIds().getFirst());
+        ObjectNode manual = previous.deepCopy(); var revision = (ObjectNode) manual.path("revision");
+        revision.put("revision_id", UUID.randomUUID().toString()).put("revision_no", 3).put("title", firstTitle);
+        HumanReviewChanges.record(previous, manual, "synthetic-manual-reviser", Instant.now(), "합성 수동 재검토로 첫 표현 복원", ReviewedImportReader.CITIZEN_FIELDS);
+        var manualResult = importer.importBatch(reader.read(requestBytes(envelope(first, manual)), root), "synthetic-manual-reviser");
+        assertThat(payload(manualResult.revisionIds().getFirst()).path("revision").path("title").asText()).isEqualTo(firstTitle);
+        var third = CitizenHandoffFixture.freeze(root, first.source(), first.extraction(), output -> {
+            var item = (ObjectNode) output.path("items").get(0).deepCopy();
+            ((ObjectNode) item.path("title")).put("value", "합성 세 번째 인계 C"); output.putArray("items").add(item);
+        });
+        ((ObjectNode) third.request().path("revisions").get(0)).put("expected_revision_no", 3);
+        byte[] thirdBytes = requestBytes(third.request()); var before = CitizenNoticeFixtures.rows(jdbc);
+        assertThatThrownBy(() -> handoffs.importBytes(thirdBytes, root, third.handoffRoot(), "synthetic-citizen-importer"))
+                .isInstanceOfSatisfying(ImportException.class, error -> assertThat(error.code()).isEqualTo("IMPORT_CONFLICT"));
+        assertThat(CitizenNoticeFixtures.rows(jdbc)).isEqualTo(before);
+        assertThat(jdbc.queryForObject("SELECT current_review_revision_id FROM events WHERE event_id=?", String.class, first.eventId()))
+                .isEqualTo(manualResult.revisionIds().getFirst());
+    }
+
+    @Test void corruptCitizenProofMarksBothReportChildAndParentInvalidWithoutChangingAnything() throws Exception {
+        var fixture = fixture(false, output -> { }); importHandoff(fixture);
+        Path projection = fixture.image().resolve("projection.json");
+        assertThat(projection.toRealPath().startsWith(root.toRealPath())).isTrue();
+        byte[] original = Files.readAllBytes(projection); var permissions = Files.getPosixFilePermissions(projection);
+        try {
+            Files.setPosixFilePermissions(projection, PosixFilePermissions.fromString("rw-------"));
+            Files.writeString(projection, "{\"schema_version\":\"OWNED_SYNTHETIC_CORRUPT_PROJECTION\"}\n");
+            Files.setPosixFilePermissions(projection, permissions);
+            var beforeRows = CitizenNoticeFixtures.rows(jdbc); var beforeFiles = CitizenExtractionArchiveTest.tree(fixture.image());
+            var report = reports.build(UUID.fromString(version(fixture)), root, null);
+            var revision = report.path("events").get(0).path("revisions").get(0);
+            assertThat(revision.path("handoffs").get(0).path("validation").path("status").asText()).isEqualTo("invalid");
+            assertThat(revision.path("handoff_validation").path("status").asText()).isEqualTo("invalid");
+            assertThat(CitizenNoticeFixtures.rows(jdbc)).isEqualTo(beforeRows);
+            assertThat(CitizenExtractionArchiveTest.tree(fixture.image())).isEqualTo(beforeFiles);
+        } finally {
+            Files.setPosixFilePermissions(projection, PosixFilePermissions.fromString("rw-------"));
+            Files.write(projection, original); Files.setPosixFilePermissions(projection, permissions);
+        }
+        assertThat(Files.readAllBytes(projection)).isEqualTo(original);
+        assertThat(Files.getPosixFilePermissions(projection)).isEqualTo(permissions);
+    }
+
+    @Test void citizenManualRevisionCannotGraftValidatedLegacyRunFromSameDocument() throws Exception {
+        var fixture = fixture(false, output -> {
+            var item = output.path("items").get(0).deepCopy(); output.putArray("items").add(item);
+        });
+        var first = importHandoff(fixture);
+        var legacy = CitizenExtractionArchiveTest.fixture(Files.createTempDirectory(root, "legacy-graft-").toRealPath(), (byte[]) null);
+        var document = fixture.source().path("documents").get(0);
+        var input = mapper.createObjectNode().put("data_kind", fixture.source().path("data_kind").asText())
+                .put("document_version_id", version(fixture)).put("title", document.path("title").asText());
+        input.set("published_date", document.path("published_date")); input.set("blocks", document.path("block_index"));
+        Files.writeString(legacy.input(), input.toString());
+        var metadata = (ObjectNode) mapper.readTree(legacy.metadata().toFile());
+        metadata.put("schema_version", "extract-schema-v1").put("document_version_id", version(fixture))
+                .put("preprocessing_version", document.path("preprocessing_version").asText());
+        Files.writeString(legacy.metadata(), metadata.toString());
+        var output = (ObjectNode) mapper.readTree(PythonProbe.REPO.resolve("contracts/examples/ai-extraction.json").toFile());
+        output.put("document_version_id", version(fixture));
+        var block = document.path("block_index").get(0); String text = block.path("text").asText();
+        ((ObjectNode) output.path("evidence").get(0)).put("block_id", block.path("block_id").asText()).put("quote", text)
+                .put("start_char", 0).put("end_char", text.codePointCount(0, text.length()))
+                .put("text_sha256", ReviewedImportReader.sha256(text.getBytes(StandardCharsets.UTF_8)));
+        Files.writeString(legacy.attempts().getFirst().output(), output.toString());
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM extraction_runs WHERE run_id=?", Long.class, legacy.run())).isZero();
+        runs.add(legacy.run());
+        assertThat(CitizenExtractionArchiveTest.importManual(archives, legacy).path("status").asText()).isEqualTo("validated");
+        extraction.importRun(legacy.run(), legacy.archive(), "synthetic-legacy-registrant");
+        var legacyRow = jdbc.queryForMap("SELECT * FROM extraction_runs WHERE run_id=?", legacy.run());
+        assertThat(legacyRow.get("schema_version")).isEqualTo("extract-schema-v1");
+        assertThat(legacyRow.get("status")).isEqualTo("validated");
+        assertThat(legacyRow.get("document_version_id")).isEqualTo(version(fixture));
+        var beforeArchive = CitizenExtractionArchiveTest.tree(legacy.archive());
+        var previous = (ObjectNode) payload(first.revisionIds().getFirst());
+        ObjectNode next = previous.deepCopy(); var revision = (ObjectNode) next.path("revision");
+        revision.put("revision_id", UUID.randomUUID().toString()).put("revision_no", 2);
+        revision.withArray("originating_run_ids").add(legacy.run());
+        HumanReviewChanges.record(previous, next, "synthetic-editor", Instant.now(), "합성 같은 문서 legacy 실행 끼워넣기", ReviewedImportReader.CITIZEN_FIELDS);
+        byte[] bytes = requestBytes(envelope(fixture, next)); var beforeRows = CitizenNoticeFixtures.rows(jdbc);
+        assertThatThrownBy(() -> importer.importBatch(reader.read(bytes, root), "synthetic-editor"))
+                .isInstanceOfSatisfying(ImportException.class, error -> assertThat(error.code()).isEqualTo("IMPORT_VALIDATION_ERROR"));
+        assertThat(CitizenNoticeFixtures.rows(jdbc)).isEqualTo(beforeRows);
+        assertThat(jdbc.queryForMap("SELECT * FROM extraction_runs WHERE run_id=?", legacy.run())).isEqualTo(legacyRow);
+        assertThat(CitizenExtractionArchiveTest.tree(legacy.archive())).isEqualTo(beforeArchive);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"replay", "new_handoff", "approve", "preview", "publish"})
+    void registeredCitizenParentRestoredToWritableModesCannotBeReferencedOrRefrozen(String operation) throws Exception {
+        if (operation.equals("preview") || operation.equals("publish"))
+            assertThat(jdbc.queryForList("SELECT snapshot_id FROM publication_heads WHERE channel_key='citizen:current'")).isEmpty();
+        var first = fixture(false, output -> {
+            var item = output.path("items").get(0).deepCopy(); output.putArray("items").add(item);
+        });
+        var imported = importHandoff(first);
+        assertThat(importHandoff(first).alreadyImported()).isTrue();
+        CitizenHandoffFixture.Handoff selected = first;
+        if (operation.equals("new_handoff")) {
+            selected = CitizenHandoffFixture.freeze(root, first.source(), first.extraction(), output -> {
+                var item = (ObjectNode) output.path("items").get(0).deepCopy();
+                ((ObjectNode) item.path("title")).put("value", "합성 봉인 검증용 후속 인계"); output.putArray("items").add(item);
+            });
+            ((ObjectNode) selected.request().path("revisions").get(0)).put("expected_revision_no", 1);
+        }
+        String approved = null;
+        if (Set.of("approve", "preview", "publish").contains(operation)) sourceReview(first, 0, "allowed", true);
+        if (operation.equals("preview") || operation.equals("publish")) {
+            approved = publication.execute(decision(first, 1), root, "synthetic-approver").revisionId();
+            assertThat(publish("preview", List.of(approved), null).action()).isEqualTo("preview");
+        } else {
+            assertThat(payload(imported.revisionIds().getFirst()).path("revision").path("review_status").asText()).isEqualTo("needs_review");
+            assertThat(jdbc.queryForObject("SELECT r.revision_no FROM events e JOIN event_revisions r ON e.current_review_revision_id=r.revision_id WHERE e.event_id=?", Long.class,
+                    first.eventId())).isEqualTo(1);
+        }
+        byte[] request = requestBytes(selected.request());
+        Path parent = Path.of(jdbc.queryForObject("SELECT raw_ref FROM extraction_runs WHERE run_id=?", String.class, first.run()));
+        assertThat(parent.toRealPath().startsWith(root.toRealPath())).isTrue();
+        var originalTree = CitizenExtractionArchiveTest.tree(parent.getParent());
+        var modes = new LinkedHashMap<Path, Set<java.nio.file.attribute.PosixFilePermission>>();
+        try (var entries = Files.walk(parent)) {
+            for (Path entry : entries.toList()) modes.put(entry, Files.getPosixFilePermissions(entry));
+        }
+        var handoff = selected; var approvedRevision = approved;
+        try {
+            for (Path entry : modes.keySet()) Files.setPosixFilePermissions(entry,
+                    PosixFilePermissions.fromString(Files.isDirectory(entry) ? "rwx------" : "rw-------"));
+            var beforeRows = CitizenNoticeFixtures.rows(jdbc);
+            var beforeTree = CitizenExtractionArchiveTest.tree(parent.getParent());
+            if (operation.equals("replay") || operation.equals("new_handoff")) {
+                assertThatThrownBy(() -> handoffs.importBytes(request, root, handoff.handoffRoot(), "synthetic-citizen-importer"))
+                        .isInstanceOfSatisfying(ImportException.class, error -> assertThat(error.code()).isEqualTo("IMPORT_VALIDATION_ERROR"));
+            } else if (operation.equals("approve")) {
+                assertThatThrownBy(() -> publication.execute(decision(first, 1), root, "synthetic-approver"))
+                        .isInstanceOfSatisfying(PublicationException.class, error -> assertThat(error.code()).isEqualTo("PUBLICATION_VALIDATION_ERROR"));
+            } else {
+                assertThatThrownBy(() -> publish(operation, List.of(approvedRevision), null))
+                        .isInstanceOfSatisfying(PublicationException.class, error -> assertThat(error.code()).isEqualTo("PUBLICATION_VALIDATION_ERROR"));
+            }
+            assertThat(CitizenNoticeFixtures.rows(jdbc)).isEqualTo(beforeRows);
+            assertThat(CitizenExtractionArchiveTest.tree(parent.getParent())).as("참조 거부 때 등록 부모의 전체 형제 트리도 새 registered 복사 없이 유지한다").isEqualTo(beforeTree);
+        } finally {
+            for (var entry : modes.entrySet()) Files.setPosixFilePermissions(entry.getKey(), entry.getValue());
+        }
+        assertThat(CitizenExtractionArchiveTest.tree(parent.getParent())).isEqualTo(originalTree);
+        if (operation.equals("replay")) assertThat(importHandoff(first).alreadyImported()).isTrue();
+        else if (operation.equals("new_handoff")) assertThat(importHandoff(handoff).revisionIds()).hasSize(1);
+        else if (operation.equals("approve")) assertThat(publication.execute(decision(first, 1), root, "synthetic-approver").action()).isEqualTo("approve");
+        else assertThat(publish(operation, List.of(approvedRevision), null).action()).isEqualTo(operation);
     }
 
     private PublicationCommand.Decision decision(CitizenHandoffFixture.Handoff fixture, long expected) throws Exception {

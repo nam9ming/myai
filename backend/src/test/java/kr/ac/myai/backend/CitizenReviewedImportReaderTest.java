@@ -175,6 +175,25 @@ class CitizenReviewedImportReaderTest {
     }
 
     @Test
+    void ordinaryCitizenProofCannotStoreAnEmptyBatchButTrustedHandoffCan() throws Exception {
+        String run = "20000000-0000-4000-8000-000000000020";
+        citizenProof(run);
+        input.putArray("events");
+        assertThatThrownBy(() -> reader.read(bytes(), root)).isInstanceOfSatisfying(ImportException.class,
+                ex -> assertThat(ex.field()).isEqualTo("events"));
+        assertThat(reader.prepareHandoff(input, root, sha(bytes()), run).events()).isEmpty();
+    }
+
+    @Test
+    void citizenPayloadExcludesEvidenceUnrelatedToItsLinksAndFacts() throws Exception {
+        var expected = input.path("evidence").deepCopy();
+        var unrelated = ((ObjectNode) input.path("evidence").get(1)).deepCopy().put("evidence_id", "unrelated-quote");
+        input.withArray("evidence").add(unrelated);
+        assertThat(payload().path("evidence")).isEqualTo(expected);
+        assertThat(input.path("evidence")).hasSize(3);
+    }
+
+    @Test
     void preparesCitizenHandoffWithExplicitRunAndPreservesStoredProof() throws Exception {
         String run = "20000000-0000-4000-8000-000000000020";
         citizenProof(run);

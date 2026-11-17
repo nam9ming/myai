@@ -159,6 +159,7 @@ public class HumanHandoffImportService {
         }
         conflict(revision.path("origin").asText().equals("ai_reviewed") && revision.path("review_status").asText().equals("needs_review")
                 && revision.path("publication_intent").asText().equals("hidden"));
+        conflict(repository.isHandoffRevision(revision.path("revision_id").asText()));
         ObjectNode facts = revision.deepCopy();
         facts.remove(WORKFLOW);
         boolean unmodified = false;
@@ -166,8 +167,15 @@ public class HumanHandoffImportService {
             var image = archives.read(reference);
             for (var event : image.projection().path("events")) {
                 ObjectNode top = event.deepCopy(); top.remove("facts");
+                JsonNode expectedEvidence = image.projection().path("evidence");
+                if (previous.path("schema_version").asText().equals(ReviewedImportReader.CITIZEN_PAYLOAD_VERSION)) {
+                    var selected = ReviewedImportReader.citizenEvidenceIds(event, event.path("facts"));
+                    var scoped = mapper.createArrayNode();
+                    for (var item : expectedEvidence) if (selected.contains(item.path("evidence_id").asText())) scoped.add(item);
+                    expectedEvidence = scoped;
+                }
                 if (top.equals(previous.path("event")) && event.path("facts").equals(facts)
-                        && image.projection().path("evidence").equals(previous.path("evidence"))) unmodified = true;
+                        && expectedEvidence.equals(previous.path("evidence"))) unmodified = true;
             }
         }
         conflict(unmodified);

@@ -1,0 +1,4 @@
+# 사전에 고정한 합성 보관본의 바이트와 의도한 CRLF를 유지한다.
+processing/tests/fixtures/citizen-g4/original/** -text whitespace=cr-at-eol
+processing/tests/fixtures/citizen-g4/manifest.json -text
+processing/tests/fixtures/citizen-g4/verification.json -text

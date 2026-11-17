@@ -24,6 +24,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashSet;
 import java.util.HexFormat;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -81,7 +82,9 @@ public class HumanHandoffArchiveReader {
                 shape(artifact, "sha256 size");
                 require(text(artifact, "sha256").matches(HASH) && count(artifact, "size") >= 0);
             }
-            byte[] savedReceipt = read(directory.resolve("receipt.json"));
+            Path receiptFile = directory.resolve("receipt.json"), identityFile = directory.resolve("identity.json");
+            Object receiptKey = fileKey(receiptFile);
+            byte[] savedReceipt = read(receiptFile);
             require(json.parseJson(savedReceipt).equals(receipt) && ReviewedImportReader.sha256(savedReceipt).equals(receiptHash));
             JsonNode summary = receipt.path("summary");
             shape(summary, "protocol_version status backend_import_supported review_required handoff_ref data_kind review_ref source_run_id source_status source_execution_mode event_count evidence_count projection_sha256 review_basis review_duration_ns");
@@ -175,6 +178,7 @@ public class HumanHandoffArchiveReader {
             require(text(metadata, "schema_version").equals(schema) && text(review.path("output"), "schema_version").equals(schema)
                     && metadata.path("run_id").equals(parent.path("run_id"))
                     && metadata.path("execution_mode").equals(parent.path("execution_mode")));
+            byte[] identityBytes = null; Object identityKey = null;
             if (citizen) {
                 require(text(parentReceipt, "format_version").equals("extraction-archive-v1")
                         && text(parent, "execution_mode").equals("manual_import"));
@@ -185,10 +189,15 @@ public class HumanHandoffArchiveReader {
                 for (String field : List.of("document_version_id", "title", "published_date")) expected.set(field, document.path(field));
                 expected.set("blocks", document.path("block_index"));
                 require(input.equals(expected) && metadata.path("preprocessing_version").equals(document.path("preprocessing_version")));
-                verifyCitizenTree(directory, receipt, reviewReceipt, parentReceipt, reviewPath, parentPath);
+                identityKey = fileKey(identityFile); identityBytes = read(identityFile);
+                verifyCitizenTree(directory, receipt, reviewReceipt, parentReceipt, reviewPath, parentPath, identityBytes);
             }
             require(Objects.equals(rootKey, directoryKey(root)) && Objects.equals(directoryKey, directoryKey(directory)));
             sealed(directory, true);
+            if (citizen) {
+                unchanged(receiptFile, savedReceipt, receiptKey);
+                unchanged(identityFile, identityBytes, identityKey);
+            }
             return new VerifiedHandoff(directory, projection, review, receipt, receiptHash);
         } catch (PythonProcess.Failure ex) {
             throw new ExtractionException("EXTRACTION_RUNTIME_UNAVAILABLE", null, ex.retryable());
@@ -200,7 +209,7 @@ public class HumanHandoffArchiveReader {
     }
 
     private void verifyCitizenTree(Path directory, JsonNode receipt, JsonNode reviewReceipt, JsonNode parentReceipt,
-                                   String reviewPath, String parentPath) throws IOException {
+                                   String reviewPath, String parentPath, byte[] identityBytes) throws IOException {
         var parentNames = new HashSet<>(ExtractionArchiveReader.artifactNames(parentReceipt));
         parentNames.addAll(Set.of("identity.json", "receipt.json"));
         var reviewNames = new HashSet<>(Set.of("review.json", "output.json"));
@@ -213,7 +222,7 @@ public class HumanHandoffArchiveReader {
         require(keys(receipt.path("artifacts")).equals(names));
         bindArtifacts(receipt, reviewReceipt, reviewPath);
         bindArtifacts(receipt, parentReceipt, parentPath);
-        JsonNode identity = json.parseJson(read(directory.resolve("identity.json")));
+        JsonNode identity = json.parseJson(identityBytes);
         shape(identity, "format_version handoff_ref artifacts recorded_at");
         require(identity.path("format_version").equals(receipt.path("format_version"))
                 && identity.path("handoff_ref").equals(receipt.path("handoff_ref"))
@@ -264,6 +273,19 @@ public class HumanHandoffArchiveReader {
     private Object directoryKey(Path directory) throws IOException {
         require(Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS) && directory.toRealPath().equals(directory));
         return Files.readAttributes(directory, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS).fileKey();
+    }
+
+    private Object fileKey(Path file) throws IOException {
+        require(Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS) && file.toRealPath().equals(file));
+        Object key = Files.readAttributes(file, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS).fileKey();
+        require(key != null);
+        return key;
+    }
+
+    private void unchanged(Path file, byte[] original, Object key) throws IOException {
+        require(Objects.equals(key, fileKey(file)));
+        byte[] current = read(file);
+        require(Arrays.equals(original, current) && Objects.equals(key, fileKey(file)));
     }
 
     private byte[] checked(Path directory, String name, JsonNode receipt) throws IOException {

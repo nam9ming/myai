@@ -15,17 +15,26 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.nio.charset.StandardCharsets;
 import java.net.URLClassLoader;
+import java.io.FilterInputStream;
+import java.io.InputStream;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.mockStatic;
 
 class CitizenHumanHandoffArchiveTest {
     @TempDir Path root;
@@ -155,6 +164,61 @@ class CitizenHumanHandoffArchiveTest {
             assertThat(Thread.currentThread().isInterrupted()).isTrue();
         } finally { Thread.interrupted(); }
         assertThat(CitizenExtractionArchiveTest.tree(fixture.directory())).isEqualTo(before);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"receipt_bytes", "identity_bytes", "receipt_identity", "identity_identity"})
+    void rejectsRootReceiptOrIdentityReplacementDuringLargeFailedArtifactVerificationWithoutRepair(String defect) throws Exception {
+        byte[] failed = new byte[8 * 1024 * 1024 + 1]; Arrays.fill(failed, (byte) 0xff);
+        var extraction = CitizenExtractionArchiveTest.fixture(root.toRealPath().resolve("large-failed"), failed);
+        var extractionReader = new kr.ac.myai.backend.extraction.ExtractionArchiveReader(json, PythonProbe.PYTHON, PythonProbe.REPO.toString(), 20_000);
+        assertThat(CitizenExtractionArchiveTest.importManual(extractionReader, extraction).path("status").asText()).isEqualTo("failed");
+        var source = CitizenHandoffFixture.source(root.toRealPath(), extraction);
+        var handoff = CitizenHandoffFixture.freeze(root.toRealPath(), source, extraction, output -> { });
+        Path directory = handoff.image();
+        String reviewPrefix = "review/" + handoff.projection().path("review").path("review_ref").asText() + "/";
+        var review = mapper.readTree(directory.resolve(reviewPrefix + "review.json").toFile());
+        Path artifact = directory.resolve(reviewPrefix + "source/" + review.path("source").path("snapshot_ref").asText() + "/attempt-1.output");
+        Path target = directory.resolve(defect.startsWith("receipt") ? "receipt.json" : "identity.json");
+        byte[] original = Files.readAllBytes(target);
+        Object originalKey = Files.readAttributes(target, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS).fileKey();
+        var receipt = mapper.readTree(directory.resolve("receipt.json").toFile());
+        Path helper = probe("print(" + mapper.writeValueAsString(receipt.toString()) + ")");
+        var changed = new AtomicBoolean();
+        var afterMutation = new AtomicReference<Map<String, String>>();
+        try (var ignored = mockStatic(Files.class, call -> {
+            Object result = call.callRealMethod();
+            if (call.getMethod().getName().equals("newInputStream") && call.getArgument(0).equals(artifact)) {
+                return new FilterInputStream((InputStream) result) {
+                    @Override public void close() throws java.io.IOException {
+                        super.close();
+                        if (changed.compareAndSet(false, true)) {
+                            if (defect.endsWith("bytes")) {
+                                Files.setPosixFilePermissions(target, PosixFilePermissions.fromString("rw-------"));
+                                byte[] expanded = Arrays.copyOf(original, original.length + 1); expanded[original.length] = ' ';
+                                Files.write(target, expanded);
+                            } else {
+                                Files.setPosixFilePermissions(directory, PosixFilePermissions.fromString("rwx------"));
+                                Files.move(target, root.resolve("old-" + target.getFileName()));
+                                Files.write(target, original);
+                                Files.setPosixFilePermissions(directory, PosixFilePermissions.fromString("r-x------"));
+                            }
+                            Files.setPosixFilePermissions(target, PosixFilePermissions.fromString("r--------"));
+                            try { afterMutation.set(CitizenExtractionArchiveTest.tree(directory)); }
+                            catch (Exception error) { throw new java.io.IOException(error); }
+                        }
+                    }
+                };
+            }
+            return result;
+        })) {
+            invalid(() -> reader(helper, 20_000).read(handoff.request().path("handoff_ref").asText(),
+                    handoff.request().path("receipt_sha256").asText(), handoff.handoffRoot()));
+        } finally {
+            assertThat(changed).isTrue();
+            assertThat(CitizenExtractionArchiveTest.tree(directory)).isEqualTo(afterMutation.get());
+        }
+        if (defect.endsWith("identity")) assertThat(Files.readAttributes(target, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS).fileKey()).isNotEqualTo(originalKey);
     }
 
     @Test
