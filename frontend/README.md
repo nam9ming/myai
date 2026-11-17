@@ -58,7 +58,7 @@ flutter run -d web-server --web-hostname 127.0.0.1 --web-port 5173 --dart-define
 
 원본 SVG 7개는 bytes를 보존했고 원본 시제품 커밋은 `4c5edf0a10751d2463400e62a2538e2101ab23df`입니다. [자산 manifest](assets/prototype/SOURCE_MANIFEST.json)에 원본 해시·파생 fixture 해시를 기록합니다. SVG를 실제 API 공지 포스터로 재사용하지 않습니다.
 
-본문 Noto Sans KR는 원본 variable TTF를 글자·굵기 축 손실 없이 WOFF2로 압축한 로컬 자산을 사용합니다. `main()`에서 한 번 다운로드한 ByteData를 `FontLoader`의 `NotoSansKR`·`sans-serif` 별칭에 공유합니다. 같은 10MB TTF를 굵기별로 7번 받던 초기 로딩을 제거했습니다. 원본 TTF는 재생성용으로 보존하고 웹 빌드에는 포함하지 않습니다. 압축 내역은 `assets/fonts/BODY-COMPRESSION.json`, 재생성은 `python tool/compress_body_font.py` (`fonttools[woff]==4.68.0`)를 따릅니다. 포스터의 `serif`는 Noto Serif KR에서 **포스터에 쓰인 글자와 ASCII만 추린** 56,264 bytes의 `YeogiPosterSerif`를 사용합니다. OFL 라이선스와 [파생 기록](assets/fonts/SERIF-SUBSET.json)을 함께 포함합니다. 기본 한국어·포스터 글꼴은 원격 CSS 없이 로컬 자산에서 읽고, 실패 시 Flutter 기본 fallback을 사용합니다.
+본문 Noto Sans KR는 원본 variable TTF를 글자·굵기 축 손실 없이 WOFF2로 압축한 로컬 자산을 사용합니다. `main()`에서 한 번 다운로드한 ByteData를 `FontLoader`의 `sans-serif` 한 이름으로 등록하며 본문과 SVG 포스터가 공유합니다. 같은 10MB TTF를 굵기별로 7번 받던 초기 로딩을 제거했습니다. 원본 TTF는 재생성용으로 보존하고 웹 빌드에는 포함하지 않습니다. 압축 내역은 `assets/fonts/BODY-COMPRESSION.json`, 재생성은 `python tool/compress_body_font.py` (`fonttools[woff]==4.68.0`)를 따릅니다. 포스터의 `serif`는 Noto Serif KR에서 **포스터에 쓰인 글자와 ASCII만 추린** 56,264 bytes의 `YeogiPosterSerif`를 사용합니다. OFL 라이선스와 [파생 기록](assets/fonts/SERIF-SUBSET.json)을 함께 포함합니다. 기본 한국어·포스터 글꼴은 원격 CSS 없이 로컬 자산에서 읽고, 실패 시 Flutter 기본 fallback을 사용합니다.
 
 포스터 serif 재생성은 선택 작업입니다. `fonttools==4.68.0`이 설치된 Python에서 원본 TTF 경로를 전달합니다.
 
@@ -128,3 +128,7 @@ PLAYWRIGHT_MODULE=/path/to/playwright node tool/check_startup.cjs build/web /tmp
 대기 화면의 이미지는 기존 favicon SVG를 인라인으로 재사용합니다. 별도 이미지 요청 없이 화면의 가로·세로 중앙에 고정하며, 하단 안내·재시도 버튼은 로고의 위치를 밀어내지 않습니다. 작은 화면에서는 대기 패널을 스크롤해 재시도 버튼에 접근할 수 있습니다.
 
 압축 파일마다 SHA-256 기반 버전 쿼리를 넣고 브라우저 HTTP 캐시를 재사용합니다. 내용이 달라진 파일만 새 버전을 사용하며, HTML과 bootstrap의 서버 캐시 정책은 유지하므로 새 배포를 확인할 수 있습니다. LocalStorage·IndexedDB·Service Worker를 추가하거나 CSP를 완화하지 않습니다. 글꼴 준비와 공지 fixture 읽기도 병렬로 시작합니다.
+
+### 글꼴 해석 중복 제거
+
+동일한 글꼴을 두 가족 이름으로 등록하면 CanvasKit이 WOFF2 해석과 글꼴 공급자 재등록을 반복합니다. 본문 테마·직접 스타일·SVG의 글꼴 이름을 `sans-serif`로 통일해 한 번만 등록합니다. 전체 23,174자와 원래 가변 굵기·포스터 SVG는 유지합니다. 다운로드 중 Wasm 컴파일 방식과 Wasm 빌드 지원 조건, 전송·초기화 측정 결과는 성능 조사 보고서에서 별도로 구분합니다.

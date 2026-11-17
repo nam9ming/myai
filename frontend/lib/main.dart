@@ -11,12 +11,9 @@ import 'data/repositories.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // 두 글꼴 별칭이 같은 데이터를 공유해 다운로드를 한 번만 수행한다.
+  // 본문과 SVG 포스터가 같은 글꼴 등록을 공유해 중복 해석을 피한다.
   final fontData = rootBundle.load('assets/fonts/NotoSansKR.woff2');
-  final fonts = Future.wait([
-    for (final family in ['NotoSansKR', 'sans-serif'])
-      (FontLoader(family)..addFont(fontData)).load(),
-  ]);
+  final fonts = (FontLoader('sans-serif')..addFont(fontData)).load();
   final (_, prototype) = await (fonts, PrototypeData.load()).wait;
   final state = AppState(
     prototype,

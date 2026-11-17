@@ -23,7 +23,7 @@ ThemeData appTheme() => ThemeData(
     },
   ),
   useMaterial3: false,
-  fontFamily: 'NotoSansKR',
+  fontFamily: 'sans-serif',
   scaffoldBackgroundColor: Palette.paper,
   colorScheme: const ColorScheme.light(
     primary: Palette.orange,
@@ -83,7 +83,7 @@ TextStyle type(
   double height = 1.6,
   double spacing = 0,
 }) => TextStyle(
-  fontFamily: 'NotoSansKR',
+  fontFamily: 'sans-serif',
   fontSize: size,
   fontWeight: weight,
   height: height,

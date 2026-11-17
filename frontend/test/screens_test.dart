@@ -196,9 +196,6 @@ void main() {
   if (const bool.fromEnvironment('CAPTURE_QA')) {
     for (final path in ['/home', '/start', '/detail?id=edu-pottery']) {
       testWidgets('화면 제어 없이 위젯 캡처 $path', (tester) async {
-        final fonts = FontLoader('NotoSansKR')
-          ..addFont(rootBundle.load('assets/fonts/NotoSansKR.ttf'));
-        await fonts.load();
         final svgFonts = FontLoader('sans-serif')
           ..addFont(rootBundle.load('assets/fonts/NotoSansKR.ttf'));
         await svgFonts.load();
