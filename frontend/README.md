@@ -132,3 +132,5 @@ PLAYWRIGHT_MODULE=/path/to/playwright node tool/check_startup.cjs build/web /tmp
 ### 글꼴 해석 중복 제거
 
 동일한 글꼴을 두 가족 이름으로 등록하면 CanvasKit이 WOFF2 해석과 글꼴 공급자 재등록을 반복합니다. 본문 테마·직접 스타일·SVG의 글꼴 이름을 `sans-serif`로 통일해 한 번만 등록합니다. 전체 23,174자와 원래 가변 굵기·포스터 SVG는 유지합니다. 다운로드 중 Wasm 컴파일 방식과 Wasm 빌드 지원 조건, 전송·초기화 측정 결과는 성능 조사 보고서에서 별도로 구분합니다.
+
+초기 전송·글꼴 해석·Wasm·압축·캐시 전체 조사와 후속 후보는 [STARTUP_AUDIT](STARTUP_AUDIT.md)를 확인해주세요.

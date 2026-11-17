@@ -6,6 +6,32 @@ const policy="sandbox allow-scripts; base-uri 'none'; object-src 'none'; form-ac
  for(const mode of ['compressed','apple-path','raw-fallback','raw-mode','missing-gzip']){
   const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});const p=await context.newPage();const urls=[],errors=[],fontWarnings=[];
   p.on('request',r=>urls.push(r.url()));p.on('pageerror',e=>errors.push(e.message));p.on('console',m=>{if(/Failed to (parse|load) font/.test(m.text()))fontWarnings.push(m.text())});
+  // 본문 WOFF2의 중복 등록과 공급자 재해석이 다시 생기면 실패한다.
+  await p.addInitScript((bodyFontBytes) => {
+   window.bodyFontOperations = 0;
+   let kit;
+   Object.defineProperty(window, 'flutterCanvasKit', {
+    get: () => kit,
+    set(value) {
+     kit = value;
+     if (!value) return;
+     const count = (object, key) => {
+      const original = object[key];
+      object[key] = function (...args) {
+       if (args[0]?.byteLength === bodyFontBytes) window.bodyFontOperations++;
+       return original.apply(this, args);
+      };
+     };
+     count(value.Typeface, 'MakeFreeTypeFaceFromData');
+     const make = value.TypefaceFontProvider.Make;
+     value.TypefaceFontProvider.Make = function (...args) {
+      const provider = make.apply(this, args);
+      count(provider, 'registerFont');
+      return provider;
+     };
+    },
+   });
+  }, fs.statSync(path.join(web, 'assets/assets/fonts/NotoSansKR.woff2')).size);
   if(mode==='apple-path')await p.addInitScript(()=>Object.defineProperty(navigator,'vendor',{get:()=> 'Apple Computer, Inc.'}));
   if(mode==='raw-fallback')await p.addInitScript(()=>Object.defineProperty(window,'DecompressionStream',{value:undefined}));
   await p.route('**/*',async route=>{
@@ -17,6 +43,7 @@ const policy="sandbox allow-scripts; base-uri 'none'; object-src 'none'; form-ac
   });
   await p.goto(base+(mode==='raw-mode'?'?startup=raw':''),{waitUntil:'domcontentloaded'});await p.locator('#loading').waitFor({state:'detached',timeout:60000});assert.deepEqual(errors,[]);assert.deepEqual(fontWarnings,[]);
   assert.equal(urls.filter(u=>u.endsWith('NotoSansKR.woff2')).length,1,'본문 글꼴 중복 요청');
+  assert.equal(await p.evaluate(() => window.bodyFontOperations), 2, '본문 글꼴 중복 해석');
   if(mode==='compressed'||mode==='apple-path'){assert.ok(urls.some(u=>new URL(u).pathname.endsWith('main.dart.js.gz')));assert.equal(urls.filter(u=>u.endsWith('/main.dart.js')).length,0);assert.equal(urls.filter(u=>u.endsWith('.wasm')).length,0)}
   else assert.ok(urls.some(u=>u.endsWith('/main.dart.js')));
   assert.ok(await p.evaluate(()=>performance.getEntriesByName('yeogi-first-frame').length===1));await p.screenshot({path:path.join(output,mode+'.png')});fs.writeFileSync(path.join(output,mode+'.json'),JSON.stringify({urls,errors,fontWarnings},null,2));console.log('PASS',mode);await context.close();
