@@ -1,4 +1,5 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/gestures.dart';
 
 import '../../app/app_context.dart';
 import '../../core/ui.dart';
@@ -215,90 +216,98 @@ class _NearbyPageState extends State<NearbyPage> {
                     ),
                   ],
                 ),
-                child: ListView(
-                  controller: controller,
-                  padding: EdgeInsets.fromLTRB(
-                    20,
-                    0,
-                    20,
-                    24 + MediaQuery.paddingOf(context).bottom,
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context).copyWith(
+                    dragDevices: {
+                      ...ScrollConfiguration.of(context).dragDevices,
+                      PointerDeviceKind.mouse,
+                    },
                   ),
-                  children: [
-                    Center(
-                      child: Container(
-                        key: const ValueKey('nearby-sheet-handle'),
-                        width: 44,
-                        height: 5,
-                        margin: const EdgeInsets.symmetric(vertical: 14),
-                        decoration: BoxDecoration(
-                          color: const Color(0xffd8dbd5),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                      ),
+                  child: ListView(
+                    controller: controller,
+                    padding: EdgeInsets.fromLTRB(
+                      20,
+                      0,
+                      20,
+                      24 + MediaQuery.paddingOf(context).bottom,
                     ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            selected == null
-                                ? '지도 안 소식 ${shown.length}건'
-                                : selected.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: type(16, weight: FontWeight.w600),
+                    children: [
+                      Center(
+                        child: Container(
+                          key: const ValueKey('nearby-sheet-handle'),
+                          width: 44,
+                          height: 5,
+                          margin: const EdgeInsets.symmetric(vertical: 14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xffd8dbd5),
+                            borderRadius: BorderRadius.circular(6),
                           ),
                         ),
-                        if (selected != null)
-                          IconAction(
-                            'close',
-                            '선택 해제',
-                            onTap: () => select(null),
+                      ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              selected == null
+                                  ? '지도 안 소식 ${shown.length}건'
+                                  : selected.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: type(16, weight: FontWeight.w600),
+                            ),
                           ),
-                        UiButton(
-                          '올려서 보기',
-                          quiet: true,
-                          onTap: () => resizeSheet(.86),
-                        ),
-                        UiButton(
-                          '접기',
-                          quiet: true,
-                          onTap: () => resizeSheet(.16),
-                        ),
-                      ],
-                    ),
-                    if (busy)
-                      const LinearProgressIndicator(color: Palette.orange),
-                    if (error != null)
-                      EmptyPanel(
-                        '소식을 불러오지 못했어요',
-                        error!,
-                        action: '다시 조회',
-                        onTap: load,
+                          if (selected != null)
+                            IconAction(
+                              'close',
+                              '선택 해제',
+                              onTap: () => select(null),
+                            ),
+                          UiButton(
+                            '올려서 보기',
+                            quiet: true,
+                            onTap: () => resizeSheet(.86),
+                          ),
+                          UiButton(
+                            '접기',
+                            quiet: true,
+                            onTap: () => resizeSheet(.16),
+                          ),
+                        ],
                       ),
-                    if (selected != null)
-                      _card(selected, expanded: true)
-                    else ...[
-                      Text(
-                        '아이콘을 누르거나 시트를 위로 올려 소식을 확인하세요.',
-                        style: type(12, color: Palette.sub),
-                      ),
-                      const SizedBox(height: 14),
-                      if (!busy && error == null && shown.isEmpty)
+                      if (busy)
+                        const LinearProgressIndicator(color: Palette.orange),
+                      if (error != null)
+                        EmptyPanel(
+                          '소식을 불러오지 못했어요',
+                          error!,
+                          action: '다시 조회',
+                          onTap: load,
+                        ),
+                      if (selected != null)
+                        _card(selected, expanded: true)
+                      else ...[
                         Text(
-                          '이 지도 영역에는 소식이 없어요. 지도를 이동해보세요.',
-                          style: type(13, color: Palette.sub),
+                          '아이콘을 누르거나 시트를 위로 올려 소식을 확인하세요.',
+                          style: type(12, color: Palette.sub),
                         ),
-                      for (final item in shown) _card(item),
+                        const SizedBox(height: 14),
+                        if (!busy && error == null && shown.isEmpty)
+                          Text(
+                            '이 지도 영역에는 소식이 없어요. 지도를 이동해보세요.',
+                            style: type(13, color: Palette.sub),
+                          ),
+                        for (final item in shown) _card(item),
+                      ],
+                      if (feed != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Text(
+                            '${feed!.demo ? "예시 소식" : "공개 소식"} · 갱신 ${feed!.updatedAt.toUtc().toIso8601String().replaceFirst("T", " ").substring(0, 16)} UTC',
+                            style: type(11, color: Palette.sub),
+                          ),
+                        ),
                     ],
-                    if (feed != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: Text(
-                          '${feed!.demo ? "예시 소식" : "공개 소식"} · 갱신 ${feed!.updatedAt.toUtc().toIso8601String().replaceFirst("T", " ").substring(0, 16)} UTC',
-                          style: type(11, color: Palette.sub),
-                        ),
-                      ),
-                  ],
+                  ),
                 ),
               ),
             ),
