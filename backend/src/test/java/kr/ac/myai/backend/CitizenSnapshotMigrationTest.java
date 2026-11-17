@@ -13,12 +13,14 @@ import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -69,12 +71,18 @@ class CitizenSnapshotMigrationTest {
             content.verifySnapshot(repository.snapshot(legacy.id()), "current");
             insert(jdbc, "citizen-snapshot-v1", null, null);
             for (String schema : List.of("snapshot-v1", "legacy-other-version")) {
-                assertThatThrownBy(() -> insert(jdbc, schema, null, null)).isInstanceOf(DataIntegrityViolationException.class)
-                        .hasMessageContaining("chk_snapshot_version_family");
+                rejectsVersionFamily(jdbc, schema, null, null);
             }
-            assertThatThrownBy(() -> insert(jdbc, "citizen-snapshot-v1", "fake-rules", "fake-dictionary"))
-                    .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("chk_snapshot_version_family");
+            rejectsVersionFamily(jdbc, "citizen-snapshot-v1", "fake-rules", "fake-dictionary");
         }
+    }
+
+    private void rejectsVersionFamily(org.springframework.jdbc.core.JdbcTemplate jdbc, String schema, String rules, String dictionary) {
+        assertThatThrownBy(() -> insert(jdbc, schema, rules, dictionary)).isInstanceOf(DataAccessException.class)
+                .hasRootCauseInstanceOf(SQLException.class).rootCause().isInstanceOfSatisfying(SQLException.class, cause -> {
+                    assertThat(cause.getErrorCode()).isEqualTo(3819);
+                    assertThat(cause.getMessage()).contains("chk_snapshot_version_family");
+                });
     }
 
     private void insert(org.springframework.jdbc.core.JdbcTemplate jdbc, String schema, String rules, String dictionary) {
