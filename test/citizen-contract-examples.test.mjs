@@ -6,12 +6,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const cases = [
+  ["같은 시민 공개본의 목록·상세 생성 시각이 다르면 계약 검증이 실패한다", (value) => { value.data.created_at = "2026-11-16T18:00:00Z"; }, "citizen-list-response.json"],
   ["시민 상세가 목록과 다른 공개본이면 계약 검증이 실패한다", (value) => { value.snapshot_id = "90000000-0000-4000-8000-000000000001"; }],
   ["미확인 최초 이력에 이전 상태를 만들면 계약 검증이 실패한다", (value) => { value.data.history.entries[0].before = {}; }],
   ["시민 공개 이력에 비공개 검토자를 추가하면 계약 검증이 실패한다", (value) => { value.data.history.entries[0].actor = "synthetic-reviewer"; }],
 ];
 
-for (const [name, mutate] of cases) {
+for (const [name, mutate, file = "citizen-detail-response.json"] of cases) {
   test(name, (t) => {
     const root = mkdtempSync(join(tmpdir(), "myai-citizen-contract-"));
     t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -26,7 +27,7 @@ for (const [name, mutate] of cases) {
     const check = () => spawnSync("python3", [script], { encoding: "utf8" });
     const valid = check();
     assert.equal(valid.status, 0, valid.stderr);
-    const detail = join(root, "contracts/examples/citizen-detail-response.json");
+    const detail = join(root, "contracts/examples", file);
     const value = JSON.parse(readFileSync(detail, "utf8"));
     mutate(value);
     writeFileSync(detail, JSON.stringify(value));

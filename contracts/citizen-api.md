@@ -30,7 +30,7 @@ notices는 제목·`education/support/culture/construction_traffic/living` 중 �
 
 ## 공개 이력
 
-history의 scope는 `same_data_kind_published_snapshots`, completeness는 `unknown`이다. 동일 자료 종류의 실제 시민 공개 기록을 현재 head까지 읽는다. 원문의 모든 변경·검토 revision을 수집했다는 뜻은 아니다.
+history의 scope는 `same_data_kind_published_snapshots`, completeness는 `unknown`이다. 시민 채널의 최초 감사부터 현재 head까지 버전 연속성·전후 공개본 연결을 검증한 뒤, 선택한 자료 종류에서 해당 사건이 처음 포함된 상태부터 반환한다. 다른 자료 종류의 등장이나 그 이전 빈 공개본을 철회·복구 이력으로 만들지 않는다. 원문의 모든 변경·검토 revision을 수집했다는 뜻은 아니다.
 
 | kind | 의미 |
 | --- | --- |
@@ -41,7 +41,9 @@ history의 scope는 `same_data_kind_published_snapshots`, completeness는 `unkno
 
 각 항목은 `kind/snapshot_id/published_at/action/before/after`를 가진다. before/after는 `{notice,sources}` 또는 null이며 출처·근거도 당시 값으로 보존한다. 같은 상태의 재공개는 새 사실 변경으로 만들지 않는다. `withdrawn`은 공지 공개 목록에서 빠졌다는 뜻으로, 원문 행사의 취소 판정과 구별한다. 검토자·비공개 감사 사유·AI 원출력·원문 파일 경로는 반환하지 않는다.
 
-한 요청에서 검증·조립하는 고유 canonical의 원래 UTF-8 bytes 합은 현재본을 포함해8MiB, 읽는 공개 감사는1000개 이하다. 같은 공개본의 반복 참조는 요청 내부에서 재사용한다. 한도를 넘으면503 CITIZEN_HISTORY_TOO_LARGE·retryable=false이며 일부 이력을 전체인 것처럼 돌려주지 않는다. 현재 공개본에 없는 사건은404이며 과거 상세를 현재로 대신 표시하지 않는다.
+상세 조회는 시민 채널 전체 공개 감사를1000개까지 검증한다. 현재 head 버전이 이를 초과하면 과거 canonical을 검색하기 전에503 CITIZEN_HISTORY_TOO_LARGE·retryable=false로 거부한다. 따라서 뒤늦게 추가된 사건도 채널 전체 한도의 영향을 받는다. 장기 운영을 위한 이력 색인·분할은 후속이며 적용된 DB 구조는 바꾸지 않는다.
+
+한 요청에서 검증하는 고유 canonical의 원래 UTF-8 bytes 합은 현재본을 포함해8MiB다. 다른 자료 종류·사건 등장 이전 공개본도 검증·한도에 포함한다. 같은 공개본은 요청 내부에서 재사용한다. 반복 복구로 이력 응답이 증폭되지 않도록 항목을 추가하는 동안 누적 직렬화 크기를 검사하며, 목록·상세의 최종 JSON도8MiB 이하로 제한한다. 초과하면 같은503을 반환하며 일부 이력을 전체인 것처럼 돌려주지 않는다. 현재 공개본에 없는 사건은404이며 과거 상세를 현재로 대신 표시하지 않는다.
 
 ## 오류·일관성
 
@@ -50,7 +52,7 @@ history의 scope는 `same_data_kind_published_snapshots`, completeness는 `unkno
 | 422 INVALID_REQUEST | 필수 ID·형식·지원 query를 확인 |
 | 503 PUBLIC_DATA_NOT_READY | 아직 시민 head가 없음. 공개 준비 상태를 확인 |
 | 404 SNAPSHOT_NOT_FOUND | 미등록·미공개·다른 계열의 ID |
-| 409 SNAPSHOT_RETIRED | 공개본 교체. 제공된 current_snapshot_id 또는 목록을 다시 읽음 |
+| 409 SNAPSHOT_RETIRED | 공개본 교체. 교체본의 공개·무결성을 검증한 current_snapshot_id 또는 목록을 다시 읽음 |
 | 404 NOTICE_NOT_FOUND | 선택한 현재 공개본에 해당 사건이 없음 |
 | 500 SNAPSHOT_INVALID | 고정 JSON/hash/metadata·과거 구성 참조의 무결성을 확인할 수 없음 |
 | 503 CITIZEN_HISTORY_TOO_LARGE | 공개 이력 조회 한도 초과. 반복 재시도로 해결되지 않음 |

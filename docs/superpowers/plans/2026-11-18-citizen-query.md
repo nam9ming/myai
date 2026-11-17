@@ -30,7 +30,7 @@
 - head 없음503·유효한 빈 공개본200·미등록404·교체된 공개본409를 구분하며 복구 후 과거 ID가 현재 head이면 다시 읽힌다.
 - 미지원/중복/빈 query와 비정규 UUID는422다. 미구현 무료/모집/기간 조건을 조용히 무시하지 않는다.
 - 현재 head까지의 실제 공개·철회·복구만 반환한다. 최초 확보 이전/다른 자료 종류/원문 밖 이력을 생성하거나 검토자·사유·원출력·private 경로를 노출하지 않는다.
-- 최대1000개 이력과 읽는 canonical 총8MiB를 넘으면 명시503·retryable=false이며 일부 이력을 전부인 것처럼 반환하지 않는다. SELECT 전용 실제 HTTP/JAR에서도 DB·원본은 불변이다.
+- 시민 채널 전체 감사1000개·고유 canonical 총8MiB·조립/최종 JSON8MiB 한도를 넘으면 명시503·retryable=false이며 일부 이력을 전부인 것처럼 반환하지 않는다. SELECT 전용 실제 HTTP/JAR에서도 DB·원본은 불변이다.
 
 ## 계약·공유 인터페이스
 
@@ -40,9 +40,10 @@
 - 상세 data의 정확한 키는 `created_at/data_kind/mode/timezone/notice/sources/history`다. notice는 선택 event_id의 전체 공개 사실이며 sources는 그 source_version_ids만 포함한다.
 - history의 정확한 키는 `scope/completeness/entries`다. scope=`same_data_kind_published_snapshots`, completeness=`unknown`이다. 항목 키는 `kind/snapshot_id/published_at/action/before/after`. before/after는 `{notice,sources}` 또는 null이다. 처음 확보한 상태는 kind=`first_observed`·before=null이며 이전에 공지가 없었다는 뜻이 아니다. 이후 실제 공개 상태의 변경은 `changed/withdrawn/restored`로 구분한다. 같은 상태 재공개는 새 사실 변경으로 만들지 않는다. 권한/사람 검토의 비공개 감사는 반환하지 않는다.
 - `CitizenNoticeService(PublicSnapshotRepository,CitizenPublicationContent,PublicationContent,ObjectMapper)`; `JsonNode list(UUID snapshotId)`와 `JsonNode notice(UUID eventId,UUID snapshotId)`. class에 읽기 전용 REPEATABLE_READ를 적용하고 `PublicRequestLogContext.selected(id,null)`로 지점 없는 선택을 기록한다.
-- 저장소에 `MAX_CITIZEN_HISTORY=1000`, `List<Historic> citizenHistory(String eventId,String selectedSnapshot)`를 추가한다. 기존 Historic4필드를 사용하고 revisionId는 철회 때 null이다. 현재 시민 head와 선택 ID를 묶고, 해당 사건을 처음 공개한 감사부터 현재 head의 lock_version까지 읽는다. LEFT JOIN membership으로 사건 없는 중간 공개도 보존하고 head_version/audit_id 순·LIMIT1001을 적용한다. 기존 history의 MIN 최초발행 경계는 변경하지 않는다.
-- service는 모든 사용 공개본의 schema/channel/audit·checksum·created_at·공개 allowlist를 기존 시민 validator로 검사한다. 이력의 membership과 canonical 내 event/revision도 대조한다. 같은 자료 종류만 비교하며, 누락/손상된 과거본은500 SNAPSHOT_INVALID다.
-- 현재/이전 canonical 원래 UTF-8 bytes의 누적8MiB·이력1000개를 읽기 한도로 사용한다. 이력 초과는503 CITIZEN_HISTORY_TOO_LARGE·retryable=false다. 현재 사실/이력을 다른 snapshot이나 빈 값으로 대체하지 않는다. 이 한도는 원문 내용/사업 의미가 아닌 작성자의 읽기 자원 경계다.
+- 저장소의 `MAX_CITIZEN_HISTORY=1000`, `CitizenHistoric(snapshotId,revisionId,publishedAt,action,version,beforeId)`와 `CitizenHistory(headVersion,audits)`를 사용한다. `citizenHistory(eventId,selectedSnapshot)`는 같은 시민 head의 버전을 먼저 확인해1000개 초과를 즉시 거부하고, 그 이하일 때 LEFT JOIN membership으로 최초 감사0부터 head까지 최대1001개 metadata를 읽는다. 기존 Historic와 legacy history SQL은 변경하지 않는다. 최초 사건을 찾으려고 과거 canonical 전체를 DB에서 검색하지 않는다.
+- service는 버전0부터 head까지 연속된 감사·전후 공개본 연결·끝 버전/UUID와 모든 사용 공개본의 schema/channel/audit·checksum·created_at·공개 allowlist를 검사한다. membership과 canonical의 event/revision도 대조하며 누락/손상은500 SNAPSHOT_INVALID다. 선택 자료 종류에서 해당 사건이 처음 실제 포함된 상태부터 이력을 만든다. 앞선 빈 공개본과 다른 자료 종류를 최초 철회/복구로 오인하지 않는다.
+- 현재/이전 고유 canonical 원래 UTF-8 bytes 누적8MiB와 시민 채널 전체 감사1000개를 읽기 한도로 사용한다. 조립 중 이력 항목의 누적 직렬화 크기와 최종 목록/상세 JSON도8MiB 이하로 제한한다. 초과는503 CITIZEN_HISTORY_TOO_LARGE·retryable=false다. 이는 작성자의 자원 경계이며 채널 전체가 길면 최근 사건도 상세 조회가 거부된다. 장기 운영의 이력 색인/분할은 별도 후속이다.
+- 교체된 ID의409 안내는 교체본까지 공개 여부/schema/hash/형식을 검증한 뒤 제공한다. legacy/미공개/손상 head에는500을 반환하고 UUID를 노출하지 않는다. head가 없는 명시 과거 ID는 기존409·current_snapshot_id 생략을 유지한다.
 - 오류는 기존 envelope/요청 UUID/field_errors 배열을 재사용한다. head 없음503 PUBLIC_DATA_NOT_READY; 미등록/다른 계열404 SNAPSHOT_NOT_FOUND; 교체409 SNAPSHOT_RETIRED+current_snapshot_id; 해당 사건 없음404 NOTICE_NOT_FOUND; 손상500 SNAPSHOT_INVALID다. DB 연결 실패는 기존 안전한503 경로다.
 
 ## 파일·소유권

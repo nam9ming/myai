@@ -52,7 +52,8 @@ class CitizenNoticeServiceTest {
     private final PublicSnapshotRepository repository = mock(PublicSnapshotRepository.class);
     private final CitizenNoticeService service = new CitizenNoticeService(repository, canonical, shared, mapper);
     private final Map<String, PublicSnapshotRepository.Published> records = new HashMap<>();
-    private List<PublicSnapshotRepository.Historic> audits;
+    private List<PublicSnapshotRepository.CitizenHistoric> audits;
+    private final Map<Integer, String> auditSnapshots = new HashMap<>();
     private ObjectNode payload;
     private PublicationRepository.Document document;
     private String head;
@@ -70,7 +71,7 @@ class CitizenNoticeServiceTest {
         head = CURRENT;
         when(repository.head(CitizenPublicationContent.CHANNEL)).thenAnswer(call -> Optional.ofNullable(head));
         when(repository.citizenPublished(anyString())).thenAnswer(call -> Optional.ofNullable(records.get(call.getArgument(0))));
-        when(repository.citizenHistory(anyString(), anyString())).thenAnswer(call -> audits);
+        when(repository.citizenHistory(anyString(), anyString())).thenAnswer(call -> new PublicSnapshotRepository.CitizenHistory(audits.stream().mapToLong(PublicSnapshotRepository.CitizenHistoric::version).max().orElse(0), audits));
     }
 
     @Test
@@ -305,7 +306,7 @@ class CitizenNoticeServiceTest {
     @Test
     void oneThousandRepeatedImmutableRowsUsesOnlyOneCanonicalRead() throws Exception {
         records.put(CURRENT, padded(records.get(CURRENT), 5 * 1024 * 1024));
-        audits = Collections.nCopies(1000, audit(CURRENT, REVISION, 1, "publish"));
+        audits = java.util.stream.IntStream.rangeClosed(1, 1000).mapToObj(hour -> audit(CURRENT, REVISION, hour, hour == 1 ? "publish" : "rollback")).toList();
         assertThat(detail().path("history").path("entries")).hasSize(1);
         verify(repository, times(1)).citizenPublished(CURRENT);
     }
@@ -336,6 +337,19 @@ class CitizenNoticeServiceTest {
         error(this::detail, HttpStatus.INTERNAL_SERVER_ERROR, "SNAPSHOT_INVALID");
     }
 
+    @Test
+    void alternatingLargeFrozenStatesRejectsResponseAmplification() throws Exception {
+        var current = records.get(CURRENT);
+        records.put(CURRENT, new PublicSnapshotRepository.Published(altered(current.snapshot(), value ->
+                ((ObjectNode) value.path("notices").get(0)).put("title", "A".repeat(2 * 1024 * 1024))), current.schemaVersion(), CREATED, CURRENT));
+        var past = published(PAST, "synthetic", payload);
+        records.put(PAST, new PublicSnapshotRepository.Published(altered(past.snapshot(), value ->
+                ((ObjectNode) value.path("notices").get(0)).put("title", "B".repeat(2 * 1024 * 1024))), past.schemaVersion(), CREATED, CURRENT));
+        audits = List.of(audit(PAST, REVISION, 1, "publish"), audit(CURRENT, REVISION, 2, "publish"),
+                audit(PAST, REVISION, 3, "rollback"), audit(CURRENT, REVISION, 4, "rollback"));
+        tooLarge();
+    }
+
     private JsonNode detail() { return service.notice(UUID.fromString(EVENT), UUID.fromString(CURRENT)).path("data"); }
     private void tooLarge() {
         assertThatThrownBy(this::detail).isInstanceOfSatisfying(ApiException.class, failure -> {
@@ -350,8 +364,9 @@ class CitizenNoticeServiceTest {
             assertThat(failure.code()).isEqualTo(code);
         });
     }
-    private PublicSnapshotRepository.Historic audit(String id, String revisionId, int hour, String action) {
-        return new PublicSnapshotRepository.Historic(id, revisionId, CREATED.plusSeconds(hour * 3600L), action);
+    private PublicSnapshotRepository.CitizenHistoric audit(String id, String revisionId, int hour, String action) {
+        auditSnapshots.put(hour - 1, id);
+        return new PublicSnapshotRepository.CitizenHistoric(id, revisionId, CREATED.plusSeconds(hour * 3600L), action, hour - 1, hour == 1 ? null : auditSnapshots.get(hour - 2));
     }
     private PublicSnapshotRepository.Published published(String id, String kind, ObjectNode... events) throws Exception {
         var metadata = (ObjectNode) mapper.readTree(document.metadata());

@@ -126,6 +126,7 @@ def main():
     assert citizen_list["data"]["notice_count"] == len(citizen_list["data"]["notices"]) == 1
     notice = citizen_detail["data"]["notice"]
     assert citizen_list["data"]["notices"] == [notice]
+    assert citizen_list["data"]["created_at"] == citizen_detail["data"]["created_at"]
     assert citizen_detail["data"]["sources"] == citizen_list["data"]["sources"]
     fact_names = set("application_period occurrences regions locations residency_requirement target eligibility application_method preparation cost recruitment lifecycle".split())
     assert set(notice) == fact_names | {"event_id", "revision_id", "title", "categories", "source_version_ids", "document_links", "relations", "evidence"}

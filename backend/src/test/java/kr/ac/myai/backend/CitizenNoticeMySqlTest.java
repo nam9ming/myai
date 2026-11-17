@@ -277,6 +277,67 @@ class CitizenNoticeMySqlTest {
         assertThat(error.has("data")).isFalse();
     }
 
+    @Test
+    void firstSelectedKindOccurrenceDoesNotInventWithdrawalOrRestoration() throws Exception {
+        var input = fixtures.citizen("education", false); String approved = fixtures.approve(input, true);
+        var other = fixtures.publish(List.of(approved), null);
+        var otherCanonical = (ObjectNode) fixtures.canonical(other.snapshotId()); otherCanonical.put("data_kind", "real");
+        fixtures.replaceCanonical(other.snapshotId(), otherCanonical);
+        jdbc.update("UPDATE snapshots SET data_kind='real' WHERE snapshot_id=?", other.snapshotId());
+        fixtures.publish(List.of(), 0L);
+        var first = fixtures.publish(List.of(approved), 1L);
+        var entries = ok(detail(CitizenNoticeFixtures.event(input), first.snapshotId())).path("data").path("history").path("entries");
+        assertThat(entries).hasSize(1);
+        assertThat(entries.get(0).path("kind").asText()).isEqualTo("first_observed");
+        assertThat(entries.get(0).path("snapshot_id").asText()).isEqualTo(first.snapshotId());
+        assertThat(entries.get(0).path("before").isNull()).isTrue();
+        assertThat(entries.get(0).path("after").isObject()).isTrue();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"gap", "before_link", "duplicate_version", "missing_terminal", "head_version"})
+    void incompleteOrDisconnectedAuditChainCannotLookUnchanged(String defect) throws Exception {
+        var input = fixtures.citizen("living", false); String approved = fixtures.approve(input, true);
+        var first = fixtures.publish(List.of(approved), null);
+        fixtures.publish(List.of(), 0L); fixtures.rollback(first.snapshotId(), 1L);
+        switch (defect) {
+            case "gap" -> jdbc.update("DELETE FROM publication_audits WHERE channel_key='citizen:current' AND head_version=1");
+            case "before_link" -> jdbc.update("UPDATE publication_audits SET before_snapshot_id=NULL WHERE channel_key='citizen:current' AND head_version=1");
+            case "duplicate_version" -> jdbc.update("UPDATE publication_audits SET head_version=0 WHERE channel_key='citizen:current' AND head_version=1");
+            case "missing_terminal" -> jdbc.update("DELETE FROM publication_audits WHERE channel_key='citizen:current' AND head_version=2");
+            default -> jdbc.update("UPDATE publication_heads SET lock_version=3 WHERE channel_key='citizen:current'");
+        }
+        error(detail(CitizenNoticeFixtures.event(input), first.snapshotId()), 500, "SNAPSHOT_INVALID");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"legacy", "unpublished", "corrupt"})
+    void retiredSelectionDoesNotDiscloseAnUnverifiedReplacementId(String defect) throws Exception {
+        var input = fixtures.citizen("support", false); String approved = fixtures.approve(input, true);
+        var past = fixtures.publish(List.of(approved), null); var replacement = fixtures.publish(List.of(approved), 0L);
+        if (defect.equals("legacy")) jdbc.update("UPDATE snapshots SET schema_version='snapshot-v1',rules_version='rules-v1',dictionary_version='synthetic-dictionary' WHERE snapshot_id=?", replacement.snapshotId());
+        else if (defect.equals("unpublished")) jdbc.update("DELETE FROM publication_audits WHERE after_snapshot_id=?", replacement.snapshotId());
+        else jdbc.update("UPDATE snapshots SET checksum=? WHERE snapshot_id=?", "0".repeat(64), replacement.snapshotId());
+        var failure = error("/api/v1/citizen/notices?snapshot_id=" + past.snapshotId(), 500, "SNAPSHOT_INVALID");
+        assertThat(failure.has("current_snapshot_id")).isFalse();
+        assertThat(failure.toString()).doesNotContain(replacement.snapshotId());
+    }
+
+    @Test
+    void recentNoticeDoesNotTriggerAnUnboundedSearchThroughEarlierPublications() throws Exception {
+        var empty = fixtures.publish(List.of(), null);
+        var rows = new ArrayList<Object[]>();
+        for (int version = 1; version <= 1000; version++) rows.add(new Object[] {UUID.randomUUID().toString(), empty.snapshotId(),
+                empty.snapshotId(), version, Timestamp.from(Instant.now())});
+        jdbc.batchUpdate("INSERT INTO publication_audits(audit_id, channel_key, action, before_snapshot_id, after_snapshot_id, head_version, reason, actor, happened_at) "
+                + "VALUES (?, 'citizen:current', 'rollback', ?, ?, ?, '합성 시작점 비용 시험', 'synthetic-history', ?)", rows);
+        jdbc.update("UPDATE publication_heads SET lock_version=1000 WHERE channel_key='citizen:current'");
+        var input = fixtures.citizen("education", false); String approved = fixtures.approve(input, true);
+        var selected = fixtures.publish(List.of(approved), 1000L);
+        var failure = error(detail(CitizenNoticeFixtures.event(input), selected.snapshotId()), 503, "CITIZEN_HISTORY_TOO_LARGE");
+        assertThat(failure.path("error").path("retryable").asBoolean()).isFalse();
+    }
+
     private URI uri(String path) { return URI.create("http://127.0.0.1:" + port + path); }
     private String detail(String event, String snapshot) { return "/api/v1/citizen/notices/" + event + "?snapshot_id=" + snapshot; }
     private HttpResponse<String> get(String path) throws Exception {

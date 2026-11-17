@@ -111,6 +111,10 @@ class CitizenNoticeApiTest {
         mvc.perform(get(BASE)).andExpect(status().isServiceUnavailable()).andExpect(jsonPath("$.error.code").value("PUBLIC_DATA_NOT_READY"));
         mvc.perform(get(BASE).param("snapshot_id", OTHER)).andExpect(status().isNotFound()).andExpect(jsonPath("$.error.code").value("SNAPSHOT_NOT_FOUND"));
         when(repository.citizenPublished(ID)).thenReturn(Optional.of(new PublicSnapshotRepository.Published(empty.snapshot(), empty.schemaVersion(), empty.createdAt(), OTHER)));
+        String replacement = empty.snapshot().canonical().replace(ID, OTHER);
+        var next = new PublicationRepository.Snapshot(OTHER, "current", null, replacement,
+                ReviewedImportReader.sha256(replacement.getBytes(StandardCharsets.UTF_8)), "synthetic", null, null);
+        when(repository.citizenPublished(OTHER)).thenReturn(Optional.of(new PublicSnapshotRepository.Published(next, empty.schemaVersion(), empty.createdAt(), OTHER)));
         mvc.perform(get(BASE).param("snapshot_id", ID)).andExpect(status().isConflict()).andExpect(jsonPath("$.current_snapshot_id").value(OTHER));
         var original = empty.snapshot();
         var corrupt = new PublicationRepository.Snapshot(ID, "current", null, original.canonical(), "0".repeat(64), "synthetic", null, null);
