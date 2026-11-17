@@ -7,7 +7,7 @@ from processing.extraction.archive import (REPO, DEFAULT_ROOT as RUN_ROOT, _fing
                                             _read_checked, _root, verify_run)
 from processing.extraction.metadata import stamp
 from processing.extraction.rule_runs import RULE_ROOT, verify_rules_run
-from processing.extraction.schema import HASH, UUID
+from processing.extraction.schema import HASH, UUID, SCHEMA_VERSION
 from processing.extraction.validation import MAX_BYTES, array, decode, require, shape, text
 from .bindings import _frozen
 from .dataset import _id, _label, _parse_manifest
@@ -114,6 +114,7 @@ def _human_source(value,doc,base,gold):
     _check(_fingerprint(parent_folder/'receipt.json')==artifacts[f'{prefix}/receipt.json'],
            'EVALUATION_SOURCE_MISMATCH')
     metadata = decode(_read_checked(folder/f'{prefix}/metadata.json',artifacts[f'{prefix}/metadata.json']),'archive')
+    _check(metadata['schema_version']==SCHEMA_VERSION,'EVALUATION_SCHEMA_UNSUPPORTED')
     packet = dict(document=doc,receipt=receipt,human=human,parent=parent,parent_metadata=metadata,
         outputs=dict(human_reviewed=_read_checked(folder/'output.json',artifacts['output.json'])))
     return packet,_collect(folder,[*artifacts,'identity.json','receipt.json'],f'runs/{reference}')
@@ -153,6 +154,9 @@ def _load_sources(value,gold_root,run_root):
             _check(run['execution_mode']=='rules','EVALUATION_RULES_REQUIRES_RULE_RUN')
         else:
             run = verify_run(run_id,folder.parent);_frozen(folder,run)
+        metadata = decode(_read_checked(folder/'metadata.json',run['artifacts']['metadata.json']),'archive')
+        if value['method']!='rules':
+            _check(metadata['schema_version']==SCHEMA_VERSION,'EVALUATION_SCHEMA_UNSUPPORTED')
             _check(run['execution_mode']=='api','EVALUATION_AUTO_REQUIRES_API')
         raw = _json(run);digest = hashlib.sha256(raw).hexdigest()
         _check(_fingerprint(folder/'receipt.json')==dict(sha256=digest,size=len(raw))
@@ -162,7 +166,6 @@ def _load_sources(value,gold_root,run_root):
         run_input = _read_checked(folder/'input.json',run['artifacts']['input.json'])
         _check(run['document_version_id']==version and run['data_kind']==dataset['data_kind']
                and run_input==inputs[version],'EVALUATION_SOURCE_MISMATCH')
-        metadata = decode(_read_checked(folder/'metadata.json',run['artifacts']['metadata.json']),'archive')
         if value['method']=='rules':
             _check(all(metadata[k]==value['policy'][k] for k in ('rule_version','profile_version'))
                    and run['profile_sha256']==value['policy']['profile_sha256'],'EVALUATION_POLICY_MISMATCH')

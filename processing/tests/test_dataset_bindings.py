@@ -75,6 +75,22 @@ class DatasetBindingsTest(unittest.TestCase):
         if code: self.assertEqual(caught.exception.code, code)
         self.assertNotIn('PRIVATE_', str(caught.exception))
 
+    def test_citizen_run_is_rejected_before_legacy_binding_counts(self):
+        info = metadata()
+        info.update(run_id=uid(99), schema_version='extract-citizen-v1')
+        meta = self.work / 'citizen-metadata.json'; meta.write_text(json.dumps(info))
+        prompt = self.work / 'citizen-prompt'; prompt.write_bytes(b'actual synthetic prompt')
+        output = self.work / 'citizen-output'
+        output.write_text(json.dumps(dict(schema_version='extract-citizen-v1',
+            document_version_id=self.version, items=[], evidence=[], warnings=['NO_EVENT_FOUND'])))
+        import_run(self.input, meta, [(prompt, output)], self.run_root)
+        packet = freeze_run(info['run_id'], self.run_root)
+        selected = dict(run_id=info['run_id'], snapshot_ref=packet['snapshot_ref'],
+            receipt_sha256=hashlib.sha256((self.run_root / packet['snapshot_ref'] / 'receipt.json').read_bytes()).hexdigest())
+        value = copy.deepcopy(self.packet)
+        value['bindings'][0]['runs'] = [selected]
+        self.invalid(value, 'BINDING_SCHEMA_UNSUPPORTED')
+
     def test_binds_all_inputs_and_retains_failed_runs_without_writes(self):
         before = {str(p): (p.read_bytes(), p.stat().st_mode) for root in (self.dataset_root,self.run_root)
                   for p in root.rglob('*') if p.is_file()}

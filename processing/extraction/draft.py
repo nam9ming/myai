@@ -6,7 +6,7 @@ from pathlib import Path
 import uuid
 
 from .archive import DEFAULT_ROOT, _json, _read, _read_checked, _root, _write, freeze_run
-from .schema import UUID
+from .schema import UUID, SCHEMA_VERSION
 from .validation import MAX_BYTES, array, decode, parse_input, parse_output, require, shape, text
 
 
@@ -47,6 +47,8 @@ def _project_draft(run_id, source, area_id, split_group_id, dictionary_version, 
     artifacts = receipt['artifacts']
     document = parse_input(_read_checked(directory / 'input.json', artifacts['input.json']))
     metadata = decode(_read_checked(directory / 'metadata.json', artifacts['metadata.json']), 'input')
+    require(metadata['schema_version'] == SCHEMA_VERSION, '$.schema_version', 'input',
+            'DRAFT_SCHEMA_UNSUPPORTED')
     _source(source, doc, document, metadata)
     last = f"attempt-{len(receipt['attempts'])}.output"
     extracted = parse_output(_read_checked(directory / last, artifacts[last]), document)

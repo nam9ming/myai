@@ -2,6 +2,12 @@
 
 Java21·MySQL8.4.13·Python3.13을 사용한다. 준비된 수동/API AI 실행의 원본 기록을 DB에 등록한다. 모델 호출은 별도 Python `run` 명령이 담당하며 Java 등록은 자료 수집·사실성 검토·공개 승인을 수행하지 않는다. 외부 Python 의존성은 없다.
 
+## 시민 수동 출력
+
+시민5분야는 [extract-citizen-v1](../../contracts/citizen-extraction.md)을 metadata에 명시한다. 기존 원문5키 입력과 수동 archive-v1·등록 wrapper를 재사용하며 `execution_mode=manual_import`만 받는다. 기존 `extract-schema-v1`의 API/장문 실행은 그대로다. 생성 준비본의 `citizen-prompt-v1`과 실제 수동 도구에 제공한 prompt bytes/라벨은 별도이며, 사용하지 않은 템플릿·모델·시각을 기록하지 않는다.
+
+Java는 새 원출력의 성공/실패·metadata·모든 시도를 그대로 D05에 등록하고 [S10](review-report.md)에서 판독한다. 정확 재실행은 기존 결과를 재사용하며 D06·승인·공개를 만들지 않는다. 시민 Python 사람 수정 선언의 별도 보관은 가능하지만 기존 D06 인계 경로는 지원하지 않는다. 다음 시민 인계 단계에서 연결하며 원문/원출력·사람 선언을 승인으로 승격하지 않는다.
+
 ## 원문만 먼저 등록
 
 DB 환경변수와 JAR를 [백엔드 안내](../README.md)에 따라 준비한다. `source-import-v1`은 기존 검토본과 같은5키 `schema_version/data_kind/documents/evidence/events`다. documents≥1, evidence/events=[]이며 D03 원문·hash·블록·확인 이력·이용권한 검증을 재사용한다. 사건·revision·공개본은 만들지 않는다. 기존 `reviewed-import-v1`의 근거·사건 최소1은 유지한다.

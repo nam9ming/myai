@@ -45,6 +45,21 @@ class DraftTest(unittest.TestCase):
         self.source = self.work / 'source.json'
         self.target = self.work / 'private' / 'draft.json'
 
+    def test_citizen_run_is_rejected_before_legacy_draft_projection(self):
+        info = metadata(); info['schema_version'] = 'extract-citizen-v1'
+        self.meta.write_text(json.dumps(info))
+        self.output = dict(schema_version='extract-citizen-v1', document_version_id=info['document_version_id'],
+                           items=[], evidence=[], warnings=['NO_EVENT_FOUND'])
+        self.register()
+        batch = dict(schema_version='ai-draft-import-v1', data_kind='synthetic', originating_run_id=self.id,
+                     documents=self.source_body['documents'], evidence=[], events=[])
+        for operation in (self.draft, lambda: check_draft(self.id, json.dumps(batch).encode(), self.root)):
+            with self.subTest(operation=operation):
+                with self.assertRaises(ExtractionError) as caught:
+                    operation()
+                self.assertEqual(caught.exception.code, 'DRAFT_SCHEMA_UNSUPPORTED')
+                self.assertFalse(self.target.exists())
+
     def register(self, raw=None):
         self.source.write_text(json.dumps(self.source_body, ensure_ascii=False), encoding='utf-8')
         out = self.work / 'output.json'

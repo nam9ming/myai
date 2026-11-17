@@ -2,12 +2,14 @@
 
 Python3.13 표준 라이브러리로 `manual_import`와 OpenAI `api` 실행을 지원합니다. 네트워크 호출은 명시적인 `run`만 수행하며 `verify/freeze/draft/check-draft`와 계산 CLI·Java 공개 조회는 AI를 호출하지 않습니다. Python은 DB를 쓰지 않습니다. 입력·원출력·프롬프트·메타데이터는 비공개 기록이며, 공개 snapshot으로 직접 전달하지 않습니다.
 
+[시민 extract-citizen-v1](citizen-extraction.md)은 수동 `manual_import`·archive-v1만 지원하는 별도 family입니다. 아래 API/장문/초안 경로는 기존 extract-schema-v1 대상입니다. prepare에만 `--schema-version extract-citizen-v1`을 지정하며 기본값·기존 경로/bytes는 유지합니다. import/verify는 metadata의 명시 schema로 parser를 고르고 실제 수동 prompt_version 라벨·원래 prompt bytes를 보존합니다. 생성 템플릿 citizen-prompt-v1 사용을 인증하지 않습니다.
+
 장문 API는 [분할 계약](chunked-extraction.md)의 prompt-v3/archive-v2를 사용합니다. 아래 단일 요청·attempt 파일 설명은 archive-v1 기준입니다. v2는 최대3개의 문서 cycle 안에서 각 chunk를1회씩 호출하고, 실제 subrequest와 전체 파생 결과를 구별합니다. 기존 v1 보관본·큰 실패 원출력의 검증/보존은 유지합니다.
 
 ## 입력·검증
 
 - 입력은 [ai-input-v1.json](schemas/ai-input-v1.json)의 정확한5키입니다. `data_kind`는 로컬 합성/실제 구분이며 모델 자료에는 넣지 않습니다. 제목·블록은 NFC·LF 전처리가 끝난 텍스트여야 합니다. 게시일 미상은 null이며 현재 시각으로 채우지 않습니다.
-- 출력은 [extract-schema-v1.json](schemas/extract-schema-v1.json)을 따릅니다. 두 스키마는 `processing/extraction/schema.py`에서 생성하며 시험에서 일치를 확인합니다. JSON Schema의 구조 검사와 별도로 실제 날짜·문서 일치·문서 내 ID 유일성·근거 참조·경고·시간 순서를 Python이 검증합니다. wire 정수는 boolean·소수 표기를 허용하지 않습니다.
+- 기존3유형 출력은 [extract-schema-v1.json](schemas/extract-schema-v1.json)을 따릅니다. 기존 입력/출력 스키마는 `processing/extraction/schema.py`에서 생성하며 시험에서 일치를 확인합니다. 시민 출력은 [별도 스키마](schemas/extract-citizen-v1.json)와 원문 사실 검증을 사용합니다. JSON Schema의 구조 검사 외에 문서 일치·ID 유일성·근거 참조를 Python이 검증하고, 날짜·시간 순서 검사는 기존3유형에 유지합니다. wire 정수는 boolean·소수 표기를 허용하지 않습니다.
 - 모든 의미 값은 `value/knowledge/evidence_ids/reason`을 유지합니다. 미상 값을 채우거나 offset을 자동 보정하지 않습니다. 근거의 `text_sha256`는 **해당 블록 UTF-8 hash**, 위치는 Python code point의 `[start,end)`입니다. D06의 문서 전체 `cleaned_text` hash와 대상이 다르므로 후속 변환에서 각각 검증해야 합니다.
 - JSON 입력·메타데이터·검증용 출력은 각각8MiB·깊이100 이하입니다. 중복 키·비정상 UTF-8/Unicode·비유한 수를 거부합니다. 과다 원출력도 파일 전체를 stream 복사해 보존하고 검증 실패로 기록합니다.
 - `validated`는 기계 검증 통과입니다. 인용이 의미값을 뒷받침하는지, 종일/예외/취소 판단이 옳은지, 이용권한이 있는지는 사람이 확인합니다. 성공·실패 모두 `review_required=true`입니다.
@@ -83,6 +85,8 @@ Java `local-extraction`은 [D03/D05 연결 안내](../backend/docs/extraction-ru
 같은 D03의 확인·사용권 갱신은 Java [local-source-review](../backend/docs/source-review.md)의 별도 이력이다. 최초 source metadata·본문/원문 hash·전체 블록과 동결 D05·사람 인계 이미지는 수정하지 않으며 기존 입력·전처리 대조와 정확한 재실행을 유지한다. 승인·공개만 현재 운영 상태를 합쳐 검사한다. 새 확인을 이유로 AI 실행을 재생성하거나 legacy/failed를 성공으로 바꾸지 않는다.
 
 ## Java의 초안 전체 대조
+
+이 절의 legacy `draft/check-draft`는 시민 family를 `DRAFT_SCHEMA_UNSUPPORTED`로 거부합니다. 시민 D05/S10 원본 판독을 D06 생성·사람 승인으로 간주하지 않으며 시민 사람 수정본의 Java 연결은 G5입니다. 기존 실패/참조 등의 선행 거부 조건도 유지합니다.
 
 Java local-import는 AI 초안에만 내부 명령 `python3.13 -m processing.extraction check-draft RUN_ID --root ROOT`를 사용한다. stdin은 ai-draft-import-v1 JSON 한 건이며 최대8MiB다. Python은 기존 생성 함수를 재사용해 등록 보관본의 최종 출력에서 기대 초안을 만들고 JSON 키 순서·공백을 제외한 전체 값·ID·근거·연결을 대조한다. 빈 사건도 실제 NO_EVENT_FOUND 출력이어야 하며 raw 파일을 사람 수정본으로 사용하지 않는다.
 

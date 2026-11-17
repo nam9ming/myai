@@ -117,6 +117,21 @@ class ExtractionValidationTest(unittest.TestCase):
             body = copy.deepcopy(self.output); body['evidence'][0].update(change); self.invalid(body, 'review')
         body = copy.deepcopy(self.output); body['items'][0]['title']['evidence_ids'] = ['missing']; self.invalid(body, 'review')
         body = copy.deepcopy(self.output); body['evidence'][0]['start_char'] = True; self.invalid(body)
+
+    def test_evidence_errors_keep_original_code_path_and_kind(self):
+        for change, code, path, kind in [
+            (dict(quote='잘못된 합성 인용'), 'EVIDENCE_MISMATCH', '$.evidence[0]', 'review'),
+            (dict(text_sha256='0' * 64), 'EVIDENCE_MISMATCH', '$.evidence[0].text_sha256', 'review'),
+            (dict(block_id='missing'), 'EXTRACTION_INVALID', '$.evidence[0].block_id', 'review'),
+            (dict(start_char=True), 'EXTRACTION_INVALID', '$.evidence[0].start_char', 'schema'),
+        ]:
+            with self.subTest(change=change):
+                body = copy.deepcopy(self.output)
+                body['evidence'][0].update(change)
+                with self.assertRaises(ExtractionError) as caught:
+                    parse_output(raw(body), self.document)
+                self.assertEqual((caught.exception.code, caught.exception.path, caught.exception.kind),
+                                 (code, path, kind))
         body = copy.deepcopy(self.output); body['document_version_id'] = '00000000-0000-4000-8000-000000000001'; self.invalid(body, 'review')
 
     def test_emoji_offsets_and_multiple_block_hashes(self):

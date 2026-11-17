@@ -152,11 +152,26 @@ public class ExtractionArchiveReader {
                     && source.path("document_version_id").equals(receipt.path("document_version_id"))
                     && source.path("data_kind").equals(receipt.path("data_kind"))
                     && info.path("execution_mode").equals(receipt.path("execution_mode"))
-                    && info.path("schema_version").asText().equals("extract-schema-v1"));
+                    && Set.of("extract-schema-v1", "extract-citizen-v1").contains(info.path("schema_version").asText()));
+            if (info.path("schema_version").asText().equals("extract-citizen-v1")) require(
+                    info.path("execution_mode").asText().equals("manual_import") && receipt.path("format_version").asText().equals("extraction-archive-v1"));
             require(info.path("attempts").isIntegralNumber() && info.path("attempts").asInt() == receipt.path("attempts").size());
             sealed(directory);
             for (String name : names) sealed(directory.resolve(name));
             sealed(directory.resolve("identity.json")); sealed(directory.resolve("receipt.json"));
+            if (info.path("schema_version").asText().equals("extract-citizen-v1")) {
+                var expected = new HashSet<>(names); expected.addAll(Set.of("identity.json", "receipt.json"));
+                var actual = new HashSet<String>();
+                try (var files = Files.list(directory)) { files.forEach(file -> actual.add(file.getFileName().toString())); }
+                require(actual.equals(expected));
+                require(Files.getPosixFilePermissions(directory, LinkOption.NOFOLLOW_LINKS)
+                        .equals(Set.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_EXECUTE)));
+                for (String name : expected) {
+                    Path file = directory.resolve(name);
+                    require(Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)
+                            && Files.getPosixFilePermissions(file, LinkOption.NOFOLLOW_LINKS).equals(Set.of(PosixFilePermission.OWNER_READ)));
+                }
+            }
             return new VerifiedExtraction(directory, source, info, receipt, new String(metadata, StandardCharsets.UTF_8),
                     new String(savedReceipt, StandardCharsets.UTF_8), ReviewedImportReader.sha256(savedReceipt));
         } catch (PythonProcess.Failure ex) {

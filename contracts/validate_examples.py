@@ -76,6 +76,48 @@ def main():
                 fields(child, allowed_evidence)
 
     fields(extraction["items"], evidence_ids)
+    citizen_input, citizen_output = data["citizen-ai-input"], data["citizen-ai-extraction"]
+    assert citizen_input["data_kind"] == "synthetic"
+    assert set(citizen_output) == {"schema_version", "document_version_id", "items", "evidence", "warnings"}
+    assert citizen_output["schema_version"] == "extract-citizen-v1"
+    assert citizen_output["document_version_id"] == citizen_input["document_version_id"]
+    citizen_blocks = {block["block_id"]: block["text"] for block in citizen_input["blocks"]}
+    citizen_evidence = set()
+    for evidence in citizen_output["evidence"]:
+        assert set(evidence) == {"evidence_id", "block_id", "quote", "start_char", "end_char", "text_sha256"}
+        assert evidence["evidence_id"] not in citizen_evidence
+        citizen_evidence.add(evidence["evidence_id"])
+        block = citizen_blocks[evidence["block_id"]]
+        assert type(evidence["start_char"]) is int and type(evidence["end_char"]) is int
+        assert 0 <= evidence["start_char"] < evidence["end_char"] <= len(block)
+        assert block[evidence["start_char"]:evidence["end_char"]] == evidence["quote"]
+        assert hashlib.sha256(block.encode("utf-8")).hexdigest() == evidence["text_sha256"]
+    raw_fields = {"application_period", "occurrences", "regions", "locations", "residency_requirement", "target",
+                  "eligibility", "application_method", "preparation", "cost", "recruitment", "lifecycle"}
+    categories, item_ids = set(), set()
+    for item in citizen_output["items"]:
+        assert set(item) == {"local_item_id", "title", "categories"} | raw_fields
+        assert item["local_item_id"] not in item_ids
+        item_ids.add(item["local_item_id"])
+        for name in {"title", "categories"} | raw_fields:
+            field_value(item[name], citizen_evidence)
+        assert item["title"]["value"] is None or type(item["title"]["value"]) is str and item["title"]["value"].strip()
+        selected = item["categories"]["value"]
+        if selected is None:
+            assert item["categories"]["knowledge"] == "ambiguous"
+        else:
+            assert type(selected) is list and selected and len(selected) == len(set(selected))
+            assert set(selected) <= {"education", "support", "culture", "construction_traffic", "living"}
+            categories.update(selected)
+        for name in raw_fields:
+            raw = item[name]["value"]
+            assert raw is None or type(raw) is str or type(raw) is list
+            if type(raw) is str:
+                assert raw.strip()
+            if type(raw) is list:
+                assert all(type(entry) is str and entry.strip() for entry in raw) and len(raw) == len(set(raw))
+    fields(citizen_output["items"], citizen_evidence)
+    assert categories == {"education", "support", "culture", "construction_traffic", "living"}
     facts = data["event-facts-response"]
     assert set(facts) == {"schema_version", "snapshot_id", "generated_at", "data"}
     assert facts["schema_version"] == "api-v1" and facts["data"]["data_kind"] == "synthetic"

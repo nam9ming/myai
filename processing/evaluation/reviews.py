@@ -13,7 +13,7 @@ from processing.extraction.archive import (REPO, _copy, _fingerprint, _identity,
 from processing.extraction.metadata import stamp
 from processing.extraction.schema import HASH, UUID
 from processing.extraction.validation import (ExtractionError, array, decode, ids, parse_input,
-                                              parse_output, require, shape, text)
+                                              parse_versioned_output, require, shape, text)
 from processing.matching.intervals import instant_ns
 from .bindings import EXTRACTION_ROOT, _frozen
 from .dataset import _id, _label
@@ -109,13 +109,14 @@ def _load_review(content, run_root, checked_at):
     document = parse_input(input_bytes)
     try:
         output_bytes = _json(value['output'])
-        output = parse_output(output_bytes, document)
+        output = parse_versioned_output(output_bytes, document, metadata['schema_version'])
     except (ExtractionError, TypeError, ValueError):
         raise ExtractionError('HUMAN_REVIEW_OUTPUT_INVALID', kind='input') from None
     previous = None
     if receipt['status'] == 'validated':
         name = f"attempt-{len(receipt['attempts'])}.output"
-        previous = parse_output(_read_checked(folder / name, receipt['artifacts'][name]), document)
+        previous = parse_versioned_output(_read_checked(folder / name, receipt['artifacts'][name]),
+                                          document, metadata['schema_version'])
     _changes(value, previous, output)
     summary = dict(protocol_version='human-review-check-v1', status='declared_reviewed',
         review_id=value['review_id'], review_ref=hashlib.sha256(value['review_id'].encode()).hexdigest(),

@@ -153,14 +153,7 @@ def chronology(occ, path):
         require(0 < seconds(hi) + offset * 86400 - seconds(lo) <= 86400, path, 'review', 'TIME_ORDER_INVALID')
 
 
-def parse_output(content, document):
-    value = decode(content, 'schema')
-    shape(value, 'schema_version document_version_id items evidence warnings')
-    require(value['schema_version'] == SCHEMA_VERSION, '$.schema_version')
-    text(value['document_version_id'], '$.document_version_id', pattern=UUID)
-    require(value['document_version_id'] == document['document_version_id'], '$.document_version_id', 'review')
-    for i, warning in enumerate(array(value['warnings'], '$.warnings')):
-        text(warning, f'$.warnings[{i}]')
+def parse_evidence(value, document):
     blocks = {b['block_id']: b['text'] for b in document['blocks']}
     block_hashes = {key: hashlib.sha256(block.encode('utf-8')).hexdigest() for key, block in blocks.items()}
     evidence = set()
@@ -179,6 +172,18 @@ def parse_output(content, document):
         start, end = entry['start_char'], entry['end_char']
         require(0 <= start < end <= len(block) and block[start:end] == entry['quote'], path, 'review', 'EVIDENCE_MISMATCH')
         require(block_hashes[entry['block_id']] == entry['text_sha256'], path + '.text_sha256', 'review', 'EVIDENCE_MISMATCH')
+    return evidence
+
+
+def parse_output(content, document):
+    value = decode(content, 'schema')
+    shape(value, 'schema_version document_version_id items evidence warnings')
+    require(value['schema_version'] == SCHEMA_VERSION, '$.schema_version')
+    text(value['document_version_id'], '$.document_version_id', pattern=UUID)
+    require(value['document_version_id'] == document['document_version_id'], '$.document_version_id', 'review')
+    for i, warning in enumerate(array(value['warnings'], '$.warnings')):
+        text(warning, f'$.warnings[{i}]')
+    evidence = parse_evidence(value, document)
     seen_items, seen_occurrences, seen_locations = set(), set(), set()
     items = array(value['items'], '$.items')
     require(items or 'NO_EVENT_FOUND' in value['warnings'], '$.warnings')
@@ -209,3 +214,12 @@ def parse_output(content, document):
             require(refs or 'LOCATION_BINDING_UNKNOWN' in value['warnings'], '$.warnings')
             chronology(occ, p)
     return value
+
+
+def parse_versioned_output(content, document, schema_version):
+    if schema_version == SCHEMA_VERSION:
+        return parse_output(content, document)
+    from . import citizen
+    require(schema_version == citizen.SCHEMA_VERSION, '$.schema_version', 'input',
+            'EXTRACTION_SCHEMA_UNSUPPORTED')
+    return citizen.parse_output(content, document)

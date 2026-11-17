@@ -6,6 +6,8 @@ source/request/extraction root는0700의 비공개 절대 경로를 사용한다
 
 ## 준비
 
+시민 출력은 metadata.schema_version을 [extract-citizen-v1](../../contracts/citizen-extraction.md)로 지정하고 기존 `manual_import`·동일 원문 입력/UUID/hash·전송 control을 사용한다. 새 endpoint/인증·AI 실행은 추가하지 않는다. 원출력의12사실·근거·미상·실패와 실제 prompt 라벨/bytes는 기존 D05/S10에서 보존하며 시민 D06/Java 사람 수정 연결은 후속이다. metadata64KiB·prompt20MiB·output5MiB의 HTTP 경계와 CLI JSON8MiB·큰 실패 전체 보관의 차이는 그대로다.
+
 먼저 대응 D03를 등록한다. input.json은 [원문 업로드 준비본](source-upload.md)의 원래5키 입력 또는 기존 D03와 정확히 같은 입력이다. metadata의 document_version_id·전처리 버전도 D03와 같아야 한다.
 
 [기존17키 metadata 예제](../../processing/examples/extraction-metadata.json)를 참고해 metadata.json을 준비한다. `manual_import`·명시 run UUID·실제 시도 수1..3을 고정하고 실제 도구 표시값·미상/null을 유지한다. prompt는 실제 도구에 제공한 전문, output은 각 시도의 원출력이다. 생성 프롬프트를 실제 사용한 기록으로 대신하지 않는다. 기존 `processing.extraction prepare`는 [수동 실행 안내](../../contracts/extraction-run.md)에 따라 입력 준비에 사용할 수 있다.

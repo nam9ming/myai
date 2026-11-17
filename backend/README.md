@@ -20,6 +20,12 @@ Java 21 / Spring Boot **3.5.16** / Gradle Wrapper **8.14.3** / MySQL **8.4.13**.
 
 [별도 시민 API](../contracts/citizen-api.md)는 `GET /api/v1/citizen/notices`와 `GET /api/v1/citizen/notices/{eventId}?snapshot_id=…`로 같은 시민 공개본의 사실·출처·확보 이력을 읽는다. 지점/영업시간 입력을 요구하지 않으며 Python/AI·원문 파일을 호출하지 않는다. 상세 이력은 버전 커서·개수 한도로 나누며 V6는 공개 감사 범위용 일반 색인만 추가한다. 이력 용량 한도만 초과하면 현재 사실과 출처는200으로 유지하고 조회 불가를 명시한다. 검색·복합 필터·정규화와 실제 Flutter 연동은 후속이다. 작성자 구현 검토안으로 화면별 최종 계약 대조가 남아 있다. [조회 계획](../docs/superpowers/plans/2026-11-18-citizen-query.md)의 실제 검증·리뷰·PR 증빙을 따른다. 기존 fixture 프로필은 아래3 API용이며 시민 조회는 public의 합성 DB로 재현한다.
 
+## 시민 추출 원본 등록
+
+[시민 수동 추출 계약](../contracts/citizen-extraction.md)의 `extract-citizen-v1`을 기존 D05 등록·수동 파일 업로드·S10에 연결한다. 원문5키 입력은 재사용하며 metadata의 schema로 출력 검증기를 선택한다. 실제 prompt bytes·제공한 prompt_version 라벨·12개 원문 사실·근거·실패를 보존한다. 새 모델/API·DB migration은 추가하지 않는다.
+
+Python의 별도 사람 수정 선언·감사는 같은 family로 검증한다. 시민 사람 수정값의 Java D06 인계·승인/공개 연결은 다음 단계다. 기존3유형 초안/인계·8필드 평가에 시민 출력을 넣으면 명시 unsupported로 거부한다. 실행·한도는 [D05](docs/extraction-run-import.md)·[업로드](docs/extraction-upload.md), 검증·진행 상태는 [계획](../docs/superpowers/plans/2026-11-18-citizen-extraction.md)을 따른다.
+
 ## 구현 범위
 
 [기존 구현·계약] 아래 기능·실행 명령은 기존3유형(`construction/event/traffic`)·지점·영업시간 계약의 구현 및 검증 기록입니다. 새5분야 조회·필터 계약이나 시민용 웹 시제품과의 연동 완료를 뜻하지 않습니다.
@@ -137,7 +143,7 @@ Java는 고정 인자 `-m processing.matching`과 JSON stdin만 사용한다. �
 
 ## 검토 JSON 로컬 import
 
-시민 5분야의 입력·수정 감사·승인/반려는 [시민 수동 검토](docs/citizen-review.md), 지점 없는 불변 공개·복구·파일 전달은 [시민 공개본](docs/citizen-publication.md)의 별도 내부 버전을 사용한다. 시민 조회·Python 시민 추출은 후속 범위다.
+시민5분야 입력·수정 감사·승인/반려는 [시민 수동 검토](docs/citizen-review.md), 지점 없는 불변 공개·복구·파일 전달은 [시민 공개본](docs/citizen-publication.md)의 별도 내부 버전을 사용한다. [시민 조회](../contracts/citizen-api.md)와 [수동 추출 원본](../contracts/citizen-extraction.md)을 별도 family로 연결하며, 시민 D06/Java 사람 인계·검색/정규화·추출 실행 확장은 후속이다.
 
 DB를 준비한 뒤 저장소 루트에서 실행한다.
 

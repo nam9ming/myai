@@ -13,8 +13,8 @@ import tempfile
 
 from .metadata import parse_metadata, stamp
 from .prompt import render_prompt
-from .schema import HASH, UUID
-from .validation import MAX_BYTES, ExtractionError, decode, parse_input, parse_output, require, shape, text
+from .schema import HASH, UUID, SCHEMA_VERSION
+from .validation import MAX_BYTES, ExtractionError, decode, parse_input, parse_versioned_output, require, shape, text
 
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_ROOT = REPO / 'data/private/extraction-runs'
@@ -154,13 +154,21 @@ def _identity(directory, identity):
     return stored
 
 
-def prepare(input_path, root=DEFAULT_ROOT):
+def prepare(input_path, root=DEFAULT_ROOT, schema_version=SCHEMA_VERSION):
+    renderer = render_prompt
+    if schema_version != SCHEMA_VERSION:
+        from .citizen import SCHEMA_VERSION as CITIZEN_SCHEMA_VERSION, render_prompt as renderer
+        require(schema_version == CITIZEN_SCHEMA_VERSION, '$.schema_version', 'input',
+                'EXTRACTION_SCHEMA_UNSUPPORTED')
     content = _read(input_path)
     document = parse_input(content)
     fingerprint = _fingerprint(input_path)
     _archive_check(fingerprint['sha256'] == hashlib.sha256(content).hexdigest(), 'ARCHIVE_SOURCE_CHANGED')
-    directory = _directory(_directory(_root(root) / 'prepared') / fingerprint['sha256'])
-    prompt = render_prompt(document)
+    prepared = _directory(_root(root) / 'prepared')
+    if schema_version != SCHEMA_VERSION:
+        prepared = _directory(prepared / schema_version)
+    directory = _directory(prepared / fingerprint['sha256'])
+    prompt = renderer(document)
     _write(directory / 'input.json', content)
     _write(directory / 'prompt.json', prompt)
     return dict(status='prepared', document_version_id=document['document_version_id'], data_kind=document['data_kind'],
@@ -216,7 +224,7 @@ def _receipt(directory, identity):
             attempts.append(dict(attempt=i, **result))
             continue
         try:
-            parse_output(contents[f'attempt-{i}.output'], document)
+            parse_versioned_output(contents[f'attempt-{i}.output'], document, metadata['schema_version'])
             result = dict(status='validated', error_code=None, error_path=None, failure_kind=None, retryable=False)
         except ExtractionError as error:
             result = dict(status='failed', error_code=error.code, error_path=error.path,
@@ -282,7 +290,27 @@ def verify_run(run_id, root=DEFAULT_ROOT):
     return expected
 
 
+def _citizen_archive(directory, receipt):
+    from .citizen import SCHEMA_VERSION as CITIZEN_SCHEMA_VERSION
+    metadata = decode(_read_checked(directory / 'metadata.json', receipt['artifacts']['metadata.json']), 'archive')
+    return metadata['schema_version'] == CITIZEN_SCHEMA_VERSION
+
+
+def _closed_modes(directory, receipt, directory_mode, file_mode):
+    names = {*receipt['artifacts'], 'identity.json', 'receipt.json'}
+    if stat.S_IMODE(directory.stat(follow_symlinks=False).st_mode) != directory_mode \
+            or {entry.name for entry in directory.iterdir()} != names:
+        return False
+    for name in names:
+        mode = (directory / name).stat(follow_symlinks=False).st_mode
+        if not stat.S_ISREG(mode) or stat.S_IMODE(mode) != file_mode:
+            return False
+    return True
+
+
 def _sealed(directory, receipt):
+    if _citizen_archive(directory, receipt):
+        return _closed_modes(directory, receipt, 0o500, 0o400)
     if directory.stat(follow_symlinks=False).st_mode & 0o222:
         return False
     for name in [*receipt['artifacts'], 'identity.json', 'receipt.json']:
@@ -303,6 +331,9 @@ def freeze_run(run_id, root=DEFAULT_ROOT):
     receipt = verify_run(run_id, root)
     base = _root(root, create=False)
     source = base / run_id
+    if _citizen_archive(source, receipt):
+        _archive_check(_closed_modes(source, receipt, 0o700, 0o600) or _sealed(source, receipt),
+                       'ARCHIVE_REQUIRES_SEALED')
 
     def result(directory):
         return dict(protocol_version='extraction-registration-v1', snapshot_ref=directory.relative_to(base).as_posix(), receipt=receipt)

@@ -25,7 +25,9 @@
 
 [시민 공개본](docs/citizen-publication.md)은 별도 채널의 미리보기·원자 발행·복구·export/S10을 연결한다. V5의 기존 데이터 보존·전용 DB·실제 SELECT 계정/JAR·전체 회귀·독립/원격 리뷰와 통합 결과는 [공개 작업 계획](../docs/superpowers/plans/2026-11-18-citizen-publication.md)을 따른다.
 
-[시민 조회 구현 검토안](../contracts/citizen-api.md)은 목록·상세를 같은 시민 공개본에 연결하고 실제 공개·철회·복구의 전후 상태를 제공한다. 읽기 전용/기존 API·미상 보존과 합성 재현/검증은 [조회 계획](../docs/superpowers/plans/2026-11-18-citizen-query.md)을 따른다. 검색·복합 필터·정규화·Python 시민 추출·실제 화면/사람 인수는 후속이다.
+[시민 조회 구현 검토안](../contracts/citizen-api.md)은 목록·상세를 같은 시민 공개본에 연결하고 실제 공개·철회·복구의 전후 상태를 제공한다. 읽기 전용/기존 API·미상 보존과 합성 재현/검증은 [조회 계획](../docs/superpowers/plans/2026-11-18-citizen-query.md)을 따른다. 검색·복합 필터·정규화·추출 자료/실행 확장·실제 화면/사람 인수는 후속이다.
+
+[시민 수동 추출](../contracts/citizen-extraction.md)은 새 출력 계약·프롬프트 준비·원출력/실패 봉인·Python 사람 수정 선언을 기존 D05/S10 판독에 연결한다. metadata의 명시 family를 사용하고 기존 prompt/archive bytes·8필드 평가 분모를 보존한다. [추출 계획](../docs/superpowers/plans/2026-11-18-citizen-extraction.md)의 실제 검증·리뷰/PR 상태를 따르며 시민 D06/Java 사람 인계·새 API 실행·실제 품질은 다음 작업이다.
 
 [기존 구현·계약] 다음 실적·명령·한도는 기존3유형 계약의 기록입니다. 현재5분야·새 필터/상세·웹 시제품 연동·실제 품질평가 완료를 뜻하지 않습니다.
 

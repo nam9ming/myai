@@ -38,7 +38,10 @@ def parse_metadata(content, document, attempt_count):
     for key in ('prompt_version', 'schema_version', 'preprocessing_version'):
         text(value[key], '$.' + key, 'input')
         require(len(value[key]) <= 100, '$.' + key, 'input')
-    require(value['schema_version'] == SCHEMA_VERSION, '$.schema_version', 'input')
+    if value['schema_version'] != SCHEMA_VERSION:
+        from .citizen import SCHEMA_VERSION as CITIZEN_SCHEMA_VERSION
+        require(value['schema_version'] == CITIZEN_SCHEMA_VERSION, '$.schema_version', 'input')
+        require(value['execution_mode'] == 'manual_import', '$.execution_mode', 'input')
     reasons = value['unavailable_reasons']
     require(type(reasons) is dict and set(reasons) <= set(NULLABLE), '$.unavailable_reasons', 'input')
     for key, reason in reasons.items():
