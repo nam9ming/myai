@@ -432,6 +432,22 @@ class CitizenNoticeServiceTest {
         });
     }
 
+    @Test
+    void maximumValidCurrentFactsStillFitAnUnavailableHistoryEnvelope() throws Exception {
+        var original = records.get(CURRENT);
+        int originalTitle = mapper.readTree(original.snapshot().canonical()).path("notices").get(0).path("title").asText().getBytes(StandardCharsets.UTF_8).length;
+        int titleBytes = LIMIT - original.snapshot().canonical().getBytes(StandardCharsets.UTF_8).length + originalTitle;
+        revision(payload).put("title", "x".repeat(titleBytes));
+        var maximum = published(CURRENT, "synthetic", payload);
+        assertThat(maximum.snapshot().canonical().getBytes(StandardCharsets.UTF_8).length).isEqualTo(LIMIT);
+        records.put(CURRENT, maximum);
+        var result = org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> service.notice(UUID.fromString(EVENT), UUID.fromString(CURRENT)));
+        assertThat(result.path("data").path("notice").path("title").asText()).hasSize(titleBytes);
+        assertThat(result.path("data").path("history").path("status").asText()).isEqualTo("unavailable");
+        assertThat(result.path("data").path("history").path("entries").isNull()).isTrue();
+        assertThat(mapper.writeValueAsBytes(result).length).isLessThanOrEqualTo(LIMIT + 1024);
+    }
+
     private JsonNode detail() { return service.notice(UUID.fromString(EVENT), UUID.fromString(CURRENT)).path("data"); }
     private void tooLarge() {
         var data = detail();

@@ -68,7 +68,7 @@ history의 정확한 키는 `scope/completeness/status/window/entries/error`다.
 }
 ```
 
-조회 불가를 빈 배열로 표시하거나 일부 이력을 전부처럼 반환하지 않는다. 현재 사실만으로도 최종 응답 JSON8MiB 한도를 넘으면503 CITIZEN_HISTORY_TOO_LARGE·retryable=false다. 이력의 누락·hash·metadata·구성 참조 손상은 여전히500이다. 현재 공개본에 없는 사건은404이며 과거 상세를 현재로 대신 표시하지 않는다.
+조회 불가를 빈 배열로 표시하거나 일부 이력을 전부처럼 반환하지 않는다. 일반 목록/상세 응답 한도는8MiB다. 유효한 최대8MiB 공개본의 현재 사실이 이력 조회 불가 상태를 표시할 수 있도록, 위 unavailable 대체 응답에만1KiB 상태 메타데이터 여유를 별도로 허용한다. 이 대체 응답도8MiB+1KiB를 넘으면503 CITIZEN_HISTORY_TOO_LARGE·retryable=false다. 공개본·원문/AI 입력·일반 응답의8MiB 한도는 늘리지 않는다. 이력의 누락·hash·metadata·구성 참조 손상은 여전히500이다. 현재 공개본에 없는 사건은404이며 과거 상세를 현재로 대신 표시하지 않는다.
 
 V6는 `publication_audits(channel_key,head_version,audit_id)`의 일반 색인만 추가해 페이지 범위를 읽는다. 적용된 V1~V5·기존 행·canonical/hash는 변경하지 않는다. 페이지·응답 필드·자원 한도는 작성자의 내부 기술 선택이며 실제 팀원·Flutter 최종 합의와 구별한다.
 
@@ -82,7 +82,7 @@ V6는 `publication_audits(channel_key,head_version,audit_id)`의 일반 색인�
 | 409 SNAPSHOT_RETIRED | 공개본 교체. 교체본의 공개·무결성을 검증한 current_snapshot_id 또는 목록을 다시 읽음 |
 | 404 NOTICE_NOT_FOUND | 선택한 현재 공개본에 해당 사건이 없음 |
 | 500 SNAPSHOT_INVALID | 고정 JSON/hash/metadata·과거 구성 참조의 무결성을 확인할 수 없음 |
-| 503 CITIZEN_HISTORY_TOO_LARGE | 현재 사실만으로 응답8MiB를 초과. 반복 재시도로 해결되지 않음 |
+| 503 CITIZEN_HISTORY_TOO_LARGE | 이력 조회 불가 대체 응답도8MiB+1KiB 초과. 반복 재시도로 해결되지 않음 |
 | 503 DATABASE_UNAVAILABLE | 저장소 연결 실패. retryable을 확인 |
 
 이력의 자원 한도 초과는 HTTP200의 `data.history.status=unavailable`과 해당 history.error로 구분한다. 유효한 빈 공개본은200·notice_count0·notices/sources 빈 배열이다. 준비/연결/무결성 실패를 빈 성공으로 바꾸지 않는다. HTTP 오류는 기존 `error.code/message/field_errors/retryable`·request_id·선택 current_snapshot_id 형식이고 `X-Request-ID`와 연결된다.

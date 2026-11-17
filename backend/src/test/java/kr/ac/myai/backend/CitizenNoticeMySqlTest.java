@@ -432,6 +432,29 @@ class CitizenNoticeMySqlTest {
         }
     }
 
+    @Test
+    void maximumVerifiedCanonicalKeepsFactsWithOnlyBoundedUnavailableMetadata() throws Exception {
+        var input = fixtures.citizen("education", false); String approved = fixtures.approve(input, true);
+        var published = fixtures.publish(List.of(approved), null);
+        var canonical = (ObjectNode) fixtures.canonical(published.snapshotId());
+        var notice = (ObjectNode) canonical.path("notices").get(0);
+        int limit = 8 * 1024 * 1024;
+        int titleBytes = limit - canonical.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8).length
+                + notice.path("title").asText().getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+        notice.put("title", "x".repeat(titleBytes));
+        assertThat(canonical.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8).length).isEqualTo(limit);
+        fixtures.replaceCanonical(published.snapshotId(), canonical);
+        var response = get(detail(CitizenNoticeFixtures.event(input), published.snapshotId()));
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.body().getBytes(java.nio.charset.StandardCharsets.UTF_8).length).isLessThanOrEqualTo(limit + 1024);
+        var data = mapper.readTree(response.body()).path("data");
+        assertThat(data.path("notice").path("title").asText()).hasSize(titleBytes);
+        assertThat(data.path("sources")).isEqualTo(canonical.path("sources"));
+        assertThat(data.path("history").path("status").asText()).isEqualTo("unavailable");
+        assertThat(data.path("history").path("window").isNull()).isTrue();
+        assertThat(data.path("history").path("entries").isNull()).isTrue();
+    }
+
     private void assertWindow(JsonNode history, long from, long to, boolean hasMore, Long next, int limit) {
         assertThat(keys(history)).containsExactlyInAnyOrder("scope", "completeness", "status", "window", "entries", "error");
         assertThat(history.path("status").asText()).isEqualTo("available"); assertThat(history.path("error").isNull()).isTrue();

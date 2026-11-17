@@ -33,6 +33,7 @@ import java.util.UUID;
 @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
 public class CitizenNoticeService {
     private static final int HISTORY_BYTES = 8 * 1024 * 1024;
+    private static final int UNAVAILABLE_METADATA_BYTES = 1024;
     private final PublicSnapshotRepository repository;
     private final CitizenPublicationContent citizens;
     private final PublicationContent shared;
@@ -72,7 +73,7 @@ public class CitizenNoticeService {
                     .put("status", "unavailable").putNull("window").putNull("entries");
             unavailable.putObject("error").put("code", failure.code()).put("retryable", false);
             data.set("history", unavailable);
-            return envelope(selected, data);
+            return envelope(selected, data, HISTORY_BYTES + UNAVAILABLE_METADATA_BYTES);
         }
     }
 
@@ -174,10 +175,14 @@ public class CitizenNoticeService {
     }
 
     private ObjectNode envelope(JsonNode selected, ObjectNode data) {
+        return envelope(selected, data, HISTORY_BYTES);
+    }
+
+    private ObjectNode envelope(JsonNode selected, ObjectNode data, int limit) {
         var result = mapper.createObjectNode().put("schema_version", "citizen-api-v1").put("snapshot_id", selected.path("snapshot_id").textValue())
                 .put("generated_at", Instant.now().toString());
         result.set("data", data);
-        if (size(result) > HISTORY_BYTES) throw tooLarge();
+        if (size(result) > limit) throw tooLarge();
         return result;
     }
 
