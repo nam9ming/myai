@@ -12,6 +12,7 @@ import '../features/notices/detail_page.dart';
 import '../features/saved/page.dart';
 import '../features/settings/page.dart';
 import '../features/nearby/page.dart';
+import '../features/nearby/detail_page.dart';
 import 'app_context.dart';
 import 'app_state.dart';
 import 'router.dart';
@@ -203,6 +204,7 @@ class _AppShellState extends State<AppShell> {
     ),
     '/home' => const HomePage(),
     '/nearby' => NearbyPage(selectedId: route.params['id']),
+    '/nearby/detail' => NearbyDetailPage(id: route.params['id'] ?? ''),
     '/list' => NoticeListPage(query: NoticeQuery.fromParams(route.params)),
     '/search' => NoticeListPage(
       query: NoticeQuery.fromParams(route.params),
@@ -414,7 +416,10 @@ class _AppShellState extends State<AppShell> {
               Expanded(
                 child: Pressable(
                   label: e.$3,
-                  selected: widget.route.path == e.$1,
+                  selected:
+                      (widget.route.path == e.$1 ||
+                      (e.$1 == '/nearby' &&
+                          widget.route.path.startsWith('/nearby/'))),
                   onTap: () => env.go(e.$1),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 10),
@@ -433,7 +438,11 @@ class _AppShellState extends State<AppShell> {
                             e.$2,
                             color: e.$1 == '/nearby'
                                 ? Colors.white
-                                : widget.route.path == e.$1
+                                : (widget.route.path == e.$1 ||
+                                      (e.$1 == '/nearby' &&
+                                          widget.route.path.startsWith(
+                                            '/nearby/',
+                                          )))
                                 ? Palette.orange
                                 : Palette.sub,
                           ),
@@ -443,7 +452,12 @@ class _AppShellState extends State<AppShell> {
                           e.$3,
                           style: type(
                             10,
-                            color: widget.route.path == e.$1
+                            color:
+                                (widget.route.path == e.$1 ||
+                                    (e.$1 == '/nearby' &&
+                                        widget.route.path.startsWith(
+                                          '/nearby/',
+                                        )))
                                 ? Palette.orange
                                 : Palette.sub,
                           ),
@@ -470,7 +484,7 @@ class _AppShellState extends State<AppShell> {
           Text('여기:it', style: type(22, weight: FontWeight.w700, spacing: -1)),
           const SizedBox(height: 13),
           Text(
-            widget.route.path == '/nearby'
+            widget.route.path.startsWith('/nearby')
                 ? '지도 소식은 각 원문과 자료 갱신 시각을 확인해주세요.'
                 : widget.state.isPrototype
                 ? '안성시 지역정보 서비스 시제품 · 화면의 소식은 모두 예시입니다.'

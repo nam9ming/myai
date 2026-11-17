@@ -1,8 +1,12 @@
-// 카카오 공식 SDK. 회의용 위치는 별도 데모 JSON에서만 전달받는다.
+// 시트가 지도 높이를 바꿔도 조회 영역은 접힌 지도 크기와 아이콘 가장자리를 포함한다.
+function nearbyQueryRect(width, height, fullHeight) {
+  const queryHeight = Math.max(height, fullHeight * .84);
+  return {left: -48, right: width + 48, top: (height-queryHeight)/2-48, bottom:(height+queryHeight)/2+48};
+}
+// 카카오 공식 SDK. 표시 자료는 검증된 지도 피드에서 전달받는다.
 (() => {
   let sdk;
   let viewport = {lat:37.0069, lng:127.2721, level:5};
-  const initial = {...viewport};
   function loadSdk() {
     if (window.kakao?.maps?.Map) return Promise.resolve();
     if (sdk) return sdk;
@@ -34,7 +38,7 @@
     return sdk;
   }
   window.myaiMountMap = (host, onMove, onSelect = () => {}) => {
-    let disposed = false, map, marker, busy = false, locationRequest = 0;
+    let disposed = false, map;
     host.setAttribute('data-myai-map', '');
     host.style.cssText = 'width:100%;height:100%;position:relative;background:#fafaf7;color:#242724;font:14px system-ui,sans-serif';
     const toolbar = document.createElement('div');
@@ -53,25 +57,6 @@
       button.style.cssText = 'min-width:44px;min-height:44px;padding:8px 10px;border:1px solid #cbd6ce;border-radius:12px;background:white;color:#ee663b;font:inherit;cursor:pointer';
       button.onclick = action; toolbar.append(button); return button;
     }
-    const locate = button('내 주변 보기', () => location(false));
-    const zoomIn = button('확대', () => { if(map) map.setLevel(Math.max(1,map.getLevel()-1)); });
-    const zoomOut = button('축소', () => { if(map) map.setLevel(Math.min(14,map.getLevel()+1)); });
-    const reset = button('안성으로', () => {
-      if (!map) return;
-      const home = noticeData.shop || initial;
-      map.setLevel(noticeData.shop ? 4 : initial.level); map.setCenter(new kakao.maps.LatLng(home.lat,home.lng));
-      message('');
-    });
-    const allNotices = button('전체 소식', () => {
-      if (!map || !noticeData.items.length) return;
-      const bounds = new kakao.maps.LatLngBounds();
-      if (noticeData.shop) bounds.extend(new kakao.maps.LatLng(noticeData.shop.lat,noticeData.shop.lng));
-      for (const item of noticeData.items) {
-        bounds.extend(new kakao.maps.LatLng(item.lat,item.lng));
-        for (const point of item.route?.path || []) bounds.extend(new kakao.maps.LatLng(point.lat,point.lng));
-      }
-      map.setBounds(bounds,35,25,35,25); message('');
-    });
     const retry = button('지도 재시도', start); retry.hidden = true;
     const style = document.createElement('style');
     style.textContent = `
@@ -99,52 +84,18 @@
     source.textContent = '구간 위치 © OpenStreetMap 기여자';
     source.style.color = '#56675e';credit.append(source);
     host.replaceChildren(style, toolbar, canvas, status);
-    function location(automatic) {
-      if (!map || busy || disposed) return;
-      if (!navigator.geolocation || !window.isSecureContext) {
-        message('이 브라우저에서는 현재 위치를 사용할 수 없어요. 지도를 직접 이동해 주세요.'); return;
-      }
-      busy = true; locate.disabled = true;
-      const request = ++locationRequest;
-      message('현재 위치를 확인하고 있어요.');
-      const valid = () => !disposed && request === locationRequest;
-      navigator.geolocation.getCurrentPosition(position => {
-        if (!valid()) return;
-        busy = false; locate.disabled = false;
-        // 자동 요청 중 사용자가 이동했다면 화면을 다시 끌어오지 않는다.
-        if (automatic && moved) { message('지도 탐색을 유지해요. 내 주변 보기를 누르면 현재 위치로 이동해요.'); return; }
-        const {latitude, longitude} = position.coords;
-        if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude)>90 || Math.abs(longitude)>180) {
-          message('현재 위치를 확인할 수 없어요. 지도를 직접 이동해 주세요.'); return;
-        }
-        const point = new kakao.maps.LatLng(latitude,longitude);
-        map.setCenter(point); map.setLevel(4);
-        if (marker) marker.setMap(null);
-        const dot = document.createElement('span');
-        dot.textContent = '내 위치';
-        dot.style.cssText = 'display:block;background:#ee663b;color:white;border:3px solid white;border-radius:16px;padding:6px 10px;font:13px system-ui;box-shadow:0 1px 5px #555';
-        marker = new kakao.maps.CustomOverlay({position:point,content:dot,yAnchor:1}); marker.setMap(map);
-        message('현재 위치로 이동했어요.');
-      }, error => {
-        if (!valid()) return;
-        busy = false; locate.disabled = false;
-        message(error.code === 1
-          ? '위치 권한이 없어요. 브라우저 설정을 확인하거나 지도를 직접 이동해 주세요.'
-          : error.code === 3 ? '위치 확인 시간이 초과됐어요. 내 주변 보기를 다시 눌러 주세요.'
-          : '현재 위치를 확인할 수 없어요. 지도를 직접 이동해 주세요.');
-      }, {enableHighAccuracy:false,timeout:10000,maximumAge:60000});
-    }
-    let moved = false;
     const save = () => {
       host.dataset.overview = String(map.getLevel() >= 6);
       const center = map.getCenter();
       if (!noticeData.shop) viewport = {lat:center.getLat(),lng:center.getLng(),level:map.getLevel()};
-      const bounds = map.getBounds();
-      const sw = bounds.getSouthWest(), ne = bounds.getNorthEast();
+      const rect = nearbyQueryRect(canvas.clientWidth, canvas.clientHeight, host.clientHeight);
+      const projection = map.getProjection();
+      const sw = projection.coordsFromContainerPoint(new kakao.maps.Point(rect.left, rect.bottom));
+      const ne = projection.coordsFromContainerPoint(new kakao.maps.Point(rect.right, rect.top));
       if (!disposed) onMove(JSON.stringify({south:sw.getLat(),west:sw.getLng(),north:ne.getLat(),east:ne.getLng()}));
     };
     const drag = () => {
-      moved = true; save();
+      save();
       message('');
     };
     let noticeLayers = [], shopLayer, noticeData = {items:[], selectedId:null, shop:null}, lastPayload;
@@ -215,7 +166,6 @@
     async function start() {
       retry.hidden = true;
       message('카카오 지도를 불러오고 있어요.');
-      for (const control of [locate,zoomIn,zoomOut,reset,allNotices]) control.disabled = true;
       try {
         await loadSdk();
         // 별도 다운로드 없이 앱과 같은 한글 바이트로 등록한 native 폰트를 기다린다.
@@ -234,7 +184,6 @@
         };
         renderNotices(); save();
         message('');
-        for (const control of [locate,zoomIn,zoomOut,reset,allNotices]) control.disabled = false;
 
       } catch (error) {
         if (disposed) return;
@@ -276,8 +225,6 @@
           const selected = data.items.find(item => item.id === data.selectedId);
           const changed = data.selectedId !== noticeData.selectedId;
           noticeData=data;lastPayload=payload;renderNotices();
-          reset.textContent = data.shop ? '내 가게로' : '안성으로';
-          locate.hidden = !!data.shop;
           host.dataset.shopMap = String(!!data.shop);
           if (map && shopChanged && data.shop) {
             map.setLevel(4);map.setCenter(new kakao.maps.LatLng(data.shop.lat,data.shop.lng));
@@ -298,9 +245,8 @@
       },
       setEnabled(enabled) {host.style.pointerEvents=enabled?'auto':'none';host.inert=!enabled;},
       dispose() {
-        disposed=true;locationRequest++;resize.disconnect();
+        disposed=true;resize.disconnect();
         if(map) {save();kakao.maps.event.removeListener(map,'idle',save);kakao.maps.event.removeListener(map,'dragend',drag);kakao.maps.event.removeListener(map,'click',clearSelection);}
-        if(marker)marker.setMap(null);
         if(shopLayer)shopLayer.setMap(null);
         for(const layer of noticeLayers)layer.setMap(null);
         noticeLayers=[];

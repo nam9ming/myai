@@ -19,7 +19,9 @@ void main() {
     final repository = NearbyRepository(browser);
     final initial = await repository.load();
     expect(initial.demo, true);
-    expect(initial.items.length, 8);
+    expect(repository.cached, same(initial));
+    expect(initial.items.every((item) => item.summary.isNotEmpty), true);
+    expect(initial.items.length, 30);
     final live = jsonDecode(demo) as Map<String, dynamic>;
     live['data_kind'] = 'live';
     for (final row in live['items']) {
@@ -35,6 +37,7 @@ void main() {
       (j) => j['items'][0]['source_url'] = 'javascript:alert(1)',
       (j) => j['data_kind'] = 'live',
       (j) => j['version'] = 2,
+      (j) => j['items'][0]['summary'] = 42,
     ]) {
       final json = jsonDecode(demo) as Map<String, dynamic>;
       change(json);

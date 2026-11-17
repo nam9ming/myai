@@ -6,7 +6,10 @@ import '../../data/models.dart';
 class NearbyNotice {
   final String id, category, title, address, description, status;
   final double lat, lng;
-  final String? start, end, sourceUrl;
+  final String? start, end, sourceUrl, summaryText;
+  String get summary =>
+      summaryText ??
+      description.split("\n").first.replaceAll(RegExp(r"\s+"), " ");
   const NearbyNotice({
     required this.id,
     required this.category,
@@ -19,6 +22,7 @@ class NearbyNotice {
     this.start,
     this.end,
     this.sourceUrl,
+    this.summaryText,
   });
 
   factory NearbyNotice.parse(Map<String, dynamic> j, {required bool live}) {
@@ -33,6 +37,11 @@ class NearbyNotice {
     final category = text('category', 30), status = text('status', 30);
     final lat = j['lat'], lng = j['lng'];
     final source = j['source_url'];
+    if (j['summary'] != null &&
+        (j['summary'] is! String ||
+            (j['summary'] as String).trim().isEmpty ||
+            (j['summary'] as String).length > 240))
+      throw const FormatException('요약을 확인해주세요.');
     final url = source is String ? Uri.tryParse(source) : null;
     if (!categories.containsKey(category) ||
         category == 'all' ||
@@ -73,6 +82,7 @@ class NearbyNotice {
       start: j['start'],
       end: j['end'],
       sourceUrl: source as String?,
+      summaryText: j['summary'],
     );
   }
   Map<String, Object> get marker => {
@@ -118,9 +128,12 @@ class NearbyFeed {
 }
 
 class NearbyRepository {
+  static final _cache = Expando<NearbyFeed>();
   final BrowserServices browser;
+  NearbyFeed? get cached => _cache[browser];
   NearbyRepository(this.browser);
   Future<NearbyFeed> load() async {
+    _cache[browser] = null;
     Future<String> get(String url) async {
       final response = await browser.request(url);
       if (response.status != 200)
@@ -143,6 +156,8 @@ class NearbyRepository {
         source.userInfo.isNotEmpty) {
       throw const FormatException('지도 자료 주소를 확인해주세요.');
     }
-    return NearbyFeed.parse(await get(source.toString()));
+    final result = NearbyFeed.parse(await get(source.toString()));
+    _cache[browser] = result;
+    return result;
   }
 }

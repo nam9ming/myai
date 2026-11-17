@@ -88,10 +88,12 @@ class _NearbyPageState extends State<NearbyPage> {
     final items = (feed?.items ?? <NearbyNotice>[])
         .where((item) => category == 'all' || item.category == category)
         .toList();
-    final shown = items.where(visible).toList();
     final selected = items
         .where((item) => item.id == widget.selectedId)
         .firstOrNull;
+    final shown = items
+        .where((item) => visible(item) || item.id == selected?.id)
+        .toList();
     return LayoutBuilder(
       builder: (context, constraints) => Stack(
         children: [
@@ -249,7 +251,7 @@ class _NearbyPageState extends State<NearbyPage> {
                           Expanded(
                             child: Text(
                               selected == null
-                                  ? '지도 안 소식 ${shown.length}건'
+                                  ? '이 지역 소식 ${shown.length}건'
                                   : selected.title,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
@@ -283,21 +285,22 @@ class _NearbyPageState extends State<NearbyPage> {
                           action: '다시 조회',
                           onTap: load,
                         ),
-                      if (selected != null)
-                        _card(selected, expanded: true)
-                      else ...[
+                      if (selected != null) _card(selected, highlighted: true),
+                      if (selected == null)
                         Text(
-                          '아이콘을 누르거나 시트를 위로 올려 소식을 확인하세요.',
+                          '소식을 누르면 자세한 내용을 볼 수 있어요.',
                           style: type(12, color: Palette.sub),
                         ),
-                        const SizedBox(height: 14),
-                        if (!busy && error == null && shown.isEmpty)
-                          Text(
-                            '이 지도 영역에는 소식이 없어요. 지도를 이동해보세요.',
-                            style: type(13, color: Palette.sub),
-                          ),
-                        for (final item in shown) _card(item),
-                      ],
+                      const SizedBox(height: 12),
+                      if (!busy && error == null && shown.isEmpty)
+                        Text(
+                          '이 지역에는 소식이 없어요. 지도를 이동해보세요.',
+                          style: type(13, color: Palette.sub),
+                        ),
+                      for (final item in shown.where(
+                        (item) => item.id != selected?.id,
+                      ))
+                        _card(item),
                       if (feed != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 12),
@@ -317,60 +320,52 @@ class _NearbyPageState extends State<NearbyPage> {
     );
   }
 
-  Widget _card(NearbyNotice item, {bool expanded = false}) => Container(
-    margin: const EdgeInsets.only(bottom: 12),
-    decoration: BoxDecoration(
-      color: expanded ? Palette.soft : Colors.white,
-      border: Border.all(color: expanded ? Palette.orange : Palette.line),
-      borderRadius: BorderRadius.circular(14),
-    ),
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  categories[item.category]!,
-                  style: type(11, color: Palette.orange),
+  Widget _card(NearbyNotice item, {bool highlighted = false}) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Pressable(
+      label: '${item.title}, 상세 보기',
+      onTap: () => AppContext.of(context).go('/nearby/detail', {'id': item.id}),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: highlighted ? Palette.soft : Colors.white,
+          border: Border.all(
+            color: highlighted ? Palette.orange : Palette.line,
+          ),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    categories[item.category]!,
+                    style: type(11, color: Palette.orange),
+                  ),
                 ),
-              ),
-              if (item.status == 'cancelled')
-                Text('취소', style: type(11, color: Palette.red)),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(item.title, style: type(16, weight: FontWeight.w600)),
-          const SizedBox(height: 7),
-          Text(item.address, style: type(12, color: Palette.sub)),
-          Text(
-            dateRange(item.start, item.end),
-            style: type(12, color: Palette.sub),
-          ),
-          if (expanded) ...[
-            const SizedBox(height: 12),
-            Text(item.description, style: type(13)),
-            if (item.sourceUrl != null)
-              UiButton(
-                '원문 보기',
-                quiet: true,
-                icon: 'external',
-                onTap: () {
-                  if (!AppContext.of(context).state.browser
-                      .open(item.sourceUrl!))
-                    AppContext.of(context).toast('원문을 열지 못했어요.');
-                },
-              ),
+                if (item.status == 'cancelled')
+                  Text('취소', style: type(11, color: Palette.red)),
+                const UiIcon('chevron', size: 16, color: Palette.sub),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(item.title, style: type(16, weight: FontWeight.w600)),
+            const SizedBox(height: 7),
+            Text(
+              item.summary,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: type(13, color: Palette.sub),
+            ),
+            const SizedBox(height: 9),
+            Text(
+              '${item.address} · ${dateRange(item.start, item.end)}',
+              style: type(11, color: Palette.sub),
+            ),
           ],
-          UiButton(
-            expanded ? '선택 해제' : '지도에서 자세히 보기',
-            quiet: true,
-            icon: expanded ? 'close' : 'pin',
-            onTap: () => select(expanded ? null : item.id),
-          ),
-        ],
+        ),
       ),
     ),
   );

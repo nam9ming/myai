@@ -90,11 +90,10 @@ void main() {
     expect(find.text('홈'), findsWidgets);
     expect(find.text('내 주변'), findsNWidgets(2));
     expect(find.text('안성천 주말 작은 음악회'), findsOneWidget);
-    await tester.ensureVisible(find.text('지도에서 자세히 보기').first);
-    await tester.tap(find.text('지도에서 자세히 보기').first);
+    await tester.tap(find.bySemanticsLabel('안성천 주말 작은 음악회, 상세 보기').first);
     await tester.pumpAndSettle();
-    expect(find.text('선택 해제'), findsOneWidget);
-    await tapText(tester, '선택 해제');
+    expect(find.text('소식 안내'), findsOneWidget);
+    await tapText(tester, '지도로 돌아가기');
     browser.responder = (url, method, body) async =>
         const HttpResult(503, 'unavailable');
     await tester.tap(find.byTooltip('새로고침'));
