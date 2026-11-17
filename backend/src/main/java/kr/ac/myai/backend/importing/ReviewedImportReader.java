@@ -30,6 +30,7 @@ public class ReviewedImportReader {
     public static final int RAW_ASSET_LIMIT = 20 * 1024 * 1024;
     public static final String CITIZEN_IMPORT_VERSION = "citizen-reviewed-import-v1";
     public static final String CITIZEN_PAYLOAD_VERSION = "citizen-revision-v1";
+    public static final String CITIZEN_HANDOFF_IMPORT_VERSION = "citizen-human-handoff-import-v1";
     private static final String CITIZEN_FACT_NAMES = "application_period occurrences regions locations residency_requirement target eligibility application_method preparation cost recruitment lifecycle";
     public static final List<String> CITIZEN_FIELDS = List.of(("title categories " + CITIZEN_FACT_NAMES
             + " source_version_ids originating_run_ids").split(" "));
@@ -78,13 +79,14 @@ public class ReviewedImportReader {
     public ReviewedBatch prepareHandoff(JsonNode input, Path sourceRoot, String inputHash, String runId) {
         try {
             unicode(input);
-            check(input.path("schema_version").asText().equals("reviewed-import-v1") && input.has("human_handoffs"), "schema_version");
+            boolean citizen = input.path("schema_version").asText().equals(CITIZEN_IMPORT_VERSION);
+            check((citizen || input.path("schema_version").asText().equals("reviewed-import-v1")) && input.has("human_handoffs"), "schema_version");
             check(inputHash != null && inputHash.matches("[0-9a-f]{64}"), "input_sha256");
             check(runId != null && runId.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"), "originating_run_id");
             var batch = batch(input, sourceRoot, inputHash, false);
             for (var event : batch.events()) check(event.originatingRunIds().contains(runId)
                     && event.reviewStatus().equals("needs_review") && event.publicationIntent().equals("hidden"), "events.revision");
-            return new ReviewedBatch("human-handoff-import-v1", inputHash, batch.dataKind(), batch.documents(), batch.events(),
+            return new ReviewedBatch(citizen ? CITIZEN_HANDOFF_IMPORT_VERSION : "human-handoff-import-v1", inputHash, batch.dataKind(), batch.documents(), batch.events(),
                     runId, null, input.path("human_handoffs").toString());
         } catch (IOException | IllegalArgumentException ex) {
             throw invalid("file", "인계 검토본 또는 원문 파일을 검증할 수 없습니다.");
@@ -98,7 +100,7 @@ public class ReviewedImportReader {
             boolean citizen = schema.equals(CITIZEN_IMPORT_VERSION);
             boolean handoff = input.has("human_handoffs");
             shape(input, "$", "schema_version data_kind documents evidence events" + (draftImport ? " originating_run_id" : "")
-                    + (handoff && !sourceOnly && !draftImport && !citizen ? " human_handoffs" : ""));
+                    + (handoff && !sourceOnly && !draftImport ? " human_handoffs" : ""));
             if (handoff) {
                 check(input.path("human_handoffs").isArray() && !input.path("human_handoffs").isEmpty(), "human_handoffs");
                 try { HandoffReference.list(input.path("human_handoffs")); }
@@ -261,12 +263,13 @@ public class ReviewedImportReader {
                 + (citizen ? "categories " + CITIZEN_FACT_NAMES : "types occurrences locations applicability exceptions route_names stop_names directions lifecycle lifecycle_evidence_ids")
                 + " human_overrides review_status reviewer_id reviewed_at publication_intent origin source_version_ids originating_run_ids"
                 + (citizen ? "" : " rules_version dictionary_version"));
-        String origin = citizen ? choice(revision, "origin", "human") : choice(revision, "origin", "human", "ai_reviewed", "ai_draft");
+        String origin = citizen ? (handoffs == null ? choice(revision, "origin", "human") : choice(revision, "origin", "ai_reviewed"))
+                : choice(revision, "origin", "human", "ai_reviewed", "ai_draft");
         boolean rawDraft = origin.equals("ai_draft");
         String status = stored ? choice(revision, "review_status", "draft", "needs_review", "approved", "rejected") : choice(revision, "review_status", "draft", "needs_review");
         String intent = stored ? choice(revision, "publication_intent", "hidden", "public") : choice(revision, "publication_intent", "hidden");
-        boolean partial = rawDraft || handoffs != null && intent.equals("hidden")
-                && (status.equals("needs_review") || stored && status.equals("rejected"));
+        boolean partial = !citizen && (rawDraft || handoffs != null && intent.equals("hidden")
+                && (status.equals("needs_review") || stored && status.equals("rejected")));
         check(stored || draftImport == rawDraft, "events.revision.origin");
         check(uuid(revision, "event_id").equals(id), "events.revision.event_id");
         String revisionId = uuid(revision, "revision_id");

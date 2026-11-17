@@ -109,7 +109,7 @@ public class LocalManagementService {
             requests.retain(body);
             return imports.importBatch(batch, actor);
         }
-        check(schema(input).equals("human-handoff-import-v1"), "schema_version");
+        check(Set.of("human-handoff-import-v1", ReviewedImportReader.CITIZEN_HANDOFF_IMPORT_VERSION).contains(schema(input)), "schema_version");
         var revisions = input.path("revisions");
         check(eventId == null || revisions.isArray() && revisions.size() == 1
                 && revisions.get(0).path("event_id").isTextual()

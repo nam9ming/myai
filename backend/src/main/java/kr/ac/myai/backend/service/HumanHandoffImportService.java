@@ -66,10 +66,14 @@ public class HumanHandoffImportService {
             check(bytes != null && bytes.length > 0 && bytes.length <= LIMIT, "file");
             JsonNode request = reader.parseJson(bytes);
             shape(request, "schema_version handoff_ref receipt_sha256 reason revisions");
-            check(request.path("schema_version").asText().equals("human-handoff-import-v1"), "schema_version");
+            String schema = request.path("schema_version").asText();
+            boolean citizen = schema.equals(ReviewedImportReader.CITIZEN_HANDOFF_IMPORT_VERSION);
+            check(citizen || schema.equals("human-handoff-import-v1"), "schema_version");
             String reason = text(request, "reason", LIMIT);
             var handoff = archives.read(text(request, "handoff_ref", 64), text(request, "receipt_sha256", 64), handoffRoot);
             var projection = handoff.projection();
+            check(projection.path("schema_version").asText().equals(citizen
+                    ? "citizen-human-handoff-projection-v1" : "human-handoff-projection-v1"), "schema_version");
             String run = projection.path("parent").path("run_id").asText();
             JsonNode mappings = request.path("revisions");
             check(mappings.isArray() && mappings.size() == projection.path("events").size(), "revisions");
@@ -82,7 +86,7 @@ public class HumanHandoffImportService {
                         && value.path("expected_revision_no").longValue() >= 0 && value.path("expected_revision_no").longValue() < Long.MAX_VALUE,
                         "revisions.expected_revision_no");
             }
-            var envelope = mapper.createObjectNode().put("schema_version", "reviewed-import-v1");
+            var envelope = mapper.createObjectNode().put("schema_version", citizen ? ReviewedImportReader.CITIZEN_IMPORT_VERSION : "reviewed-import-v1");
             envelope.set("data_kind", projection.path("data_kind"));
             envelope.set("documents", projection.path("documents"));
             envelope.set("evidence", projection.path("evidence"));
@@ -122,7 +126,8 @@ public class HumanHandoffImportService {
                 boolean present = false;
                 for (var value : proofs) present |= value.equals(selected);
                 if (!present) proofs.add(selected);
-                HumanReviewChanges.record(before, payload, actor, at, reason);
+                if (citizen) HumanReviewChanges.record(before, payload, actor, at, reason, ReviewedImportReader.CITIZEN_FIELDS);
+                else HumanReviewChanges.record(before, payload, actor, at, reason);
                 String saved = payload.toString();
                 byte[] savedBytes = saved.getBytes(StandardCharsets.UTF_8);
                 check(savedBytes.length <= LIMIT, "events");

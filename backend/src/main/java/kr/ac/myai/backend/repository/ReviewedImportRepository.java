@@ -52,7 +52,7 @@ public class ReviewedImportRepository {
         return switch (batch.schemaVersion()) {
             case "source-import-v1" -> "source";
             case "ai-draft-import-v1" -> "ai_draft";
-            case "human-handoff-import-v1" -> "human_handoff";
+            case "human-handoff-import-v1", ReviewedImportReader.CITIZEN_HANDOFF_IMPORT_VERSION -> "human_handoff";
             default -> "reviewed";
         };
     }
@@ -147,6 +147,10 @@ public class ReviewedImportRepository {
             require(previous.path("data_kind").asText().equals(kind), "data_kind");
             var oldProofs = previous.path("human_handoffs");
             var newProofs = next.path("human_handoffs");
+            if (family.equals(ReviewedImportReader.CITIZEN_IMPORT_VERSION) && newProofs.isArray() && !generatedHandoff) {
+                // 시민 AI 출처의 최초 도입은 검증한 전용 인계에서만 허용한다.
+                require(oldProofs.isArray() && !oldProofs.isEmpty(), "human_handoffs");
+            }
             if (oldProofs.isArray()) {
                 require(newProofs.isArray() && newProofs.size() >= oldProofs.size(), "human_handoffs");
                 for (int i = 0; i < oldProofs.size(); i++) require(oldProofs.get(i).equals(newProofs.get(i)), "human_handoffs");
@@ -163,7 +167,7 @@ public class ReviewedImportRepository {
                         "events.revision.originating_run_ids");
             }
             if (action.equals("import")) {
-                if (family.equals(ReviewedImportReader.CITIZEN_IMPORT_VERSION)) HumanReviewChanges.validate(previous, next, false, ReviewedImportReader.CITIZEN_FIELDS);
+                if (family.equals(ReviewedImportReader.CITIZEN_IMPORT_VERSION)) HumanReviewChanges.validate(previous, next, generatedHandoff, ReviewedImportReader.CITIZEN_FIELDS);
                 else if (hadRuns || next.has("human_handoffs")) HumanReviewChanges.validate(previous, next, generatedHandoff);
             }
             lockVersion = ((Number) state.get("lock_version")).longValue();

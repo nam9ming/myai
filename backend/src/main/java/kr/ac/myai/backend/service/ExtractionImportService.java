@@ -107,7 +107,8 @@ public class ExtractionImportService {
     public List<Reference> verifyReferences(ReviewedBatch batch) {
         var references = batch.handoffJson() == null ? List.<HandoffReference>of()
                 : HandoffReference.list(json.parseJson(batch.handoffJson().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-        return verifyReferences(batch.events(), batch.originatingRunId(), batch.documents().stream().map(ReviewedBatch.Document::versionId).toList(), references);
+        return verifyReferences(batch.events(), batch.originatingRunId(), batch.documents().stream().map(ReviewedBatch.Document::versionId).toList(),
+                references, false, batch.schemaVersion());
     }
 
     private List<Reference> verifyReferences(List<ReviewedBatch.Event> events, String batchRun, List<String> batchDocuments,
@@ -117,6 +118,11 @@ public class ExtractionImportService {
 
     private List<Reference> verifyReferences(List<ReviewedBatch.Event> events, String batchRun, List<String> batchDocuments,
                                             List<HandoffReference> batchHandoffs, boolean readOnly) {
+        return verifyReferences(events, batchRun, batchDocuments, batchHandoffs, readOnly, null);
+    }
+
+    private List<Reference> verifyReferences(List<ReviewedBatch.Event> events, String batchRun, List<String> batchDocuments,
+                                            List<HandoffReference> batchHandoffs, boolean readOnly, String batchSchema) {
         var verified = new LinkedHashMap<String, Reference>();
         var images = new LinkedHashMap<HandoffReference, VerifiedHandoff>();
         for (var event : events) {
@@ -124,6 +130,7 @@ public class ExtractionImportService {
             var proofs = new LinkedHashMap<String, VerifiedHandoff>();
             for (var reference : HandoffReference.list(payload.path("human_handoffs"))) {
                 var image = images.computeIfAbsent(reference, handoffs::read);
+                requireHandoffFamily(image, ReviewedImportReader.CITIZEN_PAYLOAD_VERSION.equals(payload.path("schema_version").asText()));
                 String run = image.projection().path("parent").path("run_id").asText();
                 boolean hasEvent = false;
                 for (var projected : image.projection().path("events")) hasEvent |= projected.path("event_id").asText().equals(event.id());
@@ -141,12 +148,21 @@ public class ExtractionImportService {
         }
         for (var reference : batchHandoffs) {
             var image = images.computeIfAbsent(reference, handoffs::read);
+            requireHandoffFamily(image, ReviewedImportReader.CITIZEN_HANDOFF_IMPORT_VERSION.equals(batchSchema)
+                    || ReviewedImportReader.CITIZEN_IMPORT_VERSION.equals(batchSchema));
             String run = image.projection().path("parent").path("run_id").asText();
             if (batchRun != null && !batchRun.equals(run)) throw new ExtractionException("EXTRACTION_ARCHIVE_INVALID", null, false);
             verifyReference(run, batchDocuments, verified, image, readOnly);
         }
         if (batchRun != null && batchHandoffs.isEmpty()) verifyReference(batchRun, batchDocuments, verified, null, readOnly);
         return verified.values().stream().sorted(Comparator.comparing(Reference::runId)).toList();
+    }
+
+    private static void requireHandoffFamily(VerifiedHandoff image, boolean citizen) {
+        if (!image.projection().path("schema_version").asText().equals(citizen
+                ? "citizen-human-handoff-projection-v1" : "human-handoff-projection-v1")) {
+            throw new ExtractionException("EXTRACTION_ARCHIVE_INVALID", null, false);
+        }
     }
 
     private void verifyReference(String id, List<String> documents, Map<String, Reference> verified, VerifiedHandoff handoff,
