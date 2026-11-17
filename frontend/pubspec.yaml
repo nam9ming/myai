@@ -23,29 +23,9 @@ flutter:
   assets:
     - assets/prototype/
     - assets/posters/
+    - assets/fonts/NotoSansKR.woff2
   fonts:
     - family: serif
       fonts:
         - asset: assets/fonts/NotoSerifKR.ttf
           weight: 400
-        - asset: assets/fonts/NotoSerifKR.ttf
-          weight: 700
-    # 원본 SVG의 generic sans-serif도 같은 한국어 글꼴로 해석한다.
-    - family: sans-serif
-      fonts:
-        - asset: assets/fonts/NotoSansKR.ttf
-          weight: 400
-        - asset: assets/fonts/NotoSansKR.ttf
-          weight: 700
-    - family: NotoSansKR
-      fonts:
-        - asset: assets/fonts/NotoSansKR.ttf
-          weight: 400
-        - asset: assets/fonts/NotoSansKR.ttf
-          weight: 500
-        - asset: assets/fonts/NotoSansKR.ttf
-          weight: 600
-        - asset: assets/fonts/NotoSansKR.ttf
-          weight: 700
-        - asset: assets/fonts/NotoSansKR.ttf
-          weight: 800

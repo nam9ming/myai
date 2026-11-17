@@ -1,0 +1,12 @@
+{
+  "source": "NotoSansKR.ttf",
+  "source_sha256": "194018e6b2b293a7964f037b25c0249ce1418bc9ab3c971060a03aa57861e252",
+  "output": "NotoSansKR.woff2",
+  "output_sha256": "9674def0626f31eb926edb7b1546bc3b7598f0418b49bfaa9acedae4894ce22c",
+  "source_bytes": 10414588,
+  "output_bytes": 3908364,
+  "glyphs": 23174,
+  "scope": "전체 글자와 가변 굵기 축을 보존한 WOFF2 압축",
+  "tool": "fonttools[woff] 4.68.0",
+  "license": "OFL.txt"
+}

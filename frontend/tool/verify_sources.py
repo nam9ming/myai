@@ -21,3 +21,8 @@ assert hashlib.sha256((root / "assets/fonts/NotoSerifKR.ttf").read_bytes()).hexd
 assert (root / "assets/fonts/OFL.txt").is_file()
 assert (root / "assets/fonts/OFL-NotoSerifKR.txt").is_file()
 print(f"PASS: {count} original SVG files, 16 fixtures, font subset and licenses")
+
+body = json.loads((root / "assets/fonts/BODY-COMPRESSION.json").read_text(encoding="utf-8"))
+assert hashlib.sha256((root / "assets/fonts/NotoSansKR.ttf").read_bytes()).hexdigest() == body["source_sha256"]
+assert hashlib.sha256((root / "assets/fonts/NotoSansKR.woff2").read_bytes()).hexdigest() == body["output_sha256"]
+print(f"PASS: lossless body WOFF2 {body['output_bytes']} bytes; {body['glyphs']} characters")

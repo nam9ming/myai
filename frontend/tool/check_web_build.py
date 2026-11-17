@@ -7,7 +7,7 @@ from urllib.request import urlopen
 import sys
 
 root = Path(sys.argv[1] if len(sys.argv) > 1 else "build/web").resolve()
-paths = ["index.html", "flutter_bootstrap.js", "main.dart.js", "canvaskit/canvaskit.wasm", "assets/assets/fonts/NotoSansKR.ttf", "assets/assets/fonts/NotoSerifKR.ttf", "assets/assets/posters/books.svg"]
+paths = ["index.html", "flutter_bootstrap.js", "main.dart.js", "canvaskit/canvaskit.wasm", "assets/assets/fonts/NotoSansKR.woff2", "assets/assets/fonts/NotoSerifKR.ttf", "assets/assets/posters/books.svg"]
 for path in paths:
     assert (root / path).is_file(), path
 assert "A new Flutter project" not in (root / "index.html").read_text(encoding="utf-8")

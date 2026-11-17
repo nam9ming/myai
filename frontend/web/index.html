@@ -46,8 +46,35 @@
 </head>
 <body>
   <div id="loading" role="status" style="font:14px sans-serif;color:#747970;position:fixed;inset:0;display:grid;place-items:center;background:#fff">
-    여기:it 소식을 준비하고 있어요…
+    <div style="text-align:center;line-height:1.8;padding:24px;max-width:360px">
+      <p id="loading-message">여기:it 소식을 준비하고 있어요…</p>
+      <p id="loading-help" hidden style="font-size:12px">첫 실행에 필요한 파일을 받고 있어요. 카카오톡에서 계속 멈춘다면 메뉴에서 Safari로 열어주세요.</p>
+      <button id="loading-retry" hidden type="button" style="margin-top:12px;padding:12px 24px;border:0;border-radius:9px;background:#ee663b;color:white;font:inherit">다시 시도</button>
+    </div>
   </div>
+  <script>
+    (() => {
+      const message = document.getElementById('loading-message');
+      const help = document.getElementById('loading-help');
+      const retry = document.getElementById('loading-retry');
+      const revealHelp = () => { help.hidden = false; retry.hidden = false; };
+      const timer = setTimeout(revealHelp, 12000);
+      const fail = () => {
+        if (!document.getElementById('loading')) return;
+        clearTimeout(timer);
+        message.textContent = '화면을 불러오지 못했어요. 다시 시도해주세요.';
+        revealHelp();
+      };
+      retry.addEventListener('click', () => location.reload());
+      window.yeogiStartup = {
+        phase(text) { message.textContent = text; },
+        fail,
+        complete() { clearTimeout(timer); document.getElementById('loading')?.remove(); },
+      };
+      window.addEventListener('error', fail);
+      window.addEventListener('unhandledrejection', fail);
+    })();
+  </script>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
