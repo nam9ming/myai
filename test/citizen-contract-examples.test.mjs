@@ -12,6 +12,10 @@ const cases = [
   ["시민 공개 이력에 비공개 검토자를 추가하면 계약 검증이 실패한다", (value) => { value.data.history.entries[0].actor = "synthetic-reviewer"; }],
   ["남은 이력이 없는데 다음 페이지 커서를 만들면 계약 검증이 실패한다", (value) => { value.data.history.window.next_before_version = 1; }],
   ["조회 불가 이력에 정상 페이지와 항목을 남기면 계약 검증이 실패한다", (value) => { value.data.history.status = "unavailable"; }],
+  ["시민 추출의 원문 인용이 다르면 계약 검증이 실패한다", (value) => { value.evidence[0].quote = "다른 합성 인용"; }, "citizen-ai-extraction.json"],
+  ["시민 추출이 다른 문서를 참조하면 계약 검증이 실패한다", (value) => { value.document_version_id = "90000000-0000-4000-8000-000000000001"; }, "citizen-ai-extraction.json"],
+  ["시민 추출 비용의 중복 값은 계약 검증이 실패한다", (value) => { value.items[0].cost = { value: ["합성 비용", "합성 비용"], knowledge: "known", evidence_ids: ["e1"], reason: null }; }, "citizen-ai-extraction.json"],
+  ["시민 추출 분류 미상을 미기재로 바꾸면 계약 검증이 실패한다", (value) => { value.items[0].categories = { value: null, knowledge: "not_stated", evidence_ids: [], reason: "분야 미상" }; }, "citizen-ai-extraction.json"],
 ];
 
 for (const [name, mutate, file = "citizen-detail-response.json"] of cases) {

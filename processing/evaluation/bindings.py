@@ -6,7 +6,7 @@ import stat
 
 from processing.extraction.archive import (DEFAULT_ROOT as EXTRACTION_ROOT, _fingerprint, _json, _read,
                                             _read_checked, _root, verify_run)
-from processing.extraction.schema import HASH, UUID
+from processing.extraction.schema import HASH, UUID, SCHEMA_VERSION
 from processing.extraction.validation import array, decode, parse_input, require, shape, text
 from .dataset import _id, _parse_manifest
 from .storage import DEFAULT_ROOT, verify_dataset
@@ -71,6 +71,8 @@ def check_bindings(content, dataset_root=DEFAULT_ROOT, run_root=EXTRACTION_ROOT)
             run_input = _read_checked(directory/'input.json', receipt['artifacts']['input.json'])
             _check(receipt['document_version_id'] == version and receipt['data_kind'] == manifest['data_kind']
                    and receipt['input_sha256'] == source_hash and run_input == source_bytes, 'BINDING_SOURCE_MISMATCH')
+            metadata = decode(_read_checked(directory/'metadata.json', receipt['artifacts']['metadata.json']), 'archive')
+            _check(metadata['schema_version'] == SCHEMA_VERSION, 'BINDING_SCHEMA_UNSUPPORTED')
             runs.append(dict(run_id=run_id, document_version_id=version, receipt_sha256=receipt_hash,
                              status=receipt['status'], execution_mode=receipt['execution_mode'],
                              attempt_count=len(receipt['attempts']), first_status=receipt['attempts'][0]['status']))

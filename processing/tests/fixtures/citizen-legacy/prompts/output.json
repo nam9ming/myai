@@ -1,0 +1,171 @@
+{
+  "schema_version": "extract-schema-v1",
+  "document_version_id": "e9dc7495-7186-5318-a054-4fc54e9b78cc",
+  "items": [
+    {
+      "local_item_id": "item1",
+      "title": {
+        "value": "가상 예시: 연결도로 도로공사",
+        "knowledge": "known",
+        "evidence_ids": [
+          "e1"
+        ],
+        "reason": null
+      },
+      "types": {
+        "value": [
+          "construction"
+        ],
+        "knowledge": "known",
+        "evidence_ids": [
+          "e1"
+        ],
+        "reason": null
+      },
+      "occurrences": [
+        {
+          "local_occurrence_id": "o1",
+          "date_start": {
+            "value": "2026-11-07",
+            "knowledge": "known",
+            "evidence_ids": [
+              "e1"
+            ],
+            "reason": null
+          },
+          "date_end": {
+            "value": "2026-11-07",
+            "knowledge": "known",
+            "evidence_ids": [
+              "e1"
+            ],
+            "reason": null
+          },
+          "time_start": {
+            "value": "10:00",
+            "knowledge": "known",
+            "evidence_ids": [
+              "e1"
+            ],
+            "reason": null
+          },
+          "time_end": {
+            "value": "16:00",
+            "knowledge": "known",
+            "evidence_ids": [
+              "e1"
+            ],
+            "reason": null
+          },
+          "end_day_offset": {
+            "value": 0,
+            "knowledge": "known",
+            "evidence_ids": [
+              "e1"
+            ],
+            "reason": null
+          },
+          "all_day": {
+            "value": false,
+            "knowledge": "known",
+            "evidence_ids": [
+              "e1"
+            ],
+            "reason": null
+          },
+          "recurrence_text": {
+            "value": null,
+            "knowledge": "not_stated",
+            "evidence_ids": [],
+            "reason": "가상 원문에 기재되지 않음"
+          },
+          "location_refs": [
+            "l1"
+          ]
+        }
+      ],
+      "locations": [
+        {
+          "local_location_id": "l1",
+          "name": {
+            "value": "가상 시장 앞 연결도로 일부 구간",
+            "knowledge": "known",
+            "evidence_ids": [
+              "e1"
+            ],
+            "reason": null
+          },
+          "address": {
+            "value": null,
+            "knowledge": "not_stated",
+            "evidence_ids": [],
+            "reason": "가상 원문에 기재되지 않음"
+          },
+          "kind": {
+            "value": "segment",
+            "knowledge": "known",
+            "evidence_ids": [
+              "e1"
+            ],
+            "reason": null
+          }
+        }
+      ],
+      "applicability": {
+        "value": "작업 구간 통행 차량",
+        "knowledge": "known",
+        "evidence_ids": [
+          "e1"
+        ],
+        "reason": null
+      },
+      "exceptions": {
+        "value": [
+          "보행자 통행로 유지"
+        ],
+        "knowledge": "known",
+        "evidence_ids": [
+          "e1"
+        ],
+        "reason": null
+      },
+      "route_names": {
+        "value": null,
+        "knowledge": "not_stated",
+        "evidence_ids": [],
+        "reason": "가상 원문에 기재되지 않음"
+      },
+      "stop_names": {
+        "value": null,
+        "knowledge": "not_stated",
+        "evidence_ids": [],
+        "reason": "가상 원문에 기재되지 않음"
+      },
+      "directions": {
+        "value": null,
+        "knowledge": "not_stated",
+        "evidence_ids": [],
+        "reason": "가상 원문에 기재되지 않음"
+      },
+      "lifecycle": {
+        "value": null,
+        "knowledge": "not_stated",
+        "evidence_ids": [],
+        "reason": "가상 원문에 기재되지 않음"
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "e1",
+      "block_id": "b1",
+      "quote": "가상 예시: 연결도로 도로공사. 2026년 11월 7일 10:00부터 같은 날 16:00까지 가상 시장 앞 연결도로 일부 구간을 정비합니다. 적용 대상은 작업 구간 통행 차량이며, 보행자 통행로는 유지합니다.",
+      "start_char": 0,
+      "end_char": 116,
+      "text_sha256": "b158c3bd92385f4c191977904e2d48bc15606915e780fad621ed1fd2e25337fc"
+    }
+  ],
+  "warnings": [
+    "SYNTHETIC_EXAMPLE_ONLY"
+  ]
+}

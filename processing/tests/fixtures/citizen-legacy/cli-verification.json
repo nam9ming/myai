@@ -1,0 +1,95 @@
+{
+  "manifest_sha256": "0cdb9589b6f1acc66075cec2a2651e23546a3dbb8747e127ff17349b67eab77f",
+  "original_file_count": 96,
+  "unchanged_after_replay": true,
+  "original_and_rebuild_equal": true,
+  "prior_13_pins_unchanged": true,
+  "commands": [
+    {
+      "case": "api_chunk",
+      "command": [
+        "/opt/homebrew/opt/python@3.13/bin/python3.13",
+        "-B",
+        "-m",
+        "processing.extraction",
+        "verify-sealed",
+        "36000000-0000-4000-8000-000000000003",
+        "--root",
+        "/private/tmp/yeogi-citizen-python-legacy-archives/original/runs/registered/3448891389c575ba3c70353041c4e26a4a8bed886ad6da24e5d67a1c18206f58"
+      ],
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "stdout_sha256": "a16fe299eca0f62ac31e8a01857c0e0d3579640c8d27fd78de207705c2f1ed80",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "case": "human_handoff",
+      "command": [
+        "/opt/homebrew/opt/python@3.13/bin/python3.13",
+        "-B",
+        "-m",
+        "processing.evaluation",
+        "verify-handoff",
+        "7c5661a47dde874f23ea723a57d76af07ea484524828a5324427bbe8a1af2d9e",
+        "--root",
+        "/private/tmp/yeogi-citizen-python-legacy-archives/original/handoffs"
+      ],
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "stdout_sha256": "41ab675582de96a5e4d9c315f58cdfaa0f2eaed1ba1182f7a56fc6a60b1a06cf",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "case": "human_review",
+      "command": [
+        "/opt/homebrew/opt/python@3.13/bin/python3.13",
+        "-B",
+        "-m",
+        "processing.evaluation",
+        "verify-review",
+        "5e396e506fc78e58923d480e2d39e0a8947c5c24e597a4d0721d94999efb232f",
+        "--root",
+        "/private/tmp/yeogi-citizen-python-legacy-archives/original/reviews"
+      ],
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "stdout_sha256": "319d1a094a7cbaf77ffc9f8e6fb7dcbbe58126834154a056fee646a6652bb046",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "case": "manual_failure",
+      "command": [
+        "/opt/homebrew/opt/python@3.13/bin/python3.13",
+        "-B",
+        "-m",
+        "processing.extraction",
+        "verify-sealed",
+        "36000000-0000-4000-8000-000000000002",
+        "--root",
+        "/private/tmp/yeogi-citizen-python-legacy-archives/original/runs/registered/0ddd12dbe9675dc97c26ead647fb5cc97a1d28a3461b4ebacf680c8726db24a3"
+      ],
+      "expected_exit": 4,
+      "actual_exit": 4,
+      "stdout_sha256": "8772d02ae86b3cdeaa9701622cd7d9666f7283c761df613b952889ff03e43c76",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "case": "manual_success",
+      "command": [
+        "/opt/homebrew/opt/python@3.13/bin/python3.13",
+        "-B",
+        "-m",
+        "processing.extraction",
+        "verify-sealed",
+        "36000000-0000-4000-8000-000000000001",
+        "--root",
+        "/private/tmp/yeogi-citizen-python-legacy-archives/original/runs/registered/bb319940842267117d4df6c4b07936e82e53a2001bcc458f4d86686770c4e5f4"
+      ],
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "stdout_sha256": "9d403ba6acf36dd72a52482f3d018deddbea636213e2d4b2abe774703cc33e49",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "real_provider_calls": 0
+}

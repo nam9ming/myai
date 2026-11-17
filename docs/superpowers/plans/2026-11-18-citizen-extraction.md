@@ -49,11 +49,11 @@
 
 **Interfaces:** 위 Files and Interfaces의 Python 서명을 생산한다. Java는 동일 schema/manual metadata와 archive-v1 receipt를 소비한다. worker는 citizen.py·schema/examples·parser 단위 시험만 소유하며, 공통 helper/CLI/archive/reviews/legacy guards와 회귀 기준은 주 작업자가 소유한다. 같은 worktree의 다른 변경을 되돌리지 않는다.
 
-- [ ] **Step 1:** 실제 CLI prepare에 `--schema-version extract-citizen-v1`과 공개 입력·소유 임시 root를 전달하는 시험을 먼저 작성한다. 기대 exit0/status prepared인데 현행은 exit2/ARGUMENT_INVALID인 행동 RED를 관찰한다. 누락 import/compile 오류를 RED로 삼지 않는다. worker도 새 parser를 작성하기 전 잘못 수용되는 계약 또는 동일 CLI RED를 확인한다.
-- [ ] **Step 2:** 해당 입력·schema/근거·5분야/12사실·분류 미상·복수 사건·추가 키/중복/증거/크기·family/API 혼용 거부를 최소 구현한다. `parse_evidence` 추출 전 기존 잘못된 근거의 code/path/kind를 고정한다. 준비 템플릿 bytes와 실제 수동 prompt bytes/hash를 구분한다.
-- [ ] **Step 3:** 실제 CLI prepare/import/verify/freeze/verify-sealed·수정 선언/보관 시험을 추가하고 관찰한 실패부터 수정한다. 비UTF8·큰 실패·3시도·정확 재실행·다른 원본 충돌·symlink/권한·원래 경로 삭제 뒤 재검증·failed 부모 전체 변경·교차 family 수정 거부를 확인한다. 시민 old draft/handoff/D08 경로는 schema unsupported를 scoring 전에 반환한다.
-- [ ] **Step 4:** 구현 전 고정 `/tmp/yeogi-citizen-python-legacy-baseline/`13pin과 `/tmp/yeogi-citizen-python-legacy-archives/`96파일을 검증한다. portable 회귀 fixture는 필요한 최소 공개 bytes/고정 hashes를 저장하고 봉인0400/0500은 시험 setup에서 재현한다. old source file SHA는 provenance이며 새 소스 일치를 강제하지 않는다. manifest SHA0cdb9589b6f1acc66075cec2a2651e23546a3dbb8747e127ff17349b67eab77f를 고정한다.
-- [ ] **Step 5:** Run `python3.13 -B -m unittest discover -s processing/tests -p 'test_citizen*.py' -v` 및 영향받는 기존 extraction/human/evaluation 시험. Expected: 새/기존 성공, 실패 case의 기대 오류·원본 불변 확인. 커밋 `feat: archive citizen extraction outputs`.
+- [x] **Step 1:** 실제 CLI prepare에 `--schema-version extract-citizen-v1`과 공개 입력·소유 임시 root를 전달하는 시험을 먼저 작성한다. 기대 exit0/status prepared인데 현행은 exit2/ARGUMENT_INVALID인 행동 RED를 관찰한다. 누락 import/compile 오류를 RED로 삼지 않는다. worker도 새 parser를 작성하기 전 잘못 수용되는 계약 또는 동일 CLI RED를 확인한다.
+- [x] **Step 2:** 해당 입력·schema/근거·5분야/12사실·분류 미상·복수 사건·추가 키/중복/증거/크기·family/API 혼용 거부를 최소 구현한다. `parse_evidence` 추출 전 기존 잘못된 근거의 code/path/kind를 고정한다. 준비 템플릿 bytes와 실제 수동 prompt bytes/hash를 구분한다.
+- [x] **Step 3:** 실제 CLI prepare/import/verify/freeze/verify-sealed·수정 선언/보관 시험을 추가하고 관찰한 실패부터 수정한다. 비UTF8·큰 실패·3시도·정확 재실행·다른 원본 충돌·symlink/권한·원래 경로 삭제 뒤 재검증·failed 부모 전체 변경·교차 family 수정 거부를 확인한다. 시민 old draft/handoff/D08 경로는 schema unsupported를 scoring 전에 반환한다.
+- [x] **Step 4:** 구현 전 고정 `/tmp/yeogi-citizen-python-legacy-baseline/`13pin과 `/tmp/yeogi-citizen-python-legacy-archives/`96파일을 검증한다. portable 회귀 fixture는 필요한 최소 공개 bytes/고정 hashes를 저장하고 봉인0400/0500은 시험 setup에서 재현한다. old source file SHA는 provenance이며 새 소스 일치를 강제하지 않는다. manifest SHA0cdb9589b6f1acc66075cec2a2651e23546a3dbb8747e127ff17349b67eab77f를 고정한다.
+- [x] **Step 5:** Run `python3.13 -B -m unittest discover -s processing/tests -p 'test_citizen*.py' -v` 및 영향받는 기존 extraction/human/evaluation 시험. Expected: 새/기존 성공, 실패 case의 기대 오류·원본 불변 확인. 커밋 `feat: archive citizen extraction outputs`.
 
 ### Task 2: Java D05·S10·기존 업로드 연결
 

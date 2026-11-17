@@ -6,7 +6,7 @@ import hashlib
 from processing.extraction.archive import REPO, _fingerprint, _json, _read, _read_checked, _root, verify_run
 from processing.extraction.draft import _content, _context, _project_output, _source
 from processing.extraction.metadata import stamp
-from processing.extraction.schema import HASH
+from processing.extraction.schema import HASH, SCHEMA_VERSION
 from processing.extraction.validation import decode, parse_input, parse_output, require, shape, text
 from .dataset import _id
 from .reviews import REVIEW_ROOT, verify_review
@@ -42,6 +42,7 @@ def project_handoff(content, review_root=REVIEW_ROOT, *, projected_at=None):
     parent = verify_run(review['source']['run_id'], parent_folder.parent)
     _check(_fingerprint(parent_folder / 'receipt.json') == artifacts[f'{prefix}/receipt.json'], 'HANDOFF_REVIEW_MISMATCH')
     metadata = decode(_read_checked(directory / f'{prefix}/metadata.json', artifacts[f'{prefix}/metadata.json']), 'archive')
+    _check(metadata['schema_version'] == SCHEMA_VERSION, 'HANDOFF_SCHEMA_UNSUPPORTED')
     document = parse_input(_read_checked(directory / f'{prefix}/input.json', artifacts[f'{prefix}/input.json']))
     output = parse_output(_read_checked(directory / 'output.json', artifacts['output.json']), document)
     context = {key: value[key] for key in ('area_id', 'split_group_id', 'dictionary_version')}

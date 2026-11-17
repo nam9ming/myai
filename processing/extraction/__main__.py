@@ -7,6 +7,7 @@ import sys
 from .archive import DEFAULT_ROOT, freeze_run, import_run, prepare, verify_run, verify_sealed_run
 from .draft import check_draft, draft_run
 from .rule_runs import RULE_ROOT, run_rules, verify_rules_run
+from .schema import SCHEMA_VERSION
 from .validation import MAX_BYTES, ExtractionError
 
 
@@ -25,6 +26,8 @@ def main():
             command.add_argument('run_id')
         else:
             command.add_argument('--input', required=True)
+        if name == 'prepare':
+            command.add_argument('--schema-version', default=SCHEMA_VERSION)
         if name == 'import':
             command.add_argument('--metadata', required=True)
             command.add_argument('--attempt', nargs=2, action='append', required=True, metavar=('PROMPT', 'OUTPUT'))
@@ -41,7 +44,7 @@ def main():
     try:
         args = parser.parse_args()
         if args.command == 'prepare':
-            result = prepare(args.input, args.root)
+            result = prepare(args.input, args.root, args.schema_version)
         elif args.command == 'import':
             result = import_run(args.input, args.metadata, args.attempt, args.root)
         elif args.command == 'run':
