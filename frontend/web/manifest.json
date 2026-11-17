@@ -1,0 +1,19 @@
+{
+    "name": "여기:it — 내 동네에 필요한 정보",
+    "short_name": "여기:it",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#ee663b",
+    "description": "안성시 예시 소식으로 체험하는 시민 지역정보 서비스",
+    "orientation": "any",
+    "prefer_related_applications": false,
+    "icons": [
+        {
+            "src": "favicon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any"
+        }
+    ]
+}

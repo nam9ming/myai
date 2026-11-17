@@ -1,0 +1,244 @@
+{
+  "schema_version": "api-v1",
+  "snapshot_id": "37d9f0b8-424f-5145-9329-e71ffd6413e3",
+  "generated_at": "2026-11-06T00:00:00Z",
+  "data": {
+    "data_kind": "synthetic",
+    "query_context": {
+      "point_id": "16ac9b3c-995e-532d-bd2b-a5348394f3c6",
+      "weekly_hours": {
+        "monday": {
+          "state": "open",
+          "full_day": false,
+          "intervals": [
+            {
+              "start": "09:00",
+              "end": "18:00",
+              "end_day_offset": 0
+            }
+          ]
+        },
+        "tuesday": {
+          "state": "open",
+          "full_day": false,
+          "intervals": [
+            {
+              "start": "09:00",
+              "end": "18:00",
+              "end_day_offset": 0
+            }
+          ]
+        },
+        "wednesday": {
+          "state": "open",
+          "full_day": false,
+          "intervals": [
+            {
+              "start": "09:00",
+              "end": "18:00",
+              "end_day_offset": 0
+            }
+          ]
+        },
+        "thursday": {
+          "state": "open",
+          "full_day": false,
+          "intervals": [
+            {
+              "start": "09:00",
+              "end": "18:00",
+              "end_day_offset": 0
+            }
+          ]
+        },
+        "friday": {
+          "state": "open",
+          "full_day": false,
+          "intervals": [
+            {
+              "start": "09:00",
+              "end": "18:00",
+              "end_day_offset": 0
+            }
+          ]
+        },
+        "saturday": {
+          "state": "open",
+          "full_day": false,
+          "intervals": [
+            {
+              "start": "09:00",
+              "end": "18:00",
+              "end_day_offset": 0
+            }
+          ]
+        },
+        "sunday": {
+          "state": "open",
+          "full_day": false,
+          "intervals": [
+            {
+              "start": "09:00",
+              "end": "18:00",
+              "end_day_offset": 0
+            }
+          ]
+        }
+      },
+      "mode": "current",
+      "case_id": null,
+      "anchor_date": "2026-11-06",
+      "window_start": "2026-11-05T15:00:00Z",
+      "window_end_exclusive": "2026-11-19T15:00:00Z",
+      "radius_m": 500,
+      "timezone": "Asia/Seoul"
+    },
+    "counts": {
+      "candidate": 2,
+      "needs_check": 1,
+      "cancelled": 1
+    },
+    "items": [
+      {
+        "event_id": "48bb73cf-3cd9-5e4f-895e-9ba9ce62560f",
+        "revision_id": "11392f02-d3fc-5c8f-8338-59913b372b61",
+        "title": "가상 예시: 연결도로 보수",
+        "types": [
+          "construction"
+        ],
+        "classification": "candidate",
+        "reason_codes": [],
+        "warnings": [
+          "직선거리만으로 실제 통행·영업 영향을 판단하지 않습니다."
+        ],
+        "occurrences": [
+          {
+            "occurrence_id": "4c02351b-1437-57d0-b03a-02d5554772ce",
+            "date_start": "2026-11-07",
+            "date_end": "2026-11-07",
+            "time_start": "10:00",
+            "time_end": "16:00",
+            "end_day_offset": 0,
+            "precision": "exact_time",
+            "location_ids": [
+              "39da1de8-dead-59d9-a82f-99b0d8d176e4"
+            ]
+          }
+        ],
+        "locations": [
+          {
+            "location_id": "39da1de8-dead-59d9-a82f-99b0d8d176e4",
+            "name": "가상 시장 인접 구역",
+            "address": null
+          }
+        ],
+        "applicability": "작업 구간을 통행하는 차량",
+        "exceptions": [
+          "보행자 통행로는 유지합니다."
+        ],
+        "source_refs": [
+          {
+            "document_id": "e2193fbc-0cfa-55af-81b7-bd8125bf42bd",
+            "title": "가상 원문: 가상 예시: 연결도로 보수",
+            "url": "https://example.org/myai-demo/construction",
+            "published_date": "2026-11-06",
+            "last_verified_at": "2026-11-06T00:00:00Z",
+            "check_result": "verified",
+            "is_fixture": true
+          }
+        ],
+        "distance_m": 180,
+        "distance_basis": "synthetic_fixture_distance",
+        "time_overlap_minutes": 360,
+        "matched_occurrence_ids": [
+          "4c02351b-1437-57d0-b03a-02d5554772ce"
+        ],
+        "lifecycle": "active",
+        "evidence": [
+          {
+            "quote": "작업 구간을 통행하는 차량 보행자 통행로는 유지합니다.",
+            "source_document_id": "e2193fbc-0cfa-55af-81b7-bd8125bf42bd",
+            "is_fixture": true
+          }
+        ],
+        "history": []
+      },
+      {
+        "event_id": "2786549b-8d34-5a6c-ab45-d6264f9f280c",
+        "revision_id": "aaee2804-5ed4-5c95-891d-ba4f5631c18a",
+        "title": "가상 예시: 골목 장터",
+        "types": [
+          "event"
+        ],
+        "classification": "candidate",
+        "reason_codes": [],
+        "warnings": [
+          "직선거리만으로 실제 통행·영업 영향을 판단하지 않습니다."
+        ],
+        "occurrences": [
+          {
+            "occurrence_id": "432a9828-e9fa-580e-b462-4f84d82bcebf",
+            "date_start": "2026-11-07",
+            "date_end": "2026-11-07",
+            "time_start": "13:00",
+            "time_end": "18:00",
+            "end_day_offset": 0,
+            "precision": "exact_time",
+            "location_ids": [
+              "8da97c67-57f3-560d-b7c5-d42d4e83f538"
+            ]
+          }
+        ],
+        "locations": [
+          {
+            "location_id": "8da97c67-57f3-560d-b7c5-d42d4e83f538",
+            "name": "가상 시장 인접 구역",
+            "address": null
+          }
+        ],
+        "applicability": "행사 구역 방문자",
+        "exceptions": [
+          "상설 점포는 평소와 같이 운영합니다."
+        ],
+        "source_refs": [
+          {
+            "document_id": "23f91acb-2b8c-5360-9e16-740fb9e4cac8",
+            "title": "가상 원문: 가상 예시: 골목 장터",
+            "url": "https://example.org/myai-demo/event",
+            "published_date": "2026-11-06",
+            "last_verified_at": "2026-11-06T00:00:00Z",
+            "check_result": "verified",
+            "is_fixture": true
+          }
+        ],
+        "distance_m": 320,
+        "distance_basis": "synthetic_fixture_distance",
+        "time_overlap_minutes": 300,
+        "matched_occurrence_ids": [
+          "432a9828-e9fa-580e-b462-4f84d82bcebf"
+        ],
+        "lifecycle": "active",
+        "evidence": [
+          {
+            "quote": "행사 구역 방문자 상설 점포는 평소와 같이 운영합니다.",
+            "source_document_id": "23f91acb-2b8c-5360-9e16-740fb9e4cac8",
+            "is_fixture": true
+          }
+        ],
+        "history": []
+      }
+    ],
+    "overlap_groups": [
+      {
+        "group_id": "a345ae20-e8a3-5358-9425-bb05c3108192",
+        "start_at": "2026-11-07T04:00:00Z",
+        "end_at": "2026-11-07T07:00:00Z",
+        "event_ids": [
+          "48bb73cf-3cd9-5e4f-895e-9ba9ce62560f",
+          "2786549b-8d34-5a6c-ab45-d6264f9f280c"
+        ]
+      }
+    ],
+    "rules_version": "rules-v1-proposed"
+  }
+}

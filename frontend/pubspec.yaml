@@ -1,0 +1,51 @@
+name: yeogi_it
+description: 여기:it 시민 지역정보 Flutter Web 프론트엔드
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.14.0 <4.0.0'
+  flutter: '>=3.50.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  material_ui: 1.11.1
+  flutter_svg: 2.4.0
+  web: 1.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/prototype/
+    - assets/posters/
+  fonts:
+    - family: serif
+      fonts:
+        - asset: assets/fonts/NotoSerifKR.ttf
+          weight: 400
+        - asset: assets/fonts/NotoSerifKR.ttf
+          weight: 700
+    # 원본 SVG의 generic sans-serif도 같은 한국어 글꼴로 해석한다.
+    - family: sans-serif
+      fonts:
+        - asset: assets/fonts/NotoSansKR.ttf
+          weight: 400
+        - asset: assets/fonts/NotoSansKR.ttf
+          weight: 700
+    - family: NotoSansKR
+      fonts:
+        - asset: assets/fonts/NotoSansKR.ttf
+          weight: 400
+        - asset: assets/fonts/NotoSansKR.ttf
+          weight: 500
+        - asset: assets/fonts/NotoSansKR.ttf
+          weight: 600
+        - asset: assets/fonts/NotoSansKR.ttf
+          weight: 700
+        - asset: assets/fonts/NotoSansKR.ttf
+          weight: 800

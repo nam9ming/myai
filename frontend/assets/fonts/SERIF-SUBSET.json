@@ -1,0 +1,10 @@
+{
+  "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/notoserifkr/NotoSerifKR%5Bwght%5D.ttf",
+  "source_sha256": "11f8d5de6f1b79195efba3828aaa2ec95c1178f5ae976fb23c8d53250a9938f3",
+  "subset_sha256": "338646fc56af64942a07843f626f2dc629368ff171be2d7083a70868b691c7e7",
+  "family": "YeogiPosterSerif",
+  "tool": "fonttools 4.68.0",
+  "scope": "원본 SVG의 serif text 및 ASCII. 제품 본문에는 사용하지 않는다.",
+  "glyph_characters": " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~가곳권까나네는동만바서악에운음책퀴한",
+  "license": "OFL-NotoSerifKR.txt"
+}

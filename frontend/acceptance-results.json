@@ -1,0 +1,284 @@
+{
+  "version": 1,
+  "date": "2026-11-17",
+  "note": "원본 검수 목록에 구현 검증 범위를 덧붙인 기록. 자동 통과는 브라우저 수동 인수·실자료 연결·총 100개 시나리오를 대신하지 않는다.",
+  "prototype_anchor": "2026-11-16",
+  "cases": [
+    {
+      "id": "ONB-01",
+      "mode": "prototype",
+      "name": "첫 진입",
+      "steps": "앱 저장 상태를 지운 뒤 #/start에서 경기도→안성시를 선택한다.",
+      "expected": "위치 안내에 도달한다. 버튼을 누르기 전에는 브라우저 권한 요청이 없다.",
+      "status": "automated_pass",
+      "verification_scope": "Dart 단위/Flutter 위젯 테스트. 실제 Spring HTTP인 API-01/02는 tool/spring_http_test.dart로 확인."
+    },
+    {
+      "id": "ONB-02",
+      "mode": "prototype",
+      "name": "위치 거부",
+      "steps": "Click location; deny permission",
+      "expected": "Continue with manually selected region; no blocking",
+      "status": "partial",
+      "verification_scope": "위젯의 권한 거부 응답은 확인. 실제 브라우저 권한 대화상자·시간 초과는 수동 확인 필요."
+    },
+    {
+      "id": "ONB-03",
+      "mode": "prototype",
+      "name": "선택 입력 생략",
+      "steps": "Choose Gyeonggi/Anseong; skip location and profile",
+      "expected": "Home opens without age/gender/interests",
+      "status": "automated_pass",
+      "verification_scope": "Dart 단위/Flutter 위젯 테스트. 실제 Spring HTTP인 API-01/02는 tool/spring_http_test.dart로 확인."
+    },
+    {
+      "id": "ONB-04",
+      "mode": "prototype",
+      "name": "이전 단계 선택값",
+      "steps": "Choose region; go back one step",
+      "expected": "Draft selections remain",
+      "status": "automated_pass",
+      "verification_scope": "Dart 단위/Flutter 위젯 테스트. 실제 Spring HTTP인 API-01/02는 tool/spring_http_test.dart로 확인."
+    },
+    {
+      "id": "ONB-05",
+      "mode": "prototype",
+      "name": "다른 도시 선택",
+      "steps": "Choose a city outside supported Anseong content",
+      "expected": "Unsupported-region notice; no relabelled Anseong content",
+      "status": "automated_pass",
+      "verification_scope": "Dart 단위/Flutter 위젯 테스트. 실제 Spring HTTP인 API-01/02는 tool/spring_http_test.dart로 확인."
+    },
+    {
+      "id": "ONB-06",
+      "mode": "prototype",
+      "name": "재방문",
+      "steps": "Finish onboarding; reload base route",
+      "expected": "Home opens; no forced onboarding",
+      "status": "automated_pass",
+      "verification_scope": "Dart 단위/Flutter 위젯 테스트. 실제 Spring HTTP인 API-01/02는 tool/spring_http_test.dart로 확인."
+    },
+    {
+      "id": "FIL-01",
+      "mode": "prototype",
+      "name": "필터 AND 조합",
+      "steps": "Anchor 2026-11-16; education + free + open",
+      "expected": "2 matching items",
+      "status": "automated_pass",
+      "verification_scope": "Dart 단위/Flutter 위젯 테스트. 실제 Spring HTTP인 API-01/02는 tool/spring_http_test.dart로 확인."
+    },
+    {
+      "id": "FIL-02",
+      "mode": "prototype",
+      "name": "도예 검색",
+      "steps": "Search 도예",
+      "expected": "1 matching item",
+      "status": "automated_pass",
+      "verification_scope": "Dart 단위/Flutter 위젯 테스트. 실제 Spring HTTP인 API-01/02는 tool/spring_http_test.dart로 확인."
+    },
+    {
+      "id": "FIL-03",
+      "mode": "prototype",
+      "name": "검색 0건",
+      "steps": "Search zz-no-such-notice-987",
+      "expected": "0 results; meaningful reset action",
+      "status": "automated_pass",
+      "verification_scope": "Dart 단위/Flutter 위젯 테스트. 실제 Spring HTTP인 API-01/02는 tool/spring_http_test.dart로 확인."
+    },
+    {
+      "id": "FIL-04",
+      "mode": "prototype",
+      "name": "미상 비용",
+      "steps": "Enable free filter",
+      "expected": "cost=null excluded; cost=0 included",
+      "status": "automated_pass",
+      "verification_scope": "Dart 단위/Flutter 위젯 테스트. 실제 Spring HTTP인 API-01/02는 tool/spring_http_test.dart로 확인."
+    },
+    {
+      "id": "FIL-05",
+      "mode": "prototype",
+      "name": "취소·마감 제외",
+      "steps": "Enable open filter",
+      "expected": "evt-cancel and sup-closed excluded",
+      "status": "automated_pass",
+      "verification_scope": "Dart 단위/Flutter 위젯 테스트. 실제 Spring HTTP인 API-01/02는 tool/spring_http_test.dart로 확인."
+    },
+    {
+      "id": "FIL-06",
+      "mode": "prototype",
+      "name": "동네와 시 전체",
+      "steps": "Select a district",
+      "expected": "That district plus citywide notices; other districts excluded",
+      "status": "automated_pass",
+      "verification_scope": "Dart 단위/Flutter 위젯 테스트. 실제 Spring HTTP인 API-01/02는 tool/spring_http_test.dart로 확인."
+    },
+    {
+      "id": "FIL-07",
+      "mode": "prototype",
+      "name": "조건 한 개 해제",
+      "steps": "Combine category/free/open; remove free chip",
+      "expected": "Only free removed; category/open retained",
+      "status": "automated_pass",
+      "verification_scope": "Dart 단위/Flutter 위젯 테스트. 실제 Spring HTTP인 API-01/02는 tool/spring_http_test.dart로 확인."
+    },
+    {
+      "id": "FIL-08",
+      "mode": "prototype",
+      "name": "이번 주 구간 경계",
+      "steps": "Inject a notice spanning this week from last week",
+      "expected": "Interval overlap included in corrected week filter; no hardcoded end date",
+      "status": "automated_pass",
+      "verification_scope": "Dart 단위/Flutter 위젯 테스트. 실제 Spring HTTP인 API-01/02는 tool/spring_http_test.dart로 확인."
+    },
+    {
+      "id": "NAV-01",
+      "mode": "all",
+      "name": "이력·스크롤 복원",
+      "steps": "Open filtered list; scroll; detail; back",
+      "expected": "Filter and scroll restored",
+      "status": "partial",
+      "verification_scope": "브라우저 route 이벤트를 모사해 필터·스크롤 복원 확인. 실제 브라우저 뒤로/앞으로 추가 확인 필요."
+    },
+    {
+      "id": "NAV-02",
+      "mode": "all",
+      "name": "상세 직접 진입",
+      "steps": "Open valid detail URL directly; reload; back",
+      "expected": "Detail survives reload; fallback stays inside app",
+      "status": "partial",
+      "verification_scope": "위젯 직접 URL·앱 내부 fallback 확인. 실제 새로고침·정적 호스팅 이력은 추가 확인 필요."
+    },
+    {
+      "id": "NAV-03",
+      "mode": "all",
+      "name": "없는 상세",
+      "steps": "Open unknown item ID",
+      "expected": "Not-found state and recovery link",
+      "status": "automated_pass",
+      "verification_scope": "Dart 단위/Flutter 위젯 테스트. 실제 Spring HTTP인 API-01/02는 tool/spring_http_test.dart로 확인."
+    },
+    {
+      "id": "SAV-01",
+      "mode": "prototype",
+      "name": "저장 상태·유지",
+      "steps": "Save item in card; open detail/saved; reload; unsave",
+      "expected": "Shared consistent state; no scroll reset; persists when storage works",
+      "status": "automated_pass",
+      "verification_scope": "Dart 단위/Flutter 위젯 테스트. 실제 Spring HTTP인 API-01/02는 tool/spring_http_test.dart로 확인."
+    },
+    {
+      "id": "SET-01",
+      "mode": "prototype",
+      "name": "설정 draft 취소",
+      "steps": "Edit settings; cancel; reopen",
+      "expected": "Saved settings unchanged",
+      "status": "automated_pass",
+      "verification_scope": "Dart 단위/Flutter 위젯 테스트. 실제 Spring HTTP인 API-01/02는 tool/spring_http_test.dart로 확인."
+    },
+    {
+      "id": "SET-02",
+      "mode": "prototype",
+      "name": "저장소 오류",
+      "steps": "Corrupt storage JSON or block writes",
+      "expected": "Safe defaults/memory fallback and persistence notice",
+      "status": "automated_pass",
+      "verification_scope": "Dart 단위/Flutter 위젯 테스트. 실제 Spring HTTP인 API-01/02는 tool/spring_http_test.dart로 확인."
+    },
+    {
+      "id": "UI-01",
+      "mode": "all",
+      "name": "반응형·확대",
+      "steps": "360/390/768/1440 widths; 200% text; long Korean title",
+      "expected": "No body horizontal overflow or clipped controls; mobile safe area",
+      "status": "partial",
+      "verification_scope": "360/390/768/1440, 369/370/760/761 경계 및 200% 위젯 배치 확인. 원본 브라우저와 같은 크기의 직접 화면 비교는 미수행."
+    },
+    {
+      "id": "UI-02",
+      "mode": "all",
+      "name": "전환·호버",
+      "steps": "Navigate onboarding/pages; hover tabs/cards; toggle filter",
+      "expected": "Specified fade-up and hover; no full-page fade on filter toggle",
+      "status": "automated_pass",
+      "verification_scope": "Dart 단위/Flutter 위젯 테스트. 실제 Spring HTTP인 API-01/02는 tool/spring_http_test.dart로 확인."
+    },
+    {
+      "id": "A11Y-01",
+      "mode": "all",
+      "name": "키보드·모션 감소",
+      "steps": "Tab through; open/close modal; enable reduced motion",
+      "expected": "Labels/focus/selection correct; focus restored; movement reduced",
+      "status": "partial",
+      "verification_scope": "Escape/Enter·focus 복원·모션 감소 확인. 모든 Tab/Shift+Tab/Space·스크린리더 수동 검수는 남음."
+    },
+    {
+      "id": "API-01",
+      "mode": "backend-fixture",
+      "name": "실제 HTTP 계약",
+      "steps": "Run Spring fixture; config -> exact fixture matches -> listed detail",
+      "expected": "HTTP success; same snapshot; synthetic indicator retained",
+      "status": "automated_pass",
+      "verification_scope": "Dart 단위/Flutter 위젯 테스트. 실제 Spring HTTP인 API-01/02는 tool/spring_http_test.dart로 확인."
+    },
+    {
+      "id": "API-02",
+      "mode": "backend-fixture",
+      "name": "fixture 제한",
+      "steps": "Change fixture match conditions outside supported example",
+      "expected": "503 shown; not transformed into empty/prototype success",
+      "status": "automated_pass",
+      "verification_scope": "Dart 단위/Flutter 위젯 테스트. 실제 Spring HTTP인 API-01/02는 tool/spring_http_test.dart로 확인."
+    },
+    {
+      "id": "API-03",
+      "mode": "api",
+      "name": "공개본 전환",
+      "steps": "Receive 409 SNAPSHOT_RETIRED",
+      "expected": "User-visible refresh choice; no mixed snapshot details",
+      "status": "automated_pass",
+      "verification_scope": "Dart 단위/Flutter 위젯 테스트. 실제 Spring HTTP인 API-01/02는 tool/spring_http_test.dart로 확인."
+    },
+    {
+      "id": "API-04",
+      "mode": "api",
+      "name": "공개 준비 중",
+      "steps": "Receive 503 PUBLIC_DATA_NOT_READY",
+      "expected": "Preparation state, not zero results or fallback",
+      "status": "automated_pass",
+      "verification_scope": "Dart 단위/Flutter 위젯 테스트. 실제 Spring HTTP인 API-01/02는 tool/spring_http_test.dart로 확인."
+    },
+    {
+      "id": "API-05",
+      "mode": "all",
+      "name": "null·근거",
+      "steps": "Map event-facts example containing emoji/null/knowledge",
+      "expected": "Null vs [] retained; quote intact; no UTF-16 offset corruption",
+      "status": "automated_pass",
+      "verification_scope": "Dart 단위/Flutter 위젯 테스트. 실제 Spring HTTP인 API-01/02는 tool/spring_http_test.dart로 확인."
+    },
+    {
+      "id": "API-06",
+      "mode": "api",
+      "name": "미지원 분야",
+      "steps": "Select education/support/life before API extension",
+      "expected": "Explicit unsupported capability; no invented enum or silent ignore",
+      "status": "automated_pass",
+      "verification_scope": "Dart 단위/Flutter 위젯 테스트. 실제 Spring HTTP인 API-01/02는 tool/spring_http_test.dart로 확인."
+    },
+    {
+      "id": "API-07",
+      "mode": "api",
+      "name": "원문·합성 구분",
+      "steps": "Open a fixture source and a real valid source",
+      "expected": "Fixture labelled/demo notice; real URL opens only on user click",
+      "status": "partial",
+      "verification_scope": "예시/유효/미상/스크립트 URL의 열기 제어를 테스트 더블로 확인. 실제 새 탭·팝업 차단·복사 복구는 브라우저 확인 필요."
+    }
+  ],
+  "environment": {
+    "flutter": "3.50.0",
+    "dart": "3.14.0",
+    "date": "2026-11-17 KST",
+    "computer_use": "사용자 요청 이후 사용하지 않음. 이후 화면은 위젯 이미지로 검사."
+  }
+}

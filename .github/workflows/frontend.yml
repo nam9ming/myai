@@ -1,0 +1,45 @@
+name: Flutter frontend
+
+on:
+  pull_request:
+    paths: ['frontend/**', '.github/workflows/frontend.yml']
+  push:
+    branches: ['develop', 'frontend/**']
+    paths: ['frontend/**', '.github/workflows/frontend.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flutter-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - name: 고정 Flutter SDK 준비
+        shell: bash
+        run: |
+          git clone --depth 1 --branch 3.50.0 https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          test "$(git -C "$RUNNER_TEMP/flutter" rev-parse HEAD)" = ab2912035e160d9cad6306df307576da6128ebdb
+          printf '%s\n' "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+      - name: 의존성과 SDK 확인
+        run: |
+          flutter --version
+          flutter pub get --enforce-lockfile
+      - name: 형식과 정적 분석
+        run: |
+          dart format --output=none --set-exit-if-changed lib test tool
+          flutter analyze
+      - name: 단위와 화면 검증
+        run: |
+          python3 tool/verify_sources.py
+          flutter test
+      - name: 예시 모드 웹 빌드
+        run: flutter build web --dart-define=DATA_MODE=prototype

@@ -1,0 +1,57 @@
+{
+  "schema_version": "api-v1",
+  "snapshot_id": "37d9f0b8-424f-5145-9329-e71ffd6413e3",
+  "generated_at": "2026-11-06T00:00:00Z",
+  "data": {
+    "data_kind": "synthetic",
+    "timezone": "Asia/Seoul",
+    "server_now": "2026-11-06T00:00:00Z",
+    "window_days": 14,
+    "radius_m": 500,
+    "area": {
+      "area_id": "e4239d98-6bc7-5f98-892a-fd035dc91381",
+      "name": "가상 시범구역 · 실제 확정구역 아님"
+    },
+    "points": [
+      {
+        "point_id": "16ac9b3c-995e-532d-bd2b-a5348394f3c6",
+        "label": "A · 시장 입구",
+        "is_test_reference": true
+      },
+      {
+        "point_id": "e93edfef-df27-58dd-801d-87749129e3e1",
+        "label": "B · 상점가 사거리",
+        "is_test_reference": true
+      },
+      {
+        "point_id": "9458eab6-62ee-5ce9-a2d1-6b7b460df437",
+        "label": "C · 골목 안쪽",
+        "is_test_reference": true
+      },
+      {
+        "point_id": "13582458-7a3e-51d8-996e-0af96b2b6cd4",
+        "label": "D · 정류장 앞",
+        "is_test_reference": true
+      },
+      {
+        "point_id": "1d000465-a062-5bc8-85d0-9662e0af17d6",
+        "label": "E · 시장 뒤편",
+        "is_test_reference": true
+      }
+    ],
+    "document_count": 4,
+    "event_count": 4,
+    "mode": "current",
+    "cases": [],
+    "sources": [
+      {
+        "publisher": "가상 안내기관",
+        "is_fixture": true
+      }
+    ],
+    "collection_range": {
+      "from": "2026-11-06",
+      "to": "2026-11-06"
+    }
+  }
+}

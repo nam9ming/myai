@@ -1,15 +1,105 @@
-# 여기:it Flutter Web 프런트 — 이상헌
+# 여기:it Flutter Web
 
-[확정 요구] **Flutter Web / Dart**, 안성시민 전체를 위한 교육·배움 / 지원·혜택 / 행사·문화 / 공사·교통 / 생활정보 화면을 만듭니다. 기존 소상공인 조건 선별도 유지합니다. Flutter stable의 동일 버전을 사용하고 번들 Dart 버전·`pubspec.lock`을 기록합니다. 저장소에는 현재 README·TASK만 있으며 Flutter 프로젝트·웹 빌드는 아직 없습니다.
+안성시 시민용 시제품을 Flutter Web으로 구현했습니다. 온보딩·홈·목록·검색·상세·관심정보·설정을 원본 예시 16건으로 연결합니다. 기존 Spring 합성 API는 별도 모드에서 조회하며, 실제 시민용 API의 미지원 기능은 준비 상태로 표시합니다.
 
-[설계 제안] [시민용 웹 시제품](https://yeogi-it-neighborhood.kmnam001.chatgpt.site/)은 통합 메인·분야별 목록·지역/관심 탐색·상세·관심·설정의 검토 대상입니다. 공지는 합성이고 원문은 예시이며 기존 백엔드와 연결되지 않았습니다. [Figma 참고 링크](https://www.figma.com/design/lM2PFXTrzaJmLqbkVp4gUO)도 제공됐으나 디자인 확인·확정을 뜻하지 않습니다. AI/Figma 시안 → 검토·피드백 → 화면 확정 → Flutter 구현 순서입니다.
+이번 구현의 시각·동작 기준은 사용자 지시와 인계 원본이며 [개발 계획](DEVELOPMENT_PLAN.md)에 기록했습니다. 최신 [TASK](TASK.md)와 [화면 명세](../docs/spec/02_화면과모바일UX.md)의 시민5분야·기존 기능 유지·계약 합의·접근성·인계 절차를 함께 따릅니다. 김윤기와 필드/API/오류를 합의하고 강명묵의 반복 시나리오 검증으로 연결합니다. 기존 계산 책임·근거·미상·공개/비공개 경계는 유지합니다.
 
-1. [착수 가이드](../docs/spec/11_개발착수가이드.md), [작업 범위](TASK.md), [화면 명세](../docs/spec/02_화면과모바일UX.md)를 확인하고 연령·디지털 이용 수준·접근성을 함께 검토합니다.
-2. 목록·상세·검색, 지역·분야·모집 상태·비용·기간·정렬의 화면별 필드·오류를 김윤기와 합의합니다. 신청 시작/마감과 진행 일정을 분리하고 비용 누락을 무료로 표시하지 않습니다.
-3. API 접근을 한곳에 모으고 기존 [api-v1 합성 fixture](../contracts/README.md)와 새 계약 제안·실제 Spring 연결을 구분합니다. 기존3유형·지점·영업시간 응답을 새5분야 구현으로 간주하지 않습니다.
-4. 관심저장·개인설정은 초기 브라우저 저장으로 구성합니다. 계정 동기화·새 인증·알림 발송은 자동 필수 범위가 아니며 저장 범위·초기화 동작을 합의합니다.
-5. `pubspec.yaml`·`pubspec.lock`·`flutter --version` 결과, 실제 실행·빌드 명령과 명묵의 반복 시나리오 확인 결과를 인계합니다.
+주요 변경의 검증·커밋·작업 브랜치 공유 규칙과 최신 윤기 커밋 검토는 [GIT_WORKFLOW](GIT_WORKFLOW.md)를 따릅니다.
 
-프로젝트 구현 후의 목표 명령 예: `flutter pub get`, `flutter run -d chrome --web-port 5173 --dart-define=API_BASE_URL=http://localhost:8080/api/v1`, `flutter build web`. 아직 현재 폴더에서 실행 가능하다는 뜻은 아닙니다.
+## 개발 버전과 실행
 
-배포는 `build/web/` 전체를 사용하고 base href·API URL·브라우저 이력을 실제 경로에 맞춥니다. [과거 기록] `docs/reference/meeting-demo.html`과 기존 `npm run build` 산출물은 합성 HTML 참고자료이며 Flutter 소스·새 시제품 API 연결 결과가 아닙니다. [기술 구성](../docs/spec/08_기술구성과연결.md)을 함께 확인합니다.
+Flutter **3.50.0 stable** (`ab2912035e160d9cad6306df307576da6128ebdb`), 번들 Dart **3.14.0**을 사용합니다. `pubspec.lock`을 포함합니다. Windows에서 Chrome 157·Edge 157을 SDK가 인식하며, 아래 코드는 다른 OS에서도 같은 SDK로 실행할 수 있습니다. 실제 브라우저별 수동 검수는 [검증 기록](VERIFICATION.md)을 확인해주세요.
+
+```powershell
+cd frontend
+flutter pub get --enforce-lockfile
+flutter run -d web-server --web-hostname 127.0.0.1 --web-port 5173 --dart-define=DATA_MODE=prototype
+```
+
+브라우저는 자동으로 열지 않습니다. 직접 `http://localhost:5173/#/start` 또는 `http://localhost:5173/#/home`을 엽니다. 실행 터미널의 Ctrl+C로 종료합니다. 이 PC에서 SDK가 PATH에 없다면 저장소 루트의 `.local/dev.cmd`로 개발 셸을 연 뒤 실행할 수 있습니다. 로컬 SDK 설치 경로는 Git에 포함하지 않습니다.
+
+## 데이터 모드
+
+| 설정 | 동작 | 실제 확인 범위 |
+|---|---|---|
+| `DATA_MODE=prototype` | 원본 예시 16건, 고정 기준일 2026-11-16, 지역·관심·검색·무료·모집·기간 필터 | 단위·위젯 검사와 웹 빌드 |
+| `DATA_MODE=backend-fixture` | Spring fixture의 config → 원래 고정 matches 조건 → 같은 snapshot 상세 | 실제 Spring HTTP·CORS 검사 |
+| `DATA_MODE=api` | 공개 config·상세 소비, 시민용 목록은 준비 안내 | DTO·오류 모사·컴파일 검사. 실제 public DB/실자료 연결 미검증 |
+
+API 모드의 기본 `API_BASE_URL`은 같은 origin의 `/api/v1`입니다. 개발 서버가 다르면 다음처럼 지정합니다.
+
+```powershell
+flutter run -d web-server --web-hostname 127.0.0.1 --web-port 5173 --dart-define=DATA_MODE=backend-fixture --dart-define=API_BASE_URL=http://localhost:8080/api/v1
+```
+
+백엔드 CORS 기본값은 `http://localhost:5173`입니다. API 연결 시 브라우저도 이 origin으로 열어주세요. fixture의 지점·영업시간은 **명시적으로 선택한 개발 모드의 합성 조건**입니다. 시민 설정에 영업시간을 자동 입력하지 않습니다. public 모드는 `/matches`에 임의 조건을 보내지 않습니다.
+
+미지원 교육·지원·생활 분야, 무료·신청 마감·동네·전역 검색을 API에 있는 것처럼 취급하지 않습니다. API 오류는 0건이나 예시 데이터로 대체하지 않습니다. 409 공개본 교체는 사용자 선택 후 새로 읽고, 재시도는 서버의 `retryable`을 따릅니다. 확장 범위는 [API_GAPS](API_GAPS.md)를 참고해주세요.
+
+## 라우팅과 저장
+
+기본 hash URL 전략과 Flutter `Router`/`Navigator`를 사용합니다. 경로는 `#/start?step=0..5`, `#/home`, `#/list`, `#/search`, `#/detail?id=...`, `#/saved`, `#/settings`입니다. 목록 쿼리는 `cat/q/free/open/period/district/sort`를 사용합니다. API 상세 링크에는 `snapshot_id`도 보존합니다.
+
+상세에서 돌아갈 때 목록 조건·스크롤을 복원합니다. 상세 직접 진입의 목록 버튼은 앱 내부에 남습니다. 오래된 비동기 응답은 최신 설정·목록·snapshot을 덮어쓰지 않습니다. 필터 모달·설정 draft는 적용 전 값과 분리합니다.
+
+설정은 `yeogi-settings-v2`, 저장은 `yeogi-saved-v2-<mode>`에 버전 2로 기록합니다. API 저장은 event_id·snapshot_id·revision_id 문맥을 남깁니다. 같은 origin에 기존 `yeogi-settings-v1`/`yeogi-saved-v1`이 있으면 읽어 옮길 수 있습니다. 다른 origin의 저장 데이터 이전·계정 동기화는 지원하지 않습니다. 손상된 JSON·저장 실패는 메모리 기본값과 지속 저장 불가 안내로 처리합니다.
+
+위치는 버튼에서만 권한을 요청하고 좌표를 저장하지 않습니다. 거부·미지원·시간 초과 후 직접 선택한 지역으로 진행합니다. 현재 위치→행정구역 변환·실거리 검색은 미지원입니다. 앱의 위치 사용 해제와 브라우저 권한 철회는 다릅니다.
+
+## 의존성과 자산
+
+| 직접 패키지 | 고정 버전 | 용도와 대안 |
+|---|---|---|
+| `material_ui` | 1.11.1 | Flutter 3.50 기본 템플릿의 Material 위젯. 대안은 deprecated `flutter/material.dart` 또는 SDK 기본 위젯 직접 조합 |
+| `flutter_svg` | 2.4.0 | 원본 SVG·아이콘을 벡터로 표시. PNG 변환이나 HTML view 삽입 대신 원본 해상도 유지 |
+| `web` | 1.1.2 | Dart 공식 브라우저 API 바인딩. fetch·localStorage·위치·외부 링크·모션 감소 이벤트. 대안은 JS interop 바인딩 직접 작성 |
+
+상태는 SDK `ChangeNotifier`, 라우팅은 SDK Router를 사용합니다. 별도 상태관리·라우팅·UI 패키지를 추가하지 않았습니다. 웹 코드와 메모리 구현을 조건부 import로 나누어 화면 제어 없이 테스트합니다.
+
+원본 SVG 7개는 bytes를 보존했고 원본 시제품 커밋은 `4c5edf0a10751d2463400e62a2538e2101ab23df`입니다. [자산 manifest](assets/prototype/SOURCE_MANIFEST.json)에 원본 해시·파생 fixture 해시를 기록합니다. SVG를 실제 API 공지 포스터로 재사용하지 않습니다.
+
+본문 Noto Sans KR 400/500/600/700/800은 Google Fonts 원본 variable TTF를 로컬에 포함하고 `sans-serif` SVG 별칭에도 바인딩합니다. 포스터의 `serif`는 Noto Serif KR에서 **포스터에 쓰인 글자와 ASCII만 추린** 56,264 bytes의 `YeogiPosterSerif`를 사용합니다. OFL 라이선스와 [파생 기록](assets/fonts/SERIF-SUBSET.json)을 함께 포함합니다. 기본 한국어·포스터 글꼴은 원격 CSS 없이 로컬 자산에서 읽고, 실패 시 Flutter 기본 fallback을 사용합니다.
+
+포스터 serif 재생성은 선택 작업입니다. `fonttools==4.68.0`이 설치된 Python에서 원본 TTF 경로를 전달합니다.
+
+```powershell
+python tool/subset_poster_font.py C:\path\to\NotoSerifKR-Original.ttf
+```
+
+## 검증 명령
+
+```powershell
+python tool/verify_sources.py
+dart format --output=none --set-exit-if-changed lib test tool
+flutter analyze
+flutter test
+flutter build web --dart-define=DATA_MODE=prototype
+```
+
+기본 단위·위젯 검증과 별도로 Spring fixture의 실제 HTTP를 확인할 수 있습니다. JDK21을 준비하고 첫 터미널에서 저장소 루트 기준으로 실행합니다.
+
+```powershell
+.\backend\gradlew.bat -p backend bootRun --args="--spring.profiles.active=fixture" --no-daemon
+```
+
+두 번째 터미널은 `frontend/`에서 실행합니다. 이 테스트는 창을 띄우지 않으며 DB를 사용하지 않습니다.
+
+```powershell
+flutter test tool/spring_http_test.dart
+```
+
+위젯 이미지는 사용자 화면을 제어하지 않고 별도로 생성합니다.
+
+```powershell
+flutter test test/screens_test.dart --dart-define=CAPTURE_QA=true --plain-name "화면 제어 없이"
+```
+
+파일은 로컬 `.local/qa/`에 저장합니다. 생성 이미지만으로 원본 브라우저와의 일치나 실제 브라우저 인수를 완료 처리하지 않습니다. 기존 저장소의 `npm run lint`, `npm test`, `npm run build`도 유지합니다. Flutter CI는 별도 `frontend.yml`에 추가했으며 기존 check를 변경하지 않았습니다.
+
+## 빌드와 인계
+
+`flutter build web`의 **`build/web/` 전체**를 사용합니다. CanvasKit도 `canvaskit/`에서 로컬 로딩합니다. 하위 경로에서는 `--base-href /경로/`를 지정하고 API 접두사·직접 URL·새로고침을 확인해야 합니다. 공개 배포 빌드에는 실제 API 주소 또는 같은 origin 경로를 사용하며 localhost를 지정하지 않습니다.
+
+빌드·캐시·SDK·비공개 자료는 소스 커밋에서 제외합니다. 현재 버전의 변경·실행 결과·남은 수동 검수와 산출물 위치는 [VERIFICATION](VERIFICATION.md), 인수 30건별 범위는 [acceptance-results.json](acceptance-results.json)에 기록했습니다. 실제 시민용 데이터 연결·100개 시나리오·실자료 평가·main 병합·운영 배포는 완료하지 않았습니다.
+
+기존 [착수 가이드](../docs/spec/11_개발착수가이드.md), [기술 구성](../docs/spec/08_기술구성과연결.md), [계약](../contracts/README.md)의 계산 책임과 공개/비공개 경계를 유지합니다.

@@ -1,0 +1,64 @@
+{
+  "prototype_commit": "4c5edf0a10751d2463400e62a2538e2101ab23df",
+  "backend_ref": "339e04f6d2bfac386fbc973fbe3e3b5b0aa02677",
+  "anchor": "2026-11-16",
+  "source_files": [
+    {
+      "path": "reference-prototype/app.js",
+      "bytes": 41631,
+      "sha256": "7c717bb0ba938843e0d6b12c15ff1042d554eb24b122fdb51accce9ee0a7329a"
+    },
+    {
+      "path": "reference-prototype/assets/books.svg",
+      "bytes": 1274,
+      "sha256": "f6466d9b914d2fdc0aee00fa7abb3a27f8047b5454799299293e505be3b415f4"
+    },
+    {
+      "path": "reference-prototype/assets/digital.svg",
+      "bytes": 1388,
+      "sha256": "a0b3e07eb8e7b5e8f717e323adb7d355dd4d2bd80743233eaa7e14f59d20ee53"
+    },
+    {
+      "path": "reference-prototype/assets/favicon.svg",
+      "bytes": 216,
+      "sha256": "2abb0ec1a1f84449fba74ee2017ebdbad7b4c1facffa97e194ec44190d705396"
+    },
+    {
+      "path": "reference-prototype/assets/market.svg",
+      "bytes": 1319,
+      "sha256": "d7ad86986b8bfb9cf0bed966643ab4a88e26d74c2df86c67aa80eeb42b4abdeb"
+    },
+    {
+      "path": "reference-prototype/assets/music.svg",
+      "bytes": 1229,
+      "sha256": "5d4a927527ee50d7b736e5d3523e574e910ea4b57701648ee2f9afd3b6a339c0"
+    },
+    {
+      "path": "reference-prototype/assets/photo.svg",
+      "bytes": 1248,
+      "sha256": "c98dbadebb27f056e71c8c48d5b7bdffcb0fe61ab4a3ae1ac6f8aa7bc68ad9c4"
+    },
+    {
+      "path": "reference-prototype/assets/pottery.svg",
+      "bytes": 1332,
+      "sha256": "adb52f496d07e564766f765dde7593c25595d3631fc6d84ad78c26dc6d266e2f"
+    },
+    {
+      "path": "reference-prototype/data.js",
+      "bytes": 15501,
+      "sha256": "c2b8a5f8894a59a4dc6afa01c6a3e622b60318477086a8af8d97c4a7cf959336"
+    },
+    {
+      "path": "reference-prototype/index.html",
+      "bytes": 837,
+      "sha256": "b20b73d2a99f41148228a1d7dce45725bd93cbb27556b2c1cf1e7bcfe25ea72e"
+    },
+    {
+      "path": "reference-prototype/styles.css",
+      "bytes": 31192,
+      "sha256": "f30651f3f32b3e022b519b2fd74ab7297dcc6d3c86d31de0901715d62e9967ca"
+    }
+  ],
+  "derived_fixture_sha256": "261b8f312887dc28c76b45592efd9b03f6ba0266dac4966de79421fcfcf91202",
+  "note": "SVG bytes는 원본을 유지하며 data.js의 예시·지역 선택지는 JSON으로 옮겼다."
+}

@@ -1,0 +1,88 @@
+{
+  "point_id": "16ac9b3c-995e-532d-bd2b-a5348394f3c6",
+  "weekly_hours": {
+    "monday": {
+      "state": "open",
+      "full_day": false,
+      "intervals": [
+        {
+          "start": "09:00",
+          "end": "18:00",
+          "end_day_offset": 0
+        }
+      ]
+    },
+    "tuesday": {
+      "state": "open",
+      "full_day": false,
+      "intervals": [
+        {
+          "start": "09:00",
+          "end": "18:00",
+          "end_day_offset": 0
+        }
+      ]
+    },
+    "wednesday": {
+      "state": "open",
+      "full_day": false,
+      "intervals": [
+        {
+          "start": "09:00",
+          "end": "18:00",
+          "end_day_offset": 0
+        }
+      ]
+    },
+    "thursday": {
+      "state": "open",
+      "full_day": false,
+      "intervals": [
+        {
+          "start": "09:00",
+          "end": "18:00",
+          "end_day_offset": 0
+        }
+      ]
+    },
+    "friday": {
+      "state": "open",
+      "full_day": false,
+      "intervals": [
+        {
+          "start": "09:00",
+          "end": "18:00",
+          "end_day_offset": 0
+        }
+      ]
+    },
+    "saturday": {
+      "state": "open",
+      "full_day": false,
+      "intervals": [
+        {
+          "start": "09:00",
+          "end": "18:00",
+          "end_day_offset": 0
+        }
+      ]
+    },
+    "sunday": {
+      "state": "open",
+      "full_day": false,
+      "intervals": [
+        {
+          "start": "09:00",
+          "end": "18:00",
+          "end_day_offset": 0
+        }
+      ]
+    }
+  },
+  "mode": "current",
+  "case_id": null,
+  "types": [],
+  "snapshot_id": null,
+  "selection": "candidate",
+  "sort": "start"
+}

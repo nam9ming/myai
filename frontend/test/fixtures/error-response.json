@@ -1,0 +1,14 @@
+{
+  "error": {
+    "code": "INVALID_POINT",
+    "message": "활성 시험 지점을 선택해 주세요.",
+    "field_errors": [
+      {
+        "field": "point_id",
+        "message": "등록되지 않은 지점입니다."
+      }
+    ],
+    "retryable": false
+  },
+  "request_id": "4fe4b85a-8a06-5327-bb02-211c91089309"
+}

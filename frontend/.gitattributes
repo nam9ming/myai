@@ -1,0 +1,8 @@
+* text=auto eol=lf
+
+# 인계 manifest 해시가 줄바꿈 자동 변환으로 바뀌지 않게 한다.
+assets/posters/*.svg -text
+assets/prototype/notices.json -text
+assets/fonts/*.ttf binary
+# 원본 라이선스의 공백도 보존한다.
+assets/fonts/*.txt -text whitespace=-blank-at-eol
