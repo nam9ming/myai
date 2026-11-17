@@ -43,7 +43,7 @@
 - 저장소는 `CitizenHistoric(snapshotId,revisionId,publishedAt,action,version,beforeId)`, `CitizenHistory(headVersion,startVersion,endVersion,audits)`와 `citizenHistory(eventId,selectedSnapshot,beforeVersion,limit)`를 사용한다. 선택 시민 head와 연결해 페이지 범위+바로 앞 문맥1개만 읽고 V6의 publication_audits(channel_key,head_version,audit_id) 색인을 사용한다. 기존 Historic/legacy history SQL·V1~V5·기존 행은 변경하지 않는다. 최초 사건을 찾는 무제한 canonical MIN 검색·채널 전체 누적 한도는 사용하지 않는다.
 - 서비스는 페이지·문맥 범위의 연속 버전·전후 ID·끝 버전을 검사하며 최신 페이지는 마지막 UUID도 head와 대조한다. 모든 사용 공개본의 schema/channel/audit·checksum·created_at·공개 allowlist와 사건 membership을 검증한다. 페이지 밖 이력을 검사했다고 쓰지 않으며 누락/손상은500 SNAPSHOT_INVALID다. 빈/다른 종류를 가짜 철회·복구로 만들지 않는다.
 - 현재 포함 고유 canonical8MiB·항목 조립/최종 JSON8MiB 한도를 검사한다. 이력 한도만 초과하면 현재 notice/sources는200이며 history.status=unavailable/window=null/entries=null/error={code:CITIZEN_HISTORY_TOO_LARGE,retryable:false}다. 더 작은 history_limit을 사용할 수 있다. 현재 사실만으로 응답 한도를 넘으면503이다. 준비/무결성/연결 실패를 빈 성공으로 바꾸지 않는다.
-- 교체된 ID의409 안내는 교체본까지 공개 여부/schema/hash/형식을 검증한 뒤 제공한다. legacy/미공개/손상 head에는500을 반환하고 UUID를 노출하지 않는다. head가 없는 명시 과거 ID는 기존409·current_snapshot_id 생략을 유지한다.
+- 교체된 ID의409 안내는 교체본까지 공개 여부/schema/hash/형식을 검증한 뒤 제공한다. 이전본과 현행 교체본의 검증은 각각8MiB 상한의 독립 예산을 사용한다. 정상 상세의 현재 포함 이력 누적8MiB 한도는 유지한다. legacy/미공개/손상 head에는500을 반환하고 UUID를 노출하지 않는다. head가 없는 명시 과거 ID는 기존409·current_snapshot_id 생략을 유지한다.
 - 오류는 기존 envelope/요청 UUID/field_errors 배열을 재사용한다. head 없음503 PUBLIC_DATA_NOT_READY; 미등록/다른 계열404 SNAPSHOT_NOT_FOUND; 교체409 SNAPSHOT_RETIRED+current_snapshot_id; 해당 사건 없음404 NOTICE_NOT_FOUND; 손상500 SNAPSHOT_INVALID다. DB 연결 실패는 기존 안전한503 경로다.
 
 ## 파일·소유권

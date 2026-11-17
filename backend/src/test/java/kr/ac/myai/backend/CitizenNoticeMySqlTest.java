@@ -426,6 +426,10 @@ class CitizenNoticeMySqlTest {
         assertThat(history.path("error").path("code").asText()).isEqualTo("CITIZEN_HISTORY_TOO_LARGE");
         assertThat(history.path("error").path("retryable").asBoolean()).isFalse();
         assertThat(ok("/api/v1/citizen/notices").path("data").path("notices").get(0)).isEqualTo(expected.path("notices").get(0));
+        for (String path : List.of("/api/v1/citizen/notices?snapshot_id=" + first.snapshotId(), detail(CitizenNoticeFixtures.event(input), first.snapshotId()))) {
+            var retired = error(path, 409, "SNAPSHOT_RETIRED");
+            assertThat(retired.path("current_snapshot_id").asText()).isEqualTo(selected.snapshotId());
+        }
     }
 
     private void assertWindow(JsonNode history, long from, long to, boolean hasMore, Long next, int limit) {

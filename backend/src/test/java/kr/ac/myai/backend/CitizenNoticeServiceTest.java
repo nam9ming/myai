@@ -398,6 +398,40 @@ class CitizenNoticeServiceTest {
         assertThat(entries.get(1).path("after").path("notice").path("event_id").asText()).isEqualTo(EVENT);
     }
 
+    @Test
+    void aCurrentSnapshotAtEightMiBStillServesFactsAndOnlyAdditionalHistoryDegrades() throws Exception {
+        records.put(CURRENT, padded(records.get(CURRENT), LIMIT));
+        assertThat(service.list(null).path("data").path("notice_count").asInt()).isEqualTo(1);
+        assertThat(detail().path("notice").path("event_id").asText()).isEqualTo(EVENT);
+        assertThat(detail().path("history").path("status").asText()).isEqualTo("available");
+        records.put(PAST, published(PAST, "synthetic", payload));
+        audits = List.of(audit(PAST, REVISION, 1, "publish"), audit(CURRENT, REVISION, 2, "publish"));
+        tooLarge();
+        assertThat(service.list(UUID.fromString(CURRENT)).path("data").path("notice_count").asInt()).isEqualTo(1);
+    }
+
+    @Test
+    void aCanonicalAboveEightMiBIsInvalidRatherThanAHistoryCapacityFailure() {
+        var current = records.get(CURRENT); var row = current.snapshot();
+        String raw = row.canonical() + " ".repeat(LIMIT + 1 - row.canonical().getBytes(StandardCharsets.UTF_8).length);
+        var oversized = new PublicationRepository.Snapshot(CURRENT, row.mode(), row.caseId(), raw,
+                ReviewedImportReader.sha256(raw.getBytes(StandardCharsets.UTF_8)), row.kind(), row.rulesVersion(), row.dictionaryVersion());
+        records.put(CURRENT, new PublicSnapshotRepository.Published(oversized, current.schemaVersion(), current.createdAt(), CURRENT));
+        error(() -> service.list(null), HttpStatus.INTERNAL_SERVER_ERROR, "SNAPSHOT_INVALID");
+        error(this::detail, HttpStatus.INTERNAL_SERVER_ERROR, "SNAPSHOT_INVALID");
+    }
+
+    @Test
+    void replacementValidationHasAnIndependentBudgetForTwoValidLargeSnapshots() throws Exception {
+        records.put(CURRENT, padded(records.get(CURRENT), 5 * 1024 * 1024));
+        records.put(PAST, padded(published(PAST, "synthetic", payload), 5 * 1024 * 1024));
+        assertThatThrownBy(() -> service.list(UUID.fromString(PAST))).isInstanceOfSatisfying(ApiException.class, failure -> {
+            assertThat(failure.status()).isEqualTo(HttpStatus.CONFLICT);
+            assertThat(failure.code()).isEqualTo("SNAPSHOT_RETIRED");
+            assertThat(failure.currentSnapshotId()).isEqualTo(CURRENT);
+        });
+    }
+
     private JsonNode detail() { return service.notice(UUID.fromString(EVENT), UUID.fromString(CURRENT)).path("data"); }
     private void tooLarge() {
         var data = detail();

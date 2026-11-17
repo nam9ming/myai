@@ -88,7 +88,8 @@ public class CitizenNoticeService {
             if (published.currentId() != null) {
                 var replacement = repository.citizenPublished(published.currentId()).orElseThrow(this::invalid);
                 if (!published.currentId().equals(replacement.currentId())) throw invalid();
-                reads.verify(published.currentId(), replacement);
+                // 교체본 검증을 이전 선택의 이력 누적 예산과 분리한다.
+                new Reads().verify(published.currentId(), replacement);
             }
             throw new ApiException(HttpStatus.CONFLICT, "SNAPSHOT_RETIRED", "공개본이 교체되었습니다. 새 버전을 선택해 주세요.", "snapshot_id", published.currentId());
         }
@@ -206,6 +207,7 @@ public class CitizenNoticeService {
             try {
                 var row = published.snapshot();
                 shared.check(row != null && id.equals(row.id()), "snapshot_id");
+                // 첫 선택도 여기서8MiB 이하로 검증하며, 아래 예산은 이력 누적 읽기를 제한한다.
                 citizens.verifySnapshot(row, published.schemaVersion(), published.createdAt());
                 JsonNode snapshot = shared.parse(row.canonical());
                 bytes += row.canonical().getBytes(StandardCharsets.UTF_8).length;

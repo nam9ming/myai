@@ -87,6 +87,8 @@ V6는 `publication_audits(channel_key,head_version,audit_id)`의 일반 색인�
 
 이력의 자원 한도 초과는 HTTP200의 `data.history.status=unavailable`과 해당 history.error로 구분한다. 유효한 빈 공개본은200·notice_count0·notices/sources 빈 배열이다. 준비/연결/무결성 실패를 빈 성공으로 바꾸지 않는다. HTTP 오류는 기존 `error.code/message/field_errors/retryable`·request_id·선택 current_snapshot_id 형식이고 `X-Request-ID`와 연결된다.
 
+교체된 ID의409 안내는 이전 공개본과 현행 교체본을 각각8MiB 상한에서 독립 검증한다. 이 검증 두 개를 이력 누적 예산으로 합산해 정상 교체 안내를 차단하지 않는다. 일반 상세의 현재본 포함 고유 canonical 이력 예산8MiB는 유지한다.
+
 조회는 읽기 전용 REPEATABLE READ에서 head·감사·공개본을 함께 읽는다. Python/AI·원문 파일을 호출하지 않으며 사용자 설정을 저장하지 않는다. CORS·최소 요청 로그는 기존 `/api/v1/**` 설정을 사용하고 시민 로그의 rules_version은 null이다.
 
 ## 새 전용 개발 DB에서 재현
