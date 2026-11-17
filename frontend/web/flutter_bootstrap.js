@@ -11,7 +11,6 @@ _flutter.loader.load({
       const appRunner = await engineInitializer.initializeEngine();
       window.yeogiStartup?.phase('동네 소식을 불러오고 있어요…');
       await appRunner.runApp();
-      window.yeogiStartup?.complete();
     } catch (error) {
       console.error('Flutter startup failed', error);
       window.yeogiStartup?.fail();

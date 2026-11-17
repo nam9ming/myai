@@ -71,7 +71,8 @@
         fail,
         complete() { clearTimeout(timer); document.getElementById('loading')?.remove(); },
       };
-      window.addEventListener('error', fail);
+      window.addEventListener('flutter-first-frame', window.yeogiStartup.complete, { once: true });
+      window.addEventListener('error', fail, true);
       window.addEventListener('unhandledrejection', fail);
     })();
   </script>
