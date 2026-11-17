@@ -72,8 +72,16 @@
 
 **Interfaces:** Task1/2의 실제 동작과 검증 결과를 인계한다. 새 처리/실패/수정과 legacy평가 거부·G5 잔여 범위를 명시한다.
 
-- [ ] **Step 1:** 실행 명령·예상 경로·새/기존 family·수동 prompt label·미상·기계/선언 검토·보관 한도·오류·미완료를 실제 출력 기준으로 문서화한다. 미확정 자료/평가/모델·팀원/Flutter 합의는 open-items에 기록하며 질문을 요청하지 않는다.
+- [x] **Step 1:** 실행 명령·예상 경로·새/기존 family·수동 prompt label·미상·기계/선언 검토·보관 한도·오류·미완료를 실제 출력 기준으로 문서화한다. 미확정 자료/평가/모델·팀원/Flutter 합의는 open-items에 기록하며 질문을 요청하지 않는다.
 - [ ] **Step 2:** Run `python3.13 -B -m unittest discover -s processing/tests -v`, parent-only `./gradlew test bootJar`, `npm run lint`, `npm test`, `npm run build`, `python3 contracts/validate_examples.py`, `git diff --check`, 변경 문서의 실제 상대 링크 검사. Expected: 전체 기능 회귀 통과·누락0. 실제 키/자료/독립 평가를 읽지 않는다. 로컬 Docker 불가 항목은 exact CI에서 반드시 실행·통과한다.
-- [ ] **Step 3:** 전체 diff·호출자·예외·권한·원본/복구·회귀/계약·문서를 자체 검토하고 유효 지적은 Minor 포함 root RED→수정→관련 검증한다. 마지막에 fresh 독립 전체 리뷰 정확1회 수행한다. 심각도와 무관하게 모든 유효 지적을 수정하고 whole author review를 반복한다. 커밋 `docs: describe citizen extraction workflow`.
+- [x] **Step 3:** 전체 diff·호출자·예외·권한·원본/복구·회귀/계약·문서를 자체 검토하고 유효 지적은 Minor 포함 root RED→수정→관련 검증한다. 마지막에 fresh 독립 전체 리뷰 정확1회 수행한다. 심각도와 무관하게 모든 유효 지적을 수정하고 whole author review를 반복한다. 커밋 `docs: describe citizen extraction workflow`.
 - [ ] **Step 4:** develop 대상 PR에 실제 검증·제약·전체/부분 리뷰를 구분해 적는다. 정확 head의 CI/실제 AI 코멘트·도착한 사람 리뷰/threads를 확인하고 유효 미해결0까지 수정한다. 자동 오탐은 원인·증거를 기록한다.
 - [ ] **Step 5:** exact green/head0을 확인한 non-main PR만 expected_head_sha로 병합한다. source/실제CI후보/병합/develop tree를 비교하고 root develop을 사용자 변경 보존하며 FF한다. 재사용 worktree를 detach하고 본인의 병합 브랜치만 lease 확인 뒤 정리한다. main PR20 통합 증빙을 갱신·검사하되 병합하지 않는다. 다음 전체 goal의 시민 D06/G5로 계속한다.
+
+## 현재 검증·리뷰 기록
+
+- ROOT 실제 CLI·Java schema gate·사람 수정·기존 평가 경로의 실패를 관찰한 뒤 구현했다. 최초 전체 Python의 규칙 metadata wrapper 오분류도 원인 수정·재현·전체 회귀로 확인했다.
+- 독립 전체 리뷰1회(`638bcf2..f0a0ce6`, 99파일) Important1·Minor3을 모두 수정했다. 시민 봉인/부모의 정확 권한·파일 집합, 빈 결과 schema 조건, 예제 FieldValue 검증, 명시 비해당 근거를 RED→GREEN으로 확인했다. 독립 재리뷰는 반복하지 않았다.
+- 수정 후 Python673건·326.320초, Node46건·lint522파일·계약13JSON·정적 HTML build가 통과했다. 변경 Markdown17개 상대 파일 링크351개 오류0이다. 기존13pin·중복을 줄인39개 보관 파일/전체5종 CLI의 고정 원본 호환을 유지한다.
+- 실제 보충 MySQL9.6을 포함한 관련 Java46건이 통과했다. 로컬 전체는1056건 중1046통과·Docker 기동10실패·오류/생략0·5분2초다. 두 클래스 초기화 실패로 시민 HTTP/JAR 등의 해당 개별 시험은 로컬에서 실행하지 못했다. 이를8.4·전체 성공으로 표시하지 않는다.
+- Task2/3의 원격 gate는 아직 미완료다. 정확 head의 MySQL8.4.13/Docker CI·실제 AI/도착한 사람 리뷰를 확인해 유효 미해결0일 때 develop에 반영한다. main/배포·G5 시민 D06/Java 사람 인계·실제 품질/인수 완료로 쓰지 않는다.
