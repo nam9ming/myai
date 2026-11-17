@@ -4,6 +4,7 @@
 (async () => {
   const canvasKitBaseUrl = new URL('canvaskit/', document.baseURI).href;
   let entrypointBlob;
+  const assetVersions = /*__YEOGI_STARTUP_ASSETS__*/ {};
 
   // 지원 브라우저에서만 압축 자산을 사용하며, 실패하면 원본 로더로 복귀한다.
   if (new URL(location.href).searchParams.get('startup') !== 'raw' &&
@@ -11,7 +12,10 @@
       _flutter.buildConfig.builds.some((build) => build.compileTarget === 'dart2js')) {
     try {
       const unpack = async (path) => {
-        const response = await fetch(new URL(path, document.baseURI));
+        const url = new URL(path, document.baseURI);
+        const version = assetVersions[path];
+        if (version) url.searchParams.set('v', version);
+        const response = await fetch(url, { cache: version ? 'force-cache' : 'default' });
         if (!response.ok) throw new Error(`Startup asset ${response.status}: ${path}`);
         return new Response(response.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
       };

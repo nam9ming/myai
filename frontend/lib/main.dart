@@ -13,11 +13,11 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // 두 글꼴 별칭이 같은 데이터를 공유해 다운로드를 한 번만 수행한다.
   final fontData = rootBundle.load('assets/fonts/NotoSansKR.woff2');
-  await Future.wait([
+  final fonts = Future.wait([
     for (final family in ['NotoSansKR', 'sans-serif'])
       (FontLoader(family)..addFont(fontData)).load(),
   ]);
-  final prototype = await PrototypeData.load();
+  final (_, prototype) = await (fonts, PrototypeData.load()).wait;
   final state = AppState(
     prototype,
     createBrowserServices(),

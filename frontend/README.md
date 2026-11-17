@@ -122,3 +122,9 @@ CanvasKit와 앱을 내려받는 동안 정적 로딩 화면이 표시됩니다.
 ```bash
 PLAYWRIGHT_MODULE=/path/to/playwright node tool/check_startup.cjs build/web /tmp/yeogi-startup-check
 ```
+
+### 중앙 로고와 재방문 최적화
+
+대기 화면의 이미지는 기존 favicon SVG를 인라인으로 재사용합니다. 별도 이미지 요청 없이 화면의 가로·세로 중앙에 고정하며, 하단 안내·재시도 버튼은 로고의 위치를 밀어내지 않습니다. 작은 화면에서는 대기 패널을 스크롤해 재시도 버튼에 접근할 수 있습니다.
+
+압축 파일마다 SHA-256 기반 버전 쿼리를 넣고 브라우저 HTTP 캐시를 재사용합니다. 내용이 달라진 파일만 새 버전을 사용하며, HTML과 bootstrap의 서버 캐시 정책은 유지하므로 새 배포를 확인할 수 있습니다. LocalStorage·IndexedDB·Service Worker를 추가하거나 CSP를 완화하지 않습니다. 글꼴 준비와 공지 fixture 읽기도 병렬로 시작합니다.
