@@ -17,6 +17,23 @@ Finder verticalScrollable() => find.byWidgetPredicate(
 );
 
 void main() {
+  testWidgets('PC 상세 요약은 재배치와 스크롤 중에도 표시된다', (tester) async {
+    final state = await mount(tester, '/detail?id=edu-pottery', 1440);
+    for (final width in [390.0, 1440.0, 850.0, 1440.0]) {
+      tester.view.physicalSize = Size(width, 1000);
+      state.notifyListeners();
+      await tester.pump();
+      await tester.pumpAndSettle();
+      final position = tester
+          .state<ScrollableState>(verticalScrollable().first)
+          .position;
+      position.jumpTo(position.maxScrollExtent.clamp(0, 160).toDouble());
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    }
+    expect(find.text('퇴근 후, 나를 위한 생활 도예'), findsOneWidget);
+    expect(find.byType(SaveButton), findsWidgets);
+  });
   testWidgets('온보딩 이전 단계로 돌아가도 지역 선택을 보존한다', (tester) async {
     final state = await mount(tester, '/start', 390);
     await tapText(tester, '경기도');

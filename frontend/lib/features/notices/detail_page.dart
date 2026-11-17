@@ -244,8 +244,16 @@ class _NoticeDetailPageState extends State<NoticeDetailPage> {
                   child: ListenableBuilder(
                     listenable: position,
                     builder: (_, child) {
-                      final left = contentKey.currentContext?.size?.height ?? 0,
-                          right = summaryKey.currentContext?.size?.height ?? 0;
+                      final leftBox = contentKey.currentContext
+                              ?.findRenderObject(),
+                          rightBox = summaryKey.currentContext
+                              ?.findRenderObject();
+                      final left = leftBox is RenderBox && leftBox.hasSize
+                              ? leftBox.size.height
+                              : 0.0,
+                          right = rightBox is RenderBox && rightBox.hasSize
+                              ? rightBox.size.height
+                              : 0.0;
                       final offset = (position.pixels - 60).clamp(
                         0.0,
                         math.max(0, left - right),
