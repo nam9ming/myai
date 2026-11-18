@@ -46,7 +46,7 @@ final class CitizenHandoffFixture {
         edit.accept(output);
         Path sourceFile = Files.writeString(work.resolve("source.json"), source.toString());
         Path outputFile = Files.writeString(work.resolve("review-output.json"), output.toString());
-        Path handoffRoot = work.resolve("handoffs");
+        Path handoffRoot = root.toRealPath().resolve("handoffs");
         String script = """
                 import hashlib, json, sys, uuid
                 from datetime import datetime, timezone

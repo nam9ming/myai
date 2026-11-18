@@ -61,6 +61,34 @@ class CitizenHumanHandoffArchiveTest {
         assertThat(CitizenExtractionArchiveTest.tree(image.directory())).isEqualTo(before);
     }
 
+    @Test
+    void repeatedCitizenFixtureFreezesDirectlyIntoSameCanonicalHandoffRootWithoutMovingImages() throws Exception {
+        Path base = root.toRealPath();
+        var extraction = CitizenExtractionArchiveTest.fixture(Files.createTempDirectory(base, "manual-").toRealPath(), (byte[]) null);
+        assertThat(CitizenExtractionArchiveTest.importManual(CitizenExtractionArchiveTest.reader(), extraction).path("status").asText()).isEqualTo("validated");
+        var source = CitizenHandoffFixture.source(base, extraction);
+        var first = CitizenHandoffFixture.freeze(base, source, extraction, output -> { });
+        var beforeSecond = CitizenExtractionArchiveTest.tree(first.image());
+        var second = CitizenHandoffFixture.freeze(base, source, extraction, output -> { });
+        Path expectedRoot = root.toRealPath().resolve("handoffs");
+        assertThat(first.handoffRoot()).isEqualTo(expectedRoot);
+        assertThat(second.handoffRoot()).isEqualTo(expectedRoot);
+        assertThat(first.image().getParent()).isEqualTo(expectedRoot);
+        assertThat(second.image().getParent()).isEqualTo(expectedRoot);
+        assertThat(first.request().path("handoff_ref")).isNotEqualTo(second.request().path("handoff_ref"));
+        assertThat(first.image()).isNotEqualTo(second.image());
+        assertThat(CitizenExtractionArchiveTest.tree(first.image())).isEqualTo(beforeSecond);
+        var beforeRead = CitizenExtractionArchiveTest.tree(base);
+        for (var handoff : List.of(first, second)) {
+            var image = reader(PythonProbe.REPO, 20_000).read(handoff.request().path("handoff_ref").asText(),
+                    handoff.request().path("receipt_sha256").asText(), expectedRoot);
+            assertThat(image.directory()).isEqualTo(handoff.image());
+            assertThat(image.projection()).isEqualTo(handoff.projection());
+        }
+        assertThat(CitizenExtractionArchiveTest.tree(base)).isEqualTo(beforeRead);
+        assertThat(CitizenExtractionArchiveTest.tree(first.image())).isEqualTo(beforeSecond);
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"review_success", "review_failed", "empty"})
     void citizenImageRetainsFactsAndFailedParentAfterOriginalRunAndReviewAreRemoved(String testCase) throws Exception {

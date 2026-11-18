@@ -81,7 +81,6 @@ class CitizenHumanHandoffJarMySqlTest {
             var failed = registered(database, sources, failedRaw, output -> {
                 var firstItem = output.path("items").get(0).deepCopy(); output.putArray("items").add(firstItem);
             });
-            moveImage(failed, commonHandoffs);
             failed.request().put("reason", PRIVATE_REASON);
             byte[] posted = padded(failed.request());
             var parentBefore = database.jdbc().queryForMap("SELECT * FROM extraction_runs WHERE run_id=?", failed.run());
@@ -102,7 +101,6 @@ class CitizenHumanHandoffJarMySqlTest {
                         firstItem.putObject(field).putNull("value").put("knowledge", "ambiguous").put("reason", "합성 재확인 필요 " + field).putArray("evidence_ids");
                     output.putArray("items").add(firstItem);
                 });
-                moveImage(changed, commonHandoffs);
                 ((ObjectNode) changed.request().path("revisions").get(0)).put("expected_revision_no", 1);
                 byte[] put = padded(changed.request());
                 var guardedRows = CitizenNoticeFixtures.rows(database.jdbc());
@@ -136,7 +134,6 @@ class CitizenHumanHandoffJarMySqlTest {
                 var empty = CitizenHandoffFixture.freeze(root, failed.source(), failed.extraction(), output -> {
                     output.putArray("items"); output.putArray("warnings").add("NO_EVENT_FOUND");
                 });
-                moveImage(empty, commonHandoffs);
                 byte[] emptyRequest = padded(empty.request());
                 var emptyResult = json(jar.send(jar.request("/local/reviews/import", true).POST(HttpRequest.BodyPublishers.ofByteArray(emptyRequest))), 200);
                 assertThat(emptyResult.path("data").path("revision_ids")).isEmpty();
@@ -201,7 +198,6 @@ class CitizenHumanHandoffJarMySqlTest {
         return handoff;
     }
 
-    private void moveImage(CitizenHandoffFixture.Handoff fixture, Path handoffs) throws Exception { Files.move(fixture.image(), handoffs.resolve(fixture.request().path("handoff_ref").asText())); }
     private Path write(ObjectNode input) throws Exception { return Files.write(root.resolve(UUID.randomUUID() + ".json"), padded(input)); }
     private byte[] padded(JsonNode input) { return (" \r\n" + input.toPrettyString() + "\r\n ").getBytes(StandardCharsets.UTF_8); }
     private String sha(byte[] bytes) { return ReviewedImportReader.sha256(bytes); }
