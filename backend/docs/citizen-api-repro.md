@@ -42,7 +42,7 @@ Java 21, 저장소 Gradle Wrapper, Spring Boot 3.5.16, MySQL 8.4.13, Python 3.13
 | `mysql-not-ready` | 1 | HTTP 503 `PUBLIC_DATA_NOT_READY` |
 | `mysql-empty-and-retired` | 6 | HTTP 200 빈 목록, HTTP 409 교체본 ID가 있는 이전 목록·상세, HTTP 404 공지/공개본 누락, HTTP 200 복구 상세 |
 | `mysql-multi-source` | 1 | HTTP 200 복수 분야·원문·공개 근거 |
-| `mysql-history-unavailable` | 1 | HTTP 200 현재 사실·출처, `history.status=unavailable`, `CITIZEN_HISTORY_TOO_LARGE` |
+| `mysql-history-unavailable` | 1 | HTTP 200 현재 사실·출처, `history.status=unavailable`, `CITIZEN_HISTORY_TOO_LARGE`. 두 공개본의 파일 크기 합이 8MiB를 초과한다. |
 | `jar-history` | 5 | SELECT 전용 계정의 실제 JAR에서 목록·상세·두 이력 페이지와 HTTP 422 잘못된 조건 |
 
 Y01에는 분야·복수 분류, Y02에는 목록/상세·0건·오류, Y03~Y05에는 합성 공지의 일정·비용·대상/조건 원문, Y06·Y08에는 확보 이력과 공개 교체·복구, Y10에는 재생성 절차를 제공한다. 시점별 모집 판정, 검색/복합 필터, 개인 설정(Y07), 실제 Flutter 화면(Y09), 팀 인수와 실자료 평가는 후속 확인 항목이다. 전체 기준은 [시험·평가·인수 기준](../../docs/spec/05_시험과인수기준.md)을 따른다.
@@ -51,8 +51,8 @@ Y01에는 분야·복수 분류, Y02에는 목록/상세·0건·오류, Y03~Y05�
 
 시험 결과는 `backend/build/repro/citizen-api-v1/`의 새 실행 디렉터리에 쓴다. `manifest.json`의 `response_checks=passed`를 확인한 뒤 파일을 사용한다. CI는 전체 시험과 빌드가 성공한 뒤 묶음을 14일간 보관한다.
 
-- `<case>.request.json`은 GET과 상대 URI를 담는다. `<case>.actual.json`은 수신한 UTF-8 응답 본문이다. HTTP 상태는 manifest의 해당 case에서 확인한다.
-- `<case>.expected.json`에는 기대 HTTP 상태와 검증할 JSON Pointer별 값이 있다. 공지·출처는 공개본에서, 오류·페이지 조건은 시험 입력과 계약에서 구한다.
+- `<case>.request.json`은 GET과 상대 URI를 담는다. `<case>.actual.json`에는 수신한 UTF-8 응답 바이트를 그대로 저장한다. HTTP 상태는 manifest의 해당 case에서 확인한다.
+- `<case>.expected.json`에는 기대 HTTP 상태와 검증할 JSON Pointer별 값이 있다. 공지·출처와 이력 전후는 공개본·감사 이력에서, 오류와 페이지 조건은 시험 입력과 계약에서 구한다.
 - `snapshots/`에는 기존 내보내기 서비스가 저장한 공개 snapshot을 둔다. UUID·SHA-256을 파일명 및 manifest와 비교한다.
 - manifest에는 시나리오·실행 버전·응답 상태·공개 ID·상대 경로·크기·SHA-256이 있다. CI에서 실행한 소스는 checkout SHA로 식별한다. 로컬 결과를 전달할 때는 `git rev-parse HEAD`와 로컬 변경 여부를 함께 적는다.
 

@@ -24,7 +24,7 @@
 
 ## Interfaces and Files
 
-- Existing test-only CitizenNoticeFixtures: record ReproCase(String id, HttpResponse<String> response, int expectedStatus, Map<String, ?> checks); static Path createReproDirectory(String scenario); static void writeRepro(Path directory, String scenario, String mysqlVersion, List<ReproCase> cases).
+- Existing test-only CitizenNoticeFixtures: record ReproCase(String id, HttpResponse<byte[]> response, int expectedStatus, Map<String, ?> checks); static Path createReproDirectory(String scenario); static void writeRepro(Path directory, String scenario, String mysqlVersion, List<ReproCase> cases).
 - createReproDirectory는 고정 build 출력 아래 새 run+snapshots 폴더를 배타 생성한다. SnapshotExportService.export(UUID,Path)는 각 시험의 열린 Spring context에서 먼저 호출한다. JAR setup context 생명주기를 늘리지 않는다.
 - writeRepro는 GET 시민 경로만 기록한다. request={method,path_query,body:null}, actual=원래 본문, expected={status,checks:{JSON_pointer:기대JSON}}. 전체 header/host는 저장하지 않는다. 생성 시각/request_id는 원본에 보존하고 선택 비교에서만 제외한다.
 - manifest=citizen-api-repro-v1, api/snapshot schema·synthetic·scenario·Java/MySQL 버전·JAR hash·실제 snapshot/event/revision ID와 파일 상대 경로/SHA256/크기·response_checks=passed. 검증한 CI checkout SHA를 기록하고 로컬에서는 null로 둔다. 파일은 CREATE_NEW로 쓰며 manifest를 마지막에 쓴다.
@@ -51,18 +51,19 @@
 
 **Files:** CitizenNoticeMySqlTest.java, CitizenNoticeJarMySqlTest.java, .github/workflows/ci.yml의 artifact path, 새 backend/docs/citizen-api-repro.md와 관련 README/TASK/contract 링크. MySQL·JAR 시험은 각각 담당 에이전트가 소유한다. 문서·CI는 주 작업자가 소유한다.
 
-- [x] 기존 get/json assertion을 보존하고 원래 HttpResponse를 변수로 유지해24건을 수집한다. MySQL5분야는 공개 canonical/원시 사실, JAR는 canonical+명시 history kinds/window/cursor/error.code를 기대값으로 전달한다.
+- [x] 기존 get/json assertion을 보존하고 원래 HttpResponse를 변수로 유지해24건을 수집한다. MySQL5분야는 공개 canonical/원시 사실, JAR는 공개본·감사 이력의 전후 값·페이지 조건과 오류 전체를 기대값으로 전달한다.
 - [x] Spring context가 열려 있을 때 관련 공개 snapshot을 기존 exporter로 새 run의 snapshots/에 내보낸다. 모든 기존 내용/DB/원본 불변 검사 뒤 완료 manifest를 저장한다. 실패를 catch해 성공으로 바꾸지 않는다.
-- [x] 실제 생성한 실제 파일·hash·ID·status·기대/실제 선택 필드를 소비자 관점으로 대조한다. 로컬 격리 Docker와 정확 CI에서 실제 JAR/MySQL 8.4 경로를 확인한다. 기존 테스트 삭제/생략0.
+- [x] 로컬 격리 Docker의 실제 JAR·MySQL 8.4 실행에서 생성한 파일의 SHA-256, 공개 ID, HTTP 상태와 기대값을 대조했다.
 - [x] 문서에 Java21/Python3.13/MySQL8.4/Docker·전용 DB allowlist·실행 명령·출력/초기화·예상 결과·버전·재생성·오프라인 제한을 적는다. 운영/공유 DB 초기화 명령은 추가하지 않는다.
 - [x] CI는 기존 JAR와 별도로 공개 repro 폴더를 보관한다. 합성 자료·실제 팀원/Flutter 인수·실자료 품질·지속 서버를 구분한다.
+- [ ] 해당 PR 커밋의 CI에서 JAR·MySQL 8.4 시험 통과를 확인하고 내려받은 산출물의 파일과 기대값을 대조한다.
 
 ### Task 3: 전체 검토·정확 source gate·develop 반영
 
 **Files:** 이 계획 최종본, G5 완료 증빙·이번 단계 결과를 관련 문서/ledger에만 반영한다.
 
-- [ ] 관련 Java/bootJar·npm lint/test/build·계약·문서 상대 링크·범위 diff 검사와 필요한 기존 회귀를 실행한다. Python 미변경은 명시하며 전체 원격 회귀를 유지한다.
-- [ ] 전체 diff/호출부/저장 원본/출력 경계/실패/cleanup/계약/docs 자체 검토·수정 후 독립 전체 리뷰 정확1회. 유효 Minor까지 수정·검증하고 전체 자체 검토를 반복한다.
+- [x] 관련 Java/bootJar·npm lint/test/build·계약·문서 상대 링크·범위 diff 검사와 필요한 기존 회귀를 실행한다. Python 미변경은 명시하며 전체 원격 회귀를 유지한다.
+- [x] 전체 diff/호출부/저장 원본/출력 경계/실패/cleanup/계약/docs 자체 검토·수정 후 독립 전체 리뷰 정확1회. 유효 Minor까지 수정·검증하고 전체 자체 검토를 반복한다.
 - [ ] 유효 미해결0에서 develop PR. exact source CI·실제 AI 코멘트/부분 범위·도착한 사람 리뷰/threads를 확인하고 유효 지적을 원인 수정한다. 오탐은 실제 근거로 기록한다.
 - [ ] expected head로 non-main 병합·source/CI후보/병합/develop tree 검증·사용자 변경 보존 FF·본인 병합 브랜치만 정리·main PR20 증빙 갱신. main/배포는 실행하지 않는다.
 
@@ -76,3 +77,12 @@
 - 저장기 시험 21건에서 데이터 파일과 유효성 검사를 요구해 구현 전에 실패를 확인했다. 기록기를 연결한 뒤 같은 21건이 통과했다.
 - 문서의 명령으로 MySQL 8.4.13과 실제 JAR 시험 32건을 통과했다. 합성 10개 시나리오에서 HTTP 응답 24건, snapshot 12개, 파일 해시 84개를 확인했다. 최신 이력 응답의 커서와 다음 실제 요청, 목록·상세의 동일 공개 ID를 대조했다.
 - CI에서는 별도 재현 artifact를 같은 checkout SHA에 연결한다. 내려받은 파일 검사와 develop 병합 증빙은 PR에 기록한다.
+
+## 독립 리뷰와 조치
+
+독립 검토는 개발 기준 `9870c18`에서 `a15235e`까지 11개 파일 전체에 한 차례 수행했다. 주요 지적 3건과 경미한 지적 5건을 모두 반영했다.
+
+- HTTP 원본 바이트를 직접 받아 UTF-8을 검증한 뒤 그대로 쓴다. 공개 오류 전체의 고정 기대값과 요청 ID 헤더를 검증한다. JAR 이력은 공개본과 감사 이력에서 독립적으로 구성한 종류·ID·시각·전후 값과 대조한다.
+- 이력 한도 사례의 두 공개본을 모두 보관한다. 동시에 폴더를 만들어도 각 실행에 새 경로를 배정하고 manifest는 마지막에 완성본 이름으로 연결한다. Gradle fixture 입력을 등록하고 로컬·원격 완료 표시를 구분했다.
+- 리뷰 보완용 8건의 실패를 먼저 확인했다. 최종 관련 Java 시험 75건이 모두 통과했으며 실제 MySQL 8.4.13과 JAR 검증을 포함한다. 10개 시나리오에서 응답 24건, 공개본 13개, 파일 해시 85개를 확인했다. 이전 두 실행의 파일 188개는 같은 bytes를 유지했다.
+- 수정 전 전체 로컬 Java 실행에서 기존 시민 인계 8MiB 초과 시험 1건이 요청 쓰기 중 `Broken pipe`로 실패했다. 동일 초과 바이트의 스트리밍 시험으로 413 응답과 DB·파일 불변을 다시 확인했다. 해당 PR 커밋의 전체 원격 회귀는 별도로 확인한다.

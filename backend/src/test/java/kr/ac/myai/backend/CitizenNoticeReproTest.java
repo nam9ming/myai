@@ -7,8 +7,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.MockedStatic;
 
 import javax.net.ssl.SSLSession;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpHeaders;
@@ -17,6 +21,8 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.LinkOption;
+import java.nio.file.OpenOption;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.List;
@@ -24,23 +30,25 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 class CitizenNoticeReproTest {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final String SNAPSHOT = "30000000-0000-4000-8000-000000000001";
     private static final String EVENT = "20000000-0000-4000-8000-000000000004";
+    private static final String REQUEST_ID = "34199ef2-1792-4349-a604-d0f7d7be01ae";
     @TempDir Path root;
 
     @Test
     void preservesUtf8ResponseAndIndependentChecksWithRelativeRequestAndFingerprints() throws Exception {
         Path directory = directory();
-        String body = " \n" + success().toPrettyString() + "\n";
+        byte[] body = (" \n" + success().toPrettyString() + "\n").getBytes(StandardCharsets.UTF_8);
         var checks = Map.<String, Object>of("/data/notices/0/title", "합성 시민 공지 😀", "/data/notice_count", 1,
                 "/data/notices/0/cost/value", JSON.nullNode());
         String path = "/api/v1/citizen/notices?snapshot_id=" + SNAPSHOT;
         CitizenNoticeFixtures.writeRepro(directory, "utf8-list", "8.4.13", List.of(sample("list", path, 200, body, checks)));
 
-        assertThat(Files.readAllBytes(directory.resolve("list.actual.json"))).isEqualTo(body.getBytes(StandardCharsets.UTF_8));
+        assertThat(Files.readAllBytes(directory.resolve("list.actual.json"))).isEqualTo(body);
         var request = JSON.readTree(directory.resolve("list.request.json").toFile());
         assertThat(request.path("method").asText()).isEqualTo("GET");
         assertThat(request.path("path_query").asText()).isEqualTo(path);
@@ -110,7 +118,7 @@ class CitizenNoticeReproTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"private", "real", "bad-utf8", "non-citizen", "post", "credentials-query"})
+    @ValueSource(strings = {"private", "real", "non-citizen", "post", "credentials-query"})
     void refusesNonPublicOrNonSyntheticResponsesBeforeWritingArtifacts(String defect) throws Exception {
         Path directory = directory();
         var body = success();
@@ -118,12 +126,77 @@ class CitizenNoticeReproTest {
         if (defect.equals("real")) ((ObjectNode) body.path("data")).put("data_kind", "real");
         String path = defect.equals("non-citizen") ? "/local/reviews/import" : "/api/v1/citizen/notices";
         if (defect.equals("credentials-query")) path += "?token=DO_NOT_EXPORT_AUTH";
-        var response = response(defect.equals("post") ? "POST" : "GET", path, 200,
-                defect.equals("bad-utf8") ? body.toString().replace("합성 시민 공지 😀", "합성\uD800") : body.toString());
+        var response = response(defect.equals("post") ? "POST" : "GET", path, 200, body.toString());
         assertThatThrownBy(() -> CitizenNoticeFixtures.writeRepro(directory, "public-only", "8.4.13",
                 List.of(new CitizenNoticeFixtures.ReproCase("list", response, 200, Map.of("/data/notice_count", 1)))));
         assertThat(directory.resolve("manifest.json")).doesNotExist();
         assertThat(directory.resolve("list.actual.json")).doesNotExist();
+    }
+
+    @Test
+    void rejectsMalformedWireUtf8InsteadOfRetainingReplacementCharacters() throws Exception {
+        Path directory = directory();
+        byte[] wire = success().toString().replace("합성 시민 공지 😀", "##").getBytes(StandardCharsets.UTF_8);
+        int marker = new String(wire, StandardCharsets.ISO_8859_1).indexOf("##");
+        assertThat(marker).isGreaterThan(0); wire[marker] = (byte) 0xc3; wire[marker + 1] = 0x28;
+        var item = new CitizenNoticeFixtures.ReproCase("invalid-utf8", response("GET", "/api/v1/citizen/notices", 200, wire),
+                200, Map.of("/data/notice_count", 1));
+        assertThatThrownBy(() -> CitizenNoticeFixtures.writeRepro(directory, "invalid-wire", "8.4.13", List.of(item)));
+        assertThat(directory.resolve("invalid-utf8.actual.json")).doesNotExist();
+        assertThat(directory.resolve("manifest.json")).doesNotExist();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"missing", "mismatch", "non-uuid", "uppercase", "duplicate"})
+    void refusesErrorRequestIdsThatCannotBeLinkedToOneCanonicalResponseHeader(String defect) throws Exception {
+        Path directory = directory();
+        String id = defect.equals("non-uuid") ? "not-a-request-id" : defect.equals("uppercase") ? REQUEST_ID.toUpperCase(java.util.Locale.ROOT) : REQUEST_ID;
+        var body = JSON.createObjectNode().put("request_id", id);
+        body.putObject("error").put("code", "INVALID_REQUEST").put("message", "지원 조건 확인").put("retryable", false).putArray("field_errors");
+        List<String> headers = switch (defect) {
+            case "missing" -> List.of();
+            case "mismatch" -> List.of("5e6a7264-d505-4b14-9134-bd71334cfd94");
+            case "duplicate" -> List.of(id, id);
+            default -> List.of(id);
+        };
+        var item = new CitizenNoticeFixtures.ReproCase("bad-request-id", response("GET", "/api/v1/citizen/notices?cost=free", 422,
+                body.toString().getBytes(StandardCharsets.UTF_8), headers), 422, Map.of("/error/code", "INVALID_REQUEST"));
+        assertThatThrownBy(() -> CitizenNoticeFixtures.writeRepro(directory, "error-identity", "8.4.13", List.of(item)));
+        assertThat(directory.resolve("bad-request-id.actual.json")).doesNotExist();
+        assertThat(directory.resolve("manifest.json")).doesNotExist();
+    }
+
+    @Test
+    void acceptsDirectoryCreatedByAnotherInitializerAfterItsExistenceCheck() throws Exception {
+        Path base = Path.of("").toRealPath().resolve("build");
+        assertThat(base).isDirectory();
+        Path created;
+        try (MockedStatic<Files> files = mockStatic(Files.class, CALLS_REAL_METHODS)) {
+            files.when(() -> Files.exists(base, LinkOption.NOFOLLOW_LINKS)).thenReturn(false);
+            created = CitizenNoticeFixtures.createReproDirectory("racing-initializer");
+        }
+        assertThat(created.resolve("snapshots")).isDirectory();
+        Files.delete(created.resolve("snapshots")); Files.delete(created);
+    }
+
+    @Test
+    void failedManifestWriteNeverPublishesPartialCompletionOrLeavesItsTemporaryFile() throws Exception {
+        Path directory = directory();
+        var selected = sample("list", "/api/v1/citizen/notices", 200, success().toString(), Map.of("/data/notice_count", 1));
+        try (MockedStatic<Files> files = mockStatic(Files.class, CALLS_REAL_METHODS)) {
+            files.when(() -> Files.write(any(Path.class), any(byte[].class), any(OpenOption[].class))).thenAnswer(call -> {
+                Path path = call.getArgument(0);
+                if (path.getFileName().toString().equals("manifest.json") || path.getFileName().toString().startsWith(".manifest-")) {
+                    try (var stream = new FileOutputStream(path.toFile())) { stream.write("{\"partial\":".getBytes(StandardCharsets.UTF_8)); }
+                    throw new IOException("시험용 manifest 중간 쓰기 실패");
+                }
+                return call.callRealMethod();
+            });
+            assertThatThrownBy(() -> CitizenNoticeFixtures.writeRepro(directory, "manifest-failure", "8.4.13", List.of(selected)))
+                    .isInstanceOf(UncheckedIOException.class);
+        }
+        assertThat(directory.resolve("manifest.json")).doesNotExist();
+        try (var files = Files.list(directory)) { assertThat(files.map(path -> path.getFileName().toString())).noneMatch(name -> name.startsWith(".manifest-")); }
     }
 
     @Test
@@ -182,15 +255,24 @@ class CitizenNoticeReproTest {
     private CitizenNoticeFixtures.ReproCase sample(String id, String path, int status, String body, Map<String, ?> checks) {
         return new CitizenNoticeFixtures.ReproCase(id, response("GET", path, status, body), status, checks);
     }
-    private HttpResponse<String> response(String method, String path, int status, String body) {
+    private CitizenNoticeFixtures.ReproCase sample(String id, String path, int status, byte[] body, Map<String, ?> checks) {
+        return new CitizenNoticeFixtures.ReproCase(id, response("GET", path, status, body), status, checks);
+    }
+    private HttpResponse<byte[]> response(String method, String path, int status, String body) {
+        return response(method, path, status, body.getBytes(StandardCharsets.UTF_8));
+    }
+    private HttpResponse<byte[]> response(String method, String path, int status, byte[] body) {
+        return response(method, path, status, body, List.of(REQUEST_ID));
+    }
+    private HttpResponse<byte[]> response(String method, String path, int status, byte[] body, List<String> requestIds) {
         HttpRequest request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:49152" + path))
                 .header("Authorization", "Bearer DO_NOT_EXPORT_AUTH").method(method, HttpRequest.BodyPublishers.noBody()).build();
         return new HttpResponse<>() {
             public int statusCode() { return status; }
             public HttpRequest request() { return request; }
-            public Optional<HttpResponse<String>> previousResponse() { return Optional.empty(); }
-            public HttpHeaders headers() { return HttpHeaders.of(Map.of("Set-Cookie", List.of("DO_NOT_EXPORT_COOKIE")), (name, value) -> true); }
-            public String body() { return body; }
+            public Optional<HttpResponse<byte[]>> previousResponse() { return Optional.empty(); }
+            public HttpHeaders headers() { return HttpHeaders.of(Map.of("Set-Cookie", List.of("DO_NOT_EXPORT_COOKIE"), "X-Request-ID", requestIds), (name, value) -> true); }
+            public byte[] body() { return body; }
             public Optional<SSLSession> sslSession() { return Optional.empty(); }
             public URI uri() { return request.uri(); }
             public HttpClient.Version version() { return HttpClient.Version.HTTP_1_1; }

@@ -15,11 +15,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import java.nio.charset.StandardCharsets;
 import java.nio.charset.CodingErrorAction;
 import java.nio.ByteBuffer;
-import java.nio.CharBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.LinkOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.FileAlreadyExistsException;
 import java.net.http.HttpResponse;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -152,7 +152,7 @@ final class CitizenNoticeFixtures {
     static ObjectNode revision(ObjectNode input) { return (ObjectNode) input.path("events").get(0).path("revision"); }
     static String event(ObjectNode input) { return input.path("events").get(0).path("event_id").asText(); }
 
-    record ReproCase(String id, HttpResponse<String> response, int expectedStatus, Map<String, ?> checks) { }
+    record ReproCase(String id, HttpResponse<byte[]> response, int expectedStatus, Map<String, ?> checks) { }
 
     static Path createReproDirectory(String scenario) {
         reproCheck(scenario != null && scenario.matches("[a-z][a-z0-9_-]{0,63}"));
@@ -160,7 +160,8 @@ final class CitizenNoticeFixtures {
             Path base = Path.of("").toRealPath();
             for (String part : List.of("build", "repro", "citizen-api-v1")) {
                 base = base.resolve(part);
-                if (!Files.exists(base, LinkOption.NOFOLLOW_LINKS)) Files.createDirectory(base);
+                try { Files.createDirectory(base); }
+                catch (FileAlreadyExistsException ignored) { /* 병렬 시험이 먼저 만든 폴더도 아래에서 확인한다. */ }
                 reproCheck(Files.isDirectory(base, LinkOption.NOFOLLOW_LINKS));
             }
             Path directory = Files.createTempDirectory(base, scenario + "-");
@@ -206,7 +207,7 @@ final class CitizenNoticeFixtures {
                 reproCheck(query == null || query.matches("(?:snapshot_id=[0-9a-f-]{36}|history_(?:before_version|limit)=[0-9]+|cost=free)(?:&(?:snapshot_id=[0-9a-f-]{36}|history_(?:before_version|limit)=[0-9]+|cost=free))*"));
                 byte[] actualBytes = reproUtf8(response.body()); JsonNode actual = REPRO_JSON.readTree(actualBytes);
                 reproExpectation(response.statusCode() == item.expectedStatus(), item, "/status");
-                reproPublicResponse(actual, response.statusCode());
+                reproPublicResponse(actual, response);
                 var expected = REPRO_JSON.createObjectNode().put("status", item.expectedStatus());
                 var checks = expected.putObject("checks");
                 for (var check : item.checks().entrySet()) {
@@ -241,11 +242,16 @@ final class CitizenNoticeFixtures {
             for (var entry : output.entrySet()) if (!entry.getKey().startsWith("snapshots/"))
                 Files.write(directory.resolve(entry.getKey()), entry.getValue(), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
             for (var entry : output.entrySet()) reproCheck(MessageDigest.isEqual(Files.readAllBytes(directory.resolve(entry.getKey())), entry.getValue()));
-            Files.write(directory.resolve("manifest.json"), REPRO_JSON.writeValueAsBytes(manifest), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+            Path temporary = Files.createTempFile(directory, ".manifest-", ".tmp");
+            try {
+                Files.write(temporary, REPRO_JSON.writeValueAsBytes(manifest), StandardOpenOption.WRITE);
+                Files.createLink(directory.resolve("manifest.json"), temporary);
+            } finally { Files.deleteIfExists(temporary); }
         } catch (IOException ex) { throw new UncheckedIOException("합성 공개 재현 파일 저장에 실패했습니다.", ex); }
     }
 
-    private static void reproPublicResponse(JsonNode value, int status) {
+    private static void reproPublicResponse(JsonNode value, HttpResponse<byte[]> response) {
+        int status = response.statusCode();
         reproNoPrivate(value);
         if (status == 200) {
             reproShape(value, "schema_version snapshot_id generated_at data");
@@ -258,6 +264,10 @@ final class CitizenNoticeFixtures {
             reproShape(value.path("error"), "code message field_errors retryable");
             reproCheck(value.path("error").path("field_errors").isArray());
             value.path("error").path("field_errors").forEach(field -> reproShape(field, "field message"));
+            String requestId = value.path("request_id").textValue();
+            var headerIds = response.headers().allValues("X-Request-ID");
+            reproCheck(requestId != null && requestId.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+                    && headerIds.size() == 1 && requestId.equals(headerIds.getFirst()));
         }
     }
 
@@ -292,11 +302,12 @@ final class CitizenNoticeFixtures {
         else if (value.isArray()) value.forEach(item -> reproIds(item, snapshots, events, revisions));
     }
 
-    private static byte[] reproUtf8(String value) throws IOException {
+    private static byte[] reproUtf8(byte[] value) throws IOException {
         reproCheck(value != null);
-        ByteBuffer encoded = StandardCharsets.UTF_8.newEncoder().onMalformedInput(CodingErrorAction.REPORT)
-                .onUnmappableCharacter(CodingErrorAction.REPORT).encode(CharBuffer.wrap(value));
-        var bytes = new byte[encoded.remaining()]; encoded.get(bytes); return bytes;
+        byte[] bytes = value.clone();
+        StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes));
+        return bytes;
     }
 
     private static String reproHash(Path file) throws IOException {

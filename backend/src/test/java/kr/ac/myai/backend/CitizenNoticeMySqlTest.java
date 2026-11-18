@@ -29,6 +29,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Timestamp;
@@ -96,16 +97,16 @@ class CitizenNoticeMySqlTest {
     void noCitizenHeadIsUnavailableRatherThanEmpty() throws Exception {
         var before = jdbc.queryForList("SELECT * FROM publication_heads");
         var response = http.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/v1/citizen/notices"))
-                .timeout(Duration.ofSeconds(10)).GET().build(), HttpResponse.BodyHandlers.ofString());
+                .timeout(Duration.ofSeconds(10)).GET().build(), HttpResponse.BodyHandlers.ofByteArray());
         assertThat(response.statusCode()).isEqualTo(503);
         var body = mapper.readTree(response.body());
         assertThat(body.path("error").path("code").asText()).isEqualTo("PUBLIC_DATA_NOT_READY");
         assertThat(body.path("request_id").asText()).matches("[0-9a-f-]{36}");
         assertThat(body.path("error").path("field_errors").isArray()).isTrue();
-        assertThat(response.body()).doesNotContain("SELECT ", "jdbc:mysql", "password", "private_content_ref");
+        assertThat(new String(response.body(), StandardCharsets.UTF_8)).doesNotContain("SELECT ", "jdbc:mysql", "password", "private_content_ref");
         assertThat(jdbc.queryForList("SELECT * FROM publication_heads")).isEqualTo(before);
         recordRepro("mysql-not-ready", List.of(new ReproCase("not-ready", response, 503,
-                Map.of("/error/code", "PUBLIC_DATA_NOT_READY"))));
+                Map.of("/error", expectedError("PUBLIC_DATA_NOT_READY", "검토된 시민 공개본이 아직 없습니다.", null, true)))));
     }
 
     @ParameterizedTest
@@ -161,14 +162,17 @@ class CitizenNoticeMySqlTest {
             var error = error(response, 409, "SNAPSHOT_RETIRED");
             assertThat(error.path("current_snapshot_id").asText()).isEqualTo(empty.snapshotId());
             cases.add(new ReproCase(cases.size() == 1 ? "retired-list" : "retired-detail", response, 409,
-                    Map.of("/error/code", "SNAPSHOT_RETIRED", "/current_snapshot_id", empty.snapshotId())));
+                    Map.of("/error", expectedError("SNAPSHOT_RETIRED", "공개본이 교체되었습니다. 새 버전을 선택해 주세요.", "snapshot_id", false),
+                            "/current_snapshot_id", empty.snapshotId())));
         }
         var missingNotice = get(detail(CitizenNoticeFixtures.event(input), empty.snapshotId()));
         error(missingNotice, 404, "NOTICE_NOT_FOUND");
-        cases.add(new ReproCase("missing-notice", missingNotice, 404, Map.of("/error/code", "NOTICE_NOT_FOUND")));
+        cases.add(new ReproCase("missing-notice", missingNotice, 404,
+                Map.of("/error", expectedError("NOTICE_NOT_FOUND", "공개 시민 공지를 찾을 수 없습니다.", "event_id", false))));
         var missingSnapshot = get("/api/v1/citizen/notices?snapshot_id=" + UUID.randomUUID());
         error(missingSnapshot, 404, "SNAPSHOT_NOT_FOUND");
-        cases.add(new ReproCase("missing-snapshot", missingSnapshot, 404, Map.of("/error/code", "SNAPSHOT_NOT_FOUND")));
+        cases.add(new ReproCase("missing-snapshot", missingSnapshot, 404,
+                Map.of("/error", expectedError("SNAPSHOT_NOT_FOUND", "시민 공개본을 찾을 수 없습니다.", "snapshot_id", false))));
         fixtures.rollback(first.snapshotId(), 1);
         var rollbackDetail = get(detail(CitizenNoticeFixtures.event(input), first.snapshotId()));
         assertThat(ok(rollbackDetail).path("data").path("notice").path("revision_id").asText()).isEqualTo(revision);
@@ -221,7 +225,7 @@ class CitizenNoticeMySqlTest {
         request.put("snapshot_id", citizen.snapshotId()).put("point_id", before.path("data").path("points").get(0).path("point_id").asText());
         var database = CitizenNoticeFixtures.rows(jdbc);
         var response = http.send(HttpRequest.newBuilder(uri("/api/v1/matches")).timeout(Duration.ofSeconds(10)).header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(request.toString())).build(), HttpResponse.BodyHandlers.ofString());
+                .POST(HttpRequest.BodyPublishers.ofString(request.toString())).build(), HttpResponse.BodyHandlers.ofByteArray());
         assertThat(response.statusCode()).isEqualTo(404);
         assertThat(mapper.readTree(response.body()).path("error").path("code").asText()).isEqualTo("SNAPSHOT_NOT_FOUND");
         assertThat(CitizenNoticeFixtures.rows(jdbc)).isEqualTo(database);
@@ -468,7 +472,16 @@ class CitizenNoticeMySqlTest {
         checks.put("/data/history/entries", NullNode.getInstance());
         checks.put("/data/history/error/code", "CITIZEN_HISTORY_TOO_LARGE");
         checks.put("/data/history/error/retryable", false);
-        recordRepro("mysql-history-unavailable", List.of(new ReproCase("detail", response, 200, checks)), selected.snapshotId());
+        Path directory = CitizenNoticeFixtures.createReproDirectory("mysql-history-unavailable");
+        Path snapshots = directory.resolve("snapshots");
+        long exportedBytes = 0;
+        for (String id : List.of(first.snapshotId(), selected.snapshotId())) {
+            var exported = exports.export(UUID.fromString(id), snapshots);
+            exportedBytes += Files.size(snapshots.resolve(exported.fileName()));
+        }
+        assertThat(exportedBytes).as("실제 두 공개 canonical의 합이 기존 이력8MiB 한도를 초과한다").isGreaterThan(8L * 1024 * 1024);
+        CitizenNoticeFixtures.writeRepro(directory, "mysql-history-unavailable", jdbc.queryForObject("SELECT VERSION()", String.class),
+                List.of(new ReproCase("detail", response, 200, checks)));
     }
 
     @Test
@@ -485,13 +498,18 @@ class CitizenNoticeMySqlTest {
         fixtures.replaceCanonical(published.snapshotId(), canonical);
         var response = get(detail(CitizenNoticeFixtures.event(input), published.snapshotId()));
         assertThat(response.statusCode()).isEqualTo(200);
-        assertThat(response.body().getBytes(java.nio.charset.StandardCharsets.UTF_8).length).isLessThanOrEqualTo(limit + 1024);
+        assertThat(response.body().length).isLessThanOrEqualTo(limit + 1024);
         var data = mapper.readTree(response.body()).path("data");
         assertThat(data.path("notice").path("title").asText()).hasSize(titleBytes);
         assertThat(data.path("sources")).isEqualTo(canonical.path("sources"));
         assertThat(data.path("history").path("status").asText()).isEqualTo("unavailable");
         assertThat(data.path("history").path("window").isNull()).isTrue();
         assertThat(data.path("history").path("entries").isNull()).isTrue();
+    }
+
+    private Map<String, ?> expectedError(String code, String message, String field, boolean retryable) {
+        return Map.of("code", code, "message", message, "field_errors",
+                field == null ? List.of() : List.of(Map.of("field", field, "message", message)), "retryable", retryable);
     }
 
     private Map<String, ?> listChecks(JsonNode canonical) {
@@ -528,24 +546,24 @@ class CitizenNoticeMySqlTest {
 
     private URI uri(String path) { return URI.create("http://127.0.0.1:" + port + path); }
     private String detail(String event, String snapshot) { return "/api/v1/citizen/notices/" + event + "?snapshot_id=" + snapshot; }
-    private HttpResponse<String> get(String path) throws Exception {
+    private HttpResponse<byte[]> get(String path) throws Exception {
         var before = CitizenNoticeFixtures.rows(jdbc);
-        var response = http.send(HttpRequest.newBuilder(uri(path)).timeout(Duration.ofSeconds(10)).GET().build(), HttpResponse.BodyHandlers.ofString());
+        var response = http.send(HttpRequest.newBuilder(uri(path)).timeout(Duration.ofSeconds(10)).GET().build(), HttpResponse.BodyHandlers.ofByteArray());
         assertThat(CitizenNoticeFixtures.rows(jdbc)).as("공개 GET은 모든 DB 행을 보존한다").isEqualTo(before);
         return response;
     }
     private JsonNode ok(String path) throws Exception {
         return ok(get(path));
     }
-    private JsonNode ok(HttpResponse<String> response) throws Exception {
-        assertThat(response.statusCode()).as(response.body()).isEqualTo(200);
+    private JsonNode ok(HttpResponse<byte[]> response) throws Exception {
+        assertThat(response.statusCode()).as(new String(response.body(), StandardCharsets.UTF_8)).isEqualTo(200);
         return mapper.readTree(response.body());
     }
     private JsonNode error(String path, int status, String code) throws Exception {
         return error(get(path), status, code);
     }
-    private JsonNode error(HttpResponse<String> response, int status, String code) throws Exception {
-        assertThat(response.statusCode()).as(response.body()).isEqualTo(status);
+    private JsonNode error(HttpResponse<byte[]> response, int status, String code) throws Exception {
+        assertThat(response.statusCode()).as(new String(response.body(), StandardCharsets.UTF_8)).isEqualTo(status);
         var body = mapper.readTree(response.body()); assertThat(body.path("error").path("code").asText()).isEqualTo(code);
         assertThat(body.path("request_id").asText()).isEqualTo(response.headers().firstValue("X-Request-ID").orElseThrow());
         assertThat(body.path("error").path("field_errors").isArray()).isTrue(); return body;
