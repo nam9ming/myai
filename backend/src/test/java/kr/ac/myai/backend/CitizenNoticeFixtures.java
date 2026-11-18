@@ -56,13 +56,24 @@ final class CitizenNoticeFixtures {
     ObjectNode citizen(String category, boolean knownCost) throws Exception {
         var input = fresh(true);
         revision(input).putArray("categories").add(category);
-        if (knownCost) {
-            String text = input.path("documents").get(0).path("cleaned_text").asText();
-            replaceCitizenText(input, text.replace("비용·자격·준비사항·신청 방법·모집 상태 미기재.",
-                    "참가비 5,000원. 자격·준비사항·신청 방법·모집 상태 미기재."));
-            knownBodyFact(input, "cost", "5,000원");
-        }
+        if (knownCost) recordKnownCost(input, "5,000원");
         return input;
+    }
+
+    void recordKnownCost(ObjectNode input, String value) throws IOException {
+        replaceCostText(input, "참가비 " + value);
+        knownBodyFact(input, "cost", value);
+    }
+
+    void recordConflictingCost(ObjectNode input) throws IOException {
+        replaceCostText(input, "신청 안내는 참가비 무료, 세부 안내는 참가비 2,000원");
+        ((ObjectNode) revision(input).path("cost")).putNull("value").put("knowledge", "ambiguous")
+                .put("reason", "원문의 참가비 안내가 서로 다름").putArray("evidence_ids").add("body-quote");
+    }
+
+    private void replaceCostText(ObjectNode input, String quote) throws IOException {
+        String text = input.path("documents").get(0).path("cleaned_text").asText();
+        replaceCitizenText(input, text.replace("비용·자격", quote + ". 자격"));
     }
 
     void recordScheduleStatus(ObjectNode input, String applicationPeriod, String occurrences,
