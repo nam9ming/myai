@@ -93,6 +93,8 @@ V6는 `publication_audits(channel_key,head_version,audit_id)`의 일반 색인�
 
 ## 새 전용 개발 DB에서 재현
 
+화면 개발과 반복 검증에는 실제 HTTP 시험에서 보관한 요청·응답·기대값·공개본을 사용할 수 있다. 내려받기와 재생성 방법은 [합성 HTTP 재현 자료](../backend/docs/citizen-api-repro.md)를 따른다.
+
 1. [백엔드 환경](../backend/README.md#mysql-기초-실행)·V6까지 준비하고 [합성 입력/승인](../backend/docs/citizen-review.md#합성-자료로-재현)과 [별도 시민 공개](../backend/docs/citizen-publication.md#입력과-실행)를 실행한다. 실제 승인 결과 ID를 작업본에 넣는다. 기존 DB를 지워 예제 상태로 만들지 않는다.
 2. 저장소 루트에서 `java -jar backend/build/libs/myai-backend-0.1.0.jar`로 public 서버를 실행한다. DB 환경변수는 별도로 전달한다. 이미 V6가 적용된 SELECT 전용 계정은 `--spring.flyway.enabled=false`를 사용한다. `.env`만 작성해 Java에 전달된 것으로 간주하지 않는다.
 3. 목록의 snapshot_id·event_id를 그대로 상세에 사용한다.

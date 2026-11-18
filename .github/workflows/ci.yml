@@ -96,3 +96,11 @@ jobs:
           path: backend/build/libs/*.jar
           retention-days: 14
           if-no-files-found: error
+
+      - name: 시민 공개 API 재현 자료 보관
+        uses: actions/upload-artifact@v7
+        with:
+          name: citizen-api-repro-${{ github.sha }}
+          path: backend/build/repro/citizen-api-v1/
+          retention-days: 14
+          if-no-files-found: error

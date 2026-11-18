@@ -20,6 +20,8 @@ Java 21 / Spring Boot **3.5.16** / Gradle Wrapper **8.14.3** / MySQL **8.4.13**.
 
 [별도 시민 API](../contracts/citizen-api.md)는 `GET /api/v1/citizen/notices`와 `GET /api/v1/citizen/notices/{eventId}?snapshot_id=…`로 같은 시민 공개본의 사실·출처·확보 이력을 읽는다. 지점/영업시간 입력을 요구하지 않으며 Python/AI·원문 파일을 호출하지 않는다. 상세 이력은 버전 커서·개수 한도로 나누며 V6는 공개 감사 범위용 일반 색인만 추가한다. 이력 용량 한도만 초과하면 현재 사실과 출처는200으로 유지하고 조회 불가를 명시한다. 검색·복합 필터·정규화와 실제 Flutter 연동은 후속이다. 작성자 구현 검토안으로 화면별 최종 계약 대조가 남아 있다. [조회 계획](../docs/superpowers/plans/2026-11-18-citizen-query.md)의 실제 검증·리뷰·PR 증빙을 따른다. 기존 fixture 프로필은 아래3 API용이며 시민 조회는 public의 합성 DB로 재현한다.
 
+같은 시민 API를 화면 연동과 반복 검증에 쓰려면 [합성 HTTP 재현 자료](docs/citizen-api-repro.md)의 시나리오·실행 절차를 따른다.
+
 ## 시민 추출 원본 등록
 
 [시민 수동 추출 계약](../contracts/citizen-extraction.md)의 `extract-citizen-v1`을 기존 D05 등록·수동 파일 업로드·S10에 연결한다. 원문5키 입력은 재사용하며 metadata의 schema로 출력 검증기를 선택한다. 실제 prompt bytes·제공한 prompt_version 라벨·12개 원문 사실·근거·실패를 보존한다. 새 모델/API·DB migration은 추가하지 않는다.
