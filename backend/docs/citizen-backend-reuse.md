@@ -63,7 +63,37 @@
 
 후보 [API_GAPS.md](https://github.com/nam9ming/myai/blob/f3bed4f196194ff62c5ed3c3e2fdb411c68114f6/frontend/API_GAPS.md#L34)의 새 경로·JSON 조각은 명시적 **논의 제안**이다. 현재 API로 채택된 것이 아니다. 후보의 fixture 복사본5개와 요청은 기존 계약 파일과 바이트가 같지만, 합성 시민16건의 문자열 ID·단일 category·신청일/비용 모델은 기존 UUID·types[]·영업조건 계약과 다르다.
 
-한 문서↔여러 사건, 한 사건↔여러 문서와 일정/장소의 연결을 유지한다. 문서 ID를 사건 카드 ID로 대체하거나 첫 일정/장소만으로 전체 관계를 확정하지 않는다. 후보의 실행/시험 문서는 기존 작성 기록이며 이번 조사에서 재실행하지 않았다.
+한 문서↔여러 사건, 한 사건↔여러 문서와 일정/장소의 연결을 유지한다. 문서 ID를 사건 카드 ID로 대체하거나 첫 일정/장소만으로 전체 관계를 확정하지 않는다.
+
+### 기존 API의 HTTP 재시험
+
+2026-11-18에 Flutter 후보 `f3bed4f`의 원본 HTTP 시험을 `develop` `8065768`과 같은 트리에서 만든 Spring JAR에 연결했다. Flutter 3.50.0(`ab2912035e`), Dart 3.14.0, Java 21을 사용했고 후보의 잠금 파일로 의존성을 설치했다. [CI](https://github.com/nam9ming/myai/actions/runs/44220744056) · [실행 JAR](https://github.com/nam9ming/myai/actions/runs/44220744056/artifacts/14389764550)
+
+| `/api/v1` 하위 요청 | 실제 확인 결과 |
+| --- | --- |
+| `GET /config` → `POST /matches` → `GET /events/{id}` | 합성 결과 2건과 같은 공개본의 상세를 읽었다. 상세 근거와 계산 분류, 출처 링크를 확인했다. |
+| 고정 예제의 영업 시작 시각을 수정해 `POST /matches` | HTTP 503 `CALCULATOR_NOT_READY`, `retryable=true`를 읽었다. |
+| `OPTIONS /matches` | `http://localhost:5173`은 HTTP 200과 허용 헤더, `http://localhost:9999`는 HTTP 403을 받았다. |
+| 예제의 `point_id`를 빼고 `POST /matches` | 서버는 HTTP 422 `INVALID_REQUEST`와 `field_errors` 배열에 `point_id` 오류를 반환했다. 본문 `request_id`와 `X-Request-ID`가 일치했다. 후보의 `ApiFailure.fromResponse`는 배열을 빈 `fieldErrors`로 읽었다. |
+
+CI 보관이 끝났다면 `8065768`의 별도 checkout에서 JDK 21로 `./backend/gradlew -p backend bootJar`를 실행한다. 같은 소스에서 새 JAR이 `backend/build/libs/`에 생성된다. JAR이 있는 디렉터리에서 서버를 실행한다.
+
+```bash
+java -jar myai-backend-0.1.0.jar --spring.profiles.active=fixture \
+  --server.address=127.0.0.1 --server.port=0 --app.cors-origin=http://localhost:5173
+```
+
+후보의 `frontend/`에서 아래 `<port>`를 서버 로그에 표시된 번호로 바꿔 실행한다.
+
+```bash
+flutter pub get --enforce-lockfile
+flutter test tool/spring_http_test.dart --no-pub \
+  '--dart-define=SMOKE_API_URL=http://127.0.0.1:<port>/api/v1'
+```
+
+추가 422는 같은 서버에 후보 `test/fixtures/matches-request.json`에서 `point_id`를 제거한 JSON을 보내 재현한다. 응답 본문을 `ApiFailure.fromResponse(422, jsonDecode(body))`에 전달해 `requestId`가 `X-Request-ID`와 일치하고 `fieldErrors.isEmpty`가 `true`인지 확인한다. 후보의 필드 오류 파서가 수정 위치다. [ApiFailure.fromResponse](https://github.com/nam9ming/myai/blob/f3bed4f196194ff62c5ed3c3e2fdb411c68114f6/frontend/lib/data/models.dart#L375)
+
+이번 실행 범위는 기존 합성 HTTP와 오류 DTO다. 시민 목록·상세는 별도 합성 HTTP 실행 결과를 사용한다. [연동용 합성 자료](citizen-api-repro.md)
 
 ## 다음 작업과 결정 자료
 
