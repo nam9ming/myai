@@ -38,7 +38,7 @@ Java 21, 저장소 Gradle Wrapper, Spring Boot 3.5.16, MySQL 8.4.13, Python 3.13
 
 | 시나리오 | 건수 | 기대 결과 |
 | --- | ---: | --- |
-| `mysql-education`, `mysql-support`, `mysql-culture`, `mysql-construction_traffic`, `mysql-living` | 10 | HTTP 200 목록과 상세의 공개본·공지·출처 일치. 신청기간과 진행일정, 명시 비용과 미기재 비용 보존 |
+| `mysql-education`, `mysql-support`, `mysql-culture`, `mysql-construction_traffic`, `mysql-living` | 10 | HTTP 200 목록과 상세의 공개본·공지·출처 일치. 신청기간·진행일정과 비용 원문·근거 보존 |
 | `mysql-not-ready` | 1 | HTTP 503 `PUBLIC_DATA_NOT_READY` |
 | `mysql-empty-and-retired` | 6 | HTTP 200 빈 목록, HTTP 409 교체본 ID가 있는 이전 목록·상세, HTTP 404 공지/공개본 누락, HTTP 200 복구 상세 |
 | `mysql-multi-source` | 1 | HTTP 200 복수 분야·원문·공개 근거 |
@@ -46,6 +46,8 @@ Java 21, 저장소 Gradle Wrapper, Spring Boot 3.5.16, MySQL 8.4.13, Python 3.13
 | `jar-history` | 5 | SELECT 전용 계정의 실제 JAR에서 목록·상세·두 이력 페이지와 HTTP 422 잘못된 조건 |
 
 목록·상세의 `mysql-support`는 11월 2일 확인한 같은 공지의 `recruitment.value=신청 마감`과 `lifecycle.value=프로그램 진행 중`을 각각 보존한다. `mysql-culture`는 당초 일정과 `행사 취소`를, `mysql-construction_traffic`는 종료된 일정과 `공사 종료`를 제공한다. 상태를 밝힌 원문 인용과 신청기간·진행일정도 함께 확인한다. `mysql-education`과 `mysql-living`의 모집·진행 상태는 사유가 있는 `not_stated`와 null이다.
+
+비용은 `mysql-education`의 명시 무료, `mysql-support`의 5,000원, `mysql-culture`의 무료(교재비 별도)를 원문 인용과 함께 확인한다. `mysql-construction_traffic`은 미기재(`not_stated`)와 null이다. `mysql-living`은 무료와 2,000원 안내가 상충해 `ambiguous`와 null, 그 이유와 근거를 확인한다.
 
 Y01에는 분야·복수 분류, Y02에는 목록/상세·0건·오류, Y03~Y05에는 합성 공지의 일정·비용·대상/조건 원문, Y06·Y08에는 확보 이력과 공개 교체·복구, Y10에는 재생성 절차를 제공한다. 시점별 모집 판정, 검색/복합 필터, 개인 설정(Y07), 실제 Flutter 화면(Y09), 팀 인수와 실자료 평가는 후속 확인 항목이다. 전체 기준은 [시험·평가·인수 기준](../../docs/spec/05_시험과인수기준.md)을 따른다.
 

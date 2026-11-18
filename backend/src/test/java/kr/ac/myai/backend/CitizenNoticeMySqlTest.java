@@ -119,6 +119,11 @@ class CitizenNoticeMySqlTest {
             default -> new ScheduleCase("2026-11-20~2026-11-25", "2026-12-01~2026-12-02", null, null);
         };
         var input = fixtures.citizen(category, category.equals("support"));
+        switch (category) {
+            case "education" -> fixtures.recordKnownCost(input, "무료");
+            case "culture" -> fixtures.recordKnownCost(input, "무료(교재비 별도)");
+            case "living" -> fixtures.recordConflictingCost(input);
+        }
         if (schedule.lifecycle() != null) {
             fixtures.recordScheduleStatus(input, schedule.applicationPeriod(), schedule.occurrences(),
                     schedule.recruitment(), schedule.lifecycle());
@@ -152,8 +157,7 @@ class CitizenNoticeMySqlTest {
         assertSourceFact(notice, "occurrences", schedule.occurrences());
         assertSourceFact(notice, "recruitment", schedule.recruitment());
         assertSourceFact(notice, "lifecycle", schedule.lifecycle());
-        if (category.equals("support")) assertThat(notice.path("cost").path("value").asText()).isEqualTo("5,000원");
-        else assertThat(notice.path("cost").path("value").isNull()).isTrue();
+        assertCost(notice, category);
         assertThat(detail.toString()).doesNotContain("raw_asset_path", "cleaned_text", "human_overrides", "reviewer_id", "private_content_ref", "synthetic-reviewer");
         assertThat(ok("/api/v1/citizen/notices?snapshot_id=" + published.snapshotId()).path("data")).isEqualTo(data);
         recordRepro("mysql-" + category, List.of(new ReproCase("list", listResponse, 200, listChecks(canonical)),
@@ -161,6 +165,26 @@ class CitizenNoticeMySqlTest {
     }
 
     private record ScheduleCase(String applicationPeriod, String occurrences, String recruitment, String lifecycle) { }
+
+    private void assertCost(JsonNode notice, String category) {
+        if (category.equals("living")) {
+            var cost = notice.path("cost");
+            assertThat(cost.path("knowledge").asText()).isEqualTo("ambiguous");
+            assertThat(cost.path("value").isNull()).isTrue();
+            assertThat(cost.path("reason").asText()).isEqualTo("원문의 참가비 안내가 서로 다름");
+            assertThat(cost.path("evidence_ids")).containsExactly(mapper.getNodeFactory().textNode("body-quote"));
+            assertBodyCitation(notice, "신청 안내는 참가비 무료, 세부 안내는 참가비 2,000원.");
+            return;
+        }
+        String value = switch (category) {
+            case "education" -> "무료";
+            case "support" -> "5,000원";
+            case "culture" -> "무료(교재비 별도)";
+            default -> null;
+        };
+        assertSourceFact(notice, "cost", value);
+        if (value != null) assertBodyCitation(notice, "참가비 " + value + ".");
+    }
 
     private void assertSourceFact(JsonNode notice, String field, String expected) {
         var fact = notice.path(field);
@@ -175,13 +199,12 @@ class CitizenNoticeMySqlTest {
         assertThat(fact.path("value").asText()).as(field).isEqualTo(expected);
         assertThat(fact.path("reason").isNull()).as(field).isTrue();
         assertThat(fact.path("evidence_ids")).containsExactly(mapper.getNodeFactory().textNode("body-quote"));
-        var citations = new ArrayList<String>();
-        for (var evidence : notice.path("evidence")) {
-            if (evidence.path("evidence_id").asText().equals("body-quote")) {
-                citations.add(evidence.path("quote").asText());
-            }
-        }
-        assertThat(citations).singleElement().asString().contains(expected);
+        assertBodyCitation(notice, expected);
+    }
+
+    private void assertBodyCitation(JsonNode notice, String expected) {
+        assertThat(notice.path("evidence")).filteredOn(entry -> "body-quote".equals(entry.path("evidence_id").asText()))
+                .singleElement().satisfies(entry -> assertThat(entry.path("quote").asText()).contains(expected));
     }
 
     @Test
