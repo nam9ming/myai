@@ -90,7 +90,9 @@ I03은 [계산·API 명세](../docs/spec/04_계산규칙과기술설계.md)에 �
 
 ## AI → 검토 → 저장
 
-시민5분야의 [extract-citizen-v1](citizen-extraction.md)은 기존 입력·근거·manual archive-v1을 재사용하는 별도 출력 family다. title/categories와12개 원문 사실을 FieldValue로 보존하며 분류 미상은 null+ambiguous다. Python의 사람 수정 보관과 Java D05/S10 원본 판독까지 연결하고, Java 시민 human-review/D06·새 평가 분모는 후속 G5/별도 기준이다. 기존 draft/handoff/D08은 시민 family를 명시 거부해 원래3유형·8필드 규격에 섞지 않는다. 기술 계약은 작성자 검토안이며 실제 팀원·Flutter 최종 합의가 아니다.
+시민5분야의 [extract-citizen-v1](citizen-extraction.md)은 기존 입력·근거·manual archive-v1을 재사용하는 별도 출력 family다. title/categories와12개 원문 사실을 FieldValue로 보존하며 분류 미상은 null+ambiguous다. [시민 사람 인계](citizen-human-handoff.md)는 `citizen-human-handoff-v1`6키 선택→`citizen-human-handoff-projection-v1`→별도 Java `citizen-human-handoff-import-v1` 요청을 구별한다. title/categories 미해결은 투영을 거부하며12사실·실패 부모·전체 검토 원본을 보존한다. 명시 split_group_id는 D06 관계 group이며 D08 배정이 아니다.
+
+기존 draft/`human-handoff-v1`/D08은 시민 family를 계속 거부해 원래3유형·8필드 규격에 섞지 않는다. 시민 Java 저장·승인/공개·S10과 전체 검증·반영 상태는 [G5 계획](../docs/superpowers/plans/2026-11-18-citizen-human-handoff.md)을 따르며 새 평가 분모·실제 품질·팀원/Flutter 최종 합의를 뜻하지 않는다.
 
 시민 원문 표현의 Java 수동 입력은 [시민 내부 검토 규격](../backend/docs/citizen-review.md)으로 분리한다. 기존 AI schema·Python 출력과 공개 `api-v1` JSON은 변경하지 않으며, 이 내부 규격을 최종 Flutter 조회 계약으로 간주하지 않는다.
 
@@ -120,4 +122,4 @@ python contracts/validate_examples.py
 
 이 검사는 JSON 예제 사이 ID·상태·counts·기간·근거 인용의 연결을 확인합니다. 앱 구현 시험, 공식자료 정확도나 AI 성능 평가를 대신하지 않습니다. AI 계약의 상세 경계는 `python3.13 -m unittest discover -s processing/tests -v`로 함께 검증합니다.
 
-사람 수정후 평가의 원본은 [human-review-v1](human-review.md)로 별도 보관합니다. 실제 전후 변경·검토 시간 선언과 frozen D05 전체를 대조하며 원출력을 덮어쓰지 않습니다. D06 역변환·독립 gold·사람 신원 인증으로 취급하지 않으며 [D08 채점/최초·재시험](extraction-evaluation.md)은 별도 human_reviewed 뷰와 선언 시간 요약을 제공합니다. 세 방법 비교는 [별도 계약](extraction-comparison.md)을 따릅니다. [D06 사실 투영·인계 이미지](human-handoff.md)는 사람/부모 원본을 보존합니다. 별도 [Java 인계 요청](../backend/docs/human-handoff-import.md)이 전체 이미지·등록 D03/D05·명시 revision을 대조해 비공개 저장하며 실제 자료의 사람 승인/공개 실적과 구분합니다.
+사람 수정후 평가의 원본은 [human-review-v1](human-review.md)로 별도 보관합니다. 실제 전후 변경·검토 시간 선언과 frozen D05 전체를 대조하며 원출력을 덮어쓰지 않습니다. D06 역변환·독립 gold·사람 신원 인증으로 취급하지 않으며 기존 family의 [D08 채점/최초·재시험](extraction-evaluation.md)은 별도 human_reviewed 뷰와 선언 시간 요약을 제공합니다. 세 방법 비교는 [별도 계약](extraction-comparison.md)을 따릅니다. [기존 D06 인계](human-handoff.md)와 [시민 D06 인계](citizen-human-handoff.md)는 명시 family별 사실과 사람/부모 원본 전체를 보존합니다. 별도 [Java 인계 요청](../backend/docs/human-handoff-import.md)이 전체 이미지·등록 D03/D05·명시 revision을 대조하며 실제 자료의 사람 승인/공개 실적과 구분합니다.

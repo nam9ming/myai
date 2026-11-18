@@ -50,7 +50,7 @@ python3.13 -m venv .venv
 | `evaluation/comparison.py`, `comparison_storage.py` | 같은 gold·회차·AI 부모의 세 방법을 짝지어 개선/악화·선언 시간을 집계하고 전체 평가를 동결 |
 | `evaluation/matching_projection.py`, `matching.py`, `matching_storage.py` | 독립 수동 기대 분류/사유와6개 뷰를 비교하고 검색 존재·완전 분류·전체 원본을 별도 동결 |
 | `evaluation/study_protocol.py`, `study.py`, `study_export.py` | D09 private 프로토콜/기록·동의/기한·전체 분모를 검사하고 M04/M05·JSON/CSV를 명시 내보내기 |
-| `evaluation/human_handoff.py`, `handoff_storage.py` | 사람 수정값의 workflow 없는 D06 사실 투영·원본 전체 인계 이미지, 별도 Java 인계 요청으로 저장 |
+| `evaluation/human_handoff.py`, `citizen_handoff.py`, `handoff_storage.py` | 명시 family별 D06 사실 투영·원본 전체 인계 이미지, 별도 Java 인계 요청으로 저장 |
 | `evaluation/reviews.py` | 사람 수정후 출력·실제 변경 기록/검토 시간 선언·D05 전체의 별도 불변 보관 |
 
 [계산 연결 계약](../contracts/calculation-bridge.md)을 따릅니다. 지원 규칙은 `rules-v1`이며 미지원 버전을 정상 결과로 바꾸지 않습니다. `dictionary_version`은 선택한 snapshot의 고정 식별자이며 계산 중 새 사전을 읽지 않습니다. 입력 원본 바이트 SHA-256을 반환하며 개인 조건은 로그에 남기지 않습니다.
@@ -93,9 +93,11 @@ python3.13 -B -m processing.extraction prepare \
 
 기본 `data/private/extraction-runs/prepared/extract-citizen-v1/<input_sha256>/`에 input.json/prompt.json을 만듭니다. 옵션은 prepare에만 있으며 생략 시 기존 prepared/<input_sha256>·prompt-v1 bytes는 유지합니다. 생성 템플릿 citizen-prompt-v1과 실제 수동 prompt_version 선언을 구별하고 실제 prompt/metadata/output bytes를 보관합니다. import는 metadata의 `schema_version=extract-citizen-v1`, `execution_mode=manual_import`로 선택하며 기존1~3시도·실패 전체·freeze/verify-sealed를 재사용합니다. 시민 API·archive-v2/chunk·새 provider/규칙 실행은 추가하지 않습니다.
 
-사람 수정은 부모 family에 맞는 Python check/freeze/verify-review와 전체 changes·실패 부모 보관까지입니다. 합성 CLI의600초 선언은 declared_only이며 실제 사람 검토 실적이 아닙니다. Java D05/S10은 새 raw/실패/metadata를 판독하고 시민 human-review 표시/저장·D06 인계·승인/공개는 다음 G5입니다. 기존 draft/check-draft·human-handoff·D08 bindings/직접 및 사람 수정후 평가는 시민 family를 각각 `DRAFT_SCHEMA_UNSUPPORTED/HANDOFF_SCHEMA_UNSUPPORTED/BINDING_SCHEMA_UNSUPPORTED/EVALUATION_SCHEMA_UNSUPPORTED`로 거부합니다. 실패 실행 등의 기존 선행 거부도 유지하며 기존8필드 분모를 바꾸지 않습니다.
+사람 수정은 부모 metadata의 family에 맞는 check/freeze/verify-review와 전체 changes·실패 부모 보관을 사용합니다. 합성 CLI의600초 선언은 declared_only이며 실제 사람 검토 실적이 아닙니다. [시민 인계](../contracts/citizen-human-handoff.md)는 `citizen-human-handoff-v1`6키 선택에서 `citizen-human-handoff-projection-v1` 사실을 만들고 기존 check/freeze/verify-handoff로 전체 이미지를 보관합니다. title/categories 미해결은 `HANDOFF_CITIZEN_FACTS_UNRESOLVED`로 거부하고12개 원문 사실·known[]/null·실패 부모 상태를 보존합니다. 명시 split_group_id는 D06 관계 group이며 D08 개발/확인 배정이 아닙니다. area/dictionary는 요구하거나 대신 생성하지 않습니다.
 
-합성 parser·실제 CLI·archive/review·legacy 거부 시험과 실제 공식자료 정확도·사람 인수는 구별합니다. 전체 Python/Java·실제 DB/HTTP·원격 MySQL8.4 결과는 [G4 계획](../docs/superpowers/plans/2026-11-18-citizen-extraction.md)에서 확인합니다. 현재 검증되지 않은 운영·실자료 성과를 처리 건수에 더하지 않습니다.
+Java 저장 요청은 `citizen-human-handoff-import-v1`로 전체 이미지와 명시 revision/CAS를 선택하며 투영 JSON 자체를 직접 import하지 않습니다. 원문/등록 D03/D05 대조·숨김 검토 revision·별도 승인/공개·S10 연결과 전체 검증 상태는 [G5 계획](../docs/superpowers/plans/2026-11-18-citizen-human-handoff.md)을 따릅니다. 기존 draft/check-draft·`human-handoff-v1` 선택·D08 bindings/직접 및 사람 수정후 평가는 시민 family를 각각 `DRAFT_SCHEMA_UNSUPPORTED/HANDOFF_SCHEMA_UNSUPPORTED/BINDING_SCHEMA_UNSUPPORTED/EVALUATION_SCHEMA_UNSUPPORTED`로 거부합니다. 실패 실행 등의 선행 거부와 기존8필드 분모도 유지합니다.
+
+합성 parser·실제 CLI·archive/review·legacy 거부 시험과 실제 공식자료 정확도·사람 인수는 구별합니다. 전체 Python/Java·실제 DB/HTTP·원격 MySQL8.4 결과는 [G4 추출 계획](../docs/superpowers/plans/2026-11-18-citizen-extraction.md)과 [G5 인계 계획](../docs/superpowers/plans/2026-11-18-citizen-human-handoff.md)에서 단계별로 확인합니다. 현재 검증되지 않은 운영·실자료 성과를 처리 건수에 더하지 않습니다.
 
 ## OpenAI 개발용 추출
 
@@ -242,7 +244,7 @@ root 기본값은 `data/private/evaluation/user-studies`이며 protocol/input/ou
 
 ## 사람 수정후 추출 원본
 
-[human-review-v1](../contracts/human-review.md)은 사람이 별도로 작성한 extract-schema-v1 수정값을 frozen D05 전체와 묶어 보관합니다. D06만 역변환해 개별 knowledge를 추측하지 않습니다. 실제 전후 값·JSON 타입·근거·검토자/종료 시각과 맞는 변경 기록이 필요하며 검토 소요시간은 제공한 시각의 차이입니다.
+[human-review-v1](../contracts/human-review.md)은 부모 metadata에 명시한 extract-schema-v1 또는 extract-citizen-v1의 수정값을 frozen D05 전체와 묶어 보관합니다. D06만 역변환해 개별 knowledge를 추측하지 않습니다. 실제 전후 값·JSON 타입·근거·검토자/종료 시각과 맞는 변경 기록이 필요하며 검토 소요시간은 제공한 시각의 차이입니다.
 
 ```sh
 python3.13 -m processing.evaluation check-review --input data/private/review.json
@@ -252,11 +254,13 @@ python3.13 -m processing.evaluation verify-review "$REVIEW_REF"
 
 검토 JSON의6개 최상위 키·source/changes 형식과 root 옵션은 계약을 따릅니다. 기본 source root는 data/private/extraction-runs, 검토 보관 root는 data/private/evaluation/human-reviews입니다. 원문/수정값·검토자·사유는 비공개 파일에만 두고 stdout은 ID/hash/상태/건수/선언 소요시간만 반환합니다. 성공0/입력2/보관 손상·충돌3/I/O5/내부1입니다.
 
-API/수동·성공/실패 D05의 실제 모드와 원출력을 보존합니다. 실패 source의 새 유효 출력은 before=null의 전체 변경 기록이 필요합니다. 기계 검사는 실제 사람이 판독했다는 증거·독립 정답·승인·공개가 아닙니다. 이 도구는 D06 저장과 별개이며 D08 human_reviewed 채점/최초·재시험은 위 평가 CLI로 연결합니다. 선언 시간은 문서별 합계이며 실제 사람별 순작업 시간이나 재시험의 새 작업시간을 인증하지 않습니다. 세 방법 비교는 아래 별도 CLI를 사용하며 실제 검토본 전달은 후속 작업입니다. 키·AI·네트워크·DB는 사용하지 않습니다.
+API/수동·성공/실패 D05의 실제 모드와 원출력을 보존합니다. 실패 source의 새 유효 출력은 before=null의 전체 변경 기록이 필요합니다. 기계 검사는 실제 사람이 판독했다는 증거·독립 정답·승인·공개가 아닙니다. 이 도구는 D06 저장과 별개이며 기존 extract-schema-v1의 D08 human_reviewed 채점/최초·재시험은 위 평가 CLI로 연결합니다. 시민 family는 기존 채점을 거부하고 명시 시민 인계 경로를 사용합니다. 선언 시간은 문서별 합계이며 실제 사람별 순작업 시간이나 재시험의 새 작업시간을 인증하지 않습니다. 세 방법 비교는 아래 별도 CLI를 사용하며 실제 검토본 전달은 후속 작업입니다. 키·AI·네트워크·DB는 사용하지 않습니다.
 
 ## 사람 수정값의 D06 사실 투영
 
 [human-handoff-v1](../contracts/human-handoff.md)은 frozen human-review의 수정값을 기존 시간/장소/근거 규칙으로 투영하고 부모 D05 전체와 별도 보관합니다. 실패 부모도 실패 상태를 유지하며 미상·중복·빈 사건과 원래 변경 기록을 보존합니다. 실제 DB revision/승인/변경 기록은 만들지 않습니다.
+
+[시민 인계](../contracts/citizen-human-handoff.md)는 별도 `citizen-human-handoff-v1`6키 선택과 split만 담은 context를 사용합니다. 아래 명령의 입력 파일만 해당 선택으로 바꾸며 기존8키 선택에 시민 출력을 섞지 않습니다. 시민12사실은 원문 FieldValue를 유지하고 legacy 시간/장소 정규화를 적용하지 않습니다.
 
 ```sh
 python3.13 -m processing.evaluation check-handoff --input data/private/evaluation/handoff.json

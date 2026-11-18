@@ -1,5 +1,6 @@
 package kr.ac.myai.backend.service;
 
+import kr.ac.myai.backend.importing.ReviewedImportReader;
 import kr.ac.myai.backend.importing.ReviewedBatch;
 import kr.ac.myai.backend.importing.ImportException;
 import kr.ac.myai.backend.repository.ReviewedImportRepository;
@@ -18,6 +19,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -63,7 +65,7 @@ public class ReviewedImportService {
                         for (String duplicate : event.suspectedDuplicateIds()) {
                             if (!eventIds.contains(duplicate) && !repository.eventExists(duplicate)) throw reference("events.suspected_duplicate_ids");
                         }
-                        if (batch.schemaVersion().equals("human-handoff-import-v1")) repository.appendEvent(event, batch.dataKind(), actor, true);
+                        if (Set.of("human-handoff-import-v1", ReviewedImportReader.CITIZEN_HANDOFF_IMPORT_VERSION).contains(batch.schemaVersion())) repository.appendEvent(event, batch.dataKind(), actor, true);
                         else repository.appendEvent(event, batch.dataKind(), actor);
                     }
                     var result = new ImportResult(importId, batch.events().stream().map(ReviewedBatch.Event::revisionId).toList(),

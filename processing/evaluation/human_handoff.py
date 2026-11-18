@@ -4,12 +4,14 @@ from datetime import datetime, timezone
 import hashlib
 
 from processing.extraction.archive import REPO, _fingerprint, _json, _read, _read_checked, _root, verify_run
-from processing.extraction.draft import _content, _context, _project_output, _source
+from processing.extraction.draft import _content, _context, _project_output, _source, _source_document
+from processing.extraction.citizen import SCHEMA_VERSION as CITIZEN_SCHEMA_VERSION
 from processing.extraction.metadata import stamp
-from processing.extraction.schema import HASH, SCHEMA_VERSION
-from processing.extraction.validation import decode, parse_input, parse_output, require, shape, text
+from processing.extraction.schema import HASH, SCHEMA_VERSION, UUID
+from processing.extraction.validation import decode, parse_input, parse_versioned_output, require, shape, text
 from .dataset import _id
 from .reviews import REVIEW_ROOT, verify_review
+from .citizen_handoff import project_output as project_citizen_output
 
 HANDOFF_ROOT = REPO / 'data/private/evaluation/handoffs'
 
@@ -20,8 +22,12 @@ def _check(condition, code='HANDOFF_INVALID'):
 
 def _header(content):
     value = decode(content, 'input')
-    shape(value, 'schema_version handoff_id review_ref review_receipt_sha256 source area_id split_group_id dictionary_version', kind='input')
-    _check(value['schema_version'] == 'human-handoff-v1')
+    if type(value) is dict and value.get('schema_version') == 'citizen-human-handoff-v1':
+        shape(value, 'schema_version handoff_id review_ref review_receipt_sha256 source split_group_id', kind='input')
+        text(value['split_group_id'], kind='input', pattern=UUID)
+    else:
+        shape(value, 'schema_version handoff_id review_ref review_receipt_sha256 source area_id split_group_id dictionary_version', kind='input')
+        _check(value['schema_version'] == 'human-handoff-v1')
     _id(value['handoff_id'])
     for key in ('review_ref', 'review_receipt_sha256'): text(value[key], kind='input', pattern=HASH)
     return value
@@ -42,21 +48,33 @@ def project_handoff(content, review_root=REVIEW_ROOT, *, projected_at=None):
     parent = verify_run(review['source']['run_id'], parent_folder.parent)
     _check(_fingerprint(parent_folder / 'receipt.json') == artifacts[f'{prefix}/receipt.json'], 'HANDOFF_REVIEW_MISMATCH')
     metadata = decode(_read_checked(directory / f'{prefix}/metadata.json', artifacts[f'{prefix}/metadata.json']), 'archive')
-    _check(metadata['schema_version'] == SCHEMA_VERSION, 'HANDOFF_SCHEMA_UNSUPPORTED')
+    citizen = value['schema_version'] == 'citizen-human-handoff-v1'
+    _check(metadata['schema_version'] == (CITIZEN_SCHEMA_VERSION if citizen else SCHEMA_VERSION), 'HANDOFF_SCHEMA_UNSUPPORTED')
+    if citizen:
+        _check(parent['format_version'] == 'extraction-archive-v1' and metadata['execution_mode'] == 'manual_import',
+               'HANDOFF_SCHEMA_UNSUPPORTED')
     document = parse_input(_read_checked(directory / f'{prefix}/input.json', artifacts[f'{prefix}/input.json']))
-    output = parse_output(_read_checked(directory / 'output.json', artifacts['output.json']), document)
-    context = {key: value[key] for key in ('area_id', 'split_group_id', 'dictionary_version')}
-    doc = _context(parent['run_id'], value['source'], **context)
-    _source(value['source'], doc, document, metadata)
-    batch = _project_output(parent['run_id'], value['source'], output, **context, label='사람 수정 원본')
-    events = []
-    for event in batch['events']:
-        facts = event.pop('revision'); event.pop('expected_revision_no')
-        # 실제 DB 전후 값·revision 번호는 Java 연결 단계에서 결정한다.
-        for key in ('revision_id', 'revision_no', 'origin', 'review_status', 'publication_intent',
-                    'reviewer_id', 'reviewed_at', 'human_overrides'): facts.pop(key)
-        events.append(dict(event, facts=facts))
-    projection = dict(schema_version='human-handoff-projection-v1', handoff_id=value['handoff_id'],
+    output = parse_versioned_output(_read_checked(directory / 'output.json', artifacts['output.json']), document, metadata['schema_version'])
+    if citizen:
+        context = dict(split_group_id=value['split_group_id'])
+        doc = _source_document(value['source'])
+        _source(value['source'], doc, document, metadata)
+        batch = project_citizen_output(parent['run_id'], value['source'], output, value['split_group_id'])
+        events = batch['events']
+    else:
+        context = {key: value[key] for key in ('area_id', 'split_group_id', 'dictionary_version')}
+        doc = _context(parent['run_id'], value['source'], **context)
+        _source(value['source'], doc, document, metadata)
+        batch = _project_output(parent['run_id'], value['source'], output, **context, label='사람 수정 원본')
+        events = []
+        for event in batch['events']:
+            facts = event.pop('revision'); event.pop('expected_revision_no')
+            # 실제 DB 전후 값·revision 번호는 Java 연결 단계에서 결정한다.
+            for key in ('revision_id', 'revision_no', 'origin', 'review_status', 'publication_intent',
+                        'reviewer_id', 'reviewed_at', 'human_overrides'): facts.pop(key)
+            events.append(dict(event, facts=facts))
+    projection = dict(schema_version='citizen-human-handoff-projection-v1' if citizen else 'human-handoff-projection-v1',
+        handoff_id=value['handoff_id'],
         handoff_ref=hashlib.sha256(value['handoff_id'].encode()).hexdigest(), projected_at=projected_at,
         review=dict(review_id=receipt['summary']['review_id'], review_ref=reference,
                     receipt_sha256=value['review_receipt_sha256']),

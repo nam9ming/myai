@@ -30,6 +30,7 @@ public class ReviewedImportReader {
     public static final int RAW_ASSET_LIMIT = 20 * 1024 * 1024;
     public static final String CITIZEN_IMPORT_VERSION = "citizen-reviewed-import-v1";
     public static final String CITIZEN_PAYLOAD_VERSION = "citizen-revision-v1";
+    public static final String CITIZEN_HANDOFF_IMPORT_VERSION = "citizen-human-handoff-import-v1";
     private static final String CITIZEN_FACT_NAMES = "application_period occurrences regions locations residency_requirement target eligibility application_method preparation cost recruitment lifecycle";
     public static final List<String> CITIZEN_FIELDS = List.of(("title categories " + CITIZEN_FACT_NAMES
             + " source_version_ids originating_run_ids").split(" "));
@@ -49,6 +50,13 @@ public class ReviewedImportReader {
         throw new ImportException("IMPORT_VALIDATION_ERROR", "지원하지 않는 검토본 식별자입니다.", "schema_version");
     }
 
+    public static Set<String> citizenEvidenceIds(JsonNode event, JsonNode facts) {
+        var ids = new HashSet<String>();
+        for (var link : event.path("document_links")) for (var id : link.path("evidence_ids")) ids.add(id.asText());
+        for (String field : CITIZEN_FACT_NAMES.split(" ")) for (var id : facts.path(field).path("evidence_ids")) ids.add(id.asText());
+        return ids;
+    }
+
     public ReviewedBatch read(Path file, Path sourceRoot) {
         try {
             return read(readBounded(file, "file"), sourceRoot);
@@ -60,7 +68,7 @@ public class ReviewedImportReader {
     public ReviewedBatch read(byte[] content, Path sourceRoot) {
         try {
             JsonNode input = parseJson(content);
-            return batch(input, sourceRoot, sha256(content), false);
+            return batch(input, sourceRoot, sha256(content), false, false);
         } catch (IOException | IllegalArgumentException ex) {
             throw invalid("file", "UTF-8 JSON 또는 원문 파일을 읽고 검증할 수 없습니다.");
         }
@@ -69,7 +77,7 @@ public class ReviewedImportReader {
     public ReviewedBatch validateStored(JsonNode input, Path sourceRoot) {
         try {
             unicode(input);
-            return batch(input, sourceRoot, sha256(input.toString().getBytes(StandardCharsets.UTF_8)), true);
+            return batch(input, sourceRoot, sha256(input.toString().getBytes(StandardCharsets.UTF_8)), true, false);
         } catch (IOException | IllegalArgumentException ex) {
             throw invalid("file", "저장된 검토본 또는 원문 파일을 검증할 수 없습니다.");
         }
@@ -78,27 +86,28 @@ public class ReviewedImportReader {
     public ReviewedBatch prepareHandoff(JsonNode input, Path sourceRoot, String inputHash, String runId) {
         try {
             unicode(input);
-            check(input.path("schema_version").asText().equals("reviewed-import-v1") && input.has("human_handoffs"), "schema_version");
+            boolean citizen = input.path("schema_version").asText().equals(CITIZEN_IMPORT_VERSION);
+            check((citizen || input.path("schema_version").asText().equals("reviewed-import-v1")) && input.has("human_handoffs"), "schema_version");
             check(inputHash != null && inputHash.matches("[0-9a-f]{64}"), "input_sha256");
             check(runId != null && runId.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"), "originating_run_id");
-            var batch = batch(input, sourceRoot, inputHash, false);
+            var batch = batch(input, sourceRoot, inputHash, false, true);
             for (var event : batch.events()) check(event.originatingRunIds().contains(runId)
                     && event.reviewStatus().equals("needs_review") && event.publicationIntent().equals("hidden"), "events.revision");
-            return new ReviewedBatch("human-handoff-import-v1", inputHash, batch.dataKind(), batch.documents(), batch.events(),
+            return new ReviewedBatch(citizen ? CITIZEN_HANDOFF_IMPORT_VERSION : "human-handoff-import-v1", inputHash, batch.dataKind(), batch.documents(), batch.events(),
                     runId, null, input.path("human_handoffs").toString());
         } catch (IOException | IllegalArgumentException ex) {
             throw invalid("file", "인계 검토본 또는 원문 파일을 검증할 수 없습니다.");
         }
     }
 
-    private ReviewedBatch batch(JsonNode input, Path sourceRoot, String inputHash, boolean stored) throws IOException {
+    private ReviewedBatch batch(JsonNode input, Path sourceRoot, String inputHash, boolean stored, boolean generatedHandoff) throws IOException {
             String schema = choice(input, "schema_version", "reviewed-import-v1", "source-import-v1", "ai-draft-import-v1", CITIZEN_IMPORT_VERSION);
             boolean sourceOnly = schema.equals("source-import-v1");
             boolean draftImport = schema.equals("ai-draft-import-v1");
             boolean citizen = schema.equals(CITIZEN_IMPORT_VERSION);
             boolean handoff = input.has("human_handoffs");
             shape(input, "$", "schema_version data_kind documents evidence events" + (draftImport ? " originating_run_id" : "")
-                    + (handoff && !sourceOnly && !draftImport && !citizen ? " human_handoffs" : ""));
+                    + (handoff && !sourceOnly && !draftImport ? " human_handoffs" : ""));
             if (handoff) {
                 check(input.path("human_handoffs").isArray() && !input.path("human_handoffs").isEmpty(), "human_handoffs");
                 try { HandoffReference.list(input.path("human_handoffs")); }
@@ -132,6 +141,7 @@ public class ReviewedImportReader {
                 check(revisionIds.add(reviewed.revisionId()), "events.revision.revision_id");
                 events.add(reviewed);
             }
+            check(!citizen || !handoff || stored || generatedHandoff || !events.isEmpty(), "events");
             return new ReviewedBatch(schema, inputHash, kind, documents, events, runId, draftImport ? input.toString() : null,
                     handoff ? input.path("human_handoffs").toString() : null);
     }
@@ -261,12 +271,13 @@ public class ReviewedImportReader {
                 + (citizen ? "categories " + CITIZEN_FACT_NAMES : "types occurrences locations applicability exceptions route_names stop_names directions lifecycle lifecycle_evidence_ids")
                 + " human_overrides review_status reviewer_id reviewed_at publication_intent origin source_version_ids originating_run_ids"
                 + (citizen ? "" : " rules_version dictionary_version"));
-        String origin = citizen ? choice(revision, "origin", "human") : choice(revision, "origin", "human", "ai_reviewed", "ai_draft");
+        String origin = citizen ? (handoffs == null ? choice(revision, "origin", "human") : choice(revision, "origin", "ai_reviewed"))
+                : choice(revision, "origin", "human", "ai_reviewed", "ai_draft");
         boolean rawDraft = origin.equals("ai_draft");
         String status = stored ? choice(revision, "review_status", "draft", "needs_review", "approved", "rejected") : choice(revision, "review_status", "draft", "needs_review");
         String intent = stored ? choice(revision, "publication_intent", "hidden", "public") : choice(revision, "publication_intent", "hidden");
-        boolean partial = rawDraft || handoffs != null && intent.equals("hidden")
-                && (status.equals("needs_review") || stored && status.equals("rejected"));
+        boolean partial = !citizen && (rawDraft || handoffs != null && intent.equals("hidden")
+                && (status.equals("needs_review") || stored && status.equals("rejected")));
         check(stored || draftImport == rawDraft, "events.revision.origin");
         check(uuid(revision, "event_id").equals(id), "events.revision.event_id");
         String revisionId = uuid(revision, "revision_id");
@@ -360,7 +371,8 @@ public class ReviewedImportReader {
         payload.set("event", facts);
         payload.set("revision", revision);
         var citations = payload.putArray("evidence");
-        evidence.forEach((key, value) -> { if (allowedEvidence.contains(key)) citations.add(value); });
+        var selectedEvidence = citizen ? citizenEvidenceIds(event, revision) : allowedEvidence;
+        evidence.forEach((key, value) -> { if (allowedEvidence.contains(key) && selectedEvidence.contains(key)) citations.add(value); });
         String json = payload.toString();
         return new ReviewedBatch.Event(id, revisionId, number, expected, json, sha256(json.getBytes(StandardCharsets.UTF_8)), status, intent, reviewer, reviewedAt, runs, sourceIds, duplicates);
     }

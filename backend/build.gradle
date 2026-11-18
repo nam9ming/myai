@@ -42,7 +42,9 @@ tasks.named('test') {
     useJUnitPlatform()
     inputs.files(fileTree('examples'), file('../contracts/examples/event-facts-response.json'))
     inputs.files(fileTree('../processing') { include '__init__.py', 'matching/**/*.py', 'extraction/**/*.py', 'evaluation/**/*.py', 'tests/**/*.py', 'examples/*.json' })
-    inputs.files(file('../contracts/examples/ai-input.json'), file('../contracts/examples/ai-extraction.json'))
+    inputs.files(file('../contracts/examples/ai-input.json'), file('../contracts/examples/ai-extraction.json'),
+            file('../contracts/examples/citizen-ai-input.json'), file('../contracts/examples/citizen-ai-extraction.json'))
+    inputs.files(fileTree('../processing/tests/fixtures/citizen-g4'))
     inputs.property('calculatorPython', System.getenv('MYAI_PYTHON_EXECUTABLE') ?: 'python3.13')
     inputs.property('mysqlTestsEnabled', System.getenv('MYAI_MYSQL_TESTS') == 'true')
     outputs.upToDateWhen { System.getenv('MYAI_MYSQL_TESTS') != 'true' }

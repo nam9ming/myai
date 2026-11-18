@@ -59,7 +59,7 @@ curl --fail-with-body --noproxy '*' \
 | POST `/local/documents` | `application/json`의 `source-import-v1`. 문서만 등록하며 사건·공개본을 만들지 않는다. |
 | POST `/local/documents` | `multipart/form-data`의 metadata/file 두 part. [업로드 계약](../../contracts/source-upload.md)에 따라 txt/pdf/json 원문을 보존하고 pending/unchecked D03와 기존5키 Python 입력을 준비한다. |
 | POST `/local/extractions/import` | `extraction-import-request-v1`의 `run_id`·`expected_input_hash`. 지정 root의 전체 보관본과 입력 SHA를 확인한 뒤 D05를 저장한다. 실패 실행도 실패로 보존한다. |
-| PUT `/local/events/{id}/review` | 사건1개의 기존 검토/인계 또는 시민 수동 입력. 승인/반려는 기존 `publication-command-v1` 또는 시민 `citizen-review-command-v1`. URL과 JSON 사건ID가 같아야 한다. |
+| PUT `/local/events/{id}/review` | 사건1개의 기존 검토/인계 또는 시민 수동 입력·`citizen-human-handoff-import-v1` 인계. 승인/반려는 기존 `publication-command-v1` 또는 시민 `citizen-review-command-v1`. URL과 JSON 사건ID가 같아야 한다. |
 | POST `/local/reviews/import` | 기존 검토/사람 인계 또는 `citizen-reviewed-import-v1` 배치 전체. 동결한 인계 이미지를 잘라서 보내지 않는다. |
 | POST `/local/publish` | 기존 `publication-command-v1` 또는 시민 `citizen-publication-command-v1` preview/publish/rollback. 각 계열의 revision·head·근거·확인/사용권·공개 조건을 검사한다. |
 

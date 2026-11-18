@@ -16,6 +16,10 @@ def _context(run_id, source, area_id, split_group_id, dictionary_version):
     text(dictionary_version, kind='input')
     require(len(dictionary_version) <= 100
             and not any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in dictionary_version), kind='input')
+    return _source_document(source)
+
+
+def _source_document(source):
     shape(source, 'schema_version data_kind documents evidence events', kind='input')
     require(source['schema_version'] == 'source-import-v1' and type(source['documents']) is list
             and len(source['documents']) == 1 and source['evidence'] == [] and source['events'] == [], kind='input')

@@ -124,7 +124,7 @@ class CitizenReviewedImportReaderTest {
 
     @ParameterizedTest
     @CsvSource({"envelope,$", "area,events", "membership,events", "rules,events.revision", "dictionary,events.revision",
-            "field,field_value", "handoff,$", "revision_schema,events.revision"})
+            "field,field_value", "handoff,human_handoffs", "revision_schema,events.revision"})
     void rejectsExtraKeysInsteadOfSilentlyTakingLegacyValues(String change, String field) throws Exception {
         switch (change) {
             case "envelope" -> input.put("unexpected", true);
@@ -172,6 +172,73 @@ class CitizenReviewedImportReaderTest {
     void humanCitizenRevisionCannotBorrowAiRunIds() throws Exception {
         revision().putArray("originating_run_ids").add("20000000-0000-4000-8000-000000000020");
         rejected("events.revision.originating_run_ids");
+    }
+
+    @Test
+    void ordinaryCitizenProofCannotStoreAnEmptyBatchButTrustedHandoffCan() throws Exception {
+        String run = "20000000-0000-4000-8000-000000000020";
+        citizenProof(run);
+        input.putArray("events");
+        assertThatThrownBy(() -> reader.read(bytes(), root)).isInstanceOfSatisfying(ImportException.class,
+                ex -> assertThat(ex.field()).isEqualTo("events"));
+        assertThat(reader.prepareHandoff(input, root, sha(bytes()), run).events()).isEmpty();
+    }
+
+    @Test
+    void citizenPayloadExcludesEvidenceUnrelatedToItsLinksAndFacts() throws Exception {
+        var expected = input.path("evidence").deepCopy();
+        var unrelated = ((ObjectNode) input.path("evidence").get(1)).deepCopy().put("evidence_id", "unrelated-quote");
+        input.withArray("evidence").add(unrelated);
+        assertThat(payload().path("evidence")).isEqualTo(expected);
+        assertThat(input.path("evidence")).hasSize(3);
+    }
+
+    @Test
+    void preparesCitizenHandoffWithExplicitRunAndPreservesStoredProof() throws Exception {
+        String run = "20000000-0000-4000-8000-000000000020";
+        citizenProof(run);
+        var batch = reader.prepareHandoff(input, root, sha(bytes()), run);
+        assertThat(batch.schemaVersion()).isEqualTo("citizen-human-handoff-import-v1");
+        assertThat(batch.originatingRunId()).isEqualTo(run);
+        assertThat(batch.handoffJson()).isEqualTo(input.path("human_handoffs").toString());
+        var saved = mapper.readTree(batch.events().getFirst().payloadJson());
+        assertThat(saved.path("schema_version").asText()).isEqualTo("citizen-revision-v1");
+        assertThat(saved.path("revision")).isEqualTo(revision());
+        assertThat(saved.path("event").has("area_id")).isFalse();
+        assertThat(saved.path("human_handoffs")).isEqualTo(input.path("human_handoffs"));
+        assertThat(reader.validateStored(input, root).events()).isEqualTo(batch.events());
+        revision().put("review_status", "approved").put("publication_intent", "public");
+        assertThat(reader.validateStored(input, root).events().getFirst().originatingRunIds()).containsExactly(run);
+    }
+
+    @Test
+    void citizenProofCannotLaunderHumanOriginOrUnresolvedTitle() throws Exception {
+        String run = "20000000-0000-4000-8000-000000000020";
+        citizenProof(run);
+        revision().putNull("title");
+        assertThatThrownBy(() -> reader.prepareHandoff(input, root, sha(bytes()), run)).isInstanceOf(ImportException.class);
+        revision().put("title", "합성 시민 공지 😀").put("origin", "human").putArray("originating_run_ids");
+        assertThatThrownBy(() -> reader.prepareHandoff(input, root, sha(bytes()), run)).isInstanceOf(ImportException.class);
+        assertThatThrownBy(() -> reader.validateStored(input, root)).isInstanceOf(ImportException.class);
+    }
+
+    @Test
+    void citizenHandoffRejectsDifferentRunAndDraftOrPublicWorkflow() throws Exception {
+        String run = "20000000-0000-4000-8000-000000000020";
+        citizenProof(run);
+        assertThatThrownBy(() -> reader.prepareHandoff(input, root, sha(bytes()),
+                "20000000-0000-4000-8000-000000000021")).isInstanceOf(ImportException.class);
+        revision().put("review_status", "draft");
+        assertThatThrownBy(() -> reader.prepareHandoff(input, root, sha(bytes()), run)).isInstanceOf(ImportException.class);
+        revision().put("review_status", "approved").put("publication_intent", "public");
+        assertThatThrownBy(() -> reader.prepareHandoff(input, root, sha(bytes()), run)).isInstanceOf(ImportException.class);
+    }
+
+    private void citizenProof(String run) {
+        revision().put("origin", "ai_reviewed").put("review_status", "needs_review").put("publication_intent", "hidden");
+        revision().putArray("originating_run_ids").add(run);
+        input.putArray("human_handoffs").addObject().put("directory", root.resolve("a".repeat(64)).toString())
+                .put("handoff_ref", "a".repeat(64)).put("receipt_sha256", "b".repeat(64));
     }
 
     @ParameterizedTest

@@ -50,7 +50,7 @@ public class LocalImportCommand implements ApplicationRunner, ExitCodeGenerator 
             Path source = Path.of(required("myai.import.source-root"));
             String actor = required("myai.import.actor");
             var input = reader.readJson(file);
-            var result = input.path("schema_version").asText().equals("human-handoff-import-v1")
+            var result = java.util.Set.of("human-handoff-import-v1", ReviewedImportReader.CITIZEN_HANDOFF_IMPORT_VERSION).contains(input.path("schema_version").asText())
                     ? handoffs.importFile(file, source, Path.of(required("myai.import.handoff-root")), actor)
                     : importer.importBatch(reader.read(file, source), actor);
             ObjectNode output = mapper.createObjectNode().put("status", "succeeded");

@@ -100,6 +100,16 @@ class CitizenPublicationContentTest {
     }
 
     @Test
+    void newlyPublishedSnapshotExcludesUnlinkedEvidenceInAnOlderStoredRevision() throws Exception {
+        var expected = payload.path("evidence").deepCopy();
+        var unrelated = ((ObjectNode) payload.path("evidence").get(1)).deepCopy().put("evidence_id", "unrelated-quote");
+        payload.withArray("evidence").add(unrelated);
+        var published = mapper.readTree(snapshot().canonical());
+        assertThat(published.path("notices").get(0).path("evidence")).isEqualTo(expected);
+        assertThat(payload.path("evidence")).hasSize(3);
+    }
+
+    @Test
     void preservesMultipleDocumentsAndRelationsWithoutReviewerIdentity() throws Exception {
         var original = sources.values().iterator().next().original();
         var metadata = (ObjectNode) mapper.readTree(original.metadata());

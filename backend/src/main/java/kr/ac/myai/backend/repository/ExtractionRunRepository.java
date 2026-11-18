@@ -78,8 +78,10 @@ public class ExtractionRunRepository {
 
     public String handoffParentDirectory(String id, VerifiedHandoff handoff) {
         require(id.equals(handoff.projection().path("parent").path("run_id").asText()));
-        var paths = jdbc.query("SELECT raw_ref FROM extraction_runs WHERE run_id=? AND status IN ('validated','failed') AND schema_version='extract-schema-v1' AND metadata_sha256 IS NOT NULL AND receipt_sha256 IS NOT NULL",
-                (row, index) -> row.getString(1), id);
+        String schema = handoffSchema(handoff);
+        var paths = jdbc.query("SELECT raw_ref FROM extraction_runs WHERE run_id=? AND status IN ('validated','failed') AND schema_version=? AND metadata_sha256 IS NOT NULL AND receipt_sha256 IS NOT NULL"
+                        + (schema.equals("extract-citizen-v1") ? " AND execution_mode='manual_import'" : ""),
+                (row, index) -> row.getString(1), id, schema);
         require(paths.size() == 1 && paths.getFirst() != null);
         return paths.getFirst();
     }
@@ -87,8 +89,12 @@ public class ExtractionRunRepository {
     public Reference verifiedHandoffParent(VerifiedExtraction run, VerifiedHandoff handoff) {
         var projection = handoff.projection();
         var parent = projection.path("parent");
+        String schema = handoffSchema(handoff);
+        require(schema.equals(run.nullable("schema_version")) && (!schema.equals("extract-citizen-v1")
+                || ("manual_import".equals(run.nullable("execution_mode"))
+                    && run.receipt().path("format_version").asText().equals("extraction-archive-v1"))));
         require(run.runId().equals(parent.path("run_id").asText()) && run.status().equals(parent.path("status").asText())
-                && run.nullable("execution_mode").equals(parent.path("execution_mode").asText())
+                && Objects.equals(run.nullable("execution_mode"), parent.path("execution_mode").asText())
                 && run.receiptSha256().equals(parent.path("receipt_sha256").asText())
                 && run.dataKind().equals(projection.path("data_kind").asText()));
         var rows = jdbc.queryForList("SELECT * FROM extraction_runs WHERE run_id=?", run.runId());
@@ -108,6 +114,15 @@ public class ExtractionRunRepository {
                 && document.path("text_sha256").asText().equals(row.get("text_sha256"))
                 && document.path("raw_asset_path").asText().equals(row.get("private_content_ref")));
         return new Reference(run.runId(), run.documentVersionId(), rowHash(rows.getFirst()), rowHash(row));
+    }
+
+    private static String handoffSchema(VerifiedHandoff handoff) {
+        String projection = handoff.projection().path("schema_version").asText();
+        require(projection.equals("human-handoff-projection-v1") || projection.equals("citizen-human-handoff-projection-v1"));
+        String schema = projection.equals("citizen-human-handoff-projection-v1") ? "extract-citizen-v1" : "extract-schema-v1";
+        require(handoff.review().path("output").path("schema_version").asText().equals(schema)
+                && (!schema.equals("extract-citizen-v1") || handoff.projection().path("parent").path("execution_mode").asText().equals("manual_import")));
+        return schema;
     }
 
     public void checkReference(Reference reference) {

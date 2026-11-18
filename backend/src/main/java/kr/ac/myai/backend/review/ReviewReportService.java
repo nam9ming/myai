@@ -184,6 +184,7 @@ public class ReviewReportService {
                     }));
                     budget.add(proof); proofs.add(proof);
                 }
+                for (var proof : proofs) check(proof.path("validation").path("status").asText().equals("valid"), "human_handoffs");
                 return null;
             }));
             budget.addRemainder(revision, proofs); ((ArrayNode) event.path("revisions")).add(revision);
@@ -277,7 +278,8 @@ public class ReviewReportService {
         var imported = mapper.createObjectNode(); imported.set("database", row);
         var proofs = imported.putArray("handoffs");
         imported.set("validation", inspect(() -> {
-            check(row.path("status").asText().equals("succeeded") && row.path("schema_version").asText().equals("human-handoff-import-v1"), "import_batches");
+            boolean citizen = row.path("schema_version").asText().equals(ReviewedImportReader.CITIZEN_HANDOFF_IMPORT_VERSION);
+            check(row.path("status").asText().equals("succeeded") && (citizen || row.path("schema_version").asText().equals("human-handoff-import-v1")), "import_batches");
             var refs = parse(row.path("result_refs_json")); imported.set("result_refs", refs);
             var references = HandoffReference.list(refs.path("human_handoffs"));
             check(!references.isEmpty(), "human_handoffs");
@@ -286,6 +288,8 @@ public class ReviewReportService {
                 var proof = mapper.createObjectNode(); proof.set("reference", mapper.valueToTree(reference));
                 proof.set("validation", inspect(() -> {
                     var image = handoffs.read(reference);
+                    check(image.projection().path("schema_version").asText().equals(citizen
+                            ? "citizen-human-handoff-projection-v1" : "human-handoff-projection-v1"), "schema_version");
                     proof.set("projection", image.projection()); proof.set("review", image.review()); proof.set("receipt", image.receipt());
                     boolean related = false;
                     for (var document : image.projection().path("documents")) related |= document.path("document_version_id").asText().equals(documentVersionId);

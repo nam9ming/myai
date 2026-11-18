@@ -49,10 +49,12 @@ stdout은 ID/hash/data_kind·상태·건수·선언 소요시간 요약 또는 r
 
 ## 현재 범위
 
-시민 family는 Python의 check/freeze/verify-review와 전체 수정 감사·실패 부모 보관까지 지원한다. Java의 시민 human-review 표시/저장·D06 전달은 G5다. 기존 사람 인계는 `HANDOFF_SCHEMA_UNSUPPORTED`, D08 직접/사람 수정후 평가는 `EVALUATION_SCHEMA_UNSUPPORTED`로 시민 family를 기존 투영·8필드 채점 전에 거부한다. 아래 D08·D06 연결 설명은 기존 extract-schema-v1 대상이며 새 점수나 시민 승인/공개 완료를 뜻하지 않는다.
+시민 family도 check/freeze/verify-review·전체 수정 감사·실패 부모 보관을 사용한다. [시민 D06 인계](citizen-human-handoff.md)는 새6키 `citizen-human-handoff-v1` 선택에서만 `citizen-human-handoff-projection-v1`을 만든다. title/categories 미해결은 인계 실패이며12개 원문 사실·실패 상태·원본 전체를 보존한다. 명시 split_group_id는 D06 관계 group이며 D08 개발/확인 배정이 아니다.
+
+기존 `human-handoff-v1` 선택은 시민 부모를 `HANDOFF_SCHEMA_UNSUPPORTED`, D08 직접/사람 수정후 평가는 `EVALUATION_SCHEMA_UNSUPPORTED`로 계속 거부한다. 아래 D08 설명은 기존 extract-schema-v1 대상이다. 시민의 별도 Java `citizen-human-handoff-import-v1` 저장·승인/공개·S10과 전체 검증 상태는 [G5 계획](../docs/superpowers/plans/2026-11-18-citizen-human-handoff.md)을 따르며 새 점수나 실제 사람 승인을 뜻하지 않는다.
 
 `declared_reviewed`/`human_verification=declared_only`는 제공된 선언·참조·형식을 검사했다는 뜻이다. 실제 사람 판독·신원·독립 gold·승인·공개를 인증하지 않는다. 검토 원본 보관은 D06 DB 저장과 별개이며 [D08 평가](extraction-evaluation.md)는 human_reviewed 뷰·최초/재시험·전체 출처 동결과 선언 소요시간을 연결한다. 세 방법의 짝지은 개선/악화 비교와 [Java D06 인계](../backend/docs/human-handoff-import.md)를 연결했으며 실제 선별 성능은 후속 검증이다. 실제40문서 평가·blind holdout도 미완료다. POSIX 권한은 WORM이 아니며 Windows·전원 중단 내구성은 미검증이다.
 
 ## D06 사실 투영·인계 이미지
 
-[human-handoff-v1](human-handoff.md)은 이 원본의 정확한 receipt·입력·부모 D05와 D03 source metadata를 대조해 workflow 없는 D06 사실을 투영합니다. 실제 수정 기록/knowledge·실패 원본 전체를 함께 보관합니다. 투영 성공은 실제 D06 저장·승인 성공이 아니며 현재 Java reader는 이 새 schema를 거부합니다. source 원문 파일 검증·실제 revision CAS·D06 변경 기록·승인/공개 재검증은 별도 [Java 인계 요청](../backend/docs/human-handoff-import.md)이 담당합니다.
+[human-handoff-v1](human-handoff.md)은 기존3유형, [citizen-human-handoff-v1](citizen-human-handoff.md)은 시민 family의 정확한 receipt·입력·부모 D05와 D03 source metadata를 대조해 workflow 없는 D06 사실을 투영합니다. 실제 수정 기록/knowledge·실패 원본 전체를 함께 보관합니다. 투영 JSON은 일반 Java import 입력이 아니며 투영 성공도 D06 저장·승인 성공이 아닙니다. source 원문 파일 검증·실제 revision CAS·D06 변경 기록·승인/공개 재검증은 각 family의 별도 [Java 인계 요청](../backend/docs/human-handoff-import.md)이 담당합니다.
