@@ -112,7 +112,17 @@ class CitizenNoticeMySqlTest {
     @ParameterizedTest
     @ValueSource(strings = {"education", "support", "culture", "construction_traffic", "living"})
     void listsAndReadsSameFrozenCitizenFactsInEveryCategory(String category) throws Exception {
+        ScheduleCase schedule = switch (category) {
+            case "support" -> new ScheduleCase("2026-10-20~2026-10-25", "2026-11-01~2026-11-03", "신청 마감", "프로그램 진행 중");
+            case "culture" -> new ScheduleCase("2026-11-20~2026-11-25", "2026-12-01~2026-12-02", null, "행사 취소");
+            case "construction_traffic" -> new ScheduleCase("2026-10-20~2026-10-25", "2026-10-28~2026-10-30", null, "공사 종료");
+            default -> new ScheduleCase("2026-11-20~2026-11-25", "2026-12-01~2026-12-02", null, null);
+        };
         var input = fixtures.citizen(category, category.equals("support"));
+        if (schedule.lifecycle() != null) {
+            fixtures.recordScheduleStatus(input, schedule.applicationPeriod(), schedule.occurrences(),
+                    schedule.recruitment(), schedule.lifecycle());
+        }
         String approved = fixtures.approve(input, true);
         var published = fixtures.publish(List.of(approved), null);
         JsonNode canonical = fixtures.canonical(published.snapshotId());
@@ -138,12 +148,40 @@ class CitizenNoticeMySqlTest {
         for (String field : "application_period occurrences regions locations residency_requirement target eligibility application_method preparation cost recruitment lifecycle".split(" "))
             assertThat(notice.path(field)).isEqualTo(CitizenNoticeFixtures.revision(input).path(field));
         assertThat(notice.path("application_period")).isNotEqualTo(notice.path("occurrences"));
+        assertSourceFact(notice, "application_period", schedule.applicationPeriod());
+        assertSourceFact(notice, "occurrences", schedule.occurrences());
+        assertSourceFact(notice, "recruitment", schedule.recruitment());
+        assertSourceFact(notice, "lifecycle", schedule.lifecycle());
         if (category.equals("support")) assertThat(notice.path("cost").path("value").asText()).isEqualTo("5,000원");
         else assertThat(notice.path("cost").path("value").isNull()).isTrue();
         assertThat(detail.toString()).doesNotContain("raw_asset_path", "cleaned_text", "human_overrides", "reviewer_id", "private_content_ref", "synthetic-reviewer");
         assertThat(ok("/api/v1/citizen/notices?snapshot_id=" + published.snapshotId()).path("data")).isEqualTo(data);
         recordRepro("mysql-" + category, List.of(new ReproCase("list", listResponse, 200, listChecks(canonical)),
                 new ReproCase("detail", detailResponse, 200, detailChecks(canonical))), published.snapshotId());
+    }
+
+    private record ScheduleCase(String applicationPeriod, String occurrences, String recruitment, String lifecycle) { }
+
+    private void assertSourceFact(JsonNode notice, String field, String expected) {
+        var fact = notice.path(field);
+        if (expected == null) {
+            assertThat(fact.path("knowledge").asText()).as(field).isEqualTo("not_stated");
+            assertThat(fact.path("value").isNull()).as(field).isTrue();
+            assertThat(fact.path("evidence_ids")).isEmpty();
+            assertThat(fact.path("reason").asText()).isNotBlank();
+            return;
+        }
+        assertThat(fact.path("knowledge").asText()).as(field).isEqualTo("known");
+        assertThat(fact.path("value").asText()).as(field).isEqualTo(expected);
+        assertThat(fact.path("reason").isNull()).as(field).isTrue();
+        assertThat(fact.path("evidence_ids")).containsExactly(mapper.getNodeFactory().textNode("body-quote"));
+        var citations = new ArrayList<String>();
+        for (var evidence : notice.path("evidence")) {
+            if (evidence.path("evidence_id").asText().equals("body-quote")) {
+                citations.add(evidence.path("quote").asText());
+            }
+        }
+        assertThat(citations).singleElement().asString().contains(expected);
     }
 
     @Test

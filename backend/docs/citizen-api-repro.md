@@ -45,6 +45,8 @@ Java 21, 저장소 Gradle Wrapper, Spring Boot 3.5.16, MySQL 8.4.13, Python 3.13
 | `mysql-history-unavailable` | 1 | HTTP 200 현재 사실·출처, `history.status=unavailable`, `CITIZEN_HISTORY_TOO_LARGE`. 두 공개본의 파일 크기 합이 8MiB를 초과한다. |
 | `jar-history` | 5 | SELECT 전용 계정의 실제 JAR에서 목록·상세·두 이력 페이지와 HTTP 422 잘못된 조건 |
 
+목록·상세의 `mysql-support`는 11월 2일 확인한 같은 공지의 `recruitment.value=신청 마감`과 `lifecycle.value=프로그램 진행 중`을 각각 보존한다. `mysql-culture`는 당초 일정과 `행사 취소`를, `mysql-construction_traffic`는 종료된 일정과 `공사 종료`를 제공한다. 상태를 밝힌 원문 인용과 신청기간·진행일정도 함께 확인한다. `mysql-education`과 `mysql-living`의 모집·진행 상태는 사유가 있는 `not_stated`와 null이다.
+
 Y01에는 분야·복수 분류, Y02에는 목록/상세·0건·오류, Y03~Y05에는 합성 공지의 일정·비용·대상/조건 원문, Y06·Y08에는 확보 이력과 공개 교체·복구, Y10에는 재생성 절차를 제공한다. 시점별 모집 판정, 검색/복합 필터, 개인 설정(Y07), 실제 Flutter 화면(Y09), 팀 인수와 실자료 평가는 후속 확인 항목이다. 전체 기준은 [시험·평가·인수 기준](../../docs/spec/05_시험과인수기준.md)을 따른다.
 
 ## 파일로 대조하기

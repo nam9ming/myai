@@ -56,7 +56,7 @@
 - [x] 로컬 격리 Docker의 실제 JAR·MySQL 8.4 실행에서 생성한 파일의 SHA-256, 공개 ID, HTTP 상태와 기대값을 대조했다.
 - [x] 문서에 Java21/Python3.13/MySQL8.4/Docker·전용 DB allowlist·실행 명령·출력/초기화·예상 결과·버전·재생성·오프라인 제한을 적는다. 운영/공유 DB 초기화 명령은 추가하지 않는다.
 - [x] CI는 기존 JAR와 별도로 공개 repro 폴더를 보관한다. 합성 자료·실제 팀원/Flutter 인수·실자료 품질·지속 서버를 구분한다.
-- [ ] 해당 PR 커밋의 CI에서 JAR·MySQL 8.4 시험 통과를 확인하고 내려받은 산출물의 파일과 기대값을 대조한다.
+- [x] 해당 PR 커밋의 CI에서 JAR·MySQL 8.4 시험 통과를 확인하고 내려받은 산출물의 파일과 기대값을 대조했다.
 
 ### Task 3: 전체 검토·정확 source gate·develop 반영
 
@@ -64,8 +64,12 @@
 
 - [x] 관련 Java/bootJar·npm lint/test/build·계약·문서 상대 링크·범위 diff 검사와 필요한 기존 회귀를 실행한다. Python 미변경은 명시하며 전체 원격 회귀를 유지한다.
 - [x] 전체 diff/호출부/저장 원본/출력 경계/실패/cleanup/계약/docs 자체 검토·수정 후 독립 전체 리뷰 정확1회. 유효 Minor까지 수정·검증하고 전체 자체 검토를 반복한다.
-- [ ] 유효 미해결0에서 develop PR. exact source CI·실제 AI 코멘트/부분 범위·도착한 사람 리뷰/threads를 확인하고 유효 지적을 원인 수정한다. 오탐은 실제 근거로 기록한다.
-- [ ] expected head로 non-main 병합·source/CI후보/병합/develop tree 검증·사용자 변경 보존 FF·본인 병합 브랜치만 정리·main PR20 증빙 갱신. main/배포는 실행하지 않는다.
+- [x] 유효 미해결 0건에서 develop PR을 제출했다. 해당 소스의 CI·실제 AI 코멘트와 범위·도착한 사람 리뷰와 스레드를 확인했다. 유효 지적을 수정하고 오탐 근거를 남겼다.
+- [x] 검증한 소스로 develop에 병합한 뒤 소스·CI 후보·병합·develop의 트리 일치를 확인했다. 사용자 변경을 보존하며 로컬 develop을 fast-forward하고 병합한 작업 브랜치를 정리했다. main PR #20의 검증 근거를 갱신했다.
+
+## PR 검증과 반영
+
+[PR #58](https://github.com/nam9ming/myai/pull/58)의 소스 `3795743`과 후보 `5ee907e`를 검사한 [CI 44213306269](https://github.com/nam9ming/myai/actions/runs/44213306269)에서 MySQL 8.4.13, Java 1,165건, Python 693건, Node 46건, 계약 예제 13개를 통과했다. 내려받은 응답 24건·공개본 13개·파일 해시 85개와 매니페스트 10개의 JAR 해시를 대조했다. 초기 자동 리뷰 원문 2건의 수정·오탐 근거는 PR에 남겼다. 최종 원문 지적 0건은 앞 60,000자 부분 검토 결과다. `develop` 병합 `3cf6626`의 트리 `799833f9`가 검증한 소스·후보와 일치했다.
 
 ## 계획 자체 검토
 

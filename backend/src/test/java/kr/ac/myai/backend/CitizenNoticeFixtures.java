@@ -57,19 +57,45 @@ final class CitizenNoticeFixtures {
         var input = fresh(true);
         revision(input).putArray("categories").add(category);
         if (knownCost) {
-            var document = (ObjectNode) input.path("documents").get(0);
-            String text = document.path("cleaned_text").asText().replace("비용·자격·준비사항·신청 방법·모집 상태 미기재.", "참가비 5,000원. 자격·준비사항·신청 방법·모집 상태 미기재.");
-            String body = text.substring(text.indexOf('\n') + 1).stripTrailing();
-            String hash = ReviewedImportReader.sha256(text.getBytes(StandardCharsets.UTF_8));
-            document.put("cleaned_text", text).put("raw_sha256", hash).put("text_sha256", hash);
-            ((ObjectNode) document.path("block_index").get(1)).put("text", body);
-            ((ObjectNode) document.path("checks").get(0)).put("text_sha256", hash);
-            for (var evidence : input.path("evidence")) ((ObjectNode) evidence).put("text_sha256", hash);
-            ((ObjectNode) input.path("evidence").get(1)).put("quote", body).put("end_char", body.codePointCount(0, body.length()));
-            ((ObjectNode) revision(input).path("cost")).put("value", "5,000원").put("knowledge", "known").putNull("reason").putArray("evidence_ids").add("body-quote");
-            Files.writeString(root.resolve(document.path("raw_asset_path").asText()), text);
+            String text = input.path("documents").get(0).path("cleaned_text").asText();
+            replaceCitizenText(input, text.replace("비용·자격·준비사항·신청 방법·모집 상태 미기재.",
+                    "참가비 5,000원. 자격·준비사항·신청 방법·모집 상태 미기재."));
+            knownBodyFact(input, "cost", "5,000원");
         }
         return input;
+    }
+
+    void recordScheduleStatus(ObjectNode input, String applicationPeriod, String occurrences,
+                              String recruitment, String lifecycle) throws IOException {
+        var revision = revision(input);
+        String text = input.path("documents").get(0).path("cleaned_text").asText().stripTrailing()
+                .replace("신청: " + revision.path("application_period").path("value").asText(), "당초 신청: " + applicationPeriod)
+                .replace("진행: " + revision.path("occurrences").path("value").asText(), "당초 진행: " + occurrences);
+        if (recruitment != null) {
+            text = text.replace("·모집 상태 미기재.", " 미기재.") + " " + recruitment + ".";
+            knownBodyFact(input, "recruitment", recruitment);
+        }
+        replaceCitizenText(input, text + " " + lifecycle + ".\n");
+        knownBodyFact(input, "application_period", applicationPeriod);
+        knownBodyFact(input, "occurrences", occurrences);
+        knownBodyFact(input, "lifecycle", lifecycle);
+    }
+
+    private void replaceCitizenText(ObjectNode input, String text) throws IOException {
+        var document = (ObjectNode) input.path("documents").get(0);
+        String body = text.substring(text.indexOf('\n') + 1).stripTrailing();
+        String hash = ReviewedImportReader.sha256(text.getBytes(StandardCharsets.UTF_8));
+        document.put("cleaned_text", text).put("raw_sha256", hash).put("text_sha256", hash);
+        ((ObjectNode) document.path("block_index").get(1)).put("text", body);
+        ((ObjectNode) document.path("checks").get(0)).put("text_sha256", hash);
+        for (var evidence : input.path("evidence")) ((ObjectNode) evidence).put("text_sha256", hash);
+        ((ObjectNode) input.path("evidence").get(1)).put("quote", body).put("end_char", body.codePointCount(0, body.length()));
+        Files.writeString(root.resolve(document.path("raw_asset_path").asText()), text);
+    }
+
+    private void knownBodyFact(ObjectNode input, String field, String value) {
+        ((ObjectNode) revision(input).path(field)).put("value", value).put("knowledge", "known")
+                .putNull("reason").putArray("evidence_ids").add("body-quote");
     }
 
     ObjectNode legacy() throws Exception { return fresh(false); }
