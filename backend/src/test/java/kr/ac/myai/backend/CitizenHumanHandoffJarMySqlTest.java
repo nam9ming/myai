@@ -12,6 +12,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -111,7 +112,10 @@ class CitizenHumanHandoffJarMySqlTest {
                         .POST(HttpRequest.BodyPublishers.ofByteArray(put))), 403, "LOCAL_API_FORBIDDEN");
                 jar.rejectWrongHost(put);
                 byte[] oversized = Arrays.copyOf(put, 8 * MIB + 1); Arrays.fill(oversized, put.length, oversized.length, (byte) ' ');
-                error(jar.send(jar.request("/local/reviews/import", true).POST(HttpRequest.BodyPublishers.ofByteArray(oversized))), 413, "PAYLOAD_TOO_LARGE");
+                // 전체 스트림을 읽는 한도 검사로 조기 연결 종료와 클라이언트 쓰기의 경합을 피한다.
+                var chunked = HttpRequest.BodyPublishers.ofInputStream(() -> new ByteArrayInputStream(oversized));
+                assertThat(chunked.contentLength()).isEqualTo(-1);
+                error(jar.send(jar.request("/local/reviews/import", true).POST(chunked)), 413, "PAYLOAD_TOO_LARGE");
                 assertThat(CitizenNoticeFixtures.rows(database.jdbc())).isEqualTo(guardedRows);
                 assertThat(CitizenExtractionArchiveTest.tree(requests)).isEqualTo(guardedRequests);
                 var updated = json(jar.send(jar.request("/local/events/" + changed.eventId() + "/review", true)
