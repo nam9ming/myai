@@ -2,6 +2,8 @@ package kr.ac.myai.backend;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import kr.ac.myai.backend.importing.ReviewedImportReader;
 import kr.ac.myai.backend.publication.PublicationCommand;
@@ -11,15 +13,27 @@ import kr.ac.myai.backend.service.ReviewedImportService;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.charset.CodingErrorAction;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.LinkOption;
+import java.nio.file.StandardOpenOption;
+import java.net.http.HttpResponse;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.security.MessageDigest;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -137,6 +151,168 @@ final class CitizenNoticeFixtures {
 
     static ObjectNode revision(ObjectNode input) { return (ObjectNode) input.path("events").get(0).path("revision"); }
     static String event(ObjectNode input) { return input.path("events").get(0).path("event_id").asText(); }
+
+    record ReproCase(String id, HttpResponse<String> response, int expectedStatus, Map<String, ?> checks) { }
+
+    static Path createReproDirectory(String scenario) {
+        reproCheck(scenario != null && scenario.matches("[a-z][a-z0-9_-]{0,63}"));
+        try {
+            Path base = Path.of("").toRealPath();
+            for (String part : List.of("build", "repro", "citizen-api-v1")) {
+                base = base.resolve(part);
+                if (!Files.exists(base, LinkOption.NOFOLLOW_LINKS)) Files.createDirectory(base);
+                reproCheck(Files.isDirectory(base, LinkOption.NOFOLLOW_LINKS));
+            }
+            Path directory = Files.createTempDirectory(base, scenario + "-");
+            Files.createDirectory(directory.resolve("snapshots")); return directory;
+        } catch (IOException ex) { throw new UncheckedIOException("합성 재현 출력 디렉터리를 만들지 못했습니다.", ex); }
+    }
+
+    private static final ObjectMapper REPRO_JSON = new ObjectMapper().enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
+            .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
+    private static final Set<String> PRIVATE_REPRO_FIELDS = Set.of("raw_asset_path", "cleaned_text", "block_index", "raw_ref",
+            "private_content_ref", "metadata_json", "payload_json", "human_overrides", "human_handoffs", "originating_run_ids",
+            "reviewer_id", "reviewed_at", "source_review_no", "source_review_sha256", "receipt", "prompt", "authorization",
+            "token", "password", "secret", "webhook", "access_token");
+
+    // 두 공개 합성 HTTP 시험에서만 호출한다. snapshot은 기존 exporter가 검증한 파일이다.
+    static void writeRepro(Path directory, String scenario, String mysqlVersion, List<ReproCase> cases) {
+        reproCheck(scenario != null && scenario.matches("[a-z][a-z0-9_-]{0,63}") && mysqlVersion != null
+                && mysqlVersion.matches("[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][a-zA-Z0-9._-]+)?") && cases != null && !cases.isEmpty());
+        try {
+            reproCheck(Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS));
+            directory = directory.toRealPath(); Path snapshots = directory.resolve("snapshots");
+            reproCheck(Files.isDirectory(snapshots, LinkOption.NOFOLLOW_LINKS));
+            try (var entries = Files.list(directory)) { reproCheck(entries.allMatch(path -> path.equals(snapshots))); }
+            var output = new LinkedHashMap<String, byte[]>();
+            var manifest = REPRO_JSON.createObjectNode().put("schema_version", "citizen-api-repro-v1")
+                    .put("api_schema", "citizen-api-v1").put("snapshot_schema", "citizen-snapshot-v1")
+                    .put("data_kind", "synthetic").put("scenario", scenario).put("response_checks", "passed");
+            var runtime = manifest.putObject("runtime").put("java", System.getProperty("java.version"))
+                    .put("spring_boot", org.springframework.boot.SpringBootVersion.getVersion()).put("mysql", mysqlVersion)
+                    .put("jar_sha256", reproHash(Path.of("build/libs/myai-backend-0.1.0.jar")));
+            String checkout = System.getenv("GITHUB_SHA");
+            if ("true".equals(System.getenv("GITHUB_ACTIONS")) && checkout != null && checkout.matches("[0-9a-f]{40}")) runtime.put("ci_checkout_sha", checkout);
+            else runtime.putNull("ci_checkout_sha");
+            var recorded = manifest.putArray("cases"); var ids = new HashSet<String>();
+            var snapshotIds = new TreeSet<String>(); var eventIds = new TreeSet<String>(); var revisionIds = new TreeSet<String>();
+            for (var item : cases) {
+                reproCheck(item != null && item.id() != null && item.id().matches("[a-z][a-z0-9-]{0,63}") && ids.add(item.id())
+                        && item.response() != null && item.checks() != null && !item.checks().isEmpty());
+                var response = item.response(); var uri = response.request().uri();
+                reproCheck(response.request().method().equals("GET") && response.uri().equals(uri) && uri.getRawUserInfo() == null
+                        && uri.getRawFragment() == null && uri.getRawPath().matches("/api/v1/citizen/notices(?:/[0-9a-f-]{36})?"));
+                String query = uri.getRawQuery();
+                reproCheck(query == null || query.matches("(?:snapshot_id=[0-9a-f-]{36}|history_(?:before_version|limit)=[0-9]+|cost=free)(?:&(?:snapshot_id=[0-9a-f-]{36}|history_(?:before_version|limit)=[0-9]+|cost=free))*"));
+                byte[] actualBytes = reproUtf8(response.body()); JsonNode actual = REPRO_JSON.readTree(actualBytes);
+                reproExpectation(response.statusCode() == item.expectedStatus(), item, "/status");
+                reproPublicResponse(actual, response.statusCode());
+                var expected = REPRO_JSON.createObjectNode().put("status", item.expectedStatus());
+                var checks = expected.putObject("checks");
+                for (var check : item.checks().entrySet()) {
+                    reproCheck(check.getKey() != null && check.getKey().startsWith("/"));
+                    JsonNode value = reproValue(check.getValue());
+                    value = REPRO_JSON.readTree(REPRO_JSON.writeValueAsBytes(value));
+                    JsonNode found = actual.at(check.getKey());
+                    reproExpectation(!found.isMissingNode() && found.equals(value), item, check.getKey()); checks.set(check.getKey(), value);
+                }
+                String requestName = item.id() + ".request.json", actualName = item.id() + ".actual.json", expectedName = item.id() + ".expected.json";
+                var request = REPRO_JSON.createObjectNode().put("method", "GET").put("path_query", uri.getRawPath() + (query == null ? "" : "?" + query)).putNull("body");
+                output.put(requestName, REPRO_JSON.writeValueAsBytes(request)); output.put(actualName, actualBytes);
+                output.put(expectedName, REPRO_JSON.writeValueAsBytes(expected));
+                recorded.addObject().put("id", item.id()).put("actual_status", response.statusCode()).put("expected_status", item.expectedStatus())
+                        .put("request", requestName).put("actual", actualName).put("expected", expectedName);
+                reproIds(actual, snapshotIds, eventIds, revisionIds);
+            }
+            try (var files = Files.list(snapshots)) {
+                for (Path file : files.sorted().toList()) {
+                    reproCheck(Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS) && file.getFileName().toString().matches("[0-9a-f-]{36}-[0-9a-f]{64}\\.json") && Files.size(file) <= 8L * 1024 * 1024);
+                    byte[] bytes = Files.readAllBytes(file); JsonNode snapshot = REPRO_JSON.readTree(bytes);
+                    reproShape(snapshot, "schema_version snapshot_id created_at data_kind mode case_id channel_key timezone revision_ids notices sources notice_count");
+                    reproCheck(snapshot.path("schema_version").asText().equals("citizen-snapshot-v1") && snapshot.path("data_kind").asText().equals("synthetic")
+                            && file.getFileName().toString().equals(snapshot.path("snapshot_id").asText() + "-" + ReviewedImportReader.sha256(bytes) + ".json"));
+                    reproNoPrivate(snapshot); reproIds(snapshot, snapshotIds, eventIds, revisionIds);
+                    output.put("snapshots/" + file.getFileName(), bytes);
+                }
+            }
+            manifest.set("snapshot_ids", REPRO_JSON.valueToTree(snapshotIds)); manifest.set("event_ids", REPRO_JSON.valueToTree(eventIds));
+            manifest.set("revision_ids", REPRO_JSON.valueToTree(revisionIds)); var artifacts = manifest.putArray("artifacts");
+            for (var entry : output.entrySet()) artifacts.addObject().put("path", entry.getKey()).put("size", entry.getValue().length).put("sha256", ReviewedImportReader.sha256(entry.getValue()));
+            for (var entry : output.entrySet()) if (!entry.getKey().startsWith("snapshots/"))
+                Files.write(directory.resolve(entry.getKey()), entry.getValue(), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+            for (var entry : output.entrySet()) reproCheck(MessageDigest.isEqual(Files.readAllBytes(directory.resolve(entry.getKey())), entry.getValue()));
+            Files.write(directory.resolve("manifest.json"), REPRO_JSON.writeValueAsBytes(manifest), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+        } catch (IOException ex) { throw new UncheckedIOException("합성 공개 재현 파일 저장에 실패했습니다.", ex); }
+    }
+
+    private static void reproPublicResponse(JsonNode value, int status) {
+        reproNoPrivate(value);
+        if (status == 200) {
+            reproShape(value, "schema_version snapshot_id generated_at data");
+            reproCheck(value.path("schema_version").asText().equals("citizen-api-v1") && value.path("data").path("data_kind").asText().equals("synthetic"));
+            reproShape(value.path("data"), value.path("data").has("notices")
+                    ? "created_at data_kind mode timezone notice_count notices sources" : "created_at data_kind mode timezone notice sources history");
+        } else {
+            reproCheck(status >= 400 && status <= 599);
+            reproShape(value, value.has("current_snapshot_id") ? "error request_id current_snapshot_id" : "error request_id");
+            reproShape(value.path("error"), "code message field_errors retryable");
+            reproCheck(value.path("error").path("field_errors").isArray());
+            value.path("error").path("field_errors").forEach(field -> reproShape(field, "field message"));
+        }
+    }
+
+    private static void reproNoPrivate(JsonNode value) {
+        if (value.isObject()) value.fields().forEachRemaining(field -> { reproCheck(!PRIVATE_REPRO_FIELDS.contains(field.getKey())); reproNoPrivate(field.getValue()); });
+        else if (value.isArray()) value.forEach(CitizenNoticeFixtures::reproNoPrivate);
+        else if (value.isFloatingPointNumber()) reproCheck(Double.isFinite(value.doubleValue()));
+    }
+
+    private static void reproShape(JsonNode value, String fields) {
+        var names = new HashSet<String>(); value.fieldNames().forEachRemaining(names::add);
+        reproCheck(value.isObject() && names.equals(Set.of(fields.split(" "))));
+    }
+
+    private static JsonNode reproValue(Object value) {
+        if (value == null) return REPRO_JSON.nullNode();
+        if (value instanceof JsonNode node) { reproNoPrivate(node); return node; }
+        if (value instanceof List<?> list) { var result = REPRO_JSON.createArrayNode(); list.forEach(item -> result.add(reproValue(item))); return result; }
+        if (value instanceof Map<?, ?> map) {
+            var result = REPRO_JSON.createObjectNode(); map.forEach((key, item) -> { reproCheck(key instanceof String); result.set((String) key, reproValue(item)); }); return result;
+        }
+        reproCheck(value instanceof String || value instanceof Boolean || value instanceof Number);
+        var result = REPRO_JSON.valueToTree(value); reproNoPrivate(result); return result;
+    }
+
+    private static void reproIds(JsonNode value, Set<String> snapshots, Set<String> events, Set<String> revisions) {
+        if (value.isObject()) value.fields().forEachRemaining(field -> {
+            Set<String> selected = switch (field.getKey()) { case "snapshot_id", "current_snapshot_id" -> snapshots; case "event_id" -> events; case "revision_id" -> revisions; default -> null; };
+            if (selected != null && field.getValue().isTextual()) { String id = field.getValue().asText(); reproCheck(id.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")); selected.add(id); }
+            reproIds(field.getValue(), snapshots, events, revisions);
+        });
+        else if (value.isArray()) value.forEach(item -> reproIds(item, snapshots, events, revisions));
+    }
+
+    private static byte[] reproUtf8(String value) throws IOException {
+        reproCheck(value != null);
+        ByteBuffer encoded = StandardCharsets.UTF_8.newEncoder().onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT).encode(CharBuffer.wrap(value));
+        var bytes = new byte[encoded.remaining()]; encoded.get(bytes); return bytes;
+    }
+
+    private static String reproHash(Path file) throws IOException {
+        try (var input = Files.newInputStream(file)) {
+            var digest = MessageDigest.getInstance("SHA-256"); byte[] buffer = new byte[64 * 1024]; int count;
+            while ((count = input.read(buffer)) != -1) digest.update(buffer, 0, count);
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (java.security.NoSuchAlgorithmException ex) { throw new IllegalStateException(ex); }
+    }
+
+    private static void reproCheck(boolean valid) { if (!valid) throw new IllegalArgumentException("합성 공개 재현의 경로·응답·기대값·파일 보존 조건을 확인해 주세요."); }
+
+    private static void reproExpectation(boolean valid, ReproCase item, String pointer) {
+        if (!valid) throw new IllegalArgumentException("재현 기대값 불일치: case=" + item.id() + ", pointer=" + pointer
+                + ", expected_status=" + item.expectedStatus() + ", actual_status=" + item.response().statusCode());
+    }
 
     static Map<String, List<Map<String, Object>>> rows(JdbcTemplate jdbc) {
         var result = new LinkedHashMap<String, List<Map<String, Object>>>();
