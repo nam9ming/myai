@@ -12,6 +12,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -111,7 +112,11 @@ class CitizenHumanHandoffJarMySqlTest {
                         .POST(HttpRequest.BodyPublishers.ofByteArray(put))), 403, "LOCAL_API_FORBIDDEN");
                 jar.rejectWrongHost(put);
                 byte[] oversized = Arrays.copyOf(put, 8 * MIB + 1); Arrays.fill(oversized, put.length, oversized.length, (byte) ' ');
-                error(jar.send(jar.request("/local/reviews/import", true).POST(HttpRequest.BodyPublishers.ofByteArray(oversized))), 413, "PAYLOAD_TOO_LARGE");
+                jar.rejectOversizedLength(oversized);
+                // 길이 헤더가 없는 요청은 스트림을 읽어 한도를 적용하는지도 확인한다.
+                var chunked = HttpRequest.BodyPublishers.ofInputStream(() -> new ByteArrayInputStream(oversized));
+                assertThat(chunked.contentLength()).isEqualTo(-1);
+                error(jar.send(jar.request("/local/reviews/import", true).POST(chunked)), 413, "PAYLOAD_TOO_LARGE");
                 assertThat(CitizenNoticeFixtures.rows(database.jdbc())).isEqualTo(guardedRows);
                 assertThat(CitizenExtractionArchiveTest.tree(requests)).isEqualTo(guardedRequests);
                 var updated = json(jar.send(jar.request("/local/events/" + changed.eventId() + "/review", true)
@@ -283,14 +288,22 @@ class CitizenHumanHandoffJarMySqlTest {
         }
         HttpResponse<byte[]> send(HttpRequest.Builder builder) throws Exception { return http.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray()); }
         void rejectWrongHost(byte[] body) throws Exception {
+            assertThat(rawImport("localhost", body, body.length)).startsWith("HTTP/1.1 403").contains("LOCAL_API_FORBIDDEN");
+        }
+        void rejectOversizedLength(byte[] body) throws Exception {
+            // 서버가 헤더로 거절할 때 남은 본문을 계속 쓰지 않도록 첫 바이트만 보낸다.
+            assertThat(rawImport("127.0.0.1", body, 1)).startsWith("HTTP/1.1 413").contains("PAYLOAD_TOO_LARGE");
+        }
+        private String rawImport(String host, byte[] body, int bytesToSend) throws Exception {
             try (var socket = new Socket()) {
                 socket.connect(new InetSocketAddress("127.0.0.1", port), 2_000); socket.setSoTimeout(10_000);
                 var output = socket.getOutputStream();
-                output.write(("POST /local/reviews/import HTTP/1.1\r\nHost: localhost:" + port + "\r\nOrigin: http://127.0.0.1:" + port
+                output.write(("POST /local/reviews/import HTTP/1.1\r\nHost: " + host + ":" + port + "\r\nOrigin: http://127.0.0.1:" + port
                         + "\r\nAuthorization: Bearer " + token + "\r\nContent-Type: application/json\r\nContent-Length: " + body.length
-                        + "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII)); output.write(body); output.flush();
-                String response = new String(socket.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-                assertThat(response).startsWith("HTTP/1.1 403").contains("LOCAL_API_FORBIDDEN");
+                        + "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+                output.write(body, 0, bytesToSend); output.flush();
+                socket.shutdownOutput();
+                return new String(socket.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
             }
         }
         @Override public void close() throws Exception {

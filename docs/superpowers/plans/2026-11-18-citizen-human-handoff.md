@@ -63,8 +63,8 @@
 - [x] **Step 1:** Task1의 실제 frozen archive를 Java 기존 public reader/import에 전달하는 시험을 작성한다. 새 schema gate의 실제 거부 RED를 주 작업자의 Gradle로 관찰한 뒤 생산 코드를 수정한다.
 - [x] **Step 2:** archive 검증/키 없는 subprocess·schema별 trusted 생성·ordinary 최초 proof 방지·명시 mapping/CAS·원래 proof/audit prefix·사건별 D05 검증을 최소 확장한다. 기존 read/import signatures·legacy 최초 첨부 회귀를 유지한다.
 - [x] **Step 3:** 전용 DB에서 D03/D05 성공·실패→숨김 D06, 정확 replay·빈 batch·stale/동시 CAS·늦은 감사 rollback·사건/근거/출처/권한 변조·수동 후속 수정의 실제 전후 값을 검증한다. 쓰기 전 시험 소유 UUID 기록·허용 DB 확인, 소유 행만 정리한다.
-- [ ] **Step 4:** 실제 JAR CLI/HTTP POST/PUT와 원입력 보관·URL event 불일치·인증/한도·SELECT S10 전체 수정/실패·별도 승인/공개/export/rollback과 private 비노출을 확인한다. 운영·독립 품질 인수로 표현하지 않는다.
-- [ ] **Step 5:** Run 주 작업자만 `./gradlew test --tests '*HumanHandoff*' --tests '*ReviewedImport*' --tests '*Citizen*' --tests '*ReviewReport*' bootJar`. Expected: 가능한 local 검증 통과; Docker 부재는 정확 원격 MySQL8.4 전체 CI로 반드시 보완한다. 커밋 `feat: import citizen human handoffs`.
+- [x] **Step 4:** 실제 JAR CLI/HTTP POST/PUT와 원입력 보관·URL event 불일치·인증/한도·SELECT S10 전체 수정/실패·별도 승인/공개/export/rollback과 private 비노출을 확인한다. 운영·독립 품질 인수로 표현하지 않는다.
+- [x] **Step 5:** Run 주 작업자만 `./gradlew test --tests '*HumanHandoff*' --tests '*ReviewedImport*' --tests '*Citizen*' --tests '*ReviewReport*' bootJar`. Expected: 가능한 local 검증 통과; Docker 부재는 정확 원격 MySQL8.4 전체 CI로 반드시 보완한다. 커밋 `feat: import citizen human handoffs`.
 
 ### Task 3: 계약·전체 검증·리뷰·develop 반영
 
@@ -73,10 +73,10 @@
 **Interfaces:** Task1/2의 실제 버전·명령·제약·합성 재현·검증 결과를 인계한다. 미확정 실제 정책·팀원/Flutter 합의는 open-items다.
 
 - [x] **Step 1:** 새/기존 family·선행 원문/추출 등록·명시 group/revisions·미상 거부·실패/전후 감사·별도 승인·오류·실행/복구를 문서화한다. G4 PR56의 완료 증빙과 G5 미완료를 구별한다.
-- [ ] **Step 2:** Run 전체 Python, 주 작업자 `./gradlew test bootJar`, npm lint/test/build·계약 validator·변경 Markdown 상대 링크·git diff --check. Expected: 회귀/원본 불변·누락0, Docker/JAR/MySQL8.4는 exact remote head에서도 통과한다.
+- [x] **Step 2:** Run 전체 Python, 주 작업자 `./gradlew test bootJar`, npm lint/test/build·계약 validator·변경 Markdown 상대 링크·git diff --check. Expected: 회귀/원본 불변·누락0, Docker/JAR/MySQL8.4는 exact remote head에서도 통과한다.
 - [x] **Step 3:** 전체 diff·호출자·권한·원본/복구·계약·문서를 자체 검토하고 유효 지적을 RED→GREEN으로 수정한다. fresh 독립 전체 리뷰 정확1회를 수행하고 Minor 포함 유효 지적을 모두 검증·수정한 뒤 전체 자체 검토한다. 커밋 `docs: describe citizen human handoffs`.
-- [ ] **Step 4:** 유효 미해결0에서 develop PR을 제출한다. exact head CI·실제 AI 코멘트·도착한 사람 리뷰/threads를 확인하고 지적은 원인 수정·검증한다. 부분 자동 리뷰를 전체로 쓰지 않는다.
-- [ ] **Step 5:** green/head 지적0인 non-main PR만 expected head로 병합한다. source/실제 CI 후보/병합/develop tree를 비교·사용자 변경 보존 FF·본인 병합 브랜치 정리·main PR20 증빙 갱신 후 전체 goal의 다음 단계로 진행한다. main은 병합하지 않는다.
+- [x] **Step 4:** 유효 미해결0에서 develop PR을 제출한다. exact head CI·실제 AI 코멘트·도착한 사람 리뷰/threads를 확인하고 지적은 원인 수정·검증한다. 부분 자동 리뷰를 전체로 쓰지 않는다.
+- [x] **Step 5:** green/head 지적0인 non-main PR만 expected head로 병합한다. source/실제 CI 후보/병합/develop tree를 비교·사용자 변경 보존 FF·본인 병합 브랜치 정리·main PR20 증빙 갱신 후 전체 goal의 다음 단계로 진행한다. main은 병합하지 않는다.
 
 ## 계획 자체 검토
 
@@ -108,4 +108,13 @@ G4와 G1~G3 기존 계약을 대조했다. Python projection→archive reader→
 
 수정 후 집중 Java223건/8클래스·2분15초·실패/오류/생략0, 전체 Python693건/333.292초가 통과했다. 전체 로컬 Java는1122건 중1111통과·11실패·오류/생략0·6분49초다. 실패11건은 모두 RecoveryDatabase의 Docker 기동 실패이며 새 시민 JAR/HTTP/SELECT S10과 기존 마이그레이션/복구의 해당 내부 시험은 로컬에서 실행하지 못했다. 별도 bootJar는852ms로 성공했다. 로컬 MySQL9.6 보충 검증을8.4·전체 성공으로 표시하지 않는다.
 
-Node46건·lint611파일·계약13JSON·HTML build와 변경 Markdown19개 상대 파일 링크396개, 전체 범위 diff 검사가 통과했다. 고정 G4/legacy 원본을 유지했고 expected 재생성·시험 삭제/생략은 없다. 수정 전체의 호출자·저장/공개·원본/복구·예외·계약·문서를 다시 자체 검토했으며 유효 미해결 지적은0이다. 정확 source의 원격 MySQL8.4/Docker 전체 CI·실제 자동/도착한 사람 리뷰 확인·PR/병합은 다음 gate다.
+Node46건·lint611파일·계약13JSON·HTML build와 변경 Markdown19개 상대 파일 링크396개, 전체 범위 diff 검사가 통과했다. 고정 G4/legacy 원본을 유지했고 expected 재생성·시험 삭제/생략은 없다. 수정 전체의 호출자·저장/공개·원본/복구·예외·계약·문서를 다시 자체 검토했으며 유효 미해결 지적은0이다. 정확 source의 원격 MySQL 8.4 검증과 병합 결과는 아래에 기록한다.
+
+
+## develop 반영 결과
+
+[PR #57](https://github.com/nam9ming/myai/pull/57)의 최종 소스 `1a50c7c`와 실제 CI 후보 `c482a534`, develop 병합 `9870c18`의 tree는 `ee102593038f7c1d3fa72de7deb900a40d9a96ee`로 일치했다. 로컬 develop을 갱신하고 병합한 기능 브랜치를 정리했다.
+
+[CI 44205321095](https://github.com/nam9ming/myai/actions/runs/44205321095)는 MySQL 8.4.13에서 Java 1,137건, Python 693건, Node 46건과 계약 검사·빌드를 통과했다. 실제 JAR의 CLI·HTTP·SELECT 전용 S10 및 근거 교체 후 수정 이력 시험을 포함한다. 앞선 CI에서 드러난 시험 시간 정밀도, 시작 로그, 봉인본 생성 위치는 수정하고 최종 CI에서 재검증했다.
+
+독립 전체 리뷰의 유효 지적 10건을 수정했다. 최종 자동 리뷰는 변경분 앞 60,000자의 부분 검토였고 원문 지적 1건은 회귀 시험과 이전 revision·감사 보존을 대조해 오탐으로 기록했다. 도착한 사람 리뷰의 미해결 지적과 유효 자동 지적은 0건이었다. [리뷰 코멘트](https://github.com/nam9ming/myai/pull/57#issuecomment-6963562344)

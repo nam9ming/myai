@@ -27,6 +27,8 @@
 
 [시민 조회 구현 검토안](../contracts/citizen-api.md)은 목록·상세를 같은 시민 공개본에 연결하고 실제 공개·철회·복구의 전후 상태를 제공한다. 읽기 전용/기존 API·미상 보존과 합성 재현/검증은 [조회 계획](../docs/superpowers/plans/2026-11-18-citizen-query.md)을 따른다. 검색·복합 필터·정규화·추출 자료/실행 확장·실제 화면/사람 인수는 후속이다.
 
+상헌의 응답 필드 대조와 명묵의 재시험에 사용할 공개 요청·실제 응답·기대값·실행 버전은 [합성 HTTP 재현 자료](docs/citizen-api-repro.md)에 정리한다. 화면 연결과 최종 계약 합의는 각 담당의 실행 결과로 확인한다.
+
 [시민 수동 추출](../contracts/citizen-extraction.md)은 새 출력 계약·프롬프트 준비·원출력/실패 봉인·Python 사람 수정 선언을 기존 D05/S10 판독에 연결한다. metadata의 명시 family를 사용하고 기존 prompt/archive bytes·8필드 평가 분모를 보존한다. [추출 계획](../docs/superpowers/plans/2026-11-18-citizen-extraction.md)의 실제 검증·리뷰/PR 상태를 따르며 [시민 D06 사람 인계](../contracts/citizen-human-handoff.md)는 명시 family·전체 proof·숨김 revision·수정 감사·기존 별도 승인/공개를 연결한다. 실제 검증/리뷰/반영은 [G5 계획](../docs/superpowers/plans/2026-11-18-citizen-human-handoff.md)을 따르며 새 API 실행·실제 품질은 후속이다.
 
 [기존 구현·계약] 다음 실적·명령·한도는 기존3유형 계약의 기록입니다. 현재5분야·새 필터/상세·웹 시제품 연동·실제 품질평가 완료를 뜻하지 않습니다.
