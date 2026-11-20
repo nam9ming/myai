@@ -1,14 +1,14 @@
-# 개발 인프라 적용·설정
+# 여기:it 개발 인프라 적용·설정
 
 ## 적용 범위
 
 `YUNGI-KIM/ai-lounge-infra`의 커밋 `85ebdae0b17252f846377360038204b470032f1f`에서 워크플로·템플릿·도구를 복사하고 myai에 맞게 조정했다. 원본과 자동 동기화되지는 않으며 갱신은 별도 PR로 검토한다.
 
-**앱 설계는 그대로다:** Flutter Web·Dart / Java21·Spring Boot3.5.x·MySQL8.4 / Python3.13. Node.js20+는 협업 자동화에만 사용한다. Node 앱이나 인프라 예제 `app/`은 가져오지 않았다. 기존 역할·계약·인계 방식은 CONTRIBUTING.md와 담당 폴더 문서를 따른다.
+**기술 구성은 유지한다:** Flutter Web·Dart / Java21·Spring Boot3.5.x·MySQL8.4 / Python3.13. 프로젝트는 여기:it·안성시민 전체5분야로 확장하며 현재 담당·작업 순서는 [협업 안내](../CONTRIBUTING.md)와 [현행 명세](spec/00_목차.md)를 따른다. Node.js20+는 협업 자동화 전용이며 Node 앱이나 인프라 예제 `app/`은 가져오지 않았다.
 
 | 워크플로 | 현재 동작 |
 | --- | --- |
-| CI | PR·main 변경 시 JS 린트, 인프라 테스트, 계약 JSON 검증, HTML 패키징·산출물 보관 |
+| CI | PR·main 변경 시 JS 린트, 인프라·계약·Python 검증, JDK21 백엔드·MySQL 시험, HTML/JAR 산출물 보관 |
 | Preview | `ENABLE_PREVIEW=true`일 때 내부 PR의 합성 HTML 시제품을 Pages에 발행 |
 | AI Review | OpenAI API로 PR 변경분 리뷰·코멘트, `OPENAI_API_KEY`가 없으면 생략 |
 | Notify / PR Notify | CI·Preview 결과와 PR 상태를 기존 디스코드 채널로 전송 |
@@ -16,7 +16,7 @@
 | Weekly Report | 금요일 18:00 KST에 myai 활동을 기존 주간·발주처 채널로 전송 |
 | Ping | 사람이 실행할 때 선택 채널에 연결 확인 메시지 전송 |
 
-현재 Flutter·Spring·Python 서비스 스캐폴드는 없다. CI 성공은 앱 빌드·DB 연결·성능 시험의 완료를 뜻하지 않는다. 앱 구현 시 실제 빌드·테스트 명령을 각 README와 CI에 추가한다. `npm run build`는 `docs/reference/meeting-demo.html` 하나만 `dist/index.html`로 복사한다. 가상 자료 표시를 유지하고 비공개 자료·저장소 전체를 배포하지 않는다.
+현재 기존3유형 공개 API·MySQL·원문/추출/검토본 import·승인/공개/복구와 Python 계산 연결을 구현했다. CI의 `check`는 Python 회귀와 MySQL8.4 전용 테스트 DB·JDK21의 백엔드 시험·JAR 빌드를 실행한다. CI의 DB 비밀번호는 실행 ID로 만든 일회성 시험 값이며 실서비스 자격증명이 아니다. 새5분야·시민용 검색/필터·신청 정보와 Flutter 앱 연동은 보완 대상이다. `npm run build`는 기존 합성 HTML 하나만 패키징하며 CI 성공을 새 기능·실자료 품질·전체 앱·운영 인수 완료로 표현하지 않는다.
 
 ## 로컬 확인
 
@@ -61,6 +61,10 @@ bash scripts/set-secret.sh PROJECT_TOKEN nam9ming/myai
 
 리뷰 스크립트는 비밀값 보호를 위해 기본 브랜치에서 읽는다. 기본 브랜치가 이전 Anthropic 버전이면 실행을 생략하며, OpenAI 리뷰 자동화는 main 반영 후 새 PR 또는 추가 커밋에서 확인한다.
 
+diff는 전체 Git 이력에서 PR 이벤트의 고정 `base.sha...head.sha`를 merge-base 기준으로 수집한다. GitHub diff API의300파일 한도를 사용하지 않으며, 기본 브랜치 checkout을 유지하고 PR head 코드를 실행하지 않는다. 외부 diff 드라이버·textconv도 차단한다. 전체 이력 다운로드 비용은 늘지만 모델에 전달하는 앞60000자 부분 검토 한도는 그대로다. 로컬 회귀 시험에는 기존 Git과 Bash가 필요하다. [checkout 이력 설정](https://github.com/actions/checkout#fetch-all-history-for-all-tags-and-branches)·[Git diff 기준](https://git-scm.com/docs/git-diff)을 따른다.
+
+강제 푸시·브랜치 삭제 뒤에도 이벤트 SHA를 비교할 수 있도록 base/head 커밋을 명시적으로 fetch한다. 인증은 그 명령에만 GitHub CLI credential helper를 지정해 `GH_TOKEN`으로 처리하며 자격정보를 Git 설정 파일에 저장하지 않는다. 서버에서도 커밋이 사라져 fetch가 실패하면 리뷰 생성을 중단한다. [GitHub CLI 인증 안내](https://cli.github.com/manual/gh_auth_setup-git)를 따른다.
+
 주간 리포트는 기존 Anthropic 구성을 유지한다. `ANTHROPIC_API_KEY`가 없으면 원본 활동 목록을 사용하며, 요약 모델은 `ANTHROPIC_SUMMARY_MODEL`로 변경한다. `OPENAI_API_KEY`만 등록해도 주간 리포트의 AI 요약이 켜지는 것은 아니다.
 
 main 반영·시크릿 등록 후 아래 명령은 실제 기존 채널에 메시지를 보낸다.
@@ -86,7 +90,7 @@ gh workflow run ping.yml --repo nam9ming/myai -f channel=ci -f message='myai 연
 
 ## 팀장·설정 담당자 확인
 
-1. PR 검토 후 main에 반영한다. 시크릿을 쓰는 작업은 기본 브랜치의 도구를 실행하므로 첫 도입 PR에서는 알림·보드·AI 실행 일부를 생략한다. 외부 fork PR은 CI만 검증한다.
+1. 기능 PR은 검증·리뷰 후 `develop`에 반영하고, `develop → main`은 사람 검토로 별도 처리한다. 시크릿을 쓰는 작업은 기본 브랜치 도구를 실행하므로 최초 도입 당시 일부 작업은 생략됐다. 외부 fork PR은 CI만 검증한다. 병합된 기능 브랜치는 포함 여부를 확인해 정리하며 미병합 작업·worktree 파일은 보존한다.
 2. 저장소 시크릿은 협업자도 등록할 수 있다. Pages·브랜치 보호·Actions 정책은 설정 권한자가 확인한다.
 3. 브랜치 보호 적용 명령은 `bash scripts/setup-branch-protection.sh nam9ming/myai main`이다. `check` 통과·리뷰 1인·대화 해결을 요구한다. `enforce_admins=false`이므로 관리자 우회는 허용하며 기존 보호 설정을 갱신하므로 설정 담당자가 실행한다.
 4. 공개 프리뷰가 필요할 때만 저장소 변수 `ENABLE_PREVIEW=true`를 등록한다. 첫 실행으로 `gh-pages`가 생기면 Settings → Pages에서 `Deploy from a branch` → `gh-pages` → `/ (root)`를 설정한다. Actions의 읽기·쓰기와 PR 코멘트 권한도 확인한다. 프리뷰 경로는 `https://nam9ming.github.io/myai/pr-번호/`이며 연구실 운영 배포와 별개다.

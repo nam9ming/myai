@@ -1,8 +1,31 @@
-# 연결 규격 초안 v0.1
+# 여기:it 연결 계약과 api-v1 기존 규격
 
-**v1.1 구현 주체:** Flutter Web은 API 소비자, Spring Boot는 공개 API·MySQL 관리, Python은 AI·시간/거리 계산입니다. 기존 공개 JSON 계약은 유지합니다. [계산 CLI 연결 계약](calculation-bridge.md)과 [DB 설계](../docs/spec/09_DB설계와트랜잭션.md)를 함께 적용합니다.
+**구현 경계:** Flutter Web은 API 소비자, Spring Boot는 공개 API·MySQL 관리, Python은 AI·시간/거리 계산입니다. 기존 공개 JSON 계약은 유지합니다. [계산 CLI 연결 계약](calculation-bridge.md)과 [DB 설계](../docs/spec/09_DB설계와트랜잭션.md)를 함께 적용합니다.
 
-`public-events.json`과 응답 예제는 특정 조건에서 계산된 가상 표시용 자료입니다. 좌표·검토 상태·근거 등 전체 D06 입력을 갖춘 원본 DB seed 또는 계산기 입력으로 간주하지 않습니다. 실제 계산 입력은 검토된 D06과 D03/D07을 조립합니다.
+[시민 목록·상세 구현 검토안](citizen-api.md)은 별도 `citizen-api-v1` 경로·고정 출처·확보된 공개 이력을 제공합니다. 화면별 최종 계약 대조는 남아 있으며 아래 기존3 API·계산 계약은 유지합니다. 새 합성 응답2개도 기존 예제와 함께 `validate_examples.py`로 검사합니다.
+
+[현행 업무] 김윤기가 기존 백엔드·계약 재사용 범위를 조사하고 이상헌과 화면별 필드/API/오류를 합의합니다. 명묵은 반복 시나리오를 검증하고 남규민은 우선 분야·수집처·개인화·변경추적·일정을 합의합니다. 새 경로·필드·enum은 아래 보완 대상이며 이 문서 변경으로 구현 완료되지 않습니다.
+
+<a id="yeogi-it-contract-agreement"></a>
+
+## 여기:it 계약 보완·합의 순서
+
+[확정 요구] 대상은 안성시민 전체이며 교육·배움 / 지원·혜택 / 행사·문화 / 공사·교통 / 생활정보5분야와 기존 소상공인 기능을 다룹니다. 기존 `construction/event/traffic`을5분야 enum으로 해석하거나5지점·500m·14일을 전체 시민 조회 제한으로 확대하지 않습니다.
+
+| 보완 대상 | 합의할 의미·경계 |
+| --- | --- |
+| 목록·상세·검색 | 화면별 필수/선택 필드·null·오류, 지역·분야·모집 상태·비용·기간 필터와 정렬, 목록/상세의 동일 자료·버전 연결 |
+| 일정·모집 상태 | 신청 시작/마감과 실제 진행일정을 분리, 미상·상시/접수 여부·기간 경계 및 시간대 정의. 신청 마감이 진행 종료를 뜻하지 않음 |
+| 조건·비용·신청 | 대상·자격/신청조건·신청방법·준비사항·비용·지역·원문을 구분, 비용 미기재를 무료로 변환하거나 연령·관심만으로 자격 확정 금지 |
+| 변경추적·불확실성 | 확보된 변경 전후·근거·확인시점과 미확인 이력을 구분, 이전 자료 부재를 변경 없음으로 확정하지 않음 |
+| 개인정보·개인화 | 관심저장·개인설정은 초기 프런트 브라우저 저장, 저장 범위·초기화 합의. 새 계정·인증·동기화·알림 발송은 자동 필수 계약이 아님 |
+
+1. [기존 구현·계약] 아래3 API·3유형·`point_id`·`weekly_hours`와 계산/오류/공개 snapshot 의미를 기준으로 재사용·부족 필드를 대조합니다.
+2. [합의 필요] 이상헌·김윤기가 화면별 필드/API/오류·검색/필터/정렬을, 남규민과 우선 분야·수집처·개인화·변경추적을 합의합니다. 차별화 후보3개는 모두 수용하는 원칙이나 정확한 명칭·내용은 미제공입니다. 정보분석·개인화·이해지원·신뢰성4항목은 구체화 제안이며3후보를 대체하지 않습니다.
+3. 합의된 필드·상태·API에 대해 기존 소비자·Python CLI·DB·fixture·평가 분모의 영향을 확인하고 `api-v1` 호환 추가 또는 새 버전/전환 방법을 정합니다. 기존 JSON·enum을 문서만으로 바꾸지 않습니다.
+4. 계약·예제·호출자·검증을 함께 변경한 뒤 백엔드 구현 → 프런트 연동 → 명묵의 반복 시나리오 검증 → 원인 수정·인계 순서로 완료를 확인합니다. 실제 실행·자료·품질평가와 합성 연결 시험을 구분합니다.
+
+`public-events.json`과 기존 fixture 응답 예제는 특정 조건에서 계산된 가상 표시용 자료입니다. 좌표·검토 상태·근거 등 전체 D06 입력을 갖춘 원본 DB seed 또는 계산기 입력으로 간주하지 않습니다. 실제 계산 입력은 검토된 D06과 D03/D07을 조립합니다.
 
 프런트·백엔드·AI 담당이 같은 필드와 상태를 사용하기 위한 기준입니다. 상세 모델/필드 검증은 [데이터·AI 명세](../docs/spec/03_데이터와AI.md), 시간·거리·중복 규칙은 [계산·API 명세](../docs/spec/04_계산규칙과기술설계.md)를 따릅니다.
 
@@ -10,15 +33,19 @@
 
 ## 세 API
 
+[기존 구현·계약] 이 절부터의 API·요청 필드·오류·예제는 현재 유효한 `api-v1`의3유형/지점/영업시간 규격입니다. 새5분야의 목록·검색·필터·신청/진행·비용/조건 계약은 위 합의 후 보완하며 아직 구현된 경로·enum으로 제시하지 않습니다.
+
+장문 AI 입력의 분할·원문 범위·실제 요청/문서 cycle·v2 보관·사람 검토 경계는 [장문 분할 계약](chunked-extraction.md)을 따릅니다. 공개 API·D03 입력·extract-schema-v1은 유지합니다.
+
 내부 경로는 아래와 같습니다. 외부 하위경로 접두사는 배포 시 별도 설정합니다.
 
 | ID | 요청 | 예제 | 응답 |
 |---|---|---|---|
 | I01 | GET `/api/v1/config?mode=current` | [config-response.json](examples/config-response.json) | 지점5개·14일/500m·시간대·자료 범위 |
 | I02 | POST `/api/v1/matches` | [matches-request.json](examples/matches-request.json) | [matches-response.json](examples/matches-response.json) |
-| I03 | GET `/api/v1/events/{event_id}?snapshot_id=…` | matches 항목의 event_id 사용 | [event-response.json](examples/event-response.json) |
+| I03 | GET `/api/v1/events/{event_id}?snapshot_id=…` | 공개 사건ID·snapshot | 실제 DB 형식: [event-facts-response.json](examples/event-facts-response.json), 기존 fixture: [event-response.json](examples/event-response.json) |
 
-JSON 응답의 공통 껍데기는 `schema_version / snapshot_id / generated_at / data`입니다. 실제 구현 시 `schema_version="api-v1"`로 시작하고 호환성에 영향을 주는 변경을 함께 협의합니다. 예제 response의 `data_kind="synthetic"`는 data 안에 있습니다. 실제 공개자료와 가상자료를 구분하는 표시가 UI까지 이어져야 합니다.
+JSON 응답의 공통 껍데기는 `schema_version / snapshot_id / generated_at / data`입니다. 현재 구현은 `schema_version="api-v1"`이며 호환성에 영향을 주는 변경을 함께 협의합니다. 예제 response의 `data_kind="synthetic"`는 data 안에 있습니다. 실제 공개자료와 가상자료를 구분하는 표시가 UI까지 이어져야 합니다.
 
 ### 조건 요청
 
@@ -45,17 +72,47 @@ JSON 응답의 공통 껍데기는 `schema_version / snapshot_id / generated_at 
 
 예제 데이터4개 전체는 [public-events.json](examples/public-events.json)에 있습니다. 서로 다른 selection 예제를 만들 때 counts는 동일 필터 기준으로 유지하고 items만 선택합니다.
 
+실제 DB config의 `data.created_at`은 snapshot 작성 시각입니다. 응답의 `generated_at`·`data.server_now`와 구분해 표시합니다.
+
+### 실제 DB 상세 조회
+
+[event-facts-response.json](examples/event-facts-response.json)은 [검토 입력 예제](../backend/examples/reviewed-import.json)를 승인·공개한 실제 DB API 응답에서 식별자·응답 시각을 고정한 **합성 예제**입니다. 기존 config fixture와 별도 snapshot이며 실제 서버의 ID를 뜻하지 않습니다. MySQL 통합 시험에서 동적 ID·요청 시각을 따로 검증한 뒤 나머지 응답 전체가 이 예제와 일치하는지 확인합니다. 계약 검사는 계산 필드 부재, FieldValue와 표시값, 문서 버전·근거 인용·code point 오프셋·hash를 확인합니다.
+
+I03은 [계산·API 명세](../docs/spec/04_계산규칙과기술설계.md)에 따른 **조건 없는 사실 응답**입니다. 기존 `event-response.json`은 고정 조건의 계산까지 포함한 화면용 합성 예제이며 fixture 프로필에서 그대로 유지합니다. 실제 DB 상세에는 I02 전용 `classification`, `reason_codes`, `distance_m`, `distance_basis`, `time_overlap_minutes`, `matched_occurrence_ids`를 넣지 않습니다. 프런트는 같은 snapshot의 I02 결과와 조합하고, 계산 미준비를0이나 후보로 표시하지 않습니다.
+
+- 대상·예외·노선·정류장·방향의 기존 값 필드는 유지합니다. 추가 `field_values`는 각 필드의 `value/knowledge/evidence_ids/reason`을 담고 null과 알려진 빈 배열을 구분합니다. 장소의 name/address도 같은 방식입니다.
+- `evidence`에 근거ID·문서 버전·블록·인용·Python code point 오프셋·본문 hash를 보존합니다. `source_refs`는 해당 공개본의 문서 버전과 당시 확인 상태를 제공합니다. replay의 `current_*`는 공개본 생성 시 확보한 현재 확인 상태이며 실시간 재확인값이 아닙니다.
+- `history`는 비공개 수정 기록 대신 같은 문맥의 공개·복구 전환에서 revision의 값 차이와 이전/새 근거·출처를 제공합니다. 구조·오류·실행 예시는 [백엔드 공개 조회 안내](../backend/docs/public-snapshot-api.md)를 따릅니다.
+
 ### 실패
 
-[error-response.json](examples/error-response.json): `error.code / message / field_errors / retryable`, `request_id`. 입력422·미등록404·버전충돌409·미준비503·기타500을 구분합니다. 실제 traceback·비밀키·비공개 원문 경로를 공개하지 않습니다.
+[error-response.json](examples/error-response.json): `error.code / message / field_errors / retryable`, `request_id`. 입력422·미등록404·버전충돌409·미준비503·기타500을 구분합니다. 교체된 공개본은409 `SNAPSHOT_RETIRED`와 최상위 `current_snapshot_id`를 반환하며, 사용자가 새 버전 적용을 선택한 뒤 재조회합니다. 접속·자원 장애와 일시적 DB 오류만 재시도 가능한503입니다. SQL 문법·스키마·제약/사용 오류는 재시도 불가500이며 서버 로그의 request_id로 추적합니다. 실제 traceback·비밀키·비공개 원문 경로를 공개하지 않습니다.
 
 ## AI → 검토 → 저장
 
+시민5분야의 [extract-citizen-v1](citizen-extraction.md)은 기존 입력·근거·manual archive-v1을 재사용하는 별도 출력 family다. title/categories와12개 원문 사실을 FieldValue로 보존하며 분류 미상은 null+ambiguous다. [시민 사람 인계](citizen-human-handoff.md)는 `citizen-human-handoff-v1`6키 선택→`citizen-human-handoff-projection-v1`→별도 Java `citizen-human-handoff-import-v1` 요청을 구별한다. title/categories 미해결은 투영을 거부하며12사실·실패 부모·전체 검토 원본을 보존한다. 명시 split_group_id는 D06 관계 group이며 D08 배정이 아니다.
+
+기존 draft/`human-handoff-v1`/D08은 시민 family를 계속 거부해 원래3유형·8필드 규격에 섞지 않는다. 시민 Java 저장·승인/공개·S10과 전체 검증·반영 상태는 [G5 계획](../docs/superpowers/plans/2026-11-18-citizen-human-handoff.md)을 따르며 새 평가 분모·실제 품질·팀원/Flutter 최종 합의를 뜻하지 않는다.
+
+시민 원문 표현의 Java 수동 입력은 [시민 내부 검토 규격](../backend/docs/citizen-review.md)으로 분리한다. 기존 AI schema·Python 출력과 공개 `api-v1` JSON은 변경하지 않으며, 이 내부 규격을 최종 Flutter 조회 계약으로 간주하지 않는다.
+
+[시민 불변 공개본](../backend/docs/citizen-publication.md)은 `citizen-snapshot-v1`·별도 채널의 공개용 기록/파일 전달 규격이다. 기존 snapshot-v1·Python 계산과 분리하며 [시민 목록·상세](citizen-api.md)에서 읽는다. 추출 원출력을 그 공개본으로 직접 사용하지 않는다.
+
 [ai-extraction.json](examples/ai-extraction.json)은 `extract-schema-v1` 형식의 **가상 추출 원출력**입니다. 같은 폴더의 [ai-input.json](examples/ai-input.json)에 대응합니다.
+
+기계 검증 스키마는 [AI 입력](schemas/ai-input-v1.json)과 [추출 출력](schemas/extract-schema-v1.json)입니다. Python의 추가 참조/근거 검증·버전 고정 프롬프트·OpenAI 실행·비공개 원본 기록은 [실행 기록 계약](extraction-run.md)을 따릅니다. Java D05 등록은 [연결 안내](../backend/docs/extraction-run-import.md), 개발용 실제3건의 처리 상태는 [Python 안내](../processing/README.md)를 따릅니다. 원출력 검증 성공을 사실 검토나 공개 승인으로 사용하지 않습니다.
 
 AI 원출력을 공개 API 응답으로 바로 사용하지 않습니다. 사람의 원문 대조·수정·장소 검토·시간 정규화·상태 관계 확정을 거쳐 backend가 관리하는 공개 데이터로 변환합니다. 바뀐 값과 이유·근거·입력/출력 버전은 분리 보존합니다. 예제에 사람 검토가 완료됐다는 실제 실적은 없습니다.
 
 ## 확인
+
+규칙 자동 기준선은 [rule-profile-v1/rules-run-v1](rule-baseline.md)을 따릅니다. 입력·고정 리터럴 프로필·출력을 AI D05와 별도로 보관하고 같은 extract-schema-v1/8필드 채점기와 D08 규칙 선택/최초·재시험 동결에 연결합니다. 프로필 검토/고정은 선언이며 실제 검토 사전·gold·40건 평가를 인증하지 않습니다. 세 방법의 짝지은 개선/악화 비교는 [extraction-comparison-v1](extraction-comparison.md)로 연결합니다.
+
+D08 문서 버전·사건 연결·개발/확인 배정은 [dataset-manifest-v1](dataset-manifest.md), 실제 입력·D05 원본 대조는 [dataset-bindings-v1](dataset-bindings.md), 독립 정답 제공자의 기록·원본 동결은 [dataset-gold-v1](gold-archive.md)을 따릅니다. [extraction-evaluation-v1](extraction-evaluation.md)은 API/규칙/사람 수정 원본 선택·8필드 채점·최초/재시험 전체 원본을 고정합니다. 공개 API는 바꾸지 않습니다. 실제 독립 정답표 작성·교차 검토·40건 평가와 실제 자료의 세 방법 비교는 아직 수행하지 않았습니다.
+
+[matching-evaluation-v1](matching-evaluation.md)은 같은 동결 비교 원본의 gold/규칙/AI/사람6개 뷰를 독립 수동 기대 분류·사유와 비교합니다. 모든 문서·버전·실패·누락·중복/추가를 보존하고 candidate 검색 존재 P/R과 모든 관측이 일치한 완전 분류를 구별합니다. cutoff 미확보·상충을 제외나 성공으로 바꾸지 않으며 matching 자체의 최초/재시험과 전체 원본을 별도로 동결합니다. 원래 공개 계약·M02·실제40건 목표는 유지합니다.
+
+[D09 user-study 계약](user-study.md)은 사전 프로토콜·동의/보존 선언·동일 자료·모집/과제 기록을 private pack에서 읽기 전용 검사하고 M04/M05·실패/정확도/미상 누락을 JSON/CSV로 명시 내보냅니다. 원본을 자동 archive로 복제하지 않으며 실제 담당자·보존기한·종료처리·모집/동의/실증 실적을 만들지 않습니다. D08 사람 수정시간과 D09 사용자 탐색시간은 별개입니다.
 
 Python 표준 라이브러리만 사용합니다.
 
@@ -63,4 +120,6 @@ Python 표준 라이브러리만 사용합니다.
 python contracts/validate_examples.py
 ```
 
-이 검사는 JSON 예제 사이 ID·상태·counts·기간·근거 인용의 연결을 확인합니다. 앱 구현 시험, 공식자료 정확도나 AI 성능 평가를 대신하지 않습니다. 실제 구현 시 JSON Schema와 요청/응답 모델 검증은 담당자가 추가합니다.
+이 검사는 JSON 예제 사이 ID·상태·counts·기간·근거 인용의 연결을 확인합니다. 앱 구현 시험, 공식자료 정확도나 AI 성능 평가를 대신하지 않습니다. AI 계약의 상세 경계는 `python3.13 -m unittest discover -s processing/tests -v`로 함께 검증합니다.
+
+사람 수정후 평가의 원본은 [human-review-v1](human-review.md)로 별도 보관합니다. 실제 전후 변경·검토 시간 선언과 frozen D05 전체를 대조하며 원출력을 덮어쓰지 않습니다. D06 역변환·독립 gold·사람 신원 인증으로 취급하지 않으며 기존 family의 [D08 채점/최초·재시험](extraction-evaluation.md)은 별도 human_reviewed 뷰와 선언 시간 요약을 제공합니다. 세 방법 비교는 [별도 계약](extraction-comparison.md)을 따릅니다. [기존 D06 인계](human-handoff.md)와 [시민 D06 인계](citizen-human-handoff.md)는 명시 family별 사실과 사람/부모 원본 전체를 보존합니다. 별도 [Java 인계 요청](../backend/docs/human-handoff-import.md)이 전체 이미지·등록 D03/D05·명시 revision을 대조하며 실제 자료의 사람 승인/공개 실적과 구분합니다.

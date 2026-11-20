@@ -1,0 +1,16 @@
+{
+  "schema_version": "rule-profile-v1",
+  "profile_version": "synthetic-places-v1",
+  "rule_version": "rule-extract-v1",
+  "data_kind": "synthetic",
+  "type_keywords": {
+    "construction": ["공사"],
+    "event": ["행사"],
+    "traffic": ["통제"]
+  },
+  "target_keywords": ["대상"],
+  "exception_keywords": ["예외", "제외"],
+  "places": [
+    {"name": "가상로 A", "aliases": ["가상길"], "kind": "point"}
+  ]
+}

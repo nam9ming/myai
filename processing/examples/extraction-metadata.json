@@ -1,0 +1,22 @@
+{
+  "run_id": "71fb66f0-e610-4f9c-8f26-4bb77655ee8c",
+  "document_version_id": "e9dc7495-7186-5318-a054-4fc54e9b78cc",
+  "execution_mode": "manual_import",
+  "attempts": 1,
+  "provider": "synthetic-fixture",
+  "model_label": null,
+  "model_version": null,
+  "unavailable_reasons": {
+    "model_label": "실제 모델 호출 없음",
+    "model_version": "실제 모델 호출 없음"
+  },
+  "prompt_version": "prompt-v1",
+  "schema_version": "extract-schema-v1",
+  "preprocessing_version": "fixture-nfc-v1",
+  "started_at": null,
+  "finished_at": null,
+  "usage_in": null,
+  "usage_out": null,
+  "cost": null,
+  "currency": null
+}

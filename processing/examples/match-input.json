@@ -1,0 +1,269 @@
+{
+  "protocol_version": "calc-v1",
+  "request_id": "synthetic-request",
+  "snapshot_id": "20000000-0000-4000-8000-000000000001",
+  "snapshot_checksum": "0000000000000000000000000000000000000000000000000000000000000000",
+  "context": {
+    "mode": "current",
+    "case_id": null,
+    "server_now": "2026-11-03T02:00:00Z",
+    "anchor_date": "2026-11-03",
+    "reference_instant": null,
+    "knowledge_cutoff": null,
+    "history_fidelity": null,
+    "data_kind": "synthetic",
+    "window_days": 14,
+    "radius_m": 500,
+    "rules_version": "rules-v1",
+    "dictionary_version": "synthetic-dictionary-v1"
+  },
+  "point": {
+    "point_id": "16ac9b3c-995e-532d-bd2b-a5348394f3c6",
+    "longitude": 127.27,
+    "latitude": 37.01
+  },
+  "query": {
+    "point_id": "16ac9b3c-995e-532d-bd2b-a5348394f3c6",
+    "weekly_hours": {
+      "monday": {
+        "state": "open",
+        "full_day": false,
+        "intervals": [
+          {
+            "start": "09:00",
+            "end": "18:00",
+            "end_day_offset": 0
+          }
+        ]
+      },
+      "tuesday": {
+        "state": "open",
+        "full_day": false,
+        "intervals": [
+          {
+            "start": "09:00",
+            "end": "18:00",
+            "end_day_offset": 0
+          }
+        ]
+      },
+      "wednesday": {
+        "state": "open",
+        "full_day": false,
+        "intervals": [
+          {
+            "start": "09:00",
+            "end": "18:00",
+            "end_day_offset": 0
+          }
+        ]
+      },
+      "thursday": {
+        "state": "open",
+        "full_day": false,
+        "intervals": [
+          {
+            "start": "09:00",
+            "end": "18:00",
+            "end_day_offset": 0
+          }
+        ]
+      },
+      "friday": {
+        "state": "open",
+        "full_day": false,
+        "intervals": [
+          {
+            "start": "09:00",
+            "end": "18:00",
+            "end_day_offset": 0
+          }
+        ]
+      },
+      "saturday": {
+        "state": "open",
+        "full_day": false,
+        "intervals": [
+          {
+            "start": "09:00",
+            "end": "18:00",
+            "end_day_offset": 0
+          }
+        ]
+      },
+      "sunday": {
+        "state": "open",
+        "full_day": false,
+        "intervals": [
+          {
+            "start": "09:00",
+            "end": "18:00",
+            "end_day_offset": 0
+          }
+        ]
+      }
+    },
+    "mode": "current",
+    "case_id": null,
+    "types": [],
+    "snapshot_id": "20000000-0000-4000-8000-000000000001",
+    "selection": "candidate",
+    "sort": "start"
+  },
+  "events": [
+    {
+      "event_id": "10000000-0000-4000-8000-000000000004",
+      "revision_id": "10000000-0000-4000-8000-000000000007",
+      "title": "합성 공지 😀",
+      "types": [
+        "construction"
+      ],
+      "applicability": {
+        "value": "차량",
+        "knowledge": "known",
+        "evidence_ids": [
+          "body-quote"
+        ],
+        "reason": null
+      },
+      "exceptions": {
+        "value": null,
+        "knowledge": "not_stated",
+        "evidence_ids": [],
+        "reason": "예외 미기재"
+      },
+      "route_names": {
+        "value": null,
+        "knowledge": "not_stated",
+        "evidence_ids": [],
+        "reason": "노선 미기재"
+      },
+      "stop_names": {
+        "value": null,
+        "knowledge": "not_stated",
+        "evidence_ids": [],
+        "reason": "정류장 미기재"
+      },
+      "directions": {
+        "value": null,
+        "knowledge": "not_stated",
+        "evidence_ids": [],
+        "reason": "방향 미기재"
+      },
+      "lifecycle": "active",
+      "lifecycle_evidence_ids": [],
+      "source_version_ids": [
+        "10000000-0000-4000-8000-000000000002"
+      ],
+      "area_membership": "verified",
+      "document_links": [
+        {
+          "document_id": "10000000-0000-4000-8000-000000000001",
+          "role": "original",
+          "evidence_ids": [
+            "heading-quote",
+            "body-quote"
+          ]
+        }
+      ],
+      "relations": [],
+      "occurrences": [
+        {
+          "occurrence_id": "10000000-0000-4000-8000-000000000008",
+          "date_start": "2026-11-03",
+          "date_end": "2026-11-03",
+          "time_start": "10:00",
+          "time_end": "12:00",
+          "end_day_offset": 0,
+          "precision": "exact_time",
+          "recurrence_dates": null,
+          "location_ids": [
+            "10000000-0000-4000-8000-000000000009"
+          ],
+          "evidence_ids": [
+            "body-quote"
+          ],
+          "knowledge": "known"
+        }
+      ],
+      "locations": [
+        {
+          "location_id": "10000000-0000-4000-8000-000000000009",
+          "name": {
+            "value": "가상도로",
+            "knowledge": "known",
+            "evidence_ids": [
+              "body-quote"
+            ],
+            "reason": null
+          },
+          "address": {
+            "value": null,
+            "knowledge": "not_stated",
+            "evidence_ids": [],
+            "reason": "주소 미기재"
+          },
+          "kind": "point",
+          "status": "verified",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              127.27,
+              37.01
+            ]
+          },
+          "coverage": "complete",
+          "evidence_ids": [
+            "body-quote"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidence_id": "heading-quote",
+          "document_version_id": "10000000-0000-4000-8000-000000000002",
+          "block_id": "heading",
+          "quote": "합성 공지 😀",
+          "start_char": 0,
+          "end_char": 7,
+          "text_sha256": "951432927f32fce5ec44844883644e3b11359a5a0b171964ed845c89a52a0b72"
+        },
+        {
+          "evidence_id": "body-quote",
+          "document_version_id": "10000000-0000-4000-8000-000000000002",
+          "block_id": "body",
+          "quote": "2026-11-03 10:00~12:00 가상도로 공사. 차량 통행 제한.",
+          "start_char": 0,
+          "end_char": 41,
+          "text_sha256": "951432927f32fce5ec44844883644e3b11359a5a0b171964ed845c89a52a0b72"
+        }
+      ]
+    }
+  ],
+  "source_versions": [
+    {
+      "document_id": "10000000-0000-4000-8000-000000000001",
+      "document_version_id": "10000000-0000-4000-8000-000000000002",
+      "publisher": "합성 기관",
+      "official_url": "https://example.org/synthetic-notice",
+      "title": "합성 공지 😀",
+      "official_number": null,
+      "published_date": "2026-11-02",
+      "collected_at": "2026-11-02T01:00:00Z",
+      "text_sha256": "951432927f32fce5ec44844883644e3b11359a5a0b171964ed845c89a52a0b72",
+      "last_verified_at": "2026-11-02T02:00:00Z",
+      "latest_check_attempt_at": "2026-11-02T02:00:00Z",
+      "check_result": "verified",
+      "current_last_verified_at": "2026-11-02T02:00:00Z",
+      "current_latest_check_attempt_at": "2026-11-02T02:00:00Z",
+      "current_check_result": "verified",
+      "checks": [
+        {
+          "checked_at": "2026-11-02T02:00:00Z",
+          "result": "verified",
+          "text_sha256": "951432927f32fce5ec44844883644e3b11359a5a0b171964ed845c89a52a0b72"
+        }
+      ]
+    }
+  ]
+}

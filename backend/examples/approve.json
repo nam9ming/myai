@@ -1,0 +1,11 @@
+{
+  "schema_version": "publication-command-v1",
+  "action": "approve",
+  "reason": "합성 원문·근거 대조 완료",
+  "event_id": "10000000-0000-4000-8000-000000000004",
+  "expected_revision_no": 1,
+  "evidence_ids": [
+    "heading-quote",
+    "body-quote"
+  ]
+}

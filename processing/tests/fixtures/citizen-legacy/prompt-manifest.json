@@ -1,0 +1,69 @@
+{
+  "source_commit": "1e17c83d14dbad3be07f6b21dee6c357e6e826c0",
+  "processing_unmodified_since": "4c2dd1b06487162f75ebb340c7f6cf50e2b8c366",
+  "public_input": "contracts/examples/ai-input.json",
+  "chunk": {
+    "chunk_id": "00000000-0000-4000-8000-000000000001",
+    "core_start": 0,
+    "core_end": 1,
+    "context_start": 0,
+    "core_block_ids": [
+      "b1"
+    ],
+    "context_block_ids": []
+  },
+  "files": {
+    "input.json": {
+      "sha256": "705078a303125a4bdf41e9b1fba98533fd0de21cbb232a89d26126699a6e4cc3",
+      "size": 529
+    },
+    "output.json": {
+      "sha256": "e865fb1568b30660b8f62493378bc8d601e85854015b5612d1659df652d8754e",
+      "size": 4388
+    },
+    "input-schema.json": {
+      "sha256": "e09404321a4df445afe4c698fdd4ea69b5b77067e7036cc958623b5b83519f35",
+      "size": 909
+    },
+    "output-schema.json": {
+      "sha256": "323a89489557f4b494708475cbf2717557341a87d4f8dfd26fef2880e441775e",
+      "size": 16759
+    },
+    "prompt-v1.json": {
+      "sha256": "93eddcb3554dca8fc9a10091db672946edef1e5742161fd159b3f7bb311af734",
+      "size": 18892
+    },
+    "prompt-v1-request.json": {
+      "sha256": "00b01d1232e2b60d7474ec45a19706d4b38693b54f5ef03ad2572c884cb0b201",
+      "size": 23721
+    },
+    "prompt-v1-feedback-request.json": {
+      "sha256": "8534e0af1c39a9e507080ac23d098cc35c6d98ff6964605be837171371f7be89",
+      "size": 23812
+    },
+    "prompt-v2.json": {
+      "sha256": "9ccc05c068736e274b280fd94196a57ee455488fc11a79a72b184ff9742f23f4",
+      "size": 19517
+    },
+    "prompt-v2-request.json": {
+      "sha256": "e6bee5456d44bdc59c866e3b43f7f8677713352f3d47f1c6e2cc59c60bfcac17",
+      "size": 24865
+    },
+    "prompt-v2-feedback-request.json": {
+      "sha256": "bc0e7e674cda7aed206895b65e450335ba6d932f3ad26f771afacd2a98e1f0b9",
+      "size": 24956
+    },
+    "prompt-v3.json": {
+      "sha256": "e50fce79685a7d48a155826c899eedd0c5e49b5083d1802ff62664620b12437b",
+      "size": 20201
+    },
+    "prompt-v3-request.json": {
+      "sha256": "d3d63de4f26abd9d259c2a7e538c3473c75808dedd5dc48b55fa181a58a24122",
+      "size": 26102
+    },
+    "prompt-v3-feedback-request.json": {
+      "sha256": "6bfd62654e3aa95bc27d27832cffad9bb4e3c5288a03d4cc71217bd63f154029",
+      "size": 26193
+    }
+  }
+}

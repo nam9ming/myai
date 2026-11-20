@@ -1,0 +1,62 @@
+# 공개 snapshot 조회 구현 계획
+
+**목표:** 승인·공개한 DB snapshot으로 config와 조건 없는 사건 상세를 제공한다.
+**기준:** `docs/spec/04_계산규칙과기술설계.md` I01~I03, `contracts/README.md`, 기존 snapshot-v1.
+**기술:** 기존 Java21·Spring JDBC·Jackson·MySQL8.4.13. 새 의존성·migration 없음.
+
+## 범위와 제약
+
+- config·상세·matches 사전 검증은 읽기 전용 REPEATABLE READ에서 같은 공개본을 사용한다.
+- canonical checksum·문맥을 확인하고 허용 필드만 반환한다. 최신 작업 revision·지점·비공개 수정 전 값을 섞지 않는다.
+- 현재 채널 head만 공개한다. 교체된 공개본은 409 SNAPSHOT_RETIRED와 current_snapshot_id, 미등록·미공개본은404다. rollback하면 이전본이 다시 활성화된다.
+- I03은 계산 전 사실 응답이다. 기존 표시용 fixture는 유지하고 실제 응답에는 I02 전용 분류·거리·겹침 시간을 만들지 않는다. field_values에 값·knowledge·근거·미상 이유를 보존한다.
+- 공개 변경이력은 선택 snapshot의 최초 공개 감사 순번까지 같은 채널의 공개·복구 전환에 등장한 revision을 순서대로 비교한다. 이전 canonical의 공개 필드·근거·출처만 사용한다.
+- replay는 선택 공개본의 cutoff·당시 확인 상태와 별도의 current_ 상태를 보존한다. 사례 목록은 같은 구역·자료 종류의 활성 replay만 제공한다.
+- matches는 snapshot·문맥·지점 검증 뒤 CALCULATOR_NOT_READY503. Python·프런트·관리 UI·배포는 후속 작업이다.
+
+### Task 1: DB 공개 조회와 인계
+
+**대상:** 공개 조회 repository/service, ApiException/handler, PublicationMySqlTest, backend 문서와 contracts/README.
+**인터페이스:** 기존 PublicNoticeService·HTTP 경로 유지. 상세의 field_values·공개 history와409 current_snapshot_id를 문서화한다.
+
+1. 실제 MySQL에서 공개 후 config/상세, null·빈 배열·whitelist, 비공개 작업 수정 격리, 교체/복구, 미공개·손상본, replay·계산 미준비를 검증하는 실패 시험을 작성한다.
+   실행: 전용 DB 환경에서 `./gradlew test --tests kr.ac.myai.backend.PublicationMySqlTest`.
+   Expected: 공개 조회가503이라 새 성공/교체 검증이 실패한다.
+2. canonical 조회·허용 필드·과거 공개본 비교·오류 응답을 구현한다.
+   같은 명령 실행. Expected: 새 조회 시험과 기존 공개 시험 통과.
+3. 전체 Java/실제 MySQL·Node·계약 예제·lint·build·bootJar 검증, 독립 코드 검토 후 한국어 문서를 갱신하고 child PR을 만든다.
+   Expected: 전체 성공·Java 생략0개. PR base는 아직 main에 반영하지 않은 backend/api-foundation이다.
+
+## 로컬 검증 기록
+
+Java64개를 실제 전용 MySQL8.4.13에서 실행해 전부 통과했고 생략은0개다. Node15개·계약 예제8개·lint·build·bootJar도 통과했다. 실행 JAR로 import→승인→공개→config/상세→교체409→복구와 matches503·실제 DB 중단503·health200을 확인했다.
+
+독립 검토에서 공개 변경 비교 목록에 구역 소속·문서 연결 등의 누락을 발견했다. source_refs·문서 버전·구역 소속 변경의 실패를 재현하고 공개 응답 필드 전체를 비교해 해결했다. 손상된 current 포인터가 다른 모드의 활성 snapshot을 가리키는 경우도500으로 차단한다. replay 이력은 역사 문맥이 같은 공개본만 비교한다.
+
+사례 목록과 변경이력은 소수 자료를 대상으로 순차 조회한다. 자료 증가 시 목록 projection·이력 pagination이 필요하다. Python·프런트·관리 UI·실제 자료 검수·운영 배포는 후속 범위다. CI·자동 리뷰와 PR 링크는 PR 본문에 기록한다.
+
+OpenAI 리뷰 후 공개 A→공개 B→A 복구→B 재공개에서 이력이1개만 남는 문제를 회귀 시험으로 재현했다. 공개 감사 전환을 head_version 순서로 읽고 연속된 동일 revision만 생략해3개 변경을 보존한다. 마지막 반복 공개는 새 변경을 만들지 않는다. 남아 있던 공개 조회 미구현 설명도 수정했다. 수정 후 전체 Java64개·Node15개·계약8개·lint·build·bootJar를 다시 통과했다.
+
+최초 공개 감사의 head_version을 이력 상한으로 사용한다. 생성/감사 시각 차이를 강제로 둔 MySQL 회귀에서 변경 누락을 재현한 뒤, 시스템 시각 대신 감사 순번으로 경계를 고정했다. 이전 snapshot 복구 시 최초 공개 이후의 변경은 계속 제외한다. 전체 Java64개를 생략 없이 통과했다.
+
+사례 목록은 구역·자료 종류를 DB에서 먼저 선별하고 해당 공개본만 검증한다. 다른 구역 또는 자료 종류의 손상된 replay가 정상 current config를500으로 만들던 회귀를 재현·수정했으며, 손상된 사례를 직접 선택하면 여전히500으로 차단한다. 전체 Java64개·생략0개와 bootJar·lint를 통과했다.
+
+## 사용자 지적 후 전체 재검토 — 로컬 수정, 원격 반영 보류
+
+PR7은 Draft로 전환했다. 자동 지적별 즉시 push를 중단하고 변경 파일·호출부·기존 producer·명세를 함께 재검토했다. 신규2건(다른 역사 문맥의 손상 전파, snapshot 작성 시각 누락)과 기존 producer1건(outside 공개 허용)을 확인했다.
+
+실제 MySQL에서4개 실패를 먼저 확인했다: 무관한 cutoff의 손상본으로 정상 상세500, outside publish 성공, legacy outside 공개 조회200, config.created_at 누락. 이후 조회 SQL의 문맥 선별, 생성·기존 공개본·복구의 공통 publicArea 검증, 고정 data.created_at 전달을 로컬에서 묶어 수정했다. 전체 Java66개·생략0개와 bootJar를 통과했다. 반복 config에서 작성 시각의 불변성도 확인했다.
+
+원격 head는 a6ddce4로 유지한다. 생성·조회 파일을 포함한 로컬 수정은 아직 commit/push하지 않았다. 실제 fact-only I03의 별도 기계 검증 예제와 일반 SQL 오류의503 분류 개선은 P3 인계·운영 항목으로 별도 남긴다. 이력의 관련 자료 자체가 손상된 경우500으로 막는 정책과 대량 이력 pagination 미구현은 유지한다.
+
+## 추가 개선 및 제출 준비
+
+사용자 요청에 따라 보류했던 SQL 오류 분류와 실제 I03 예제를 보완한다. 접속/자원·일시적·복구 가능한 DB 오류와 트랜잭션 생성 실패는503을 유지하고 영구 SQL/사용 오류는500과 요청 ID가 남는 기존 오류 로그로 처리한다. HTTP 오류 주입 시험7개에서3개의 잘못된503을 먼저 재현하고 분류를 수정했다.
+
+실행 JAR의 실제 DB 상세로 event-facts-response.json 합성 예제를 작성했다. MySQL 시험에서 UUID·요청 시각은 별도로 검증하고 응답 전체를 예제와 비교한다. Python 계약 검사는 FieldValue·근거·원문 버전·hash까지 대조하며 Node 변이 시험12개로 계산 필드·인용·null/빈 배열·문서 버전 오류를 거부함을 확인한다. 원래 API fixture5개는 유지한다.
+
+현재 로컬 전체 Java74개·생략0개와 bootJar를 통과했다. 최종 전체 독립 검토·인프라/계약 검사 후 기존 PR7에 모아 반영하고 Ready for review로 전환한다. Python·프런트·실자료 검수·운영 배포·대량 이력 pagination은 기존 후속 범위다.
+
+제출 전 독립 전체 검토에서 P1/P2 추가 지적은 없었다. 확인된 P3 FieldValue 키/enum 검사·생애 상태 근거 참조·문서 상태 모순은 변이 실패를 재현한 뒤 함께 보완했다. 동적 UUID·응답 시각도 예제 자체에서 검증한다. 최종 Node28개·계약9개·lint·build가 통과했고 Java74개·생략0개 및 실행 JAR의 실제 DB 장애503 검증을 유지한다.
+
+API 비교 시험의 외부 JSON 입력 누락도 제출 전 검토에서 확인했다. 예제 title을 바꿔도 Gradle이 UP-TO-DATE를 반환하던 현상을 재현한 뒤 예제 파일과 DB 시험 모드를 입력으로 명시했다. 실제 DB 시험은 매번 실행한다. 잘못된 예제로 API 비교가 실패하고 원본 복원 후 Java74개가 다시 통과함을 확인했다.

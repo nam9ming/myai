@@ -1,0 +1,154 @@
+{
+  "schema_version": "dataset-manifest-v1",
+  "dataset_version": "synthetic-dataset-v1",
+  "data_kind": "synthetic",
+  "documents": [
+    {
+      "document_id": "40000000-0000-4000-8000-000000000001",
+      "official_url": "https://example.org/notices/1",
+      "versions": [
+        {
+          "document_version_id": "40000000-0000-4000-8000-00000000000b",
+          "input_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "document_version_id": "40000000-0000-4000-8000-00000000000f",
+          "input_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        }
+      ],
+      "types": [
+        "construction"
+      ],
+      "feature_tags": [
+        "unknown_time"
+      ],
+      "exposure_status": "development",
+      "exposure_note": "합성 개발/확인 배정 예제; 실제 원문/정답 없음"
+    },
+    {
+      "document_id": "40000000-0000-4000-8000-000000000002",
+      "official_url": "https://example.org/notices/2",
+      "versions": [
+        {
+          "document_version_id": "40000000-0000-4000-8000-00000000000c",
+          "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      ],
+      "types": [
+        "construction"
+      ],
+      "feature_tags": [],
+      "exposure_status": "development",
+      "exposure_note": "합성 개발/확인 배정 예제; 실제 원문/정답 없음"
+    },
+    {
+      "document_id": "40000000-0000-4000-8000-000000000003",
+      "official_url": "https://example.org/notices/3",
+      "versions": [
+        {
+          "document_version_id": "40000000-0000-4000-8000-00000000000d",
+          "input_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      ],
+      "types": [
+        "event"
+      ],
+      "feature_tags": [
+        "multiple_times"
+      ],
+      "exposure_status": "development",
+      "exposure_note": "합성 개발/확인 배정 예제; 실제 원문/정답 없음"
+    },
+    {
+      "document_id": "40000000-0000-4000-8000-000000000004",
+      "official_url": "https://example.org/notices/4",
+      "versions": [
+        {
+          "document_version_id": "40000000-0000-4000-8000-00000000000e",
+          "input_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        }
+      ],
+      "types": [
+        "traffic"
+      ],
+      "feature_tags": [
+        "unknown_date"
+      ],
+      "exposure_status": "unexposed",
+      "exposure_note": "합성 개발/확인 배정 예제; 실제 원문/정답 없음"
+    }
+  ],
+  "events": [
+    {
+      "event_id": "40000000-0000-4000-8000-000000000015",
+      "document_ids": [
+        "40000000-0000-4000-8000-000000000001",
+        "40000000-0000-4000-8000-000000000002"
+      ],
+      "split_group_id": "40000000-0000-4000-8000-00000000001f",
+      "suspected_duplicate_ids": []
+    },
+    {
+      "event_id": "40000000-0000-4000-8000-000000000016",
+      "document_ids": [
+        "40000000-0000-4000-8000-000000000002",
+        "40000000-0000-4000-8000-000000000003"
+      ],
+      "split_group_id": "40000000-0000-4000-8000-00000000001f",
+      "suspected_duplicate_ids": []
+    },
+    {
+      "event_id": "40000000-0000-4000-8000-000000000017",
+      "document_ids": [
+        "40000000-0000-4000-8000-000000000004"
+      ],
+      "split_group_id": "40000000-0000-4000-8000-000000000020",
+      "suspected_duplicate_ids": []
+    }
+  ],
+  "relations": [
+    {
+      "from_document_id": "40000000-0000-4000-8000-000000000002",
+      "to_document_id": "40000000-0000-4000-8000-000000000001",
+      "type": "corrects",
+      "reviewed_by": "synthetic-reviewer",
+      "reason": "합성 정정 관계",
+      "created_at": "2026-11-03T00:00:00Z"
+    }
+  ],
+  "split_assignments": [
+    {
+      "split_group_id": "40000000-0000-4000-8000-00000000001f",
+      "document_id": "40000000-0000-4000-8000-000000000001",
+      "split": "dev",
+      "assigned_at": "2026-11-03T01:00:00Z",
+      "assigned_by": "synthetic-assigner"
+    },
+    {
+      "split_group_id": "40000000-0000-4000-8000-00000000001f",
+      "document_id": "40000000-0000-4000-8000-000000000002",
+      "split": "dev",
+      "assigned_at": "2026-11-03T01:00:00Z",
+      "assigned_by": "synthetic-assigner"
+    },
+    {
+      "split_group_id": "40000000-0000-4000-8000-00000000001f",
+      "document_id": "40000000-0000-4000-8000-000000000003",
+      "split": "dev",
+      "assigned_at": "2026-11-03T01:00:00Z",
+      "assigned_by": "synthetic-assigner"
+    },
+    {
+      "split_group_id": "40000000-0000-4000-8000-000000000020",
+      "document_id": "40000000-0000-4000-8000-000000000004",
+      "split": "holdout",
+      "assigned_at": "2026-11-03T01:00:00Z",
+      "assigned_by": "synthetic-assigner"
+    }
+  ],
+  "grouping_review": {
+    "reviewed_by": "synthetic-reviewer",
+    "reviewed_at": "2026-11-03T00:00:00Z",
+    "note": "합성 관계 검토 기록; 실제 사람 검토 실적 아님"
+  }
+}
