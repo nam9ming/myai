@@ -114,7 +114,7 @@ void main() {
       Uri.parse('/list?cat=invalid&sort=invalid&free=true&period=invalid'),
     );
     expect(route.params, isEmpty);
-    expect(AppRoute.parse(Uri.parse('/start?step=99')).params['step'], '5');
+    expect(AppRoute.parse(Uri.parse('/start?step=99')).params['step'], '7');
     expect(AppRoute.parse(Uri.parse('/start?step=oops')).params['step'], '0');
     expect(
       AppRoute.parse(Uri.parse('https://example.test/#/detail?id=edu-pottery'))

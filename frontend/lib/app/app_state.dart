@@ -12,6 +12,7 @@ class AppState extends ChangeNotifier {
   final String mode;
   late final NoticeRepository repository;
   Preferences settings = const Preferences(), onboarding = const Preferences();
+  String? onboardingProvinceSelection, onboardingCitySelection;
   Map<String, Map<String, dynamic>> saved = {};
   List<Notice> items = [];
   bool storageFailed = false, loading = true, locationBusy = false;

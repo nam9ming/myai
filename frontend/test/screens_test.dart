@@ -122,15 +122,23 @@ void main() {
     }
   }
   testWidgets('위치 거부 뒤 온보딩을 선택 정보 없이 완료한다', (tester) async {
-    final browser = FakeBrowser(),
-        state = await mount(tester, '/start', 390, browser: FakeBrowser());
+    final browser = FakeBrowser();
+    final state = await mount(tester, '/start', 390, browser: browser);
+    expect(find.text('위치로 시작할까요?'), findsOneWidget);
     expect(browser.locationRequests, 0);
+    await tester.tap(find.byTooltip('현재 위치로 찾기'));
+    await tester.pumpAndSettle();
+    expect(browser.locationRequests, 1);
+    expect(state.onboarding.locationEnabled, isFalse);
+    expect(find.text('경기도 안성시 소식이 맞으세요?'), findsOneWidget);
+    await tapText(tester, '아니오');
+    expect(find.text('어느 지역 소식을\n만나볼까요?'), findsOneWidget);
     await tapText(tester, '경기도');
+    await tapText(tester, '다음');
+    expect(find.byTooltip('현재 위치로 찾기'), findsNothing);
     await tapText(tester, '안성시');
-    expect(state.browser, isA<FakeBrowser>());
-    expect((state.browser as FakeBrowser).locationRequests, 0);
-    await tapText(tester, '현재 위치로 찾기');
-    expect((state.browser as FakeBrowser).locationRequests, 1);
+    await tapText(tester, '다음');
+    expect(find.text('거의 다 됐어요!'), findsOneWidget);
     await tapText(tester, '지금 바로 둘러보기');
     expect(state.settings.onboarded, isTrue);
     expect(state.settings.age, isEmpty);
@@ -138,11 +146,40 @@ void main() {
     expect(find.text('안성시 소식을 살펴보세요.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('위치 허용 뒤 지역 확인에서 지도로 돌아가거나 홈으로 간다', (tester) async {
+    final browser = FakeBrowser()..locationAllowed = true;
+    final state = await mount(tester, '/start', 390, browser: browser);
+    Future<void> openConfirmation() async {
+      await tester.tap(find.byTooltip('현재 위치로 찾기'));
+      await tester.pumpAndSettle();
+      expect(find.text('경기도 안성시 소식이 맞으세요?'), findsOneWidget);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byTooltip('현재 위치로 찾기'), findsNothing);
+    }
+
+    await openConfirmation();
+    await tapText(tester, '아니오');
+    expect(state.settings.onboarded, isFalse);
+    expect(find.byTooltip('현재 위치로 찾기'), findsOneWidget);
+    await openConfirmation();
+    await tapText(tester, '네');
+    expect(state.settings.onboarded, isFalse);
+    expect(find.text('연령대 · 선택'), findsOneWidget);
+    expect(find.text('성별 · 선택'), findsOneWidget);
+    await tapText(tester, '이전');
+    expect(find.text('경기도 안성시 소식이 맞으세요?'), findsOneWidget);
+    await tapText(tester, '네');
+    await tapText(tester, '여기:it 시작하기');
+    expect(state.settings.onboarded, isTrue);
+    expect(state.settings.locationEnabled, isTrue);
+    expect(find.text('안성시 소식을 살펴보세요.'), findsOneWidget);
+  });
   testWidgets('다른 도시에서는 안성 예시를 해당 도시 소식으로 표시하지 않는다', (tester) async {
     final state = await mount(tester, '/start', 390);
-    await tapText(tester, '서울특별시');
+    await tapText(tester, '서울');
+    await tapText(tester, '다음');
     await tapText(tester, '종로구');
-    await tapText(tester, '선택한 지역으로 둘러보기');
+    await tapText(tester, '다음');
     await tapText(tester, '지금 바로 둘러보기');
     expect(state.settings.city, '종로구');
     expect(find.text('종로구 소식은 준비 중이에요.'), findsOneWidget);
@@ -170,6 +207,30 @@ void main() {
     expect(q.open, isTrue);
     expect(q.category, 'education');
     expect(find.text('총 2개의 소식'), findsOneWidget);
+  });
+  testWidgets('모바일 홈의 검색과 관심정보는 상단에만 표시한다', (tester) async {
+    await mount(tester, '/home', 390);
+    expect(find.text('검색'), findsNothing);
+    expect(find.text('관심정보'), findsNothing);
+    expect(find.byTooltip('검색'), findsOneWidget);
+    expect(find.byTooltip('관심정보'), findsOneWidget);
+  });
+  testWidgets('상단 관심정보 배지는 저장과 해제를 반영한다', (tester) async {
+    final state = await mount(tester, '/home', 390);
+    final action = find.byTooltip('관심정보');
+    final badge = find.descendant(of: action, matching: find.text('1'));
+    expect(badge, findsNothing);
+    final notice = state.items.first;
+    state.toggleSaved(notice);
+    await tester.pumpAndSettle();
+    expect(badge, findsOneWidget);
+    state.toggleSaved(notice);
+    await tester.pumpAndSettle();
+    expect(badge, findsNothing);
+  });
+  testWidgets('상세에서 원문 근거 접이식 항목을 표시하지 않는다', (tester) async {
+    await mount(tester, '/detail?id=edu-pottery', 390);
+    expect(find.text('원문 근거 확인'), findsNothing);
   });
   testWidgets('검색은 1건과 0건을 구분하고 무료 추천어를 필터로 연결한다', (tester) async {
     await mount(tester, '/search', 390);

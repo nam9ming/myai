@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../core/browser.dart';
 import 'models.dart';
+import 'municipality_boundaries.dart';
 
 class PrototypeData {
   final List<Notice> items;
@@ -17,7 +18,12 @@ class PrototypeData {
       provinces = List<String>.from(json['provinces']),
       districts = List<String>.from(json['districts']),
       cities = (json['cities'] as Map<String, dynamic>).map(
-        (k, v) => MapEntry(k, List<String>.from(v)),
+        (k, v) => MapEntry(k, [
+          ...<String>{
+            ...List<String>.from(v),
+            ...?municipalityBoundaries[k]?.keys,
+          },
+        ]),
       ),
       anchor = dateOnly(json['anchor'])!;
   static Future<PrototypeData> load() async => PrototypeData(

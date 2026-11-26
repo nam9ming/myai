@@ -424,7 +424,6 @@ class _NoticeDetailPageState extends State<NoticeDetailPage> {
     final raw = n.api;
     final occurrences = (raw?['occurrences'] as List?) ?? [];
     final locations = (raw?['locations'] as List?) ?? [];
-    final evidence = (raw?['evidence'] as List?) ?? [];
     final history = (raw?['history'] as List?) ?? [];
     final fields = (raw?['field_values'] as Map?) ?? {};
     final refs = sourceRefs(n);
@@ -534,59 +533,6 @@ class _NoticeDetailPageState extends State<NoticeDetailPage> {
             ),
           ],
         ],
-        const SizedBox(height: 25),
-        Container(
-          decoration: BoxDecoration(
-            border: Border.all(color: Palette.line),
-            borderRadius: BorderRadius.circular(9),
-          ),
-          child: ExpansionTile(
-            title: Text('원문 근거 확인', style: type(13, weight: FontWeight.w500)),
-            childrenPadding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
-            expandedAlignment: Alignment.centerLeft,
-            children: [
-              if (n.evidence != null)
-                SelectableText(
-                  '“${n.evidence}”',
-                  style: type(13, color: Palette.sub),
-                ),
-              for (final e in evidence)
-                Padding(
-                  padding: const EdgeInsets.only(top: 13),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SelectableText(
-                        '“${e['quote'] ?? '근거 문장 미기재'}”',
-                        style: type(13, color: Palette.sub),
-                      ),
-                      for (final s in refs.where(
-                        (s) =>
-                            s['document_version_id'] ==
-                            e['document_version_id'],
-                      ))
-                        UiButton(
-                          s['title'] as String? ??
-                              s['publisher'] as String? ??
-                              '근거 출처',
-                          quiet: true,
-                          icon: 'external',
-                          onTap: () =>
-                              unawaited(showSource(context, n, source: s)),
-                        ),
-                    ],
-                  ),
-                ),
-              if (n.evidence == null && evidence.isEmpty)
-                Text('공개된 근거가 없습니다.', style: type(12, color: Palette.sub)),
-              if (n.synthetic)
-                Text(
-                  '시제품 설명을 위한 예시 근거입니다.',
-                  style: type(11, color: Palette.sub),
-                ),
-            ],
-          ),
-        ),
         if (refs.isNotEmpty) ...[
           _heading('출처와 확인 시각'),
           for (final s in refs)

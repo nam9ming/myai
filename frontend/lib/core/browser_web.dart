@@ -42,13 +42,32 @@ class WebBrowserServices implements BrowserServices {
   @override
   Future<bool> requestLocation() async {
     final completer = Completer<bool>();
+    web.PermissionStatus? permission;
     try {
+      permission = await web.window.navigator.permissions
+          .query({'name': 'geolocation'}.jsify()! as JSObject)
+          .toDart
+          .timeout(const Duration(seconds: 1));
+      if (permission.state == 'granted') return true;
+    } catch (_) {
+      // Older browsers can still report the result through geolocation.
+    }
+    final onPermissionChange = ((web.Event _) {
+      final state = permission?.state;
+      if (state != 'prompt' && !completer.isCompleted) {
+        completer.complete(state == 'granted');
+      }
+    }).toJS;
+    try {
+      permission?.addEventListener('change', onPermissionChange);
       web.window.navigator.geolocation.getCurrentPosition(
         ((web.GeolocationPosition _) {
           if (!completer.isCompleted) completer.complete(true);
         }).toJS,
         ((web.GeolocationPositionError _) {
-          if (!completer.isCompleted) completer.complete(false);
+          if (!completer.isCompleted) {
+            completer.complete(permission?.state == 'granted');
+          }
         }).toJS,
         web.PositionOptions(
           enableHighAccuracy: false,
@@ -58,10 +77,12 @@ class WebBrowserServices implements BrowserServices {
       );
       return await completer.future.timeout(
         const Duration(seconds: 9),
-        onTimeout: () => false,
+        onTimeout: () => permission?.state == 'granted',
       );
     } catch (_) {
-      return false;
+      return permission?.state == 'granted';
+    } finally {
+      permission?.removeEventListener('change', onPermissionChange);
     }
   }
 

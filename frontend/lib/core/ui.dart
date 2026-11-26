@@ -188,7 +188,7 @@ class _PressableState extends State<Pressable> {
               foregroundDecoration: BoxDecoration(
                 borderRadius: widget.borderRadius,
                 border: Border.all(
-                  color: focus ? Palette.focus : Colors.transparent,
+                  color: focus ? Palette.sub : Colors.transparent,
                   width: 3,
                 ),
               ),
@@ -246,15 +246,9 @@ class UiButton extends StatelessWidget {
               ? (green ? const Color(0xfff0f3e5) : Palette.soft)
               : null,
           borderRadius: BorderRadius.circular(9),
-          border: quiet || primary
+          border: quiet || primary || selected
               ? null
-              : Border.all(
-                  color: selected
-                      ? (green
-                            ? const Color(0xffaab995)
-                            : const Color(0xfff6b798))
-                      : Palette.line,
-                ),
+              : Border.all(color: Palette.line),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -291,6 +285,7 @@ class IconAction extends StatelessWidget {
   final VoidCallback? onTap;
   final Color? color;
   final bool selected;
+  final int count;
   const IconAction(
     this.icon,
     this.label, {
@@ -298,19 +293,47 @@ class IconAction extends StatelessWidget {
     this.onTap,
     this.color,
     this.selected = false,
+    this.count = 0,
   });
   @override
   Widget build(BuildContext context) => Tooltip(
     message: label,
     child: Pressable(
-      label: label,
+      label: count > 0 ? '$label $count개' : label,
       selected: selected,
       onTap: onTap,
       hoverColor: Palette.soft,
       child: SizedBox(
         width: 44,
         height: 44,
-        child: Center(child: UiIcon(icon, size: 20, color: color)),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            UiIcon(icon, size: 20, color: color),
+            if (count > 0)
+              Positioned(
+                right: 3,
+                bottom: 5,
+                child: ExcludeSemantics(
+                  child: Text(
+                    count > 99 ? '99+' : '$count',
+                    textScaler: TextScaler.noScaling,
+                    style:
+                        type(
+                          count > 9 ? 10 : 12,
+                          color: const Color(0xffba4623),
+                          weight: FontWeight.w800,
+                          height: 1,
+                        ).copyWith(
+                          shadows: const [
+                            Shadow(color: Color(0x88ff8753), blurRadius: 5),
+                          ],
+                        ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     ),
   );
@@ -556,6 +579,7 @@ class _NoticeCardState extends State<NoticeCard> {
       'id': n.id,
       if (n.snapshotId != null) 'snapshot_id': n.snapshotId!,
     });
+    final deadline = n.cancelled || n.uncertain ? null : dateOnly(n.deadline);
     final copy = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -574,21 +598,32 @@ class _NoticeCardState extends State<NoticeCard> {
           ),
         ),
         const SizedBox(height: 9),
-        if (!hasPoster) ...[
-          Text(n.target, style: type(12, color: Palette.sub)),
-          const SizedBox(height: 16),
-        ],
-        Text(
-          dateRange(n.start, n.end),
-          style: type(small ? 10 : 12, color: Palette.sub),
-        ),
-        const SizedBox(height: 8),
         Wrap(
           spacing: 7,
-          runSpacing: 5,
+          runSpacing: 4,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             NoticeBadge(n),
+            if (deadline != null)
+              Text(
+                '${deadline.month}월 ${deadline.day}일 마감',
+                style: type(11, weight: FontWeight.w600),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (!hasPoster) ...[
+          Text(n.target, style: type(12, color: Palette.sub)),
+          const SizedBox(height: 8),
+        ],
+        Wrap(
+          spacing: 7,
+          runSpacing: 4,
+          children: [
+            Text(
+              dateRange(n.start, n.end),
+              style: type(small ? 10 : 12, color: Palette.sub),
+            ),
             Text(n.costLabel, style: type(11, color: Palette.sub)),
           ],
         ),

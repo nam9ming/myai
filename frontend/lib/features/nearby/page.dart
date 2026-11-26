@@ -329,9 +329,7 @@ class _NearbyPageState extends State<NearbyPage> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: highlighted ? Palette.soft : Colors.white,
-          border: Border.all(
-            color: highlighted ? Palette.orange : Palette.line,
-          ),
+          border: highlighted ? null : Border.all(color: Palette.line),
           borderRadius: BorderRadius.circular(14),
         ),
         child: Column(

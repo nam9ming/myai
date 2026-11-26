@@ -303,7 +303,12 @@ class _AppShellState extends State<AppShell> {
                   ),
                 ),
                 IconAction('search', '검색', onTap: () => env.go('/search')),
-                IconAction('bookmark', '관심정보', onTap: () => env.go('/saved')),
+                IconAction(
+                  'bookmark',
+                  '관심정보',
+                  count: env.state.saved.length,
+                  onTap: () => env.go('/saved'),
+                ),
                 if (!small)
                   IconAction('pin', '내 주변', onTap: () => env.go('/nearby')),
                 if (!small)
@@ -398,9 +403,7 @@ class _AppShellState extends State<AppShell> {
     final env = AppContext.of(context);
     const entries = [
       ('/home', 'home', '홈'),
-      ('/search', 'search', '검색'),
       ('/nearby', 'pin', '내 주변'),
-      ('/saved', 'bookmark', '관심정보'),
       ('/settings', 'settings', '설정'),
     ];
     return Container(

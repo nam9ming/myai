@@ -67,14 +67,89 @@ void main() {
     expect(focus, findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('온보딩 지도에서 지역을 확대하고 선택한다', (tester) async {
+    final state = await mount(tester, '/start', 390);
+    final province = find.byKey(const ValueKey('경기도'));
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(tester.getCenter(find.text('경기도')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<AnimatedScale>(province).scale, 1.07);
+    await mouse.moveTo(Offset.zero);
+    await tester.pumpAndSettle();
+    expect(tester.widget<AnimatedScale>(province).scale, 1);
+    expect(find.text('울릉도'), findsOneWidget);
+    expect(find.text('독도'), findsOneWidget);
+    await tapText(tester, '서울');
+    expect(state.onboardingProvinceSelection, '서울특별시');
+    await tapText(tester, '서울');
+    expect(state.onboardingProvinceSelection, isNull);
+    await tapText(tester, '서울');
+    await tapText(tester, '다음');
+    expect(state.onboarding.province, '서울특별시');
+    expect(find.text('서울특별시의\n어디가 궁금하세요?'), findsOneWidget);
+  });
   testWidgets('온보딩 이전 단계로 돌아가도 지역 선택을 보존한다', (tester) async {
     final state = await mount(tester, '/start', 390);
     await tapText(tester, '경기도');
+    await tapText(tester, '다음');
+    final labels = find.byWidgetPredicate(
+      (widget) =>
+          widget is Text &&
+          widget.key is ValueKey<String> &&
+          (widget.key! as ValueKey<String>).value.startsWith('region-label-'),
+    );
+    final rectangles = <Rect>[];
+    for (final label in labels.evaluate()) {
+      expect((label.widget as Text).style!.fontSize, 10);
+      final rect = tester.getRect(find.byWidget(label.widget));
+      expect(rectangles.any(rect.overlaps), isFalse);
+      rectangles.add(rect);
+    }
+    final paju = tester.getRect(find.text('파주시'));
+    final yeoncheon = tester.getRect(find.text('연천군'));
+    final pocheon = tester.getRect(find.text('포천시'));
+    expect(yeoncheon.center.dy, lessThan(paju.center.dy));
+    expect(paju.center.dx, lessThan(pocheon.center.dx));
+    expect(paju.overlaps(yeoncheon), isFalse);
+    expect(yeoncheon.overlaps(pocheon), isFalse);
+    await tapText(tester, '파주시');
+    expect(state.onboardingCitySelection, '파주시');
     await tapText(tester, '안성시');
+    expect(state.onboardingCitySelection, '안성시');
+    await tapText(tester, '안성시');
+    expect(state.onboardingCitySelection, isNull);
+    await tapText(tester, '안성시');
+    await tapText(tester, '다음');
     await tapText(tester, '이전');
     expect(state.onboarding.province, '경기도');
     expect(state.onboarding.city, '안성시');
     expect(find.text('경기도의\n어디가 궁금하세요?'), findsOneWidget);
+  });
+  testWidgets('온보딩 지도 호버와 선택에서 지역 이름을 크게 표시한다', (tester) async {
+    final state = await mount(tester, '/start', 390);
+    await tapText(tester, '경기도');
+    await tapText(tester, '다음');
+    expect(find.text('목록에서 선택'), findsNothing);
+    final area = find.byKey(const ValueKey('파주시'));
+    final label = find.byKey(const ValueKey('region-label-파주시'));
+    final highlight = find.byKey(const ValueKey('highlighted-region-label'));
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(tester.getCenter(label));
+    await tester.pumpAndSettle();
+    expect(tester.widget<AnimatedScale>(area).scale, 1.28);
+    expect(tester.widget<RichText>(highlight).text.toPlainText(), '파주시');
+    expect(tester.widget<RichText>(highlight).text.style!.fontSize, 16);
+    await mouse.moveTo(Offset.zero);
+    await tester.pumpAndSettle();
+    expect(highlight, findsNothing);
+    await tester.tapAt(tester.getCenter(label));
+    await tester.pumpAndSettle();
+    expect(state.onboardingCitySelection, '파주시');
+    expect(tester.widget<RichText>(highlight).text.toPlainText(), '파주시');
   });
   testWidgets('포스터 hover는 내부 이미지만 확대한다', (tester) async {
     await mount(tester, '/home', 1440);

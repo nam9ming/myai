@@ -1,8 +1,12 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:material_ui/material_ui.dart';
 
 import '../../app/app_context.dart';
 import '../../core/ui.dart';
 import '../../data/models.dart';
+import 'region_map.dart';
 
 class OnboardingPage extends StatefulWidget {
   final int step;
@@ -21,16 +25,25 @@ class _OnboardingPageState extends State<OnboardingPage> {
     env.toast('선택한 지역의 소식부터 살펴보세요.');
   }
 
+  Future<void> _confirmLocation() async {
+    final env = AppContext.of(context);
+    final app = env.state;
+    final allowed = await app.requestLocation();
+    if (!mounted) return;
+    app.onboarding = app.onboarding.copyWith(locationEnabled: allowed);
+    _step(6);
+  }
+
   @override
   Widget build(BuildContext context) {
     final env = AppContext.of(context),
         app = env.state,
         draft = app.onboarding,
-        step = widget.step.clamp(0, 5),
+        step = widget.step == 2 ? 3 : widget.step.clamp(0, 7),
         small = mobile(context);
-    final group = step < 2
+    final group = step < 2 || step == 6
         ? 1
-        : step == 2
+        : step == 3
         ? 2
         : 3;
     final form = Padding(
@@ -65,7 +78,12 @@ class _OnboardingPageState extends State<OnboardingPage> {
               '이전',
               quiet: true,
               icon: 'left',
-              onTap: () => _step(step - 1),
+              onTap: () => _step(switch (step) {
+                3 => 1,
+                6 => 0,
+                7 => 6,
+                _ => step - 1,
+              }),
             ),
           AnimatedSwitcher(
             duration: Duration(milliseconds: reducedMotion(context) ? 0 : 320),
@@ -92,57 +110,97 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 if (step == 0) ...[
                   _title('어느 지역 소식을\n만나볼까요?'),
                   _intro('자주 머무는 곳이나 관심 있는 지역을 골라주세요.'),
-                  _grid(app.prototype.provinces, draft.province, (p) {
-                    app.onboarding = draft.copyWith(
-                      province: p,
-                      city: app.prototype.cities[p]!.first,
-                      district: citywide,
-                    );
-                    _step(1);
-                  }),
-                  _fine('첫 시제품은 안성시 예시 공지를 제공해요.\n다른 지역은 선택 흐름만 체험할 수 있어요.'),
+                  RegionMap(
+                    regions: app.prototype.provinces,
+                    selected: app.onboardingProvinceSelection,
+                    mapAction: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        if (!app.locationBusy) const _LocationHint(),
+                        Material(
+                          color: app.locationBusy
+                              ? Palette.sub
+                              : Palette.orange,
+                          shape: const CircleBorder(),
+                          elevation: 2,
+                          child: IconButton(
+                            tooltip: app.locationBusy
+                                ? '위치 권한 확인 중'
+                                : '현재 위치로 찾기',
+                            constraints: const BoxConstraints.tightFor(
+                              width: 48,
+                              height: 48,
+                            ),
+                            icon: app.locationBusy
+                                ? const SizedBox.square(
+                                    dimension: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const UiIcon(
+                                    'map',
+                                    size: 23,
+                                    color: Colors.white,
+                                  ),
+                            onPressed: app.locationBusy
+                                ? null
+                                : _confirmLocation,
+                          ),
+                        ),
+                      ],
+                    ),
+                    onSelected: (province) => setState(() {
+                      app.onboardingProvinceSelection =
+                          app.onboardingProvinceSelection == province
+                          ? null
+                          : province;
+                    }),
+                  ),
+                  const SizedBox(height: 12),
+                  _primary(
+                    '다음',
+                    app.onboardingProvinceSelection == null
+                        ? null
+                        : () {
+                            final province = app.onboardingProvinceSelection!;
+                            if (province != draft.province) {
+                              app.onboardingCitySelection = null;
+                              app.onboarding = draft.copyWith(
+                                province: province,
+                                city: app.prototype.cities[province]!.first,
+                                district: citywide,
+                              );
+                            }
+                            _step(1);
+                          },
+                  ),
                 ] else if (step == 1) ...[
                   _title('${draft.province}의\n어디가 궁금하세요?'),
                   _intro('시·군·구를 선택해주세요.\n나중에 관심 지역을 바꿀 수 있어요.'),
-                  _grid(
-                    app.prototype.cities[draft.province] ?? [],
-                    draft.city,
-                    (c) {
-                      app.onboarding = draft.copyWith(
-                        city: c,
-                        district: citywide,
-                      );
-                      _step(2);
-                    },
+                  RegionMap(
+                    province: draft.province,
+                    regions: app.prototype.cities[draft.province] ?? [],
+                    selected: app.onboardingCitySelection,
+                    onSelected: (city) => setState(() {
+                      app.onboardingCitySelection =
+                          app.onboardingCitySelection == city ? null : city;
+                    }),
                   ),
-                  _fine('지역 목록은 일부 예시입니다.\n현재 공지를 볼 수 있는 예시 지역은 안성시예요.'),
-                ] else if (step == 2) ...[
-                  _symbol('pin'),
-                  _title('내 주변 소식을\n더 가까이.'),
-                  _intro(
-                    '현재 위치를 사용하면 가까운 소식을 찾는 데 도움이 돼요. 시제품에서는 위치 권한 흐름만 체험할 수 있어요.',
-                  ),
+                  const SizedBox(height: 12),
                   _primary(
-                    app.locationBusy ? '위치 설정을 확인하고 있어요…' : '현재 위치로 찾기',
-                    app.locationBusy
+                    '다음',
+                    app.onboardingCitySelection == null
                         ? null
-                        : () async {
-                            final allowed = await app.requestLocation();
-                            app.onboarding = app.onboarding.copyWith(
-                              locationEnabled: allowed,
+                        : () {
+                            app.onboarding = draft.copyWith(
+                              city: app.onboardingCitySelection!,
+                              district: citywide,
                             );
-                            if (!context.mounted) return;
                             _step(3);
-                            env.toast(
-                              allowed
-                                  ? '위치 권한을 확인했어요. 직접 선택한 지역의 예시를 보여드려요.'
-                                  : '위치 없이도 괜찮아요. 선택한 지역으로 계속할게요.',
-                            );
                           },
-                  ),
-                  _secondary('선택한 지역으로 둘러보기', () => _step(3)),
-                  _fine(
-                    '위치 사용은 선택이에요. 정확한 좌표는 저장하지 않으며, 허용하지 않아도 계속 이용할 수 있어요.',
                   ),
                 ] else if (step == 3) ...[
                   _symbol('spark'),
@@ -209,6 +267,13 @@ class _OnboardingPageState extends State<OnboardingPage> {
                   const SizedBox(height: 25),
                   _primary('다음', () => _step(5)),
                   _secondary('지금 바로 둘러보기', () => _finish()),
+                ] else if (step == 6) ...[
+                  _symbol('pin'),
+                  _title('${draft.province} ${draft.city} 소식이 맞으세요?'),
+                  _intro('이 지역의 소식을 보거나 지도에서 다른 지역을 고를 수 있어요.'),
+                  const SizedBox(height: 16),
+                  _primary('네', () => _step(7)),
+                  _secondary('아니오', () => _step(0)),
                 ] else ...[
                   _title('조금 더\n나에게 맞게.'),
                   _intro('선택한 정보는 추천 순서를 정하는 데 참고해요.'),
@@ -218,7 +283,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     draft.age,
                     (v) => setState(
                       () => app.onboarding = app.onboarding.copyWith(
-                        age: v == '선택 안 함' ? '' : v,
+                        age: v == draft.age || v == '선택 안 함' ? '' : v,
                       ),
                     ),
                   ),
@@ -228,7 +293,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     draft.gender,
                     (v) => setState(
                       () => app.onboarding = app.onboarding.copyWith(
-                        gender: v == '선택 안 함' ? '' : v,
+                        gender: v == draft.gender || v == '선택 안 함' ? '' : v,
                       ),
                     ),
                   ),
@@ -327,25 +392,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
   );
   Widget _secondary(String label, VoidCallback tap) =>
       Center(child: UiButton(label, quiet: true, onTap: tap));
-  Widget _grid(List<String> items, String selected, ValueChanged<String> tap) =>
-      LayoutBuilder(
-        builder: (context, c) => Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final item in items)
-              SizedBox(
-                width: (c.maxWidth - 8) / 2,
-                child: UiButton(
-                  item,
-                  leftAligned: true,
-                  selected: selected == item,
-                  onTap: () => tap(item),
-                ),
-              ),
-          ],
-        ),
-      );
   Widget _choices(
     List<String> items,
     String selected,
@@ -566,4 +612,80 @@ class _StoryCardState extends State<_StoryCard> {
       ),
     );
   }
+}
+
+class _LocationHint extends StatefulWidget {
+  const _LocationHint();
+
+  @override
+  State<_LocationHint> createState() => _LocationHintState();
+}
+
+class _LocationHintState extends State<_LocationHint> {
+  Timer? _timer;
+  int _bounce = 0;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (reducedMotion(context)) {
+      _timer?.cancel();
+      _timer = null;
+    } else {
+      _timer ??= Timer.periodic(const Duration(milliseconds: 1500), (_) {
+        setState(() => _bounce++);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+    child: TweenAnimationBuilder<double>(
+      key: ValueKey((_bounce, reducedMotion(context))),
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: reducedMotion(context) ? 0 : 750),
+      builder: (context, value, child) => Transform.translate(
+        offset: Offset(0, -3 * math.sin(math.pi * value).abs()),
+        child: child,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8, right: 3),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned(
+              bottom: -3,
+              right: 17,
+              child: Transform.rotate(
+                angle: math.pi / 4,
+                child: const ColoredBox(
+                  color: Palette.ink,
+                  child: SizedBox.square(dimension: 8),
+                ),
+              ),
+            ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: Palette.ink,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                child: Text(
+                  '위치로 시작할까요?',
+                  style: type(11, color: Colors.white, weight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }

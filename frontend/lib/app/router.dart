@@ -16,7 +16,7 @@ class AppRoute {
     final params = Map<String, String>.from(uri.queryParameters);
     if (path == '/start') {
       final step = int.tryParse(params['step'] ?? '0') ?? 0;
-      params['step'] = step.clamp(0, 5).toString();
+      params['step'] = step.clamp(0, 7).toString();
     }
     if (path == '/list' || path == '/search') {
       final parsed = NoticeQuery.fromParams(params);
