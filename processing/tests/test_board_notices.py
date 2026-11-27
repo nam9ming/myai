@@ -1,3 +1,4 @@
+import time
 import unittest
 from unittest.mock import patch
 
@@ -284,6 +285,59 @@ class BoardNoticeTest(unittest.TestCase):
         swallowed = '<!-- x -- >' + _notice() + '-->'
         with self.assertRaisesRegex(ValueError, "본문 영역을 확인할 수 없습니다"):
             parse_board_notice(swallowed, board="city", notice_id="203043")
+
+    def test_body_markup_outside_the_allowlist_is_rejected(self):
+        """본문 영역은 허용한 태그·속성·인라인 스타일만 받는다. 목록 밖 표기는 숨김 여부를 추정하지 않는다."""
+        bodies = [
+            '<link rel="stylesheet" href="data:text/css,p{display:none}"><p>숨김</p>', '<div popover>숨김</div>',
+            '<progress>숨김</progress>', '<meter>숨김</meter>', '<p inert>숨김</p>', '<p aria-hidden="true">숨김</p>',
+            '<input type="text" value="숨김">', '<p style="font-size:0mm">숨김</p>', '<p style="font-size:0Q">숨김</p>',
+            '<p style="font-size:0e0px">숨김</p>', '<p style="font:0/0 a">숨김</p>', '<p style="color:#0000">숨김</p>',
+            '<p style="color:#ffffff00">숨김</p>', '<p style="text-indent:-1e3px">숨김</p>',
+            '<p style="text-indent:calc(9999px * -1)">숨김</p>', '<p style="text-indent:9999px">숨김</p>',
+            '<p style="padding-left:5000px">숨김</p>', '<p style="margin-left:-99em">숨김</p>',
+            '<p style="width:0 !important;width:100px;height:0 !important;height:10px;overflow:hidden">숨김</p>',
+            '<p style="display:none! important">숨김</p>', '<p style="background:url(/img/a.png)">보임</p>',
+            '<p style="line-height:0">숨김</p>', '<p style="letter-spacing:-50px">숨김</p>',
+        ]
+        for body in bodies:
+            with self.subTest(body=body), self.assertRaisesRegex(ValueError, "^시청 공지 본문 영역에 .*숨김"):
+                parse_board_notice(_notice(body=body), board="city", notice_id="203043")
+
+    def test_tokenizer_boundaries_follow_the_browser_in_every_python_version(self):
+        """3.12.16·3.13.5·3.14.6에서 결과가 같아야 한다. 원문 텍스트 요소·종료 태그·CDATA 경계를 고정했다."""
+        def description(page):
+            return parse_board_notice(page, board="city", notice_id="203043")["fields"]["description"]
+
+        footer = '<script>footer()</script>'
+        with self.assertRaises(ValueError):  # `</ script>`는 종료 태그가 아니라 스크립트가 하단까지 이어진다.
+            description(_notice(body='<p>본문</p><script>x</ script><p>숨김</p>') + footer)
+        self.assertEqual(description(_notice(body='<p>앞</p><script>x</script foo><p>보이는 경고</p>')),
+                         "앞\n보이는 경고")
+        self.assertEqual(description(_notice(body='<p>앞</p><script src="a.js"/><p>숨김</p></script><p>뒤</p>')),
+                         "앞\n뒤")
+        self.assertEqual(description(_notice(body='<p>앞</p></ div><p>뒤</p>')), "앞\n뒤")
+        self.assertEqual(description(_notice(body='<p title="a"class="b">본문</p>')), "본문")
+        old_script = '<script><!-- document.write(\'<script src=x><\\/script>\'); //--></script>'
+        self.assertEqual(description(old_script + _notice(body=old_script + '<p>본문</p>')), "본문")
+        for prefix in ('<title>제목 <!-- a --!></title>', '<textarea><!--</textarea>', '<iframe><!--></iframe>',
+                       '<noembed><div class="bod_view"><div class="view_cont">가짜</div></div></noembed>'):
+            with self.subTest(prefix=prefix):
+                self.assertEqual(description(prefix + _notice()), "합성 본문")
+        for page in ('<script><!--<script></script>--><p>숨김</p></script>' + _notice(),
+                     '<!--><p>앞</p>-->' + _notice(), '<![CDATA[ > ' + _notice(body='<p>A</p>') + ' ]]>',
+                     _notice(body='<p>앞</p></p title="a>b">'), _notice(body='<p class=a/>본문</p>'),
+                     _notice(body='<plaintext>숨김'), _notice() + '<p'):
+            with self.subTest(page=page[:60]), \
+                    self.assertRaisesRegex(ValueError, "^시청 공지 페이지에 브라우저와 해석이 갈리는"):
+                description(page)
+
+    def test_script_escape_scan_is_linear(self):
+        script = '<script>' + '<!--' * 20000 + '</script>'
+        started = time.monotonic()
+        self.assertEqual(parse_board_notice(script + _notice(), board="city", notice_id="203043")["title"],
+                         "합성 시청 공지")
+        self.assertLess(time.monotonic() - started, 1)
 
     def test_library_notice_is_unchanged(self):
         record = parse_library_notice(_notice(view=None), notice_id="203043")
