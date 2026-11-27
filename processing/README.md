@@ -81,6 +81,25 @@ python3.13 -m processing.extraction verify 71fb66f0-e610-4f9c-8f26-4bb77655ee8c
 
 첫 명령은 합성 입력의 프롬프트만 생성합니다. 가져오기에는 실제 제공한 프롬프트·원출력과 새 run_id의 메타데이터를 준비합니다. 기본 저장 위치는 Git 제외 `data/private/extraction-runs`입니다. 같은 ID의 원본을 덮어쓰지 않으며 실패·과다 출력도 전부 보존합니다. 마지막 출력이 기계 검증을 통과해도 `review_required=true`이며 사람 승인과 다릅니다. 종료 코드·1~3시도·복구·hash 대상·미상 제공값 처리 등은 [실행 기록 계약](../contracts/extraction-run.md)을 따릅니다.
 
+## 포털·공식 웹 수집 원본 비교 시범
+
+전국문화축제 CSV와 안성행사알림이 상세 JSON, 전국도서관 CSV와 안성시 도서관 공지 상세 HTML을 비교한다. 원본을 비공개 작업 디렉터리에 준비하고 저장소 루트에서 실행한다. 포털 CSV는 EUC-KR과 UTF-8, 공식 웹 상세는 UTF-8을 지원한다.
+
+```sh
+python3.13 -B -m processing.collection culture \
+  --portal-csv data/private/festivals.csv \
+  --web-detail data/private/event-detail.json --web-id 123
+python3.13 -B -m processing.collection living \
+  --portal-csv data/private/libraries.csv \
+  --web-detail data/private/library-notice.html --web-id 456
+```
+
+표준 데이터는 안성시 행을 골라 읽는다. 축제 주소가 비어 있으면 안성시 주최기관 또는 공식 도메인을 기준으로 후보에 넣는다. 결과에는 각 입력 파일의 SHA-256, CSV 원본 레코드 번호(헤더와 빈 줄 제외), 검토할 두 출처의 값, 관계 후보가 들어 있다. 행사에서 공식 링크·제목·시작일·종료일이 모두 일치하면 후보로 표시하고, 중복 후보는 함께 남긴다. 겹치는 값이 다르면 출처별 값을 보여준다. 도서관 이름이 공지에 독립된 이름으로 등장하면 운영 기준과의 관계 후보를 표시한다. 시민 공지 등록 전에 출처, 적용 날짜·시간과 예외를 확인한다.
+
+같은 게시판에서도 정보가 들어 있는 위치가 다르다. 안성시청 [4404번 개통 공지](https://www.anseong.go.kr/portal/bbs/view.do?bIdx=201589&mId=0501010000&ptIdx=16)는 시간표와 요금이 본문에 있고, [15번 변경 공지](https://www.anseong.go.kr/portal/bbs/view.do?bIdx=201456&mId=0501010000&ptIdx=16)는 세부 시간표가 이미지에 있다. 도서관은 [본문형](https://www.anseong.go.kr/library/bbs/view.do?bIdx=195773&mId=0401010000&ptIdx=16), [이미지 포함형](https://www.anseong.go.kr/library/bbs/view.do?bIdx=201918&mId=0401010000&ptIdx=16), [HWPX 첨부형](https://www.anseong.go.kr/library/bbs/view.do?bIdx=203047&mId=0401010000&ptIdx=16)을 표본으로 확인했다.
+
+도서관 HTML은 본문과 이미지·첨부 유무를 구분한다. 읽을 수 있는 본문이 없는 글은 오류로 남긴다. 행사 상세는 원문 주소와 선택 링크를 함께 다루며, 썸네일이나 첨부 이미지가 있으면 확인 표시를 남긴다. 설명에 섞인 HTML은 원문 필드로 보관한다. 두 공식 웹 상세 모두 입력에 포함된 게시물 번호를 `--web-id`와 대조한다. 이 시범은 내부 자료 비교용이다. 자동 수집, 이미지·첨부 내용 추출, DB 저장, 승인·발행은 별도 단계다.
+
 ## 시민 수동 추출·보관
 
 [extract-citizen-v1](../contracts/citizen-extraction.md)은 기존 ai-input-v1·manual archive-v1을 재사용하는 별도 family입니다. title/categories와12개 원문 사실을 FieldValue로 보존하며 분류 미상은 null+ambiguous입니다. 날짜·무료·자격·모집/취소·일정 대응을 추론하지 않습니다. 작성자의 기술 계약이며 실제 팀원·Flutter 최종 합의나 새 평가 기준을 대신하지 않습니다.
