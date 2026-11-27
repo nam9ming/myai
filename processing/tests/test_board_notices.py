@@ -299,6 +299,7 @@ class BoardNoticeTest(unittest.TestCase):
             '<p style="width:0 !important;width:100px;height:0 !important;height:10px;overflow:hidden">숨김</p>',
             '<p style="display:none! important">숨김</p>', '<p style="background:url(/img/a.png)">보임</p>',
             '<p style="line-height:0">숨김</p>', '<p style="letter-spacing:-50px">숨김</p>',
+            '<p style="opacity:0.4">숨김</p>', '<p style="-webkit-text-fill-color:transparent">숨김</p>',
         ]
         for body in bodies:
             with self.subTest(body=body), self.assertRaisesRegex(ValueError, "^시청 공지 본문 영역에 .*숨김"):
@@ -318,6 +319,7 @@ class BoardNoticeTest(unittest.TestCase):
                          "앞\n뒤")
         self.assertEqual(description(_notice(body='<p>앞</p></ div><p>뒤</p>')), "앞\n뒤")
         self.assertEqual(description(_notice(body='<p title="a"class="b">본문</p>')), "본문")
+        self.assertEqual(description(_notice(body='<p style="display:inline !important; opacity:0.5">본문</p>')), "본문")
         old_script = '<script><!-- document.write(\'<script src=x><\\/script>\'); //--></script>'
         self.assertEqual(description(old_script + _notice(body=old_script + '<p>본문</p>')), "본문")
         for prefix in ('<title>제목 <!-- a --!></title>', '<textarea><!--</textarea>', '<iframe><!--></iframe>',

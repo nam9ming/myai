@@ -74,7 +74,7 @@ _BODY_TAGS = frozenset('a abbr address article aside b bdi bdo big blockquote br
 _BODY_ATTRS = frozenset('abbr action align alt bgcolor border cellpadding cellspacing cite class color colspan datetime '
                         'dir face headers height href id lang method name onclick open rel reversed rowspan scope size '
                         'span src start style summary target title type valign value width'.split())
-_DISPLAY_ATTRS = ('style', 'class', 'open')
+_DISPLAY_ATTRS = ('style', 'class')
 # 브라우저와 Python 버전이 모두 같게 읽는 시작 태그 문법만 받는다(속성 사이 공백은 따옴표 뒤에서만 생략 가능).
 _STRICT_START_TAG = re.compile(
     r'<[a-zA-Z][^\t\n\f\r />]*'
@@ -459,7 +459,7 @@ class _NoticeParser(HTMLParser):
     def parse_comment(self, i, report=True):
         """주석 종료 규칙을 Python 패치 버전과 무관하게 `-->`로 고정한다.
 
-        3.13.5는 `--\\s*>`, 3.14는 `--!?>`와 `<!-->`에서 닫아 같은 HTML의 결과가 달랐다. 브라우저와 해석이 갈리는
+        3.13.5는 `--\\s*>`, 3.14는 `--!?>`(없으면 `<!-->`·`<!--->`)에서 닫아 같은 HTML의 결과가 달랐다. 브라우저와 해석이 갈리는
         `<!-->`·`<!--->`·`--!>`와 닫히지 않은 주석(문서를 한 번에 넣으므로 문서 끝까지 이어진다)은 문서 어디서든 거부한다.
         """
         rawdata = self.rawdata
