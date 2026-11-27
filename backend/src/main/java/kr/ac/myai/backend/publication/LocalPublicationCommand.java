@@ -51,6 +51,10 @@ public class LocalPublicationCommand implements ApplicationRunner, ExitCodeGener
                 default -> 1;
             };
             error(ex.code(), ex.getMessage(), ex.field(), exitCode == 4);
+        } catch (kr.ac.myai.backend.extraction.ExtractionException ex) {
+            // 서비스는 Python 실행 불가·시간 초과만 그대로 던진다. DB 장애처럼 실행 환경을 확인할 문제로 알린다.
+            exitCode = 4;
+            error(ex.code(), "Python 실행 환경을 확인한 뒤 다시 시도해 주세요.", null, ex.retryable());
         } catch (IllegalArgumentException ex) {
             exitCode = 2;
             error("PUBLICATION_VALIDATION_ERROR", "파일 경로와 실행 설정을 확인해 주세요.", null, false);
