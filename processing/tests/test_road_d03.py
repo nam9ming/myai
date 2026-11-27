@@ -45,29 +45,36 @@ class RoadD03Test(unittest.TestCase):
             with self.subTest(keys=keys), self.assertRaises(ValueError):
                 capture_assets(self.root, "road", "trial", keys)
 
-    def test_rejects_changed_raw_parsed_record_or_receipt(self):
+    def test_rejects_changed_raw(self):
         original = (self.directory / "detail-9.html").read_bytes()
         self.rewrite("detail-9.html", original.replace("양성면".encode(), "보개면".encode()))
         with self.assertRaises(ValueError):
             capture_assets(self.root, "road", "trial", {"9"})
-        self.rewrite("detail-9.html", original)
 
+    def test_rejects_changed_parsed_record(self):
         parsed = json.loads((self.directory / "parsed-9.json").read_bytes())
         parsed["record"]["fields"]["region"] = "다른 지역"
         self.rewrite("parsed-9.json", json.dumps(parsed, ensure_ascii=False).encode())
         with self.assertRaises(ValueError):
             capture_assets(self.root, "road", "trial", {"9"})
 
+    def test_rejects_changed_receipt(self):
+        original = (self.directory / "batch.json").read_bytes()
         for change in ({"state": "planned"}, {"schema_version": "other"}, {"batch_id": "other"},
                        {"parsed": 2}, {"status": "complete"}):
+            self.rewrite("batch.json", original)
+            self.assertIn("9", capture_assets(self.root, "road", "trial", {"9"}))
             receipt = dict(self.receipt, **change)
             self.rewrite("batch.json", json.dumps(receipt, ensure_ascii=False).encode())
             with self.subTest(change=change), self.assertRaises(ValueError):
                 capture_assets(self.root, "road", "trial", {"9"})
 
     def test_rejects_changed_item_reference_or_time(self):
+        original = (self.directory / "batch.json").read_bytes()
         for change in ({"file": "detail-8.html"}, {"parsed_file": "parsed-8.json"}, {"sha256": "A" * 64},
                        {"fetched_at": "2026-11-27 08:00:00"}, {"source_url": road_detail_url("planned", "9")}):
+            self.rewrite("batch.json", original)
+            self.assertIn("9", capture_assets(self.root, "road", "trial", {"9"}))
             receipt = json.loads(json.dumps(self.receipt))
             receipt["items"][0].update(change)
             self.rewrite("batch.json", json.dumps(receipt, ensure_ascii=False).encode())
