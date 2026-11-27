@@ -4,6 +4,7 @@ from html.parser import HTMLParser
 from io import StringIO
 import json
 import re
+from types import MappingProxyType
 
 from . import official_url
 from .official_web import OFFICIAL_ORIGIN, board as board_info, board_detail_url, detail_url
@@ -62,10 +63,230 @@ def parse_library_csv(text: str) -> list[dict]:
 
 
 _LIBRARY_VIEW = '/library/bbs/view.do?ptIdx=16&mId=0401010000'
+_HIDDEN_ERROR = '{} 본문 영역에 화면 표시를 확정할 수 없는 숨김·미확인 표기가 있습니다.'
+_MARKUP_ERROR = '{} 페이지에 브라우저와 해석이 갈리는 태그·주석·스크립트 표기가 있습니다.'
+# 본문 영역은 아래 허용 목록만 받는다. 2026-11-27 실제 본문 128쪽에서 쓰인 태그·속성·스타일을 바탕으로,
+# 화면에 그대로 보이는 일반 문서 요소만 더했다. 목록 밖 표기는 숨김 여부를 추정하지 않고 거부한다.
+_BODY_TAGS = frozenset('a abbr address article aside b bdi bdo big blockquote br caption center cite code col colgroup '
+                       'dd del details dfn div dl dt em figcaption figure font footer form h1 h2 h3 h4 h5 h6 header '
+                       'hr i img input ins kbd label li main mark nav ol p pre q s samp script section small span '
+                       'strike strong sub summary sup table tbody td tfoot th thead tr tt u ul var wbr'.split())
+_BODY_ATTRS = frozenset('abbr action align alt bgcolor border cellpadding cellspacing cite class color colspan datetime '
+                        'dir face headers height href id lang method name onclick open rel reversed rowspan scope size '
+                        'span src start style summary target title type valign value width'.split())
+# 크기·여백 속성은 숫자만 받는다(0이나 큰 값은 그림·글자를 감추거나 밀어낸다). 실제 그림 크기는 500 이상이었다.
+_IMG_SIZE_ATTR = re.compile(r'[1-9]\d{1,3}|(?:[1-9]\d|100)%')
+_SIZE_ATTR = re.compile(r'[1-9]\d{1,2}|(?:[1-9]\d|100)%')
+_SPACING_ATTR = re.compile(r'\d{1,2}')
+# 브라우저와 Python 버전이 모두 같게 읽는 시작 태그 문법만 받는다(속성 사이 공백은 따옴표 뒤에서만 생략 가능).
+# 따옴표 밖의 유니코드 공백(\xa0 등)은 Python 3.13.5만 속성 구분자로 읽어 받지 않는다.
+_STRICT_START_TAG = re.compile(
+    r'<[a-zA-Z][^\s/>]*'
+    r'(?:(?:[\t\n\f\r ]+|(?<=["\']))[^\s"\'<>/=`]+'
+    r'(?:[\t\n\f\r ]*=[\t\n\f\r ]*(?:"[^"]*"|\'[^\']*\'|[^\s"\'=<>`/]+(?=[\t\n\f\r >])))?)*'
+    r'[\t\n\f\r ]*/?>')
+# 본문 안 script는 실제 본문에 있던 첨부 파일용 외부 스크립트만 받는다. 실행 결과는 해석하지 않는다.
+_BODY_SCRIPT = re.compile(r'(?:/edu)?/(?:dwr/(?:interface/EgovFileMngDwr|engine|util)|common/js/common/EgovFileUtils)\.js')
+# svg·math 안(외부 콘텐츠)에서는 브라우저가 style·title 등을 원문 텍스트로 읽지 않는다.
+_FOREIGN_TAGS = ('svg', 'math')
+# _NoticeParser.CDATA_CONTENT_ELEMENTS: 브라우저가 내용을 원문 텍스트로 읽는 요소. Python 3.13.5는 script·style만,
+# 3.14는 일부만 그렇게 읽어 결과가 달랐다(noscript는 스크립트를 켠 브라우저 기준).
+_RAW_TEXT_TAGS = ('script', 'style', 'xmp', 'iframe', 'noembed', 'noframes', 'noscript', 'title', 'textarea')
+_SCRIPT_OPEN = re.compile(r'<script[\t\n\f\r />]', re.I | re.A)
+
+_NUMBER = r'(?:\d+(?:\.\d+)?|\.\d+)'
+_DIMENSION = re.compile(rf'(-?)({_NUMBER})(px|pt|em|rem|%)?')
+_HEX_COLOR = re.compile(r'#(?:[0-9a-f]{3}|[0-9a-f]{6})')
+_COLOR_WORD = re.compile(r'[a-z]+')
+_RGB = re.compile(r'rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(?:,\s*(?:\d*\.\d+|\d+)\s*)?\)')
+_KEYWORD = re.compile(r'[a-z][a-z-]*')
+_BORDER_STYLES = frozenset('none solid dashed dotted double groove ridge inset outset'.split())
+_DISPLAY_VALUES = frozenset('inline inline-block block flex inline-flex list-item table table-row table-cell'.split())
+_FONT_SIZE_WORDS = frozenset('xx-small x-small small medium large x-large xx-large smaller larger inherit'.split())
+_FONT_WEIGHTS = frozenset(['normal', 'bold', 'bolder', 'lighter', 'inherit'] + [str(n) for n in range(100, 1000, 100)])
+# 단위별 하한(이상)과 허용 음수 크기(미만). 단위 없는 값은 '' 키로 다룬다.
+_NON_NEGATIVE = {'': 0}
+_SPACING = {'px': 3, 'pt': 3, 'em': 0.2, 'rem': 0.2}
+_WORD_SPACING = {'px': 1, 'pt': 1}
+_SPACING_MAXIMUM = {'px': 20, 'pt': 20, 'em': 1, 'rem': 1}
+_INDENT = {'px': 100, 'pt': 100, 'em': 5, 'rem': 5}
+_SIZE_MINIMUM = {'px': 10, 'pt': 10, 'em': 1, 'rem': 1, '%': 10}
+_LINE_HEIGHT_MINIMUM = {'': 0.5, 'px': 5, 'pt': 5, 'em': 0.5, 'rem': 0.5, '%': 50}
+_FONT_SIZE_MINIMUM = {'px': 4, 'pt': 4, 'em': 0.3, 'rem': 0.3, '%': 30}
+# 큰 양수 이동·여백으로 글자를 화면 밖으로 밀어내는 경우도 받지 않는다.
+_MAXIMUM = {'': 10, 'px': 1000, 'pt': 1000, 'em': 50, 'rem': 50, '%': 101}
+
+
+def _dimensions(value: str, minimum: dict, negative: dict | None = None, keywords=(), count=4,
+                maximum: dict = _MAXIMUM) -> bool:
+    """공백으로 나뉜 길이 값을 확인한다.
+
+    양수(와 0)는 `minimum`의 단위별 하한 이상·`maximum` 미만, 음수는 `negative`의 단위별 크기 미만만 받는다.
+    단위 없는 0은 0px로 본다. 단위 없는 그 밖의 수는 `minimum`에 '' 키가 있을 때만 받는다.
+    """
+    tokens = value.split()
+    if not 1 <= len(tokens) <= count:
+        return False
+    for token in tokens:
+        if token in keywords:
+            continue
+        match = _DIMENSION.fullmatch(token)
+        if not match:
+            return False
+        sign, number, unit = match.groups()
+        number, unit = float(number), unit or ''
+        if unit == '' and '' not in minimum:
+            if number:
+                return False
+            unit = 'px'
+        if number >= maximum.get(unit, 0):
+            return False
+        if sign and number:
+            if number >= (negative or {}).get(unit, 0):
+                return False
+        elif unit not in minimum or number < minimum[unit]:
+            return False
+    return True
+
+
+def _color(value: str, transparent=False) -> bool:
+    """글자색은 3·6자리 16진수와 색 이름만 받는다. `transparent`가 참이면(배경·테두리) 투명과 rgb()/rgba()도 받는다."""
+    if value in ('transparent', 'currentcolor'):
+        return transparent
+    if transparent and _RGB.fullmatch(value):
+        return True
+    return bool(_HEX_COLOR.fullmatch(value) or _COLOR_WORD.fullmatch(value))
+
+
+def _keyword(value: str) -> bool:
+    return bool(_KEYWORD.fullmatch(value))
+
+
+_BOX = {'px': 0, 'pt': 0, 'em': 0, 'rem': 0, '%': 0}
+_STYLE_RULES = {
+    **dict.fromkeys(('padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'border-radius'),
+                    lambda v: _dimensions(v, _BOX)),
+    **dict.fromkeys(('margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left'),
+                    lambda v: _dimensions(v, _BOX, _INDENT, keywords=('auto',))),
+    # 간격은 실제 값(글자 -1.4pt~0, 낱말 0px) 가까이만 받는다. 큰 음수는 글자를 한 자리에 겹친다.
+    'letter-spacing': lambda v: v == 'normal' or _dimensions(v, _BOX, _SPACING, count=1, maximum=_SPACING_MAXIMUM),
+    'word-spacing': lambda v: v == 'normal' or _dimensions(v, _BOX, _WORD_SPACING, count=1, maximum=_SPACING_MAXIMUM),
+    'text-indent': lambda v: _dimensions(v, _BOX, _INDENT, count=1, maximum=_INDENT),
+    **dict.fromkeys(('width', 'height', 'max-width', 'max-height'),
+                    lambda v: v in ('auto', 'none') or _dimensions(v, _SIZE_MINIMUM, count=1)),
+    'line-height': lambda v: v == 'normal' or _dimensions(v, _LINE_HEIGHT_MINIMUM, count=1,
+                                                          maximum={**_MAXIMUM, '%': 1000}),
+    'font-size': lambda v: v in _FONT_SIZE_WORDS or _dimensions(v, _FONT_SIZE_MINIMUM, count=1),
+    'font-weight': lambda v: v in _FONT_WEIGHTS,
+    'color': _color,
+    'background-color': lambda v: _color(v, transparent=True),
+    **dict.fromkeys(('border', 'border-top', 'border-right', 'border-bottom', 'border-left'),
+                    lambda v: 1 <= len(v.split()) <= 3 and all(
+                        t in _BORDER_STYLES or _color(t, transparent=True) or _dimensions(t, _BOX, count=1)
+                        for t in v.split())),
+    'display': lambda v: v in _DISPLAY_VALUES,
+    'opacity': lambda v: bool(re.fullmatch(_NUMBER, v)) and 0.5 <= float(v) <= 1,
+    'overflow': lambda v: v in ('visible', 'auto', 'hidden'),
+    '-webkit-text-stroke-width': lambda v: _dimensions(v, {'px': 0}, count=1, maximum={'px': 1}),
+    **dict.fromkeys(('orphans', 'widows'), lambda v: v.isascii() and v.isdigit()),
+    # 글꼴 이름은 함수·이스케이프 없이 글자만 받는다.
+    'font-family': lambda v: bool(re.fullmatch(r'[\w\s\'",.-]+', v)),
+    # 아래 속성은 값이 낱말 하나일 때만 받는다. 낱말 값으로는 글자를 감추지 못한다.
+    **dict.fromkeys(('text-align', 'vertical-align', 'font-style', 'font-variant-ligatures', 'font-variant-caps',
+                     'font-variant-numeric', 'font-variant-east-asian', 'font-variant-alternates',
+                     'font-variant-position', 'font-variant-emoji', 'font-feature-settings', 'font-kerning',
+                     'font-optical-sizing', 'font-variation-settings', 'font-language-override', 'font-size-adjust',
+                     'font-stretch', 'text-transform', 'white-space', 'word-break', '-ms-word-break', 'float',
+                     'box-sizing', 'cursor', 'justify-content', 'align-items', 'text-autospace',
+                     'text-decoration-color', 'text-decoration-style', 'text-decoration-thickness'), _keyword),
+}
+
+
+def _style_allowed(style: str) -> bool:
+    """인라인 스타일을 선언 단위로 읽어 허용 속성·값 형태만 받는다.
+
+    shortcut: 허용한 값끼리의 조합(글자색과 배경색이 같음, 고정 크기 상자의 넘침 잘림 등)은 해석하지 않는다.
+    """
+    if '/*' in style or '\\' in style:
+        return False
+    seen = set()
+    for declaration in style.split(';'):
+        if not declaration.strip():
+            continue
+        name, colon, value = declaration.partition(':')
+        name = name.strip().lower()
+        value = value.strip().lower()
+        head, bang, tail = value.rpartition('!')
+        if bang and tail.strip() == 'important':  # 정규식 `\s*!`는 긴 공백에서 제곱 시간이 걸린다.
+            value = head.rstrip()
+        if not colon or not value or '!' in value or name in seen:
+            return False
+        seen.add(name)
+        if name.startswith('mso-'):
+            # Word가 남기는 mso-* 속성은 브라우저가 해석하지 않는다.
+            if '(' in value:
+                return False
+            continue
+        rule = _STYLE_RULES.get(name)
+        if rule is None or not rule(value):
+            return False
+    return True
+
+
+def _unsafe_body_tag(tag: str, attrs: dict, names: list[str]) -> bool:
+    """본문 영역의 태그·속성·스타일이 허용 목록 밖이면 숨김 범위를 추정하지 않고 거부한다.
+
+    속성이 중복되면 이 파서는 마지막 값을, 브라우저는 첫 값을 쓰므로 중복 자체를 거부한다.
+    src·href 중복은 매체 파서가 주소를 확정하지 않는 검토 후보로 따로 처리한다.
+    """
+    others = [name for name in names if name not in ('src', 'href')]
+    size = _IMG_SIZE_ATTR if tag == 'img' else _SIZE_ATTR  # 그림만 실제 크기(500~1920)를 받고, 다른 태그는 999까지다.
+    return (tag not in _BODY_TAGS or len(set(others)) != len(others)
+            or any(name in attrs and not size.fullmatch(attrs[name] or '') for name in ('width', 'height'))
+            or any(name in attrs and not _SPACING_ATTR.fullmatch(attrs[name] or '')
+                   for name in ('cellpadding', 'cellspacing', 'border'))
+            or any(name not in _BODY_ATTRS and not name.startswith('data-') for name in names)
+            or (tag == 'details' and 'open' not in attrs)
+            # 같은 name의 details는 하나만 열린다. 실제 본문의 name은 form·input에만 있었다.
+            or ('name' in attrs and tag not in ('a', 'form', 'input'))
+            or (tag == 'script' and (names != ['src'] or not _BODY_SCRIPT.fullmatch(attrs['src'] or '')))
+            or (tag == 'input' and (attrs.get('type') or '').lower() != 'hidden')
+            or not _style_allowed(attrs.get('style') or ''))
+
+
+def _ends_double_escaped(data: str) -> bool:
+    """브라우저의 script 이스케이프 상태를 따라가, Python이 끝낸 `</script` 앞에서 이중 이스케이프 중인지 본다.
+
+    이중 이스케이프(`<!--` 뒤 `<script`) 안의 `</script>`에서 브라우저는 스크립트를 끝내지 않아 뒤따르는 HTML을 숨긴다.
+    """
+    state, i = 'data', 0
+    while True:
+        if state == 'data':
+            i = data.find('<!--', i)
+            if i < 0:
+                return False
+            state, i = 'escaped', i + 2  # `<!-->`처럼 `<!--`의 `--`도 이스케이프 종료에 쓰인다.
+            continue
+        end = data.find('-->', i)
+        if state == 'escaped':
+            match = _SCRIPT_OPEN.search(data, i, end if end >= 0 else len(data))
+            if match:
+                state, i = 'double', match.end()
+                continue
+        if end < 0:
+            return state == 'double'
+        state, i = 'data', end + 3
 
 
 class _NoticeParser(HTMLParser):
-    """`view_action`은 본문 영역 밖 `form#viewForm`의 게시판 주소다. 다른 게시판의 HTML을 같은 구조라는 이유로 받지 않는다."""
+    """`view_action`은 본문 영역 밖 `form#viewForm`의 게시판 주소다. 다른 게시판의 HTML을 같은 구조라는 이유로 받지 않는다.
+
+    문서는 한 번에 넣는다. 태그·주석·원문 텍스트 요소의 경계는 Python 패치 버전과 무관하게 브라우저(HTML5) 규칙으로
+    고정하고, 이 파서가 브라우저와 다르게 읽을 수 있는 표기는 문서 어디서든 거부한다.
+    """
+
+    CDATA_CONTENT_ELEMENTS = _RAW_TEXT_TAGS
+    RCDATA_CONTENT_ELEMENTS = ()
 
     def __init__(self, label='도서관 공지', view_action=_LIBRARY_VIEW, require_view=False, title_class=None,
                  context_path=''):
@@ -87,11 +308,81 @@ class _NoticeParser(HTMLParser):
         self.section = None
         self.section_depth = 0
         self.hidden_depth = 0
+        self.foreign_depth = 0
         self.attachment_open = False
         self.review_flags = set()
 
+    def parse_starttag(self, i):
+        self.tag_reported = False
+        k = super().parse_starttag(i)
+        if k < 0 or not self.tag_reported:
+            # 닫히지 않았거나 Python이 글자로 넘긴 시작 태그다. 브라우저는 태그로 읽으므로 받지 않는다.
+            raise ValueError(_MARKUP_ERROR.format(self.label))
+        return k
+
+    def parse_endtag(self, i):
+        """종료 태그를 브라우저처럼 읽는다. `</ x>`는 무시되는 가짜 주석이고, 원문 텍스트 요소는 여기서 끝난다."""
+        rawdata = self.rawdata
+        end = rawdata.find('>', i + 2)
+        if end < 0 or '"' in rawdata[i:end] or "'" in rawdata[i:end]:
+            raise ValueError(_MARKUP_ERROR.format(self.label))
+        if self.cdata_elem is not None:
+            # set_cdata_mode의 패턴이 `</이름` 뒤 구분 문자까지 확인했다.
+            tag = self.cdata_elem
+            self.clear_cdata_mode()
+        else:
+            match = re.match(r'</([a-zA-Z][^\t\n\f\r />]*)', rawdata[i:end])
+            if match is None:
+                return end + 1
+            tag = match.group(1).lower()
+        self.handle_endtag(tag)
+        return end + 1
+
+    def set_cdata_mode(self, elem, **options):
+        super().set_cdata_mode(elem, **options)
+        # 원문 텍스트는 브라우저처럼 `</이름` 뒤에 공백·`/`·`>`가 올 때만 끝난다(3.13.5는 `</ 이름`에서도 끝냈다).
+        self.interesting = re.compile(r'</%s(?=[\t\n\f\r />])' % re.escape(self.cdata_elem), re.I | re.A)
+
+    def parse_pi(self, i):
+        if self.rawdata.find('>', i + 2) < 0:
+            # 닫히지 않은 `<?`는 3.13.5는 글자로, 3.14는 문서 끝까지의 처리 지시로 읽었다.
+            raise ValueError(_MARKUP_ERROR.format(self.label))
+        return super().parse_pi(i)
+
+    def parse_html_declaration(self, i):
+        end = self.rawdata.find('>', i + 2)
+        # 따옴표가 든 선언(`<!DOCTYPE html PUBLIC "x>`)은 브라우저가 닫는 따옴표까지 읽어 경계가 갈린다. 실제 문서는 `<!DOCTYPE html>`뿐이다.
+        if self.rawdata.startswith('<![', i) or end < 0 or '"' in self.rawdata[i:end] or "'" in self.rawdata[i:end]:
+            # HTML 문서에서 브라우저는 `<![CDATA[`를 첫 `>`에서 끝나는 가짜 주석으로 읽고, Python은 `]]>`까지 삼킨다.
+            # 닫히지 않은 `<!`도 Python 버전마다 글자 또는 문서 끝까지의 선언으로 달리 읽는다.
+            raise ValueError(_MARKUP_ERROR.format(self.label))
+        return super().parse_html_declaration(i)
+
+    def handle_startendtag(self, tag, attrs):
+        # HTML에서 브라우저는 빈 요소가 아닌 태그의 `/>`를 무시하고, 원문 텍스트 요소도 여기서 내용 읽기를 시작한다.
+        # svg·math 안과 `<svg/>`·`<math/>` 자신은 `/>`에서 닫힌다.
+        foreign = self.foreign_depth
+        self.handle_starttag(tag, attrs)
+        if tag in _FOREIGN_TAGS:
+            self.foreign_depth -= 1
+        elif tag in self.CDATA_CONTENT_ELEMENTS:
+            if foreign:
+                # foreignObject 같은 통합 지점에서는 브라우저가 `/>`를 무시하고 원문 텍스트를 시작한다. 위치를 가리지 않고 거부한다.
+                raise ValueError(_MARKUP_ERROR.format(self.label))
+            self.set_cdata_mode(tag)
+
     def handle_starttag(self, tag, attrs):
+        self.tag_reported = True
+        if tag == 'plaintext' or not _STRICT_START_TAG.fullmatch(self.get_starttag_text() or ''):
+            raise ValueError(_MARKUP_ERROR.format(self.label))
         names = [name for name, _ in attrs]
+        if tag in _FOREIGN_TAGS:
+            # shortcut: 브라우저가 svg를 닫는 규칙(탈출 태그, 무시되는 `</svg>`)은 따라 하지 않고 종료 태그에서도 깊이를
+            # 줄이지 않는다. 한 번 열리면 문서 끝까지 외래 콘텐츠로 볼 뿐이라 원문 텍스트·template 거부만 늘어난다.
+            self.foreign_depth += 1
+        elif tag == 'template' and self.foreign_depth:
+            # svg·math 안의 template은 HTML template이 아니라 내용을 숨기지 않는다. 숨김 깊이를 셀 수 없어 받지 않는다.
+            raise ValueError(_MARKUP_ERROR.format(self.label))
         view_form = tag == 'form' and ('id', 'viewForm') in attrs
         attrs = dict(attrs)
         classes = (attrs.get('class') or '').split()
@@ -111,10 +402,14 @@ class _NoticeParser(HTMLParser):
             if tag == 'div' and 'bod_view' in classes:
                 if self.found_board:
                     raise ValueError(self.label + ' 본문 영역이 중복되었습니다.')
+                if _unsafe_body_tag(tag, attrs, names):
+                    raise ValueError(_HIDDEN_ERROR.format(self.label))
                 self.found_board = True
                 self.tags.append(tag)
             return
 
+        if not self.hidden_depth and _unsafe_body_tag(tag, attrs, names):
+            raise ValueError(_HIDDEN_ERROR.format(self.label))
         if self.section == 'description' and not self.hidden_depth:
             optional = {
                 'li': {'li'},
@@ -207,7 +502,29 @@ class _NoticeParser(HTMLParser):
         while self.tags[-1] in tags:
             self.handle_endtag(self.tags[-1])
 
+    def parse_comment(self, i, report=True):
+        """주석 종료 규칙을 Python 패치 버전과 무관하게 `-->`로 고정한다.
+
+        3.13.5는 `--\\s*>`, 3.14는 `--!?>`(없으면 `<!-->`·`<!--->`)에서 닫아 같은 HTML의 결과가 달랐다. 브라우저와 해석이 갈리는
+        `<!-->`·`<!--->`·`--!>`와 닫히지 않은 주석(문서를 한 번에 넣으므로 문서 끝까지 이어진다)은 문서 어디서든 거부한다.
+        """
+        rawdata = self.rawdata
+        end = rawdata.find('-->', i + 4)
+        if end < 0 or rawdata.startswith(('>', '->'), i + 4) or '--!>' in rawdata[i + 4:end]:
+            raise ValueError(_MARKUP_ERROR.format(self.label))
+        if report:
+            self.handle_comment(rawdata[i + 4:end])
+        return end + 3
+
     def handle_data(self, data):
+        if self.cdata_elem == 'script' and _ends_double_escaped(data):
+            raise ValueError(_MARKUP_ERROR.format(self.label))
+        if self.cdata_elem and self.foreign_depth and '<' in data:
+            # 브라우저는 svg·math 안의 이 내용을 태그·주석으로 읽는다. 글자만 있을 때는 두 해석이 같다.
+            raise ValueError(_MARKUP_ERROR.format(self.label))
+        if self.cdata_elem == 'script' and self.tags and data.strip():
+            # 본문 안 인라인 스크립트는 읽는 도중 실행되어 뒤따르는 본문을 숨길 수 있다.
+            raise ValueError(_HIDDEN_ERROR.format(self.label))
         if self.script is not None and not self.tags and self.hidden_depth == 1:
             self.script.append(data)
         if self.section and not self.hidden_depth:
@@ -226,7 +543,6 @@ class _MediaParser(_NoticeParser):
         self.media = []
         self.seen_links = set()
         self.anchor = None
-        self.explicit_hidden_depth = 0
 
     def add_media(self, kind, url, label, format_name=None):
         if url is not None:
@@ -239,7 +555,7 @@ class _MediaParser(_NoticeParser):
 
     def handle_starttag(self, tag, attrs):
         names = [name for name, _ in attrs]
-        if not self.hidden_depth and not self.explicit_hidden_depth:
+        if not self.hidden_depth:
             if (not self.tags and tag == 'input' and ('name', 'bIdx') in attrs
                     and (names.count('name') > 1 or names.count('value') > 1)):
                 raise ValueError(self.label + ' 번호의 HTML 속성이 중복되었습니다.')
@@ -247,14 +563,11 @@ class _MediaParser(_NoticeParser):
             if (len(self.tags) <= 1 and tag in ('div', 'dl') and names.count('class') > 1
                     and any(name == 'class' and classes.intersection((value or '').split()) for name, value in attrs)):
                 raise ValueError(self.label + ' 영역의 HTML 속성이 중복되었습니다.')
+        # 본문 영역의 hidden 요소는 기반 파서가 거부하므로 여기서 따로 건너뛰지 않는다.
         super().handle_starttag(tag, attrs)
-        if self.hidden_depth or self.explicit_hidden_depth or not self.tags:
+        if self.hidden_depth or not self.tags:
             return
         values = dict(attrs)
-        if 'hidden' in values:
-            if tag not in _VOID_TAGS:
-                self.explicit_hidden_depth = len(self.tags)
-            return
 
         if tag == 'img' and self.section == 'description':
             source = values.get('src') or ''
@@ -280,14 +593,12 @@ class _MediaParser(_NoticeParser):
 
     def handle_data(self, data):
         super().handle_data(data)
-        if self.anchor is not None and not self.hidden_depth and not self.explicit_hidden_depth:
+        if self.anchor is not None and not self.hidden_depth:
             self.anchor[2].append(data)
 
     def handle_endtag(self, tag):
         depth = len(self.tags)
         super().handle_endtag(tag)
-        if self.explicit_hidden_depth == depth and len(self.tags) < depth:
-            self.explicit_hidden_depth = 0
         if tag == 'a' and self.anchor is not None and self.anchor[0] == depth:
             _, url, parts = self.anchor
             self.anchor = None
@@ -344,6 +655,9 @@ def _declared_context_paths(scripts: list[str]) -> list[object]:
         match = _PAGE_CONFIG.fullmatch(script)
         if match is None:
             continue
+        if len(match[1]) > 4096 or match[1].count('[') + match[1].count('{') > 64:
+            # 실제 설정은 227자였다. 깊은 중첩은 Python 버전마다 재귀 한계가 달라 결과가 갈리므로 받지 않는다.
+            raise ValueError('페이지 설정 스크립트가 너무 길거나 깊습니다.')
         try:
             config = json.loads(match[1], object_pairs_hook=_unique_object)
         except ValueError:
@@ -389,11 +703,22 @@ def parse_library_notice(text: str, *, notice_id: str) -> dict:
     return _notice_record(_NoticeParser(), text, notice_id, 'library_notice', lambda: detail_url('living', notice_id))
 
 
-# parse_board_notice나 공유하는 _NoticeParser·_notice_record의 출력 또는 허용 규칙이 바뀌면 함께 올린다.
-# v2: 시청 상세의 viewForm 게시판 주소를 필수로 대조한다.
-# v2 유지: 안성배움e 추가는 새 게시판 설정만 더하며 시청 결과와 허용 규칙은 그대로다.
-# 버전은 모든 게시판이 함께 쓰므로 한 게시판의 규칙을 바꿔도 다른 게시판 기록을 다시 수집해야 한다.
-BOARD_PARSER_VERSION = 'board-notice-parser-v2'
+# 게시판별 파서 버전. 그 게시판의 parse_board_notice 출력이나 허용 규칙이 바뀌면 해당 값만 올린다.
+# 공유하는 _NoticeParser·_notice_record를 바꾸면 영향을 받는 모든 게시판의 값을 올린다.
+# 이력(이전 공유 이름 board-notice-parser): v1 시작, v2 시청 viewForm 필수, 안성배움e 추가.
+# v3: 본문 영역(div.bod_view 포함)은 허용 목록의 태그·속성·인라인 스타일만 받고, 문서 전체의 태그·주석·
+#     원문 텍스트 경계를 브라우저 규칙으로 고정해 해석이 갈리는 표기를 거부한다.
+BOARD_PARSER_VERSIONS = MappingProxyType({
+    'city': 'city-notice-parser-v3',
+    'edu': 'edu-notice-parser-v3',
+})
+
+
+def board_parser_version(board: str) -> str:
+    board_info(board)
+    if board not in BOARD_PARSER_VERSIONS:  # 시험이 BOARDS와 키가 같음을 보장하지만 등록 누락을 ValueError로 알린다.
+        raise ValueError('게시판의 파서 버전이 등록되지 않았습니다.')
+    return BOARD_PARSER_VERSIONS[board]
 
 
 def parse_board_notice(text: str, *, board: str, notice_id: str) -> dict:

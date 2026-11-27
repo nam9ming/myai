@@ -60,8 +60,11 @@ class LibraryCollectionTest(unittest.TestCase):
     def test_notice_reads_text_and_posting_date_from_known_sections(self):
         html = _notice(
             '<p>자료실 이용 안내</p><br><p>11월 9일: <strong>임시 휴관</strong> &amp; 정기 점검</p>'
-            '<script>스크립트는 본문이 아닙니다</script><template><p>숨긴 본문</p></template>',
+            '<script src="/dwr/engine.js"></script>',
         )
+        for hidden in ('<script>스크립트는 본문이 아닙니다</script>', '<template><p>숨긴 본문</p></template>'):
+            with self.subTest(hidden=hidden), self.assertRaisesRegex(ValueError, '숨김'):
+                parse_library_notice(_notice('<p>본문</p>' + hidden), notice_id='77')
         self.assertEqual(parse_library_notice(html, notice_id='77'), {
             'source': 'library_notice',
             'external_id': '77',

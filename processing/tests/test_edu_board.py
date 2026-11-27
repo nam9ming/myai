@@ -112,7 +112,8 @@ class EduBoardTest(unittest.TestCase):
         city = f'<script>var yh = {{"contextPath": ""}};</script><!-- {fake} -->' + _notice("3838", f"<p>{fake}</p>")
         self.assertEqual(parse_board_media(city, board="city", notice_id="3838"), [])
         inner = _edu_notice(attachment=ATTACHMENT).replace("<p>합성 본문</p>", f"<p>본문</p><script>var y = {fake};</script>")
-        self.assertEqual(len(parse_board_media(inner, board="edu", notice_id="3838")), 1)
+        with self.assertRaisesRegex(ValueError, "숨김"):  # 본문 안 인라인 스크립트는 그 자체로 받지 않는다.
+            parse_board_media(inner, board="edu", notice_id="3838")
 
     def test_context_path_requires_the_page_configuration_object(self):
         no_config = _edu_notice(attachment=ATTACHMENT, context=None)
@@ -167,6 +168,30 @@ class EduPipelineTest(unittest.TestCase):
         media.store_media(self.private, "edu", 1, package, "edu-file", "2026-11-27T08:00:00Z")
         asset = media.read_media_assets(self.private, "edu-file", {"1"})["1"]
         self.assertEqual(asset["official_url"], board_detail_url("edu", "3838"))
+
+
+class EduVersionTest(unittest.TestCase):
+    def test_edu_batch_records_edu_parser_version(self):
+        root = Path(self.enterContext(TemporaryDirectory())).resolve() / "private"
+        root.mkdir(mode=0o700)
+        with (patch("processing.collection.board_batch.sleep"),
+              patch("processing.collection.board_batch.fetch_board_listing",
+                    return_value=_listing(_edu_row("3838", "330"), total=1).encode()),
+              patch("processing.collection.board_batch.fetch_board_detail", return_value=_edu_notice().encode())):
+            capture_board_batch("edu", "edu", root / BOARD_SECTION)
+        parsed = json.loads((root / BOARD_SECTION / "edu" / "parsed-3838.json").read_bytes())
+        self.assertEqual(parsed["parser_version"], "edu-notice-parser-v3")
+        for page in (_edu_notice(title_markup='<div class="bod_view_title" hidden>숨김</div>'),
+                     _edu_notice().replace('<div class="bod_view">', '<div class="bod_view" hidden>'),
+                     _edu_notice(body='<p>본문<img hidden src="/common/imgView.do" alt=""></p>'),
+                     _edu_notice(body='<p style="display:none">숨김</p>'),
+                     _edu_notice(attachment=ATTACHMENT.replace("<dd>", "<dd hidden>")),
+                     _edu_notice(body='<p>앞</p><!--->보임-->'),
+                     _edu_notice(body='<iframe>숨김</iframe>')):
+            for parse in (parse_board_notice, parse_board_media):
+                with self.subTest(parse=parse.__name__, page=page[-70:]), \
+                        self.assertRaisesRegex(ValueError, "^안성배움e 공지 .*(숨김|해석이 갈리는)"):
+                    parse(page, board="edu", notice_id="3838")
 
 
 class CityTitleTest(unittest.TestCase):

@@ -9,7 +9,7 @@ from .capture import read_capture_file as _read
 from .capture import read_receipt as _receipt
 from .media import read_media_assets
 from . import board_batch, road_batch
-from .libraries import BOARD_PARSER_VERSION, parse_board_notice
+from .libraries import board_parser_version, parse_board_notice
 from .official_web import BOARDS, DETAIL_MAX_BYTES, ROAD_STATES, board_detail_url, detail_url, road_detail_url
 from .portal import read_portal_snapshot
 from .road_works import PARSER_VERSION as ROAD_PARSER_VERSION, parse_road_detail
@@ -107,13 +107,13 @@ def _web_asset(directory: int, archive_kind: str, receipt: dict, items: dict[str
 _WEB_ARCHIVES = {
     "road": {
         "section": road_batch.ROAD_SECTION, "schema": road_batch.BATCH_SCHEMA, "record": road_batch.RECORD_SCHEMA,
-        "version": ROAD_PARSER_VERSION, "scope_key": "state", "scopes": ROAD_STATES, "label": "도로 공사현황", "item": "공사",
+        "version": lambda _state: ROAD_PARSER_VERSION, "scope_key": "state", "scopes": ROAD_STATES, "label": "도로 공사현황", "item": "공사",
         "url": road_detail_url, "method": "official-web-road-works",
         "parse": lambda text, scope, key: parse_road_detail(text, state=scope, project_id=key),
     },
     "board": {
         "section": board_batch.BOARD_SECTION, "schema": board_batch.BATCH_SCHEMA, "record": board_batch.RECORD_SCHEMA,
-        "version": BOARD_PARSER_VERSION, "scope_key": "board", "scopes": BOARDS, "label": "공지 게시판", "item": "공지",
+        "version": board_parser_version, "scope_key": "board", "scopes": BOARDS, "label": "공지 게시판", "item": "공지",
         "url": board_detail_url, "method": "official-web-board",
         "parse": lambda text, scope, key: parse_board_notice(text, board=scope, notice_id=key),
     },
@@ -145,9 +145,10 @@ def _web_assets(private_root: Path, kind: str, name: str, asset_keys: set[str]) 
             if digest != recorded:
                 raise ValueError(f"{label} 상세 원본 해시가 수집 기록과 다릅니다.")
             parsed = _receipt(directory, row["parsed_file"])
-            if parsed.get("parser_version") != config["version"]:
+            version = config["version"](scope)
+            if parsed.get("parser_version") != version:
                 raise ValueError("다른 파서 버전으로 만든 파싱 결과입니다. 현재 버전으로 다시 수집해 주세요.")
-            if parsed != {"schema_version": config["record"], "parser_version": config["version"],
+            if parsed != {"schema_version": config["record"], "parser_version": version,
                           "sha256": digest, "record": config["parse"](text, scope, key)}:
                 raise ValueError(f"{label} 파싱 결과가 원본과 다릅니다.")
             assets[key] = {

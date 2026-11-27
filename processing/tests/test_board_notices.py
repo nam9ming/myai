@@ -1,10 +1,14 @@
+import time
 import unittest
 from unittest.mock import patch
 
-from processing.collection.libraries import BOARD_PARSER_VERSION, parse_board_notice, parse_library_notice
+from processing.collection.libraries import (
+    BOARD_PARSER_VERSIONS, board_parser_version, parse_board_media, parse_board_notice, parse_library_media,
+    parse_library_notice,
+)
 from processing.collection.library_listing import parse_board_listing, parse_library_listing
 from processing.collection.official_web import (
-    SourceHTTPError, board_detail_url, fetch_board_detail, fetch_board_listing,
+    BOARDS, SourceHTTPError, board_detail_url, fetch_board_detail, fetch_board_listing,
 )
 
 
@@ -27,6 +31,9 @@ def _listing(rows, *, current=1, total=3):
 
 CITY_VIEW = "/portal/bbs/view.do?ptIdx=16&amp;mId=0501010000"
 LIBRARY_VIEW = "/library/bbs/view.do?ptIdx=16&amp;mId=0401010000"
+
+
+IMAGE = "/common/imgView.do?attachId=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&amp;fileSn=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb&amp;mode=origin"
 
 
 def _notice(notice_id="203043", body="<p>합성 본문</p>", view=CITY_VIEW):
@@ -147,7 +154,12 @@ class BoardListingTest(unittest.TestCase):
 class BoardNoticeTest(unittest.TestCase):
     def test_city_notice_uses_board_url_and_source(self):
         record = parse_board_notice(_notice(), board="city", notice_id="203043")
-        self.assertEqual(BOARD_PARSER_VERSION, "board-notice-parser-v2", "출력·허용 규칙을 바꾸면 파서 버전도 올린다.")
+        self.assertEqual(dict(BOARD_PARSER_VERSIONS), {"city": "city-notice-parser-v3", "edu": "edu-notice-parser-v3"},
+                         "게시판의 출력·허용 규칙을 바꾸면 그 게시판의 파서 버전을 올린다.")
+        self.assertEqual(set(BOARD_PARSER_VERSIONS), set(BOARDS), "모든 게시판에 파서 버전이 있어야 한다.")
+        for board in ("library", "other", None):
+            with self.subTest(board=board), self.assertRaises(ValueError):
+                board_parser_version(board)
         flagged = parse_board_notice(_notice(body='<p>본문</p><p><img src="/x.png" alt=""></p>'),
                                      board="city", notice_id="203043")
         self.assertEqual(flagged["review_flags"], ["inline_image"])
@@ -186,6 +198,201 @@ class BoardNoticeTest(unittest.TestCase):
                 parse_library_notice(fixture, notice_id="203043")
         self.assertEqual(parse_library_notice(_notice(view=LIBRARY_VIEW), notice_id="203043")["source"],
                          "library_notice")
+
+    def test_hidden_elements_in_body_are_rejected(self):
+        """브라우저 표시를 확정할 수 없으므로 hidden 요소가 있는 본문 영역은 추정하지 않고 거부한다."""
+        pages = [
+            _notice().replace("<h4>", "<h4 hidden>"),
+            _notice().replace('<div class="bod_view">', '<div class="bod_view" hidden>'),
+            _notice(body='<p>앞</p><p hidden>숨김<div>보이는 조건</div></p>'),
+            _notice(body='<ul><li hidden>숨김<li>보임</ul>'),
+            _notice(body='<p>본문<img hidden src="/common/imgView.do" alt=""></p>'),
+            _notice(body='<p>앞</p><div hidden/><p>뒤</p>'),
+            _notice(body='<p hidden style="display:block">보이는 조건</p>'),
+            _notice(body='<dl><dd hidden><a href="#">첨부</a></dd></dl>'),
+            _notice().replace("</div></div></div>",
+                              '</div><dl class="view_file"><dd hidden><a href="#" onclick="x">첨부</a></dd></dl></div></div>'),
+            _notice(body='<p>앞</p><svg><style><div hidden></style></svg><p>본문</p>'),
+            _notice(body='<p>앞</p><math><style>x</style></math>'),
+            _notice(body='<p>앞</p><!--><div hidden>--><p>본문</p>'),
+            _notice(body='<p>앞</p><!-- a --!><p>본문</p>'),
+            _notice(body='<p>앞</p><!-- a --!><div hidden>--><p>본문</p>'),
+            _notice(body='<p>앞</p><![CDATA[><div hidden>]]><p>본문</p>'),
+            _notice(body='<p style="display: none">숨김</p>'),
+            _notice(body='<p style="color:red; VISIBILITY:hidden">숨김</p>'),
+            _notice(body='<style>.x{display:none}</style><p class="x">숨김</p>'),
+            _notice(body='<noscript>숨김</noscript>'),
+            _notice(body='<iframe>숨김</iframe>'),
+            _notice(body='<details><summary>요약</summary>숨김</details>'),
+            _notice(body='<dialog>숨김</dialog>'),
+            _notice(body='<title>숨김</title>'),
+            _notice().replace('<div class="bod_view">', '<div class="bod_view" style="display:none">'),
+            _notice(body='<p style="display:none" style="color:red">숨김</p>'),
+            _notice(body='<p class="a" class="b">본문</p>'),
+            _notice(body='<p style="display:/**/none">숨김</p>'),
+            _notice(body='<p style="display:\\6e one">숨김</p>'),
+            _notice(body='<p style="opacity: 0">숨김</p>'),
+            _notice(body='<p style="opacity:0.0">숨김</p>'),
+            _notice(body='<p style="font-size:0px">숨김</p>'),
+            _notice(body='<p style="visibility: collapse">숨김</p>'),
+            _notice(body='<p style="content-visibility:hidden">숨김</p>'),
+            _notice(body='<svg><text>숨김</text></svg>'),
+            _notice(body='<math><mi>숨김</mi></math>'),
+            _notice(body='<p>앞</p><!--->보임-->'),
+            _notice(body='<p>앞</p><script><!--<script></script>--><p>숨김</p>'),
+            *(_notice(body=f'<{tag}>숨김</{tag}>') for tag in (
+                'video', 'audio', 'canvas', 'object', 'noembed', 'noframes', 'datalist', 'rp', 'select', 'xmp',
+                'textarea')),
+            *(_notice(body=f'<p style="{style}">숨김</p>') for style in (
+                'position:absolute;left:-9999px', 'text-indent:-9999px', 'margin-left: -120px',
+                'width:0;height:0;overflow:hidden', 'transform:scale(0)', 'clip-path:inset(50%)',
+                'color:transparent', 'color: rgba(0,0,0,0)', 'opacity:0.001', 'opacity:calc(0)',
+                'font-size:calc(0px)')),
+        ]
+        for page in pages:
+            with self.subTest(page=page[-90:]):
+                with self.assertRaisesRegex(ValueError, "^시청 공지 .*(숨김|해석이 갈리는)"):
+                    parse_board_notice(page, board="city", notice_id="203043")
+                with self.assertRaisesRegex(ValueError, "숨김|해석이 갈리는"):
+                    parse_board_media(page, board="city", notice_id="203043")
+                library = page.replace(CITY_VIEW, LIBRARY_VIEW)
+                with self.assertRaisesRegex(ValueError, "^도서관 공지 .*(숨김|해석이 갈리는)"):
+                    parse_library_notice(library, notice_id="203043")
+                with self.assertRaisesRegex(ValueError, "숨김|해석이 갈리는"):
+                    parse_library_media(library, notice_id="203043")
+        outside = ('<div hidden><span>메뉴</span></div><p style="display:none;position:absolute">메뉴</p>'
+                   '<svg><title>아이콘</title></svg>' + _notice())
+        self.assertEqual(parse_board_notice(outside, board="city", notice_id="203043")["title"], "합성 시청 공지")
+        self.assertEqual(parse_board_media(outside, board="city", notice_id="203043"), [])
+        library = outside.replace(CITY_VIEW, LIBRARY_VIEW)
+        self.assertEqual(parse_library_notice(library, notice_id="203043")["title"], "합성 시청 공지")
+        self.assertEqual(parse_library_media(library, notice_id="203043"), [])
+        page_script = '<script>var x = "<div hidden>"; /*<!-- Al Chat -- >*/</script><template><p hidden>틀</p></template>'
+        shown = page_script + _notice(
+            body='<p>본문</p><!-- 정상 주석 --><!----><details open><summary>요약</summary>내용</details>'
+                 '<script src="/dwr/engine.js"></script><p style="color:red">강조</p>'
+                 '<p style="opacity:0.95; font-size:16px; display:inline-block; font-family:\'맑은 고딕\';'
+                 ' text-indent:-31.4pt; letter-spacing:-0.57px; background-color: rgba(0,0,0,0.1);'
+                 ' max-width:800px; overflow:hidden">글꼴</p>'
+                 '<p>&lt;!-- 예시 문구</p><!-- 메모 -- ><p>숨은 내용</p> --><p>끝</p>') + (
+            '<svg><title>마이크 권한이 필요합니다.</title></svg>')
+        self.assertEqual(parse_board_notice(shown, board="city", notice_id="203043")["fields"]["description"],
+                         "본문\n요약내용\n강조\n글꼴\n<!-- 예시 문구\n끝")
+
+    def test_comment_rules_do_not_depend_on_python_patch_version(self):
+        """3.13.5와 3.14는 `--!>`·`-- >`·`<!-->`에서 주석을 닫는지가 달랐다. 결과가 같도록 종료 규칙을 고정한다."""
+        for markup in ('<!-- a --!><p>본문</p>', '<!-- a --!><div hidden>--><p>본문</p>', '<!--><p>본문</p>',
+                       '<!-- 끝나지 않는 주석<p>본문</p>'):
+            for where in ('body', 'before'):
+                page = _notice(body=markup) if where == 'body' else markup + _notice()
+                with self.subTest(markup=markup, where=where), \
+                        self.assertRaisesRegex(ValueError, "^시청 공지 페이지에 브라우저와 해석이 갈리는"):
+                    parse_board_notice(page, board="city", notice_id="203043")
+        swallowed = '<!-- x -- >' + _notice() + '-->'
+        with self.assertRaisesRegex(ValueError, "본문 영역을 확인할 수 없습니다"):
+            parse_board_notice(swallowed, board="city", notice_id="203043")
+
+    def test_body_markup_outside_the_allowlist_is_rejected(self):
+        """본문 영역은 허용한 태그·속성·인라인 스타일만 받는다. 목록 밖 표기는 숨김 여부를 추정하지 않는다."""
+        bodies = [
+            '<link rel="stylesheet" href="data:text/css,p{display:none}"><p>숨김</p>', '<div popover>숨김</div>',
+            '<progress>숨김</progress>', '<meter>숨김</meter>', '<p inert>숨김</p>', '<p aria-hidden="true">숨김</p>',
+            '<input type="text" value="숨김">', '<p style="font-size:0mm">숨김</p>', '<p style="font-size:0Q">숨김</p>',
+            '<p style="font-size:0e0px">숨김</p>', '<p style="font:0/0 a">숨김</p>', '<p style="color:#0000">숨김</p>',
+            '<p style="color:#ffffff00">숨김</p>', '<p style="text-indent:-1e3px">숨김</p>',
+            '<p style="text-indent:calc(9999px * -1)">숨김</p>', '<p style="text-indent:9999px">숨김</p>',
+            '<p style="padding-left:5000px">숨김</p>', '<p style="margin-left:-99em">숨김</p>',
+            '<p style="width:0 !important;width:100px;height:0 !important;height:10px;overflow:hidden">숨김</p>',
+            '<p style="display:none! important">숨김</p>', '<p style="background:url(/img/a.png)">보임</p>',
+            '<p style="line-height:0">숨김</p>', '<p style="letter-spacing:-50px">숨김</p>',
+            '<p style="opacity:0.4">숨김</p>',
+            f'<img width="0" height="0" src="{IMAGE}" alt="숨은 그림">', f'<img height="0" src="{IMAGE}">',
+            f'<img width="0" width="100" src="{IMAGE}">', '<p><font size="2" size="1">숨김</font></p>',
+            '<table cellpadding="99999"><tr><td>밀린 문구</td></tr></table>', '<table width="9999"><tr><td>밀린 문구</td></tr></table>', '<p align="center" align="left">본문</p>', '<p style="-webkit-text-fill-color:transparent">숨김</p>',
+            '<template><svg><style></template>보이는 문구</style></svg></template><p>끝</p>',
+            '<p>앞</p><script>document.write(\'<div hidden>\')</script><span>숨은 문구</span>',
+            '<script src="https://invalid.example/x.js"></script><p>본문</p>', '<script></script><p>본문</p>',
+            '<details name="g" open><summary>요약1</summary>보이는 문구</details>'
+            '<details name="g" open><summary>요약2</summary>닫힌 문구</details>',
+            '<input type="text" type="hidden" value="보이는 입력값"><p>본문</p>',
+            '<p style="letter-spacing:-0.99em">숨김</p>', '<p style="font-size:10px;letter-spacing:-9.9px">숨김</p>',
+            '<p style="word-spacing:-0.99em">숨김</p>', '<p style="word-spacing:-2px">숨김</p>', '<p style="-webkit-text-stroke-width:4.9px">숨김</p>',
+        ]
+        for body in bodies:
+            with self.subTest(body=body), self.assertRaisesRegex(ValueError, "^시청 공지 본문 영역에 .*숨김"):
+                parse_board_notice(_notice(body=body), board="city", notice_id="203043")
+
+    def test_tokenizer_boundaries_follow_the_browser_in_every_python_version(self):
+        """3.13.5·3.14.6에서 결과가 같아야 한다. 원문 텍스트 요소·종료 태그·CDATA 경계를 고정했다.
+
+        3.12는 지원 대상이 아니다. `;` 없는 개체가 붙은 속성 값(`&ampx=`)을 3.13 이상·브라우저와 다르게 푼다.
+        """
+        def description(page):
+            return parse_board_notice(page, board="city", notice_id="203043")["fields"]["description"]
+
+        footer = '<script>footer()</script>'
+        with self.assertRaises(ValueError):  # `</ script>`는 종료 태그가 아니라 스크립트가 하단까지 이어진다.
+            description(_notice(body='<p>본문</p><script>x</ script><p>숨김</p>') + footer)
+        # 3.13.5는 `</script foo>`를 끝으로 보지 않아 뒤따르는 본문을 삼켰다.
+        self.assertEqual(description('<script>x</script foo>' + _notice()), "합성 본문")
+        # `/>`가 붙어도 script는 열린 채로 다음 `</script>`까지 이어진다.
+        self.assertEqual(description('<script src="a.js"/>' + _notice(body='<p>숨김</p>') + '</script>'
+                                     + _notice(body='<p>뒤</p>')),
+                         "뒤")
+        self.assertEqual(description(_notice(body='<p>앞</p></ div><p>뒤</p>')), "앞\n뒤")
+        self.assertEqual(description(_notice(body='<p title="a"class="b">본문</p>')), "본문")
+        self.assertEqual(description(_notice(body='<p style="display:inline !important; opacity:0.5">본문</p>')), "본문")
+        old_script = '<script><!-- document.write(\'<script src=x><\\/script>\'); //--></script>'
+        self.assertEqual(description(old_script + _notice(body='<p>본문</p>')), "본문")
+        for prefix in ('<title>제목 <!-- a --!></title>', '<textarea><!--</textarea>', '<iframe><!--></iframe>',
+                       '<noembed><div class="bod_view"><div class="view_cont">가짜</div></div></noembed>'):
+            with self.subTest(prefix=prefix):
+                self.assertEqual(description(prefix + _notice()), "합성 본문")
+        for page in ('<script><!--<script></script>--><p>숨김</p></script>' + _notice(),
+                     '<!--><p>앞</p>-->' + _notice(), '<![CDATA[ > ' + _notice(body='<p>A</p>') + ' ]]>',
+                     _notice(body='<p>앞</p></p title="a>b">'), _notice(body='<p class=a/>본문</p>'),
+                     _notice(body='<plaintext>숨김'), _notice() + '<p',
+                     '<svg><style>' + _notice(body='<p>진짜 본문</p>') + '</style></svg>' + _notice(body='<p>가짜</p>'),
+                     '<svg><title><!--</title>' + _notice() + '--></svg>', '<math><style><!--</style></math>' + _notice(),
+                     '<svg><foreignObject><div></div></foreignObject><style><!--</style></svg>' + _notice(),
+                     '<svg></math><style><!--</style>' + _notice(), '<math></svg><style><!--</style>' + _notice(),
+                     '<svg><foreignObject><div></svg></div></foreignObject><style><!--</style>' + _notice(),
+                     '<math><mi></svg></mi><style><!--</style>' + _notice(),
+                     '<svg><template/></svg>' + _notice(body='<p>진짜</p>') + '</template>' + _notice(body='<p>가짜</p>'),
+                     _notice() + '<?x<b', _notice() + '<!x<b', _notice() + '<!DOCTYPE x<b',
+                     '<!DOCTYPE html PUBLIC "x>' + _notice().replace('"', "'") + '">' + _notice(body='<p>가짜</p>'),
+                     '<svg><foreignObject><style/>' + _notice(body='<p>숨김</p>') + '</style></foreignObject></svg>'
+                     + _notice(body='<p>뒤</p>'),
+                     _notice(body='<details title="x"\xa0open><summary>요약</summary><p>숨김</p></details>'),
+                     _notice(body='<p class="a"\u3000title="b">본문</p>'),
+                     _notice(body='<img alt="x"\xa0src="/common/imgView.do"><p>본문</p>')):
+            with self.subTest(page=page[:60]), \
+                    self.assertRaisesRegex(ValueError, "^시청 공지 페이지에 브라우저와 해석이 갈리는"):
+                description(page)
+
+    def test_script_escape_scan_is_linear(self):
+        started = time.monotonic()
+        with self.assertRaisesRegex(ValueError, "숨김"):
+            parse_board_notice(_notice(body='<p style="color:a' + ' ' * 80000 + 'b">x</p>'), board="city",
+                               notice_id="203043")
+        self.assertLess(time.monotonic() - started, 2)
+        deep = '<script>var yh = {"a": ' + '[' * 100000 + ']' * 100000 + '};</script>'
+        nested = '<script>var yh = {"a": ' + '[' * 1100 + ']' * 1100 + '};</script>'  # 4096자 안의 깊은 중첩
+        for script in (deep, nested):
+            with self.subTest(size=len(script)), self.assertRaisesRegex(ValueError, "페이지 설정"):
+                parse_board_media(script + _notice(), board="city", notice_id="203043")
+        started = time.monotonic()
+        attrs = ' '.join(f'data-a{n}="1"' for n in range(40000))
+        self.assertEqual(parse_board_notice(_notice(body=f'<p {attrs}>본문</p>'), board="city",
+                                            notice_id="203043")["fields"]["description"], "본문")
+        self.assertLess(time.monotonic() - started, 3)  # 속성 중복 검사가 속성 수에 비례해야 한다.
+        for unit in ('<!--', '<!---->', '<!-- -->'):
+            script = '<script>' + unit * 80000 + '</script>'
+            started = time.monotonic()
+            with self.subTest(unit=unit):
+                self.assertEqual(parse_board_notice(script + _notice(), board="city", notice_id="203043")["title"],
+                                 "합성 시청 공지")
+                self.assertLess(time.monotonic() - started, 2)
 
     def test_library_notice_is_unchanged(self):
         record = parse_library_notice(_notice(view=None), notice_id="203043")
