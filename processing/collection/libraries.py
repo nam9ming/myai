@@ -63,16 +63,41 @@ def parse_library_csv(text: str) -> list[dict]:
 
 
 _LIBRARY_VIEW = '/library/bbs/view.do?ptIdx=16&mId=0401010000'
-_HIDDEN_ERROR = '{} 본문 영역에 숨김(hidden) 요소가 있어 화면 표시를 확정할 수 없습니다.'
+_HIDDEN_ERROR = '{} 본문 영역에 화면 표시를 확정할 수 없는 숨김·중복 표기가 있습니다.'
 # 본문 영역에서 화면 표시를 바꾸거나 이 파서와 브라우저의 해석이 갈리는 요소. 실제 본문에는 없었다.
 _CONCEALING_TAGS = frozenset(('svg', 'math', 'iframe', 'noscript', 'title', 'style', 'dialog'))
-_INLINE_HIDING = re.compile(r'display\s*:\s*none|visibility\s*:\s*hidden', re.I)
+_DISPLAY_ATTRS = ('hidden', 'style', 'class', 'open')
+_ZERO = re.compile(r'[+-]?(?:0+(?:\.0*)?|\.0+)(?:px|pt|em|rem|ex|ch|%|vw|vh|vmin|vmax)?')
+_HIDING_DECLARATIONS = {
+    'display': lambda value: value.split()[:1] == ['none'],
+    'visibility': lambda value: value.split()[:1] in (['hidden'], ['collapse']),
+    'content-visibility': lambda value: value.split()[:1] == ['hidden'],
+    'opacity': lambda value: bool(_ZERO.fullmatch(value)),
+    'font-size': lambda value: bool(_ZERO.fullmatch(value)),
+}
 
 
-def _conceals(tag: str, attrs: dict) -> bool:
-    """이 파서는 암묵적 태그 닫기를 일부만 재현하고 CSS를 해석하지 않으므로 숨김 범위를 추정하지 않고 거부한다."""
-    return ('hidden' in attrs or tag in _CONCEALING_TAGS or (tag == 'details' and 'open' not in attrs)
-            or bool(_INLINE_HIDING.search(attrs.get('style') or '')))
+def _hiding_style(style: str) -> bool:
+    """인라인 스타일을 선언 단위로 읽는다. 주석·이스케이프는 브라우저와 해석이 갈릴 수 있어 그 자체로 거부한다."""
+    if '/*' in style or '\\' in style:
+        return True
+    for declaration in style.split(';'):
+        name, colon, value = declaration.partition(':')
+        value = value.lower().replace('!important', '').strip()
+        check = _HIDING_DECLARATIONS.get(name.strip().lower())
+        if colon and check and check(value):
+            return True
+    return False
+
+
+def _conceals(tag: str, attrs: dict, names: list[str]) -> bool:
+    """이 파서는 암묵적 태그 닫기를 일부만 재현하고 CSS를 해석하지 않으므로 숨김 범위를 추정하지 않고 거부한다.
+
+    표시에 관여하는 속성이 중복되면 이 파서는 마지막 값을, 브라우저는 첫 값을 쓰므로 중복 자체를 거부한다.
+    src·href 중복은 매체 파서가 주소를 확정하지 않는 검토 후보로 따로 처리한다.
+    """
+    return (any(names.count(name) > 1 for name in _DISPLAY_ATTRS) or 'hidden' in attrs or tag in _CONCEALING_TAGS
+            or (tag == 'details' and 'open' not in attrs) or _hiding_style(attrs.get('style') or ''))
 
 
 class _NoticeParser(HTMLParser):
@@ -122,13 +147,13 @@ class _NoticeParser(HTMLParser):
             if tag == 'div' and 'bod_view' in classes:
                 if self.found_board:
                     raise ValueError(self.label + ' 본문 영역이 중복되었습니다.')
-                if _conceals(tag, attrs):
+                if _conceals(tag, attrs, names):
                     raise ValueError(_HIDDEN_ERROR.format(self.label))
                 self.found_board = True
                 self.tags.append(tag)
             return
 
-        if not self.hidden_depth and _conceals(tag, attrs):
+        if not self.hidden_depth and _conceals(tag, attrs, names):
             raise ValueError(_HIDDEN_ERROR.format(self.label))
         if self.section == 'description' and not self.hidden_depth:
             optional = {

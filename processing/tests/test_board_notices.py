@@ -223,6 +223,15 @@ class BoardNoticeTest(unittest.TestCase):
             _notice(body='<dialog>숨김</dialog>'),
             _notice(body='<title>숨김</title>'),
             _notice().replace('<div class="bod_view">', '<div class="bod_view" style="display:none">'),
+            _notice(body='<p style="display:none" style="color:red">숨김</p>'),
+            _notice(body='<p class="a" class="b">본문</p>'),
+            _notice(body='<p style="display:/**/none">숨김</p>'),
+            _notice(body='<p style="display:\\6e one">숨김</p>'),
+            _notice(body='<p style="opacity: 0">숨김</p>'),
+            _notice(body='<p style="opacity:0.0">숨김</p>'),
+            _notice(body='<p style="font-size:0px">숨김</p>'),
+            _notice(body='<p style="visibility: collapse">숨김</p>'),
+            _notice(body='<p style="content-visibility:hidden">숨김</p>'),
         ]
         for page in pages:
             with self.subTest(page=page[-90:]):
@@ -238,9 +247,10 @@ class BoardNoticeTest(unittest.TestCase):
         outside = '<div hidden><span>메뉴</span></div><p style="display:none">메뉴</p>' + _notice()
         self.assertEqual(parse_board_notice(outside, board="city", notice_id="203043")["title"], "합성 시청 공지")
         shown = _notice(body='<p>본문</p><!-- 정상 주석 --><details open><summary>요약</summary>내용</details>'
-                             '<script>var x = "<div hidden>";</script><p style="color:red">강조</p>')
+                             '<script>var x = "<div hidden>";</script><p style="color:red">강조</p>'
+                             '<p style="opacity:0.95; font-size:16px; display:inline-block; font-family:\'맑은 고딕\'">글꼴</p>')
         self.assertEqual(parse_board_notice(shown, board="city", notice_id="203043")["fields"]["description"],
-                         "본문\n요약내용\n강조")
+                         "본문\n요약내용\n강조\n글꼴")
 
     def test_library_notice_is_unchanged(self):
         record = parse_library_notice(_notice(view=None), notice_id="203043")
