@@ -1,6 +1,5 @@
 """안성시 도로 공사현황 목록과 상세를 비공개 묶음으로 보관한다."""
 
-import argparse
 import json
 from pathlib import Path
 import sys
@@ -8,6 +7,7 @@ from time import sleep
 
 from .batch import LIST_MAX_BYTES
 from .capture import CAPTURE_ROOT
+from .cli import CollectionArguments
 from .official_web import (
     DETAIL_MAX_BYTES, OFFICIAL_ORIGIN, ROAD_STATES, fetch_road_detail, fetch_road_listing, road_detail_url,
     road_listing_path, road_state,
@@ -45,14 +45,8 @@ def capture_road_batch(state: str, name: str, root: Path, *, start_page: int = 1
                              start_page=start_page, max_pages=max_pages, max_items=max_items)
 
 
-class _Arguments(argparse.ArgumentParser):
-    def error(self, message):
-        self.print_usage(sys.stderr)
-        self.exit(1, f"{self.prog}: 입력 오류: {message}\n")
-
-
 def main() -> int:
-    parser = _Arguments(description=__doc__)
+    parser = CollectionArguments(description=__doc__)
     parser.add_argument("state", choices=ROAD_STATES)
     parser.add_argument("--name", required=True)
     parser.add_argument("--start-page", type=int, default=1)

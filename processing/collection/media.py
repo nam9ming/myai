@@ -1,6 +1,5 @@
 """도서관·시청 공지의 매체 링크를 확인하고 운영자가 확보한 원본을 보관한다."""
 
-import argparse
 from collections.abc import Callable
 from datetime import UTC, datetime
 import hashlib
@@ -16,6 +15,7 @@ from .capture import (
     CAPTURE_ROOT, bundle_directory, capture_timestamp, open_archive, read_capture_file, read_receipt,
     validate_name, write_new, write_receipt,
 )
+from .cli import CollectionArguments
 from .libraries import parse_board_media, parse_library_media
 from .official_web import (
     BOARDS, DETAIL_MAX_BYTES, board as board_info, board_detail_url, detail_url, fetch_board_detail, fetch_detail,
@@ -184,8 +184,8 @@ def read_media_assets(private_root: Path, name: str, asset_keys: set[str]) -> di
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    commands = parser.add_subparsers(dest="action", required=True)
+    parser = CollectionArguments(description=__doc__)
+    commands = parser.add_subparsers(dest="action", required=True, parser_class=CollectionArguments)
     inspect = commands.add_parser("inspect", help="도서관·시청 공지 HTML과 매체 목록을 보관한다.")
     inspect.add_argument("--board", choices=("library", *BOARDS), default="library")
     inspect.add_argument("--web-id", required=True)

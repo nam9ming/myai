@@ -1,6 +1,5 @@
 """공식 목록에서 게시물을 찾아 포털 원본과 비공개로 보관한다."""
 
-import argparse
 from datetime import UTC, date, datetime
 import hashlib
 import json
@@ -10,6 +9,7 @@ from time import sleep
 
 from .__main__ import PORTAL_MAX_BYTES, SOURCE_PAGES, decode_input, parse_detail, parse_portal, preview, read_raw
 from .capture import CAPTURE_ROOT, bundle_directory, validate_name, write_new, write_receipt
+from .cli import CollectionArguments
 from .event_listing import parse_event_listing
 from .library_listing import parse_library_listing
 from .official_web import (
@@ -147,7 +147,7 @@ def capture_batch(category: str, portal_file: Path | None, name: str, root: Path
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = CollectionArguments(description=__doc__)
     parser.add_argument("category", choices=SOURCE_PAGES)
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--portal-csv", type=Path)

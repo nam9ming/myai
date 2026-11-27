@@ -1,6 +1,5 @@
 """시민 공지 수집 원본을 로컬에서 비교한다."""
 
-import argparse
 import hashlib
 import json
 import os
@@ -10,6 +9,7 @@ import stat
 import sys
 import unicodedata
 
+from .cli import CollectionArguments
 from .events import parse_event_detail, parse_festival_csv
 from .libraries import parse_library_csv, parse_library_notice
 from .official_web import DETAIL_MAX_BYTES
@@ -130,7 +130,7 @@ def compare_sources(category: str, portal: tuple[str, str], web: tuple[str, str]
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = CollectionArguments(description=__doc__)
     parser.add_argument("category", choices=("culture", "living"))
     parser.add_argument("--portal-csv", type=Path, required=True)
     parser.add_argument("--web-detail", type=Path, required=True)
