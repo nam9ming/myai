@@ -190,7 +190,7 @@ def prepare(input_path: Path, name: str, private_root: Path) -> dict:
     review = decode(input_bytes, "input")
     shape(review, "archive_kind archive_name data_kind documents", kind="input")
     kind = review["archive_kind"]
-    require(kind in ("single", "batch", "portal", "odcloud", "media", "road", "board"), "$.archive_kind", "input")
+    require(kind in ("single", "batch", "portal", "odcloud", "media", "road", "board", "welfare"), "$.archive_kind", "input")
     archive_name = text(review["archive_name"], "$.archive_name", "input")
     validate_name(archive_name)
     require(review["data_kind"] in ("real", "synthetic"), "$.data_kind", "input")
@@ -203,7 +203,7 @@ def prepare(input_path: Path, name: str, private_root: Path) -> dict:
         path = f"$.documents[{index}]"
         shape(item, DOCUMENT_FIELDS, path, "input")
         for key, known, pattern in (
-            ("asset", selected, r"portal|[1-9][0-9]{0,17}"),
+            ("asset", selected, r"portal|[1-9][0-9]{0,17}|WLF[0-9]{8}"),
             ("document_id", doc_ids, UUID),
             ("document_version_id", version_ids, UUID),
         ):

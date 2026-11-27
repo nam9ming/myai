@@ -1,5 +1,6 @@
 """수집 기록과 비공개 원본을 대조해 등록에 필요한 정보를 돌려준다."""
 
+import hashlib
 from pathlib import Path
 import re
 
@@ -8,7 +9,7 @@ from .capture import PORTAL_SECTION, capture_timestamp, open_archive, validate_n
 from .capture import read_capture_file as _read
 from .capture import read_receipt as _receipt
 from .media import read_media_assets
-from . import board_batch, road_batch
+from . import board_batch, road_batch, welfare_api, welfare_batch
 from .libraries import board_parser_version, parse_board_notice
 from .official_web import BOARDS, DETAIL_MAX_BYTES, ROAD_STATES, board_detail_url, detail_url, road_detail_url
 from .odcloud import ODCLOUD_SECTION, read_odcloud_snapshot
@@ -38,15 +39,15 @@ def _reference(record: object, filename: str, url_key: str, url: str) -> str:
     return digest
 
 
-def _batch_items(record: dict, source_url) -> dict[str, dict]:
+def _batch_items(record: dict, source_url, id_key: str = "web_id", valid=_web_id) -> dict[str, dict]:
     rows = record.get("items")
     if not isinstance(rows, list) or record.get("status") not in ("complete", "partial"):
         raise ValueError("묶음 수집 기록의 상태 또는 게시물 목록이 맞지 않습니다.")
     items = {}
     for row in rows:
-        if not isinstance(row, dict) or not _web_id(row.get("web_id")) or row.get("status") not in _DETAIL_STATUSES:
+        if not isinstance(row, dict) or not valid(row.get(id_key)) or row.get("status") not in _DETAIL_STATUSES:
             raise ValueError("묶음 수집 기록의 게시물 번호 또는 상태가 맞지 않습니다.")
-        web_id = row["web_id"]
+        web_id = row[id_key]
         if web_id in items:
             raise ValueError("묶음 수집 기록에 중복 게시물 번호가 있습니다.")
         if row.get("source_url") != source_url(web_id):
@@ -169,15 +170,73 @@ _API_ARCHIVES = {
 }
 
 
+def _welfare_assets(private_root: Path, name: str, asset_keys: set[str]) -> dict[str, dict]:
+    """보관한 목록·상세 응답의 해시와 파싱 결과를 현재 파서로 다시 만들어 대조한다."""
+    if not isinstance(asset_keys, set) or not asset_keys:
+        raise ValueError("선택한 수집 원본 키가 유효하지 않습니다.")
+    for key in asset_keys:
+        welfare_api.serv_id(key)
+    relative = Path(welfare_batch.WELFARE_SECTION) / name
+    with open_archive(private_root, relative) as directory:
+        receipt = _receipt(directory, "batch.json")
+        page_size, pages = receipt.get("page_size"), receipt.get("pages")
+        if (receipt.get("schema_version") != welfare_batch.BATCH_SCHEMA or receipt.get("batch_id") != name
+                or receipt.get("region") != welfare_api.REGION or receipt.get("catalog_url") != welfare_api.CATALOG_URL
+                or type(page_size) is not int or not isinstance(pages, list)):
+            raise ValueError("복지 API 수집 기록의 규격·이름·지역이 맞지 않습니다.")
+        for number, entry in enumerate(pages, 1):
+            if not isinstance(entry, dict) or entry.get("page") != number:
+                raise ValueError("복지 API 수집 기록의 목록 페이지가 맞지 않습니다.")
+        items = _batch_items(receipt, welfare_api.detail_source_url, "servId",
+                             lambda value: isinstance(value, str) and welfare_api.SERV_ID.fullmatch(value) is not None)
+        assets = {}
+        for key in sorted(asset_keys):
+            row = items.get(key)
+            if row is None or row["status"] != "parsed" or row.get("parsed_file") != f"parsed-{key}.json":
+                raise ValueError("선택한 서비스는 파싱이 완료된 복지 API 수집 원본이어야 합니다.")
+            page = row.get("list_page")
+            if type(page) is not int or not 1 <= page <= len(pages) or pages[page - 1].get("status") != "parsed":
+                raise ValueError("선택한 서비스의 목록 페이지 기록이 맞지 않습니다.")
+            listing, filename = f"list-{page}.xml", f"detail-{key}.xml"
+            list_digest = _reference(pages[page - 1], listing, "source_url", welfare_api.list_source_url(page, page_size))
+            capture_timestamp(pages[page - 1].get("fetched_at"))
+            digest = _reference(row, filename, "source_url", welfare_api.detail_source_url(key))
+            list_raw, raw = (_read(directory, file, welfare_api.RESPONSE_MAX_BYTES) for file in (listing, filename))
+            if hashlib.sha256(list_raw).hexdigest() != list_digest or hashlib.sha256(raw).hexdigest() != digest:
+                raise ValueError("복지 API 응답 원본 해시가 수집 기록과 다릅니다.")
+            matches = [item for item in welfare_api.parse_list(list_raw, page=page, page_size=page_size)[1]
+                       if item["fields"]["servId"] == key]
+            if len(matches) != 1:
+                raise ValueError("선택한 서비스가 기록된 목록 페이지 원본에 없습니다.")
+            stored = _receipt(directory, row["parsed_file"])
+            if stored.get("parser_version") != welfare_batch.PARSER_VERSION:
+                raise ValueError("다른 파서 버전으로 만든 파싱 결과입니다. 현재 버전으로 다시 수집해 주세요.")
+            detail = welfare_api.parse_detail(raw, service_id=key)
+            if stored != {"schema_version": welfare_batch.RECORD_SCHEMA, "parser_version": welfare_batch.PARSER_VERSION,
+                          "list_sha256": list_digest, "sha256": digest,
+                          "record": welfare_batch.service_record(key, page, matches[0], detail)}:
+                raise ValueError("복지 API 파싱 결과가 원본과 다릅니다.")
+            assets[key] = {
+                "raw_asset_path": (relative / filename).as_posix(),
+                "raw_sha256": digest,
+                "official_url": welfare_api.service_page_url(key),
+                "collected_at": capture_timestamp(row.get("fetched_at")),
+                "collection_method": "data-go-kr-welfare-api",
+            }
+        return assets
+
+
 def capture_assets(private_root: Path, archive_kind: str, archive_name: str,
                    asset_keys: set[str]) -> dict[str, dict]:
     """정해진 수집 경로 안의 원본만 읽으며 파일이나 기록을 바꾸지 않는다."""
     if not isinstance(archive_kind, str) or (archive_kind not in _ARCHIVES and archive_kind not in _WEB_ARCHIVES
-                                             and archive_kind not in _API_ARCHIVES and archive_kind != "media"):
+                                             and archive_kind not in _API_ARCHIVES and archive_kind not in ("media", "welfare")):
         raise ValueError("지원하지 않는 수집 기록 종류입니다.")
     if not isinstance(archive_name, str):
         raise ValueError("수집 이름이 유효하지 않습니다.")
     validate_name(archive_name)
+    if archive_kind == "welfare":
+        return _welfare_assets(private_root, archive_name, asset_keys)
     if not isinstance(asset_keys, set) or not asset_keys or any(
         key != "portal" and not _web_id(key) for key in asset_keys
     ):

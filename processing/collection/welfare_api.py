@@ -48,7 +48,7 @@ _KEY_ECHO = "복지 API 응답에 인증 키가 포함되어 수집을 중단했
 
 
 class WelfareResultError(ValueError):
-    """HTTP 200이지만 서비스가 오류를 보낸 경우. 결과 코드 실패, 문서와 다른 봉투, 키 노출이 해당한다."""
+    """HTTP 200이지만 서비스가 오류를 보낸 경우. 결과 코드 실패, 문서와 다른 봉투, 키 노출이 해당하며 남은 요청을 멈춘다."""
 
 
 def serv_id(value: object) -> str:
@@ -66,7 +66,7 @@ def _page_arguments(page: int, page_size: int) -> dict:
 
 
 def list_source_url(page: int, page_size: int) -> str:
-    """인증 키를 뺀 요청 주소. 기록에는 이 주소만 남긴다."""
+    """인증 키를 뺀 요청 주소. 수집 기록과 D03 원출처로 쓴다."""
     return f"https://{HOST}{LIST_PATH}?{urlencode(_page_arguments(page, page_size))}"
 
 
@@ -75,7 +75,7 @@ def detail_source_url(service_id: str) -> str:
 
 
 def service_page_url(service_id: str) -> str:
-    """사람이 검토할 공개 원문 주소. 상세 요청 주소는 키 없이 열리지 않으므로 사람이 검토할 복지로 화면을 쓴다."""
+    """D03 원문 주소. 상세 요청 주소는 키 없이 열리지 않으므로 사람이 검토할 복지로 화면을 쓴다."""
     return f"{SERVICE_PAGE}?{urlencode({'wlfareInfoId': serv_id(service_id)})}"
 
 
