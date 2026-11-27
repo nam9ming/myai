@@ -1,0 +1,193 @@
+"""도서관 공지의 매체 링크를 확인하고 운영자가 확보한 원본을 보관한다."""
+
+import argparse
+from datetime import UTC, datetime
+import hashlib
+from io import BytesIO
+import json
+from pathlib import Path
+import re
+import sys
+from zipfile import BadZipFile, ZIP_STORED, ZipFile
+
+from .__main__ import decode_input, read_raw
+from .capture import (
+    CAPTURE_ROOT, bundle_directory, capture_timestamp, open_archive, read_capture_file, read_receipt,
+    validate_name, write_new, write_receipt,
+)
+from .libraries import parse_library_media
+from .official_web import DETAIL_MAX_BYTES, detail_url, fetch_detail
+
+NOTICE_SECTION = "collection-media-notices"
+MEDIA_SECTION = "collection-media"
+PRIVATE_ROOT = CAPTURE_ROOT.parent
+NOTICE_SCHEMA = "citizen-media-notice-v1"
+MEDIA_SCHEMA = "citizen-supplied-media-v1"
+HWPX_MIME = b"application/hwp+zip"
+SIGNATURES = {
+    "pdf": b"%PDF-",
+    "hwp": b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",
+    "jpeg": b"\xff\xd8\xff",
+    "png": b"\x89PNG\r\n\x1a\n",
+}
+MEDIA_FILES = {"media.hwpx", *("media." + fmt for fmt in SIGNATURES)}
+
+
+def inspect_notice(private_root: Path, web_id: str, name: str) -> dict:
+    validate_name(name)
+    url = detail_url("living", web_id)
+    if len(web_id) > 18:
+        raise ValueError("공식 웹 게시물 번호는 최대 18자리여야 합니다.")
+    with bundle_directory(private_root / NOTICE_SECTION, name) as directory:
+        fetched_at = digest = None
+        status = "fetch_failed"
+        error = None
+        try:
+            raw = fetch_detail("living", web_id, limit=DETAIL_MAX_BYTES)
+            fetched_at = datetime.now(UTC).isoformat()
+            write_new(directory, "notice.html", raw)
+            digest = hashlib.sha256(raw).hexdigest()
+            status = "parse_failed"
+            text, _ = decode_input(raw, "도서관 공지")
+            candidates = parse_library_media(text, notice_id=web_id)
+            status = "parsed"
+        except ValueError as failure:
+            candidates, error = [], str(failure)
+        write_receipt(directory, "notice.json", {
+            "schema_version": NOTICE_SCHEMA, "notice_id": name, "web_id": web_id, "status": status,
+            "source_url": url, "fetched_at": fetched_at, "sha256": digest,
+            "media": candidates, "error": error,
+        })
+    return {"notice_id": name, "status": status, "media": len(candidates)}
+
+
+def _notice(private_root: Path, name: str) -> dict:
+    validate_name(name)
+    with open_archive(private_root, Path(NOTICE_SECTION) / name) as directory:
+        receipt = read_receipt(directory, "notice.json")
+        web_id = receipt.get("web_id")
+        if (receipt.get("schema_version") != NOTICE_SCHEMA or receipt.get("notice_id") != name
+                or receipt.get("status") != "parsed" or receipt.get("error") is not None
+                or not isinstance(web_id, str) or not re.fullmatch(r"[1-9][0-9]{0,17}", web_id)
+                or receipt.get("source_url") != detail_url("living", web_id)):
+            raise ValueError("도서관 공지 수집 기록을 확인할 수 없습니다.")
+        capture_timestamp(receipt.get("fetched_at"))
+        raw = read_capture_file(directory, "notice.html", DETAIL_MAX_BYTES)
+        text, digest = decode_input(raw, "도서관 공지")
+        if receipt.get("sha256") != digest or receipt.get("media") != parse_library_media(text, notice_id=web_id):
+            raise ValueError("도서관 공지 원본 또는 매체 목록이 수집 기록과 다릅니다.")
+        return receipt
+
+
+def _chosen(notice: dict, asset: int) -> dict:
+    if type(asset) is not int or not 1 <= asset <= len(notice["media"]):
+        raise ValueError("공지 매체 목록의 번호를 지정해 주세요.")
+    candidate = notice["media"][asset - 1]
+    if not candidate["source_url"]:
+        raise ValueError("공지 원문에서 연결 주소를 확인할 수 있는 매체만 연결할 수 있습니다.")
+    return candidate
+
+
+def _file_format(raw: bytes, candidate: dict) -> str:
+    formats = ("jpeg", "png") if candidate["kind"] == "image" else (candidate["format"],)
+    for fmt in formats:
+        if fmt in SIGNATURES and raw.startswith(SIGNATURES[fmt]):
+            return fmt
+        if fmt == "hwpx" and raw.startswith(b"PK\x03\x04"):
+            try:
+                with ZipFile(BytesIO(raw)) as package:
+                    entry = package.getinfo("mimetype")
+                    if (entry.compress_type == ZIP_STORED and entry.file_size == entry.compress_size == len(HWPX_MIME)
+                            and package.read(entry) == HWPX_MIME):
+                        return fmt
+            except (BadZipFile, KeyError, RuntimeError, UnicodeError):
+                pass
+    raise ValueError("선택한 공지의 첨부 형식 또는 이미지 서명과 파일이 일치하지 않습니다.")
+
+
+def _downloaded_timestamp(value: object) -> str:
+    timestamp = capture_timestamp(value)
+    if datetime.fromisoformat(timestamp).year < 1000:
+        raise ValueError("매체 다운로드 시각의 연도는 1000년 이상이어야 합니다.")
+    return timestamp
+
+
+def store_media(private_root: Path, notice_name: str, asset: int, file: Path, name: str,
+                downloaded_at: str) -> dict:
+    validate_name(name)
+    downloaded_at = _downloaded_timestamp(downloaded_at)
+    notice = _notice(private_root, notice_name)
+    candidate = _chosen(notice, asset)
+    raw = read_raw(file, DETAIL_MAX_BYTES, "선택한 매체")
+    fmt = _file_format(raw, candidate)
+    filename = "media." + fmt
+    with bundle_directory(private_root / MEDIA_SECTION, name) as directory:
+        write_new(directory, filename, raw)
+        write_receipt(directory, "media.json", {
+            "schema_version": MEDIA_SCHEMA, "media_id": name, "notice_id": notice_name,
+            "notice_sha256": notice["sha256"], "asset": asset, "linked_source_url": candidate["source_url"],
+            "file": filename, "sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw),
+            "operator_downloaded_at": downloaded_at,
+        })
+    return {"media_id": name, "asset": asset, "format": fmt, "bytes": len(raw)}
+
+
+def read_media_assets(private_root: Path, name: str, asset_keys: set[str]) -> dict[str, dict]:
+    validate_name(name)
+    relative = Path(MEDIA_SECTION) / name
+    with open_archive(private_root, relative) as directory:
+        receipt = read_receipt(directory, "media.json")
+        notice_name = receipt.get("notice_id")
+        number = receipt.get("asset")
+        if (receipt.get("schema_version") != MEDIA_SCHEMA or receipt.get("media_id") != name
+                or not isinstance(notice_name, str) or type(number) is not int or asset_keys != {str(number)}):
+            raise ValueError("선택한 매체가 보관 기록과 일치하지 않습니다.")
+        notice = _notice(private_root, notice_name)
+        candidate = _chosen(notice, number)
+        if receipt.get("notice_sha256") != notice["sha256"] or receipt.get("linked_source_url") != candidate["source_url"]:
+            raise ValueError("보관 파일과 도서관 공지의 연결 기록이 일치하지 않습니다.")
+        filename = receipt.get("file")
+        if not isinstance(filename, str) or filename not in MEDIA_FILES:
+            raise ValueError("보관 파일 이름을 확인할 수 없습니다.")
+        raw = read_capture_file(directory, filename, DETAIL_MAX_BYTES)
+        digest = hashlib.sha256(raw).hexdigest()
+        if (receipt.get("sha256") != digest or type(receipt.get("bytes")) is not int
+                or receipt["bytes"] != len(raw) or filename != "media." + _file_format(raw, candidate)):
+            raise ValueError("보관 파일 원본 또는 형식이 기록과 다릅니다.")
+        return {str(number): {
+            "raw_asset_path": (relative / filename).as_posix(), "raw_sha256": digest,
+            "official_url": notice["source_url"], "collected_at": _downloaded_timestamp(receipt.get("operator_downloaded_at")),
+            "collection_method": "official-web-media-manual",
+        }}
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest="action", required=True)
+    inspect = commands.add_parser("inspect", help="도서관 공지 HTML과 매체 목록을 보관한다.")
+    inspect.add_argument("--web-id", required=True)
+    inspect.add_argument("--name", required=True)
+    store = commands.add_parser("store", help="운영자가 확보한 파일 한 개를 매체 항목과 연결한다.")
+    store.add_argument("--notice", required=True)
+    store.add_argument("--asset", required=True, type=int)
+    store.add_argument("--file", required=True, type=Path)
+    store.add_argument("--downloaded-at", required=True)
+    store.add_argument("--name", required=True)
+    args = parser.parse_args()
+    try:
+        if args.action == "inspect":
+            result = inspect_notice(PRIVATE_ROOT, args.web_id, args.name)
+        else:
+            result = store_media(PRIVATE_ROOT, args.notice, args.asset, args.file, args.name, args.downloaded_at)
+    except ValueError as error:
+        print(f"공지 매체 처리 실패: {error}", file=sys.stderr)
+        return 1
+    except OSError:
+        print("공지 매체의 원본 또는 기록을 보관할 수 없습니다.", file=sys.stderr)
+        return 1
+    print(json.dumps(result, ensure_ascii=False))
+    return 2 if result.get("status") in ("parse_failed", "fetch_failed") else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
