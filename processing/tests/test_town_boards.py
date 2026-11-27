@@ -130,13 +130,19 @@ class TownNoticeTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "경로"):
             parse_board_media(_town_notice(attachment=ATTACHMENT, context="/csc"), board="town-yangseong",
                               notice_id="203049")
-        # 읍면동도 v3 숨김 규칙(중복 표시 속성·회피 스타일·비정상 주석)을 그대로 적용한다.
+        # 읍면동도 시청과 같은 본문 허용 목록(태그·속성·스타일·스크립트 주소)과 브라우저 기준 태그 경계를 적용한다.
         for body, error in (('<p style="display:none">숨김</p>', "숨김"),
                             ('<p style="color:red" style="display:none">숨김</p>', "숨김"),
                             ('<p style="opacity:0.1">숨김</p>', "숨김"),
-                            ('<p>보임</p><!--->숨김-->', "주석")):
-            with self.subTest(body=body), self.assertRaisesRegex(ValueError, f"^양성면 공지 .*{error}"):
-                parse_board_notice(_town_notice(body=body), board="town-yangseong", notice_id="203049")
+                            ('<progress>숨김</progress>', "미확인"),
+                            ('<p inert>숨김</p>', "미확인"),
+                            ('<script src="/csc/yangseong/x.js"></script><p>본문</p>', "미확인"),
+                            ('<p>보임</p><!--->숨김-->', "주석"),
+                            ('<p\xa0hidden>숨김</p>', "해석이 갈리는")):
+            for parse in (parse_board_notice, parse_board_media):
+                with self.subTest(body=body, parse=parse.__name__), \
+                        self.assertRaisesRegex(ValueError, f"^양성면 공지 .*{error}"):
+                    parse(_town_notice(body=body), board="town-yangseong", notice_id="203049")
 
 
 def _city_notice(notice_id):
