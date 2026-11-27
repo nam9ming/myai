@@ -3,9 +3,9 @@ from datetime import date
 from html.parser import HTMLParser
 from io import StringIO
 import re
-from urllib.parse import urlencode
 
 from . import official_url
+from .official_web import detail_url
 
 
 _LOCATION_COLUMNS = ('시도명', '시군구명', '도서관명')
@@ -20,7 +20,6 @@ _FIELDS = {
     '공휴일운영종료시각': 'holiday_close',
     '운영기관명': 'operator',
 }
-_BOARD_URL = 'https://www.anseong.go.kr/library/bbs/view.do'
 _VOID_TAGS = frozenset('area base br col embed hr img input link meta param source track wbr'.split())
 _BLOCK_TAGS = frozenset('br div h1 h2 h3 h4 h5 h6 li p table tr'.split())
 _HIDDEN_TAGS = frozenset(('script', 'style', 'template'))
@@ -213,7 +212,7 @@ def parse_library_notice(text: str, *, notice_id: str) -> dict:
         'source': 'library_notice',
         'external_id': notice_id,
         'title': title,
-        'official_url': _BOARD_URL + '?' + urlencode({'bIdx': notice_id, 'mId': '0401010000', 'ptIdx': '16'}),
+        'official_url': detail_url('living', notice_id),
         'fields': fields,
     }
     if parser.review_flags:

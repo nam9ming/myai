@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 from processing.extraction.validation import decode
 
 from . import official_url
+from .official_web import detail_url
 
 
 FESTIVAL_FIELDS = {
@@ -120,7 +121,7 @@ def parse_event_detail(text: str, *, event_id: str) -> dict:
         "external_id": event_id,
         "title": title,
         "official_url": official_url(_optional_text(row.get("url"))),
-        "source_url": f"https://www.anseong.go.kr/event/program/popup/detail.do?idx={event_id}",
+        "source_url": detail_url("culture", event_id),
         "fields": _fields(row, EVENT_FIELDS),
     }
     media = [

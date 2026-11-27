@@ -3,13 +3,16 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
+import stat
 import sys
 import unicodedata
 
 from .events import parse_event_detail, parse_festival_csv
 from .libraries import parse_library_csv, parse_library_notice
+from .official_web import DETAIL_MAX_BYTES
 
 SOURCE_PAGES = {
     "culture": (
@@ -22,18 +25,23 @@ SOURCE_PAGES = {
     ),
 }
 PORTAL_MAX_BYTES = 20 * 1024 * 1024
-DETAIL_MAX_BYTES = 8 * 1024 * 1024
 EVENT_IDENTITY_FIELDS = ("start_date", "end_date")
 
 
-def read_input(path: Path, limit: int, label: str, *, portal_csv: bool = False) -> tuple[str, str]:
+def read_raw(path: Path, limit: int, label: str) -> bytes:
     try:
-        with path.open("rb") as stream:
+        with os.fdopen(os.open(path, os.O_RDONLY | os.O_NONBLOCK), "rb") as stream:
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                raise ValueError(f"{label} 입력은 일반 파일이어야 합니다.")
             raw = stream.read(limit + 1)
     except OSError as error:
         raise ValueError(f"{label} 파일을 읽을 수 없습니다.") from error
     if len(raw) > limit:
         raise ValueError(f"{label} 파일이 허용 크기를 초과했습니다.")
+    return raw
+
+
+def decode_input(raw: bytes, label: str, *, portal_csv: bool = False) -> tuple[str, str]:
     try:
         text = raw.decode("utf-8-sig")
     except UnicodeDecodeError as error:
@@ -44,6 +52,10 @@ def read_input(path: Path, limit: int, label: str, *, portal_csv: bool = False) 
         except UnicodeDecodeError:
             raise ValueError(f"{label} 파일은 UTF-8 또는 EUC-KR이어야 합니다.") from None
     return text, hashlib.sha256(raw).hexdigest()
+
+
+def read_input(path: Path, limit: int, label: str, *, portal_csv: bool = False) -> tuple[str, str]:
+    return decode_input(read_raw(path, limit, label), label, portal_csv=portal_csv)
 
 
 def normalized_text(text: str) -> str:
@@ -101,6 +113,18 @@ def preview(category: str, portal: list[dict], web: dict,
     }
 
 
+def compare_sources(category: str, portal: tuple[str, str], web: tuple[str, str], web_id: str) -> dict:
+    portal_text, portal_sha = portal
+    web_text, web_sha = web
+    if category == "culture":
+        records = parse_festival_csv(portal_text)
+        record = parse_event_detail(web_text, event_id=web_id)
+    else:
+        records = parse_library_csv(portal_text)
+        record = parse_library_notice(web_text, notice_id=web_id)
+    return preview(category, records, record, portal_sha, web_sha)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("category", choices=("culture", "living"))
@@ -110,15 +134,9 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        portal_text, portal_sha = read_input(args.portal_csv, PORTAL_MAX_BYTES, "포털 CSV", portal_csv=True)
-        web_text, web_sha = read_input(args.web_detail, DETAIL_MAX_BYTES, "공식 웹 상세")
-        if args.category == "culture":
-            portal = parse_festival_csv(portal_text)
-            web = parse_event_detail(web_text, event_id=args.web_id)
-        else:
-            portal = parse_library_csv(portal_text)
-            web = parse_library_notice(web_text, notice_id=args.web_id)
-        result = preview(args.category, portal, web, portal_sha, web_sha)
+        portal = read_input(args.portal_csv, PORTAL_MAX_BYTES, "포털 CSV", portal_csv=True)
+        web = read_input(args.web_detail, DETAIL_MAX_BYTES, "공식 웹 상세")
+        result = compare_sources(args.category, portal, web, args.web_id)
     except ValueError as error:
         print(f"수집 원본 검토 실패: {error}", file=sys.stderr)
         return 1

@@ -98,7 +98,22 @@ python3.13 -B -m processing.collection living \
 
 같은 게시판에서도 정보가 들어 있는 위치가 다르다. 안성시청 [4404번 개통 공지](https://www.anseong.go.kr/portal/bbs/view.do?bIdx=201589&mId=0501010000&ptIdx=16)는 시간표와 요금이 본문에 있고, [15번 변경 공지](https://www.anseong.go.kr/portal/bbs/view.do?bIdx=201456&mId=0501010000&ptIdx=16)는 세부 시간표가 이미지에 있다. 도서관은 [본문형](https://www.anseong.go.kr/library/bbs/view.do?bIdx=195773&mId=0401010000&ptIdx=16), [이미지 포함형](https://www.anseong.go.kr/library/bbs/view.do?bIdx=201918&mId=0401010000&ptIdx=16), [HWPX 첨부형](https://www.anseong.go.kr/library/bbs/view.do?bIdx=203047&mId=0401010000&ptIdx=16)을 표본으로 확인했다.
 
-도서관 HTML은 본문과 이미지·첨부 유무를 구분한다. 읽을 수 있는 본문이 없는 글은 오류로 남긴다. 행사 상세는 원문 주소와 선택 링크를 함께 다루며, 썸네일이나 첨부 이미지가 있으면 확인 표시를 남긴다. 설명에 섞인 HTML은 원문 필드로 보관한다. 두 공식 웹 상세 모두 입력에 포함된 게시물 번호를 `--web-id`와 대조한다. 이 시범은 내부 자료 비교용이다. 자동 수집, 이미지·첨부 내용 추출, DB 저장, 승인·발행은 별도 단계다.
+도서관 HTML은 본문과 이미지·첨부 유무를 구분한다. 읽을 수 있는 본문이 없는 글은 오류로 남긴다. 행사 상세는 원문 주소와 선택 링크를 함께 다루며, 썸네일이나 첨부 이미지가 있으면 확인 표시를 남긴다. 설명에 섞인 HTML은 원문 필드로 보관한다. 두 공식 웹 상세 모두 입력에 포함된 게시물 번호를 `--web-id`와 대조한다.
+
+### 공식 웹 상세 내려받기 및 보관
+
+포털 CSV를 준비한 뒤 공식 웹 게시물 번호로 한 건을 내려받아 함께 보관한다. 공공데이터포털에서 [축제](https://www.data.go.kr/data/15013104/standard.do)·[도서관](https://www.data.go.kr/data/15013109/standard.do) 표준 CSV를 내려받는다. 웹 요청은 안성시 고정 HTTPS 상세 경로에만 전송하며 리디렉션을 따르지 않는다. 원문은 포털 20MiB, 웹 8MiB까지 읽고 웹 소켓 작업별 대기 시간은 15초다.
+
+```sh
+python3.13 -B -m processing.collection.capture living \
+  --portal-csv data/private/libraries.csv --web-id 203047 --name library-203047-first
+```
+
+`data/private/collection/<name>/`에 포털·웹 원본 바이트와 `capture.json`을 저장한다. 수집 루트와 묶음은 실행 사용자만 접근할 수 있어야 하며 수집 이름은 한 번만 쓴다. 웹 요청 주소·수신 시각·원본 해시와 비교 후보는 수집 기록에서 확인한다. 완료 파일인 `capture.json`은 마지막에 생성한다.
+
+종료 0은 원본 보관과 파싱 성공, 2는 원본 보관과 파싱 실패, 1은 입력·웹 요청·저장 오류다. 형식이 바뀌거나 본문이 없는 경우 종료 2로 원본과 파싱 사유를 남긴다. 저장이 중단되어 완료 파일이 없으면 그 묶음은 사용하지 않는다. 성공한 비교에도 이미지·첨부 확인 표시와 미확정 관계가 남을 수 있다.
+
+D03 등록이 필요하면 사람이 원문·추출할 내용·개인정보를 대조한 뒤 [기존 원문 등록](../backend/docs/extraction-run-import.md)에 원문 상대 경로·해시와 확인한 원출처 주소를 연결한다. `portal.catalog_url`은 비교 대상의 카탈로그 주소다. 현재 CSV를 어디서 받았는지는 운영자가 대조한다. 등록 초기 상태는 `pending`과 `unchecked`로 유지한다. 이 명령은 웹 상세 한 건과 제공된 CSV를 처리하며 목록 순회·정기 실행·첨부 다운로드·DB 등록·승인·발행은 후속 단계다.
 
 ## 시민 수동 추출·보관
 
