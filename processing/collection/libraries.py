@@ -60,10 +60,18 @@ def parse_library_csv(text: str) -> list[dict]:
         raise ValueError('도서관 CSV 형식이 올바르지 않습니다.') from None
 
 
+_LIBRARY_VIEW = '/library/bbs/view.do?ptIdx=16&mId=0401010000'
+
+
 class _NoticeParser(HTMLParser):
-    def __init__(self, label='도서관 공지'):
+    """`view_action`은 본문 영역 밖 `form#viewForm`의 게시판 주소다. 다른 게시판의 HTML을 같은 구조라는 이유로 받지 않는다."""
+
+    def __init__(self, label='도서관 공지', view_action=_LIBRARY_VIEW, require_view=False):
         super().__init__()
         self.label = label
+        self.view_action = view_action
+        self.require_view = require_view
+        self.view_actions = []
         self.tags = []
         self.found_board = False
         self.notice_ids = set()
@@ -75,6 +83,8 @@ class _NoticeParser(HTMLParser):
         self.review_flags = set()
 
     def handle_starttag(self, tag, attrs):
+        names = [name for name, _ in attrs]
+        view_form = tag == 'form' and ('id', 'viewForm') in attrs
         attrs = dict(attrs)
         classes = (attrs.get('class') or '').split()
         if not self.tags:
@@ -82,6 +92,10 @@ class _NoticeParser(HTMLParser):
                 self.hidden_depth += 1
             if self.hidden_depth:
                 return
+            if view_form:
+                if names.count('id') != 1 or names.count('action') != 1:
+                    raise ValueError(self.label + ' 상세 폼의 HTML 속성이 중복되었습니다.')
+                self.view_actions.append(attrs.get('action'))
             if tag == 'input' and attrs.get('name') == 'bIdx':
                 self.notice_ids.add(attrs.get('value'))
             if tag == 'div' and 'bod_view' in classes:
@@ -186,8 +200,8 @@ _ATTACHMENT_FORMATS = {'pdf', 'hwp', 'hwpx', 'png', 'jpg', 'jpeg'}
 
 
 class _MediaParser(_NoticeParser):
-    def __init__(self, label='도서관 공지'):
-        super().__init__(label)
+    def __init__(self, label='도서관 공지', **board):
+        super().__init__(label, **board)
         self.media = []
         self.seen_links = set()
         self.anchor = None
@@ -279,6 +293,9 @@ def _parse_notice(text: str, notice_id: str, parser: _NoticeParser) -> str:
         raise ValueError(parser.label + ' HTML에 게시물 번호가 없습니다.')
     if parser.notice_ids != {notice_id}:
         raise ValueError(parser.label + ' HTML의 번호가 요청과 일치하지 않습니다.')
+    views = parser.view_actions
+    if len(views) > 1 or (views and views[0] != parser.view_action) or (parser.require_view and not views):
+        raise ValueError(parser.label + ' HTML의 게시판이 요청과 일치하지 않습니다.')
     title = ' '.join(''.join(parser.parts.get('title', [])).split())
     if not title:
         raise ValueError(parser.label + ' 제목이 없습니다.')
@@ -288,6 +305,19 @@ def _parse_notice(text: str, notice_id: str, parser: _NoticeParser) -> str:
 def parse_library_media(text: str, *, notice_id: str) -> list[dict]:
     """공식 도서관 상세의 이미지와 첨부 후보를 확인한다."""
     parser = _MediaParser()
+    _parse_notice(text, notice_id, parser)
+    return parser.media
+
+
+def _board_options(board: str) -> dict:
+    prefix, menu, label, _ = board_info(board)
+    return {'label': label, 'view_action': f'{prefix}/view.do?ptIdx=16&mId={menu}', 'require_view': True}
+
+
+def parse_board_media(text: str, *, board: str, notice_id: str) -> list[dict]:
+    """같은 게시판 구조를 쓰는 시청 공지 상세의 이미지와 첨부 후보를 확인한다."""
+    parser = _MediaParser(**_board_options(board))
+    board_detail_url(board, notice_id)  # HTML을 읽기 전에 18자리 번호 한도를 확인한다.
     _parse_notice(text, notice_id, parser)
     return parser.media
 
@@ -303,9 +333,9 @@ BOARD_PARSER_VERSION = 'board-notice-parser-v1'
 
 def parse_board_notice(text: str, *, board: str, notice_id: str) -> dict:
     """같은 게시판 구조를 쓰는 시청 공지 상세의 본문 텍스트와 게시일만 준비한다."""
-    _, _, label, source = board_info(board)
+    source = board_info(board)[3]
     url = board_detail_url(board, notice_id)
-    return _notice_record(_NoticeParser(label), text, notice_id, source, lambda: url)
+    return _notice_record(_NoticeParser(**_board_options(board)), text, notice_id, source, lambda: url)
 
 
 def _notice_record(parser: _NoticeParser, text: str, notice_id: str, source: str, url) -> dict:
