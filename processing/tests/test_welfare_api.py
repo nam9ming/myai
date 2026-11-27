@@ -111,7 +111,9 @@ class WelfareTransportTest(unittest.TestCase):
             nested = quote(nested, safe="")
         for echoed in (KEY, ENCODED_KEY, "example&#47;-_&#43;&#61;123", "example&#x2F;-_&#x2B;=123",
                        "example%2f-_%2b%3d123", "%65xample/-_+=123", "example&amp;#47;-_+=123",
-                       "example\\/-_\\u002B=123", "\\u0065xample/-_+=123", "example/-_ =123", nested):
+                       "example\\/-_\\u002B=123", "\\u0065xample/-_+=123", "example/-_ =123", nested,
+                       # 주석·CDATA·처리 지시로 나뉘어도 XML 파싱 뒤에는 키가 합쳐진다.
+                       "example/<![CDATA[-_+=123]]>", "exam<!-- 나눔 -->ple/-_+=123", "exam<?x y?>ple/-_+=123"):
             raw = f"<response><resultMessage>{echoed}</resultMessage></response>".encode()
             self.reply(raw)
             with self.subTest(echoed=echoed), self.assertRaisesRegex(WelfareResultError, "인증 키") as caught:
@@ -137,7 +139,8 @@ class WelfareTransportTest(unittest.TestCase):
             fetch_list(1, 10, KEY)
 
     def test_unrelated_escapes_still_pass_echo_check(self):
-        raw = "<response><resultMessage>소득 50%이하 &amp;amp; https://a.example/?q=%2B\\/</resultMessage></response>"
+        raw = ("<response><resultMessage>소득 50%이하 &amp;amp; https://a.example/?q=%2B\\/</resultMessage>"
+               "<!-- 안내 --><resultCode><![CDATA[00]]></resultCode></response>")
         for body in (raw.encode(), b"\xef\xbb\xbf" + raw.encode()):
             self.reply(body)
             self.assertEqual(fetch_list(1, 10, KEY), body)
