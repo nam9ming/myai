@@ -107,7 +107,7 @@ def prepare(input_path: Path, name: str, private_root: Path) -> dict:
     review = decode(input_bytes, "input")
     shape(review, "archive_kind archive_name data_kind documents", kind="input")
     kind = review["archive_kind"]
-    require(kind in ("single", "batch", "portal", "media", "road"), "$.archive_kind", "input")
+    require(kind in ("single", "batch", "portal", "media", "road", "board"), "$.archive_kind", "input")
     archive_name = text(review["archive_name"], "$.archive_name", "input")
     validate_name(archive_name)
     require(review["data_kind"] in ("real", "synthetic"), "$.data_kind", "input")

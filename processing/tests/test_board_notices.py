@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from processing.collection.libraries import parse_board_notice, parse_library_notice
+from processing.collection.libraries import BOARD_PARSER_VERSION, parse_board_notice, parse_library_notice
 from processing.collection.library_listing import parse_board_listing, parse_library_listing
 from processing.collection.official_web import (
     SourceHTTPError, board_detail_url, fetch_board_detail, fetch_board_listing,
@@ -142,6 +142,10 @@ class BoardListingTest(unittest.TestCase):
 class BoardNoticeTest(unittest.TestCase):
     def test_city_notice_uses_board_url_and_source(self):
         record = parse_board_notice(_notice(), board="city", notice_id="203043")
+        self.assertEqual(BOARD_PARSER_VERSION, "board-notice-parser-v1", "출력 형식을 바꾸면 파서 버전도 올린다.")
+        flagged = parse_board_notice(_notice(body='<p>본문</p><p><img src="/x.png" alt=""></p>'),
+                                     board="city", notice_id="203043")
+        self.assertEqual(flagged["review_flags"], ["inline_image"])
         self.assertEqual(record, {
             "source": "city_notice",
             "external_id": "203043",
