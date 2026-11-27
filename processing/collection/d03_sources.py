@@ -11,6 +11,7 @@ from .media import read_media_assets
 from . import board_batch, road_batch
 from .libraries import BOARD_PARSER_VERSION, parse_board_notice
 from .official_web import BOARDS, DETAIL_MAX_BYTES, ROAD_STATES, board_detail_url, detail_url, road_detail_url
+from .odcloud import ODCLOUD_SECTION, read_odcloud_snapshot
 from .portal import read_portal_snapshot
 from .road_works import PARSER_VERSION as ROAD_PARSER_VERSION, parse_road_detail
 
@@ -160,11 +161,18 @@ def _web_assets(private_root: Path, kind: str, name: str, asset_keys: set[str]) 
         return assets
 
 
+# 응답 페이지 원본을 그대로 등록하는 API 묶음. 읽기 함수가 원본 해시와 파생 결과를 먼저 다시 대조한다.
+_API_ARCHIVES = {
+    "portal": (PORTAL_SECTION, read_portal_snapshot, "포털 API", "data-go-kr-api"),
+    "odcloud": (ODCLOUD_SECTION, read_odcloud_snapshot, "파일데이터 API", "data-go-kr-odcloud-api"),
+}
+
+
 def capture_assets(private_root: Path, archive_kind: str, archive_name: str,
                    asset_keys: set[str]) -> dict[str, dict]:
     """정해진 수집 경로 안의 원본만 읽으며 파일이나 기록을 바꾸지 않는다."""
     if not isinstance(archive_kind, str) or (archive_kind not in _ARCHIVES and archive_kind not in _WEB_ARCHIVES
-                                             and archive_kind not in ("portal", "media")):
+                                             and archive_kind not in _API_ARCHIVES and archive_kind != "media"):
         raise ValueError("지원하지 않는 수집 기록 종류입니다.")
     if not isinstance(archive_name, str):
         raise ValueError("수집 이름이 유효하지 않습니다.")
@@ -177,18 +185,19 @@ def capture_assets(private_root: Path, archive_kind: str, archive_name: str,
         return read_media_assets(private_root, archive_name, asset_keys)
     if archive_kind in _WEB_ARCHIVES:
         return _web_assets(private_root, archive_kind, archive_name, asset_keys)
-    if archive_kind == "portal":
-        _, receipt = read_portal_snapshot(private_root, archive_name)
+    if archive_kind in _API_ARCHIVES:
+        section, read_snapshot, label, method = _API_ARCHIVES[archive_kind]
+        _, receipt = read_snapshot(private_root, archive_name)
         pages = {str(entry["page"]): entry for entry in receipt["responses"]}
         if not asset_keys <= pages.keys():
-            raise ValueError("선택한 응답 페이지가 포털 API 수집 기록에 없습니다.")
+            raise ValueError(f"선택한 응답 페이지가 {label} 수집 기록에 없습니다.")
         return {
             key: {
-                "raw_asset_path": (Path(PORTAL_SECTION) / archive_name / pages[key]["file"]).as_posix(),
+                "raw_asset_path": (Path(section) / archive_name / pages[key]["file"]).as_posix(),
                 "raw_sha256": pages[key]["sha256"],
                 "official_url": pages[key]["source_url"],
                 "collected_at": pages[key]["fetched_at"],
-                "collection_method": "data-go-kr-api",
+                "collection_method": method,
             }
             for key in sorted(asset_keys, key=int)
         }

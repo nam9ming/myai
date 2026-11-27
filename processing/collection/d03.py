@@ -107,7 +107,7 @@ def prepare(input_path: Path, name: str, private_root: Path) -> dict:
     review = decode(input_bytes, "input")
     shape(review, "archive_kind archive_name data_kind documents", kind="input")
     kind = review["archive_kind"]
-    require(kind in ("single", "batch", "portal", "media", "road", "board"), "$.archive_kind", "input")
+    require(kind in ("single", "batch", "portal", "odcloud", "media", "road", "board"), "$.archive_kind", "input")
     archive_name = text(review["archive_name"], "$.archive_name", "input")
     validate_name(archive_name)
     require(review["data_kind"] in ("real", "synthetic"), "$.data_kind", "input")
@@ -125,7 +125,9 @@ def prepare(input_path: Path, name: str, private_root: Path) -> dict:
             ("document_version_id", version_ids, UUID),
         ):
             value = text(item[key], path + "." + key, "input", pattern)
-            require(value not in known, path + "." + key, "input")
+            # API 응답 한 페이지에 안성시 행이 여러 개 있을 수 있어 그 페이지는 여러 문서의 원본이 될 수 있다.
+            require(value not in known or (key == "asset" and kind in ("portal", "odcloud")),
+                    path + "." + key, "input")
             known.add(value)
 
     assets = capture_assets(private_root, kind, archive_name, selected)
