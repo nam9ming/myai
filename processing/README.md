@@ -242,16 +242,22 @@ python3.13 -B -m processing.collection.board_batch city --name city-20261127 --m
 
 ### 지자체복지서비스 OpenAPI 목록·상세 수집
 
-지원·혜택 분야의 안성시 복지서비스는 [한국사회보장정보원_지자체복지서비스](https://www.data.go.kr/data/15108347/openapi.do)(공공데이터포털 15108347)에서 받는다. `processing/collection/welfare_api.py`는 이 API의 목록·상세 요청과 XML 응답 검증만 맡는다. 원본을 보관하는 명령은 아직 없다. **이 모듈은 합성 XML 응답으로만 시험했고 인증 키가 필요한 실제 API는 호출하지 않았다.** 아래 요소 이름과 검증 기준은 공개 문서에서 옮긴 것이며, 실제 응답과 다르면 추정해 고치지 않고 거부한다.
+지원·혜택 분야의 안성시 복지서비스는 [한국사회보장정보원_지자체복지서비스](https://www.data.go.kr/data/15108347/openapi.do)(공공데이터포털 15108347)에서 받는다. **이 수집기는 합성 XML 응답으로만 시험했고 인증 키가 필요한 실제 API는 호출하지 않았다.** 아래 요소 이름과 검증 기준은 공개 문서에서 옮긴 것이며, 실제 응답과 다르면 원본과 실패 사유를 남기고 멈춘다.
 
-인증 키는 공공데이터포털에서 활용 신청을 마친 디코딩 키를 호출하는 쪽이 넘긴다. 키는 요청 주소에만 붙고 오류 문구에는 쓰지 않는다. 응답 본문에 키가 그대로, URL 인코딩, JSON 이스케이프(`\/`·`\u00XX`), XML 문자 참조로 들어 있거나 `+`가 공백으로 풀린 형태로 들어 있으면 그 응답을 돌려주지 않고 `WelfareResultError`로 거부한다. 겹친 인코딩은 다섯 번까지 풀어 보고, 그래도 끝나지 않으면 키 포함 여부를 확인할 수 없으므로 같은 방식으로 거부한다. NUL 바이트가 있는 본문(UTF-16·UTF-32 등)과 UTF-8로 읽을 수 없는 본문(EBCDIC 등)은 키가 원문이든 URL 인코딩이든 이 비교를 빠져나갈 수 있으므로 키 확인 전에 같은 방식으로 거부한다. 키 확인도 파서처럼 앞의 UTF-8 BOM을 떼고 엄격한 UTF-8로 읽는다. 이런 본문은 어차피 UTF-8 XML 파서가 읽지 않는다.
+```sh
+DATA_GO_KR_SERVICE_KEY=<디코딩 키> python3.13 -B -m processing.collection.welfare_batch --name welfare-20261127
+```
 
-- 요청: `https://apis.data.go.kr/B554287/LocalGovernmentWelfareInformations`의 `/LcgvWelfarelist`(목록)와 `/LcgvWelfaredetailed`(상세)만 GET으로 보낸다. 리디렉션은 따르지 않는다. 목록은 `pageNo`·`numOfRows`·`ctpvNm=경기도`·`sggNm=안성시`·`arrgOrd=001`(최신순)을, 상세는 `servId`를 쓴다. 조회수로 순서가 바뀌는 인기순 대신 최신순을 고정했다. `list_source_url`·`detail_source_url`은 키를 뺀 같은 주소를 돌려준다.
-- 한도: 응답당 2 MiB. HTTP 200이 아닌 응답은 상태 코드를 담은 `SourceHTTPError`로 거부한다. HTTP 200이라도 서비스 오류로 보이는 응답은 `WelfareResultError`로 거부한다. 서비스 오류는 UTF-8 XML로 읽을 수 없는 본문, 문서와 다른 최상위 요소(예: 게이트웨이의 `OpenAPI_ServiceResponse`), 최상위 바로 아래의 `resultCode`가 없거나 성공 코드가 아닌 경우다. 그 밖의 봉투·항목 불일치는 `ValueError`로 거부한다.
+공공데이터포털에서 활용 신청을 마친 디코딩 키를 실행 환경의 `DATA_GO_KR_SERVICE_KEY`에만 넣는다. 키는 요청 주소에만 붙고 원본·파싱 결과·`batch.json`·오류 문구에는 쓰지 않는다. 응답 본문에 키가 그대로, URL 인코딩, JSON 이스케이프(`\/`·`\u00XX`), XML 문자 참조로 들어 있거나 `+`가 공백으로 풀린 형태로 들어 있으면 원본을 쓰기 전에 그 요청을 실패로 기록하고 남은 요청을 멈춘다. 겹친 인코딩은 다섯 번까지 풀어 보고, 그래도 끝나지 않으면 키 포함 여부를 확인할 수 없으므로 같은 방식으로 거부한다. NUL 바이트가 있는 본문(UTF-16·UTF-32 등)과 UTF-8로 읽을 수 없는 본문(EBCDIC 등)은 키가 원문이든 URL 인코딩이든 이 비교를 빠져나갈 수 있으므로 키 확인 전에 같은 방식으로 거부하고 원본을 남기지 않는다. 키 확인도 파서처럼 앞의 UTF-8 BOM을 떼고 엄격한 UTF-8로 읽는다. 이런 본문은 어차피 UTF-8 XML 파서가 읽지 않는다.
+
+- 요청: `https://apis.data.go.kr/B554287/LocalGovernmentWelfareInformations`의 `/LcgvWelfarelist`(목록)와 `/LcgvWelfaredetailed`(상세)만 GET으로 보낸다. 리디렉션은 따르지 않는다. 목록은 `pageNo`·`numOfRows=100`·`ctpvNm=경기도`·`sggNm=안성시`·`arrgOrd=001`(최신순)을, 상세는 `servId`를 쓴다. 조회수로 순서가 바뀌는 인기순 대신 최신순을 고정했다. 기록하는 `source_url`은 키를 뺀 같은 주소다.
+- 한도: 응답당 2 MiB, 목록 `--max-pages` 1~20(기본 5), 상세 `--max-items` 1~500(기본 200). 요청은 하나씩 0.6초 간격으로 보내고 HTTP 401·403·429·503을 받으면 이후 요청을 멈춘다. HTTP 200이라도 서비스 오류로 보이는 응답이면 그 원본과 사유를 남기고 이후 요청을 멈춘다. 서비스 오류는 UTF-8 XML로 읽을 수 없는 본문, 문서와 다른 최상위 요소(예: 게이트웨이의 `OpenAPI_ServiceResponse`), 최상위 바로 아래의 `resultCode`가 없거나 성공 코드가 아닌 경우다. 다만 UTF-8이 아니거나 NUL 바이트가 있는 본문은 위와 같이 원본 없이 사유만 남긴다. 이미 찾은 서비스의 상세도 더 요청하지 않고 `not_attempted`로 남긴다. `batch.json`의 `stop_http_status`에는 멈춘 HTTP 상태(200 응답이면 `null`)를, `stop_reason`에는 멈춘 사유를 쓴다.
 - XML: UTF-8만 받고, `<!--`·`<![CDATA[`가 아닌 `<!` 선언(DOCTYPE·ENTITY)이 있으면 파싱 전에 거부한다. 파싱은 표준 라이브러리 `xml.etree.ElementTree`로 하며 새 의존성은 없다. 정의되지 않은 엔터티와 문법 오류는 형식 오류다.
-- 봉투 검증: 최상위 요소, `resultCode`가 성공 코드인지, 응답의 `pageNo`·`numOfRows`가 요청과 같은지, `totalCount`와 페이지 항목 수가 맞는지 확인한다. 목록 항목마다 `servId`(`WLF`+숫자 8자리)·`servNm`과 `ctpvNm=경기도`·`sggNm=안성시`가 있어야 한다. 상세는 `servId`가 요청과 같아야 하고, 시도·시군구가 있으면 안성시여야 한다. 문서에 없는 하위 구조, 같은 요소의 반복, 최상위·`servList`·하위 목록 요소에 하위 요소 없이 들어 있는 글자는 형식 변경으로 거부한다.
+- 봉투 검증: 최상위 요소, `resultCode`가 성공 코드인지, 응답의 `pageNo`·`numOfRows`가 요청과 같은지, `totalCount`와 페이지 항목 수가 맞는지 확인한다. 목록 항목마다 `servId`(`WLF`+숫자 8자리)·`servNm`과 `ctpvNm=경기도`·`sggNm=안성시`가 있어야 한다. 순회 중 전체 건수가 바뀌거나 페이지 사이에 같은 `servId`가 나오면 그 페이지를 실패로 남기고 이전 페이지의 서비스만 상세를 받는다. 상세는 `servId`가 요청과 같아야 하고, 시도·시군구가 있으면 안성시여야 한다. 문서에 없는 하위 구조, 같은 요소의 반복, 최상위·`servList`·하위 목록 요소에 하위 요소 없이 들어 있는 글자는 형식 변경으로 거부한다.
 
-파싱 결과는 API 요소 이름을 키로 원문 텍스트를 그대로 둔다. 앞뒤 공백·줄바꿈도 바꾸지 않는다. 문서의 요소가 없거나 공백뿐이면 값을 `null`로 두고 `unknown`에 `missing`·`empty`를 남긴다. 문서에 없는 단일 값 요소는 `undocumented`에 원문 그대로 보관한다. 시행기간(`enfcBgngYmd`·`enfcEndYmd`)은 날짜로 해석하지 않고, 지원대상·선정기준에서 자격·연령·소득을, 급여서비스 내용에서 금액·비용을 추정하지 않는다. 서비스 URL은 상세 응답에 없고 목록 항목의 `servDtlLink`에만 있다. 상세 하위 목록(`inqplCtadrList` 등)의 서비스구분코드가 코드표와 다르면 거부한다. 목록 항목에는 이 코드가 없다.
+`data/private/collection-welfare/<name>/`에 `list-<페이지>.xml`, `detail-<servId>.xml`, 파싱 결과 `parsed-<servId>.json`(파서 버전과 두 원본 해시 포함), 마지막으로 `batch.json`을 쓴다. 종료 코드는 0 완료, 2 한도 도달·일부 실패, 1 입력·키 설정·보관 오류다.
+
+파싱 결과는 API 요소 이름을 키로 원문 텍스트를 그대로 둔다. 앞뒤 공백·줄바꿈도 바꾸지 않는다. 문서의 요소가 없거나 공백뿐이면 값을 `null`로 두고 `unknown`에 `missing`·`empty`를 남긴다. 문서에 없는 단일 값 요소는 `undocumented`에 원문 그대로 보관한다. 시행기간(`enfcBgngYmd`·`enfcEndYmd`)은 날짜로 해석하지 않고, 지원대상·선정기준에서 자격·연령·소득을, 급여서비스 내용에서 금액·비용을 추정하지 않는다. 서비스 URL은 상세 응답에 없어 목록 항목의 `servDtlLink`를 함께 보관한다(`record.list`). 상세 하위 목록(`inqplCtadrList` 등)의 서비스구분코드가 코드표와 다르면 거부한다. 목록 항목에는 이 코드가 없다.
 
 요소 이름의 출처는 다음과 같다. 2026-11-27에 공개 페이지와 첨부 문서를 받아 확인했다.
 
@@ -273,7 +279,7 @@ python3.13 -B -m processing.collection.board_batch city --name city-20261127 --m
 | 성공 코드 | `0` | 같은 활용가이드 v2.2의 오류 코드표 |
 | 성공 코드 | `00` | 공공데이터포털 표준 API(`portal_format.py`) 기준 |
 
-이 API 상세 페이지의 참고문서는 코드표 하나이며 응답 XML 예시와 오류 코드표가 없다. 같은 기관의 중앙부처 API는 Swagger에 `response`로 적혀 있지만 활용가이드 예시는 `wantedList`·`wantedDtl`을 쓴다. 그래서 두 문서의 이름을 모두 허용했다. 이 API의 실제 최상위 이름·성공 코드는 미확인이다. 최대 `numOfRows`, 한글 지역 인자의 인코딩, 목록 항목의 `ctpvNm`·`sggNm` 포함 여부, 게이트웨이 오류 응답 형식, 최신순 정렬의 페이지 안정성도 실제 응답으로 확인하지 않았다. 게이트웨이가 200과 함께 다른 최상위 요소(예: `OpenAPI_ServiceResponse`)를 보내면 최상위 요소 불일치로 거부한다. 다음 세 가지도 실제 응답으로 확인하지 않았고, 해당하면 응답이 거부된다. 첫째, `servDtlLink`의 `&`가 `&amp;`로 이스케이프되지 않으면 목록 페이지 전체가 XML 형식 오류가 된다. 둘째, 경기도 공통 서비스처럼 `sggNm`이 빈 목록 항목이 있으면 그 페이지 전체가 거부된다. 셋째, 중앙부처 API의 신청방법 목록 `applmetList` 같은 하위 목록이 상세에 나오면 문서에 없는 하위 구조로 거부한다. XML 문법 오류는 오류 화면과 구별할 수 없어 서비스 오류(`WelfareResultError`)로 본다. 첫 실제 호출에서 응답 원본을 보고 위 항목을 확인한 뒤 이 표를 갱신한다. 이전 조사에서 확인한 안성시 공공근로사업 `WLF00000915`([복지로 상세](https://www.bokjiro.go.kr/ssis-tbu/twataa/wlfareInfo/moveTWAT52011M.do?wlfareInfoId=WLF00000915))도 이번 작업에서 다시 조회하지 않았다.
+이 API 상세 페이지의 참고문서는 코드표 하나이며 응답 XML 예시와 오류 코드표가 없다. 같은 기관의 중앙부처 API는 Swagger에 `response`로 적혀 있지만 활용가이드 예시는 `wantedList`·`wantedDtl`을 쓴다. 그래서 두 문서의 이름을 모두 허용했다. 이 API의 실제 최상위 이름·성공 코드는 미확인이다. 최대 `numOfRows`, 한글 지역 인자의 인코딩, 목록 항목의 `ctpvNm`·`sggNm` 포함 여부, 게이트웨이 오류 응답 형식, 최신순 정렬의 페이지 안정성도 실제 응답으로 확인하지 않았다. 게이트웨이가 200과 함께 다른 최상위 요소(예: `OpenAPI_ServiceResponse`)를 보내면 최상위 요소 불일치로 기록하고 남은 요청을 멈춘다. 다음 세 가지도 실제 응답으로 확인하지 않았고, 해당하면 수집이 실패로 남는다. 첫째, `servDtlLink`의 `&`가 `&amp;`로 이스케이프되지 않으면 목록 페이지 전체가 XML 형식 오류가 된다. 둘째, 경기도 공통 서비스처럼 `sggNm`이 빈 목록 항목이 있으면 그 페이지 전체가 실패한다. 셋째, 중앙부처 API의 신청방법 목록 `applmetList` 같은 하위 목록이 상세에 나오면 문서에 없는 하위 구조로 거부한다. XML 문법 오류는 오류 화면과 구별할 수 없어 서비스 오류로 본다. 그래서 상세 한 건의 원문에 이스케이프되지 않은 `&` 같은 문법 오류가 하나만 있어도 남은 상세(`--max-items` 최대 500건)를 요청하지 않고 배치 전체가 멈춘다. 같은 원문이 계속 오면 다시 실행해도 같은 자리에서 멈추므로 이 실패가 나오면 원본을 보고 처리 방식을 다시 정한다. 첫 실제 실행에서 `batch.json`과 원본을 보고 위 항목을 확인한 뒤 이 표를 갱신한다. 이전 조사에서 확인한 안성시 공공근로사업 `WLF00000915`([복지로 상세](https://www.bokjiro.go.kr/ssis-tbu/twataa/wlfareInfo/moveTWAT52011M.do?wlfareInfoId=WLF00000915))도 이번 작업에서 다시 조회하지 않았다.
 
 ### 수집 원본을 D03 등록 입력으로 준비하기
 
@@ -286,6 +292,8 @@ API 수집은 `archive_kind=portal`, API 수집 이름, `asset="1"` 같은 응�
 도서관·시청·안성배움e 매체는 `archive_kind=media`, `archive_name`에는 `store --name` 값, `asset`에는 같은 항목 번호를 문자열로 넣는다. `official_url`은 `notice.json`의 `source_url`(해당 게시판의 부모 공지 주소), `collected_at`은 `null`로 둔다. D03이 운영자 입력 다운로드 시각과 매체 원본 해시를 연결한다. 사람 검토를 마친 제목·본문을 전달하고 기존 D03 명령으로 등록한다.
 
 도로 공사현황은 `archive_kind=road`, `archive_name`에는 `road_batch --name` 값, `asset`에는 공사 번호를 넣는다. 포털 원본은 선택할 수 없다. `official_url`은 `batch.json`의 해당 상세 `source_url`, `collected_at`은 `null`로 둔다. 명령은 상세 원본 해시와 함께 보관된 파싱 결과를 원본에서 다시 만든 값과 대조한다. 파싱 결과의 `parser_version`이 현재 파서와 다르면 변조와 구분되는 오류로 거부하므로 현재 버전으로 다시 수집한다. 시청·안성배움e 공지는 `archive_kind=board`, `archive_name`에는 `board_batch --name` 값, `asset`에는 공지 번호를 넣고 같은 방식으로 대조한다. 등록 방식은 `official-web-board`로 기록된다.
+
+지자체복지서비스 API 수집은 `archive_kind=welfare`, `archive_name`에는 `welfare_batch --name` 값, `asset`에는 `WLF00000915` 같은 서비스 ID를 넣는다. 포털 원본은 선택할 수 없다. `official_url`은 복지로 공개 상세 화면 `https://www.bokjiro.go.kr/ssis-tbu/twataa/wlfareInfo/moveTWAT52011M.do?wlfareInfoId=<servId>`이고, `collected_at`은 `null`로 둔다. `batch.json`의 상세 요청 주소(`items[].source_url`)는 키를 뺐지만 키 없이는 열리지 않아 사람이 검토할 원문 주소로 쓰지 않는다. 복지로 주소 형식은 위의 `WLF00000915` 조사에서 확인한 것이며, 응답의 `servDtlLink`는 `record.list`에 원문 그대로 남아 있어 대조할 수 있다. 명령은 상세 응답과 그 서비스가 실린 목록 페이지의 원본 해시를 확인하고, 두 원본에서 파싱 결과를 다시 만들어 보관본과 대조한다. 파서 버전이 다르면 다시 수집한다. 등록 방식은 `data-go-kr-welfare-api`이며 D03 원본은 상세 응답 XML이다.
 
 다음은 이미 보관한 `synthetic-capture` 묶음의 합성 예다. 실제 등록 입력은 담당자가 원본·개인정보·추출 대상 문구를 대조해 작성한다. 게시일·공식 문서번호 미상은 `null`로 둔다. 웹 수신 시각은 수집 기록을 사용하므로 `collected_at`을 `null`로 둔다. 포털 CSV는 실제 다운로드 출처를 담당자가 확인하고, `official_url`에는 수집 기록의 `portal.catalog_url`, `collected_at`에는 실제로 받은 시각을 입력한다. `redaction_log`는 제거 위치와 범주를 `location`, `category`로 적고 제거한 실제 값은 적지 않는다.
 
