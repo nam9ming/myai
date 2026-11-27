@@ -59,13 +59,14 @@ class LibraryMediaLinksTest(unittest.TestCase):
     def test_ignores_template_script_escaped_and_out_of_scope_markup(self):
         img = f'<img src="{IMAGE_PATH}">'
         link = _link('샘플.pdf')
-        page = img + _notice(
-            f'<template>{img}</template><script>{img}</script>'
+        page = f'<template>{img}</template><script>{img}</script>' + img + _notice(
             '<p>&lt;img src="/external"&gt;</p>'
             f'<dl class="view_file"><dd>{link}</dd></dl>',
-            attachments=f'<template>{link}</template>',
         ) + link
         self.assertEqual(parse_library_media(page, notice_id='77'), [])
+        for hidden in (f'<template>{img}</template>', f'<script>{img}</script>'):
+            with self.subTest(hidden=hidden), self.assertRaisesRegex(ValueError, '숨김'):
+                parse_library_media(_notice(hidden), notice_id='77')
 
     def test_rejects_hidden_markup_instead_of_guessing_what_is_shown(self):
         img = f'<img src="{IMAGE_PATH}">'

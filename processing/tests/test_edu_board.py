@@ -112,7 +112,8 @@ class EduBoardTest(unittest.TestCase):
         city = f'<script>var yh = {{"contextPath": ""}};</script><!-- {fake} -->' + _notice("3838", f"<p>{fake}</p>")
         self.assertEqual(parse_board_media(city, board="city", notice_id="3838"), [])
         inner = _edu_notice(attachment=ATTACHMENT).replace("<p>합성 본문</p>", f"<p>본문</p><script>var y = {fake};</script>")
-        self.assertEqual(len(parse_board_media(inner, board="edu", notice_id="3838")), 1)
+        with self.assertRaisesRegex(ValueError, "숨김"):  # 본문 안 인라인 스크립트는 그 자체로 받지 않는다.
+            parse_board_media(inner, board="edu", notice_id="3838")
 
     def test_context_path_requires_the_page_configuration_object(self):
         no_config = _edu_notice(attachment=ATTACHMENT, context=None)

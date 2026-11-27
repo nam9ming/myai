@@ -264,12 +264,15 @@ class BoardNoticeTest(unittest.TestCase):
         library = outside.replace(CITY_VIEW, LIBRARY_VIEW)
         self.assertEqual(parse_library_notice(library, notice_id="203043")["title"], "합성 시청 공지")
         self.assertEqual(parse_library_media(library, notice_id="203043"), [])
-        shown = _notice(body='<p>본문</p><!-- 정상 주석 --><!----><details open><summary>요약</summary>내용</details>'
-                             '<script>var x = "<div hidden>"; /*<!-- Al Chat -- >*/</script><p style="color:red">강조</p>'
-                             '<p style="opacity:0.95; font-size:16px; display:inline-block; font-family:\'맑은 고딕\';'
-                             ' text-indent:-31.4pt; letter-spacing:-0.57px; background-color: rgba(0,0,0,0.1);'
-                             ' max-width:800px; overflow:hidden">글꼴</p><template><p hidden>틀</p><style>y</style></template>'
-                             '<p>&lt;!-- 예시 문구</p><!-- 메모 -- ><p>숨은 내용</p> --><p>끝</p>')
+        page_script = '<script>var x = "<div hidden>"; /*<!-- Al Chat -- >*/</script><template><p hidden>틀</p></template>'
+        shown = page_script + _notice(
+            body='<p>본문</p><!-- 정상 주석 --><!----><details open><summary>요약</summary>내용</details>'
+                 '<script src="/dwr/engine.js"></script><p style="color:red">강조</p>'
+                 '<p style="opacity:0.95; font-size:16px; display:inline-block; font-family:\'맑은 고딕\';'
+                 ' text-indent:-31.4pt; letter-spacing:-0.57px; background-color: rgba(0,0,0,0.1);'
+                 ' max-width:800px; overflow:hidden">글꼴</p>'
+                 '<p>&lt;!-- 예시 문구</p><!-- 메모 -- ><p>숨은 내용</p> --><p>끝</p>') + (
+            '<svg><title>마이크 권한이 필요합니다.</title></svg>')
         self.assertEqual(parse_board_notice(shown, board="city", notice_id="203043")["fields"]["description"],
                          "본문\n요약내용\n강조\n글꼴\n<!-- 예시 문구\n끝")
 
@@ -300,28 +303,41 @@ class BoardNoticeTest(unittest.TestCase):
             '<p style="display:none! important">숨김</p>', '<p style="background:url(/img/a.png)">보임</p>',
             '<p style="line-height:0">숨김</p>', '<p style="letter-spacing:-50px">숨김</p>',
             '<p style="opacity:0.4">숨김</p>', '<p style="-webkit-text-fill-color:transparent">숨김</p>',
+            '<template><svg><style></template>보이는 문구</style></svg></template><p>끝</p>',
+            '<p>앞</p><script>document.write(\'<div hidden>\')</script><span>숨은 문구</span>',
+            '<script src="https://invalid.example/x.js"></script><p>본문</p>', '<script></script><p>본문</p>',
+            '<details name="g" open><summary>요약1</summary>보이는 문구</details>'
+            '<details name="g" open><summary>요약2</summary>닫힌 문구</details>',
+            '<input type="text" type="hidden" value="보이는 입력값"><p>본문</p>',
+            '<p style="letter-spacing:-0.99em">숨김</p>', '<p style="font-size:10px;letter-spacing:-9.9px">숨김</p>',
+            '<p style="word-spacing:-0.99em">숨김</p>', '<p style="word-spacing:-2px">숨김</p>', '<p style="-webkit-text-stroke-width:4.9px">숨김</p>',
         ]
         for body in bodies:
             with self.subTest(body=body), self.assertRaisesRegex(ValueError, "^시청 공지 본문 영역에 .*숨김"):
                 parse_board_notice(_notice(body=body), board="city", notice_id="203043")
 
     def test_tokenizer_boundaries_follow_the_browser_in_every_python_version(self):
-        """3.12.16·3.13.5·3.14.6에서 결과가 같아야 한다. 원문 텍스트 요소·종료 태그·CDATA 경계를 고정했다."""
+        """3.13.5·3.14.6에서 결과가 같아야 한다. 원문 텍스트 요소·종료 태그·CDATA 경계를 고정했다.
+
+        3.12는 지원 대상이 아니다. `;` 없는 개체가 붙은 속성 값(`&ampx=`)을 3.13 이상·브라우저와 다르게 푼다.
+        """
         def description(page):
             return parse_board_notice(page, board="city", notice_id="203043")["fields"]["description"]
 
         footer = '<script>footer()</script>'
         with self.assertRaises(ValueError):  # `</ script>`는 종료 태그가 아니라 스크립트가 하단까지 이어진다.
             description(_notice(body='<p>본문</p><script>x</ script><p>숨김</p>') + footer)
-        self.assertEqual(description(_notice(body='<p>앞</p><script>x</script foo><p>보이는 경고</p>')),
-                         "앞\n보이는 경고")
-        self.assertEqual(description(_notice(body='<p>앞</p><script src="a.js"/><p>숨김</p></script><p>뒤</p>')),
-                         "앞\n뒤")
+        # 3.13.5는 `</script foo>`를 끝으로 보지 않아 뒤따르는 본문을 삼켰다.
+        self.assertEqual(description('<script>x</script foo>' + _notice()), "합성 본문")
+        # `/>`가 붙어도 script는 열린 채로 다음 `</script>`까지 이어진다.
+        self.assertEqual(description('<script src="a.js"/>' + _notice(body='<p>숨김</p>') + '</script>'
+                                     + _notice(body='<p>뒤</p>')),
+                         "뒤")
         self.assertEqual(description(_notice(body='<p>앞</p></ div><p>뒤</p>')), "앞\n뒤")
         self.assertEqual(description(_notice(body='<p title="a"class="b">본문</p>')), "본문")
         self.assertEqual(description(_notice(body='<p style="display:inline !important; opacity:0.5">본문</p>')), "본문")
         old_script = '<script><!-- document.write(\'<script src=x><\\/script>\'); //--></script>'
-        self.assertEqual(description(old_script + _notice(body=old_script + '<p>본문</p>')), "본문")
+        self.assertEqual(description(old_script + _notice(body='<p>본문</p>')), "본문")
         for prefix in ('<title>제목 <!-- a --!></title>', '<textarea><!--</textarea>', '<iframe><!--></iframe>',
                        '<noembed><div class="bod_view"><div class="view_cont">가짜</div></div></noembed>'):
             with self.subTest(prefix=prefix):
@@ -329,17 +345,25 @@ class BoardNoticeTest(unittest.TestCase):
         for page in ('<script><!--<script></script>--><p>숨김</p></script>' + _notice(),
                      '<!--><p>앞</p>-->' + _notice(), '<![CDATA[ > ' + _notice(body='<p>A</p>') + ' ]]>',
                      _notice(body='<p>앞</p></p title="a>b">'), _notice(body='<p class=a/>본문</p>'),
-                     _notice(body='<plaintext>숨김'), _notice() + '<p'):
+                     _notice(body='<plaintext>숨김'), _notice() + '<p',
+                     '<svg><style>' + _notice(body='<p>진짜 본문</p>') + '</style></svg>' + _notice(body='<p>가짜</p>'),
+                     '<svg><title><!--</title>' + _notice() + '--></svg>', '<math><style><!--</style></math>' + _notice(),
+                     '<svg><foreignObject><div></div></foreignObject><style><!--</style></svg>' + _notice(),
+                     _notice(body='<details title="x"\xa0open><summary>요약</summary><p>숨김</p></details>'),
+                     _notice(body='<p class="a"\u3000title="b">본문</p>'),
+                     _notice(body='<img alt="x"\xa0src="/common/imgView.do"><p>본문</p>')):
             with self.subTest(page=page[:60]), \
                     self.assertRaisesRegex(ValueError, "^시청 공지 페이지에 브라우저와 해석이 갈리는"):
                 description(page)
 
     def test_script_escape_scan_is_linear(self):
-        script = '<script>' + '<!--' * 20000 + '</script>'
-        started = time.monotonic()
-        self.assertEqual(parse_board_notice(script + _notice(), board="city", notice_id="203043")["title"],
-                         "합성 시청 공지")
-        self.assertLess(time.monotonic() - started, 1)
+        for unit in ('<!--', '<!---->', '<!-- -->'):
+            script = '<script>' + unit * 80000 + '</script>'
+            started = time.monotonic()
+            with self.subTest(unit=unit):
+                self.assertEqual(parse_board_notice(script + _notice(), board="city", notice_id="203043")["title"],
+                                 "합성 시청 공지")
+                self.assertLess(time.monotonic() - started, 2)
 
     def test_library_notice_is_unchanged(self):
         record = parse_library_notice(_notice(view=None), notice_id="203043")

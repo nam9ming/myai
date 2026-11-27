@@ -70,17 +70,22 @@ _MARKUP_ERROR = '{} 페이지에 브라우저와 해석이 갈리는 태그·주
 _BODY_TAGS = frozenset('a abbr address article aside b bdi bdo big blockquote br caption center cite code col colgroup '
                        'dd del details dfn div dl dt em figcaption figure font footer form h1 h2 h3 h4 h5 h6 header '
                        'hr i img input ins kbd label li main mark nav ol p pre q s samp script section small span '
-                       'strike strong sub summary sup table tbody td template tfoot th thead tr tt u ul var wbr'.split())
+                       'strike strong sub summary sup table tbody td tfoot th thead tr tt u ul var wbr'.split())
 _BODY_ATTRS = frozenset('abbr action align alt bgcolor border cellpadding cellspacing cite class color colspan datetime '
                         'dir face headers height href id lang method name onclick open rel reversed rowspan scope size '
                         'span src start style summary target title type valign value width'.split())
-_DISPLAY_ATTRS = ('style', 'class')
+_DISPLAY_ATTRS = ('style', 'class', 'type')
 # 브라우저와 Python 버전이 모두 같게 읽는 시작 태그 문법만 받는다(속성 사이 공백은 따옴표 뒤에서만 생략 가능).
+# 따옴표 밖의 유니코드 공백(\xa0 등)은 Python 3.13.5만 속성 구분자로 읽어 받지 않는다.
 _STRICT_START_TAG = re.compile(
-    r'<[a-zA-Z][^\t\n\f\r />]*'
-    r'(?:(?:[\t\n\f\r ]+|(?<=["\']))[^\t\n\f\r "\'<>/=`]+'
-    r'(?:[\t\n\f\r ]*=[\t\n\f\r ]*(?:"[^"]*"|\'[^\']*\'|[^\t\n\f\r "\'=<>`/]+(?=[\t\n\f\r >])))?)*'
+    r'<[a-zA-Z][^\s/>]*'
+    r'(?:(?:[\t\n\f\r ]+|(?<=["\']))[^\s"\'<>/=`]+'
+    r'(?:[\t\n\f\r ]*=[\t\n\f\r ]*(?:"[^"]*"|\'[^\']*\'|[^\s"\'=<>`/]+(?=[\t\n\f\r >])))?)*'
     r'[\t\n\f\r ]*/?>')
+# 본문 안 script는 실제 본문에 있던 첨부 파일용 외부 스크립트만 받는다. 실행 결과는 해석하지 않는다.
+_BODY_SCRIPT = re.compile(r'(?:/edu)?/(?:dwr/(?:interface/EgovFileMngDwr|engine|util)|common/js/common/EgovFileUtils)\.js')
+# svg·math 안(외부 콘텐츠)에서는 브라우저가 style·title 등을 원문 텍스트로 읽지 않는다.
+_FOREIGN_TAGS = ('svg', 'math')
 # _NoticeParser.CDATA_CONTENT_ELEMENTS: 브라우저가 내용을 원문 텍스트로 읽는 요소. Python 3.13.5는 script·style만,
 # 3.14는 일부만 그렇게 읽어 결과가 달랐다(noscript는 스크립트를 켠 브라우저 기준).
 _RAW_TEXT_TAGS = ('script', 'style', 'xmp', 'iframe', 'noembed', 'noframes', 'noscript', 'title', 'textarea')
@@ -98,7 +103,9 @@ _FONT_SIZE_WORDS = frozenset('xx-small x-small small medium large x-large xx-lar
 _FONT_WEIGHTS = frozenset(['normal', 'bold', 'bolder', 'lighter', 'inherit'] + [str(n) for n in range(100, 1000, 100)])
 # 단위별 하한(이상)과 허용 음수 크기(미만). 단위 없는 값은 '' 키로 다룬다.
 _NON_NEGATIVE = {'': 0}
-_SPACING = {'px': 10, 'pt': 10, 'em': 1, 'rem': 1}
+_SPACING = {'px': 3, 'pt': 3, 'em': 0.2, 'rem': 0.2}
+_WORD_SPACING = {'px': 1, 'pt': 1}
+_SPACING_MAXIMUM = {'px': 20, 'pt': 20, 'em': 1, 'rem': 1}
 _INDENT = {'px': 100, 'pt': 100, 'em': 5, 'rem': 5}
 _SIZE_MINIMUM = {'px': 10, 'pt': 10, 'em': 1, 'rem': 1, '%': 10}
 _LINE_HEIGHT_MINIMUM = {'': 0.5, 'px': 5, 'pt': 5, 'em': 0.5, 'rem': 0.5, '%': 50}
@@ -158,8 +165,9 @@ _STYLE_RULES = {
                     lambda v: _dimensions(v, _BOX)),
     **dict.fromkeys(('margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left'),
                     lambda v: _dimensions(v, _BOX, _INDENT, keywords=('auto',))),
-    **dict.fromkeys(('letter-spacing', 'word-spacing'),
-                    lambda v: v == 'normal' or _dimensions(v, _BOX, _SPACING, count=1)),
+    # 간격은 실제 값(글자 -1.4pt~0, 낱말 0px) 가까이만 받는다. 큰 음수는 글자를 한 자리에 겹친다.
+    'letter-spacing': lambda v: v == 'normal' or _dimensions(v, _BOX, _SPACING, count=1, maximum=_SPACING_MAXIMUM),
+    'word-spacing': lambda v: v == 'normal' or _dimensions(v, _BOX, _WORD_SPACING, count=1, maximum=_SPACING_MAXIMUM),
     'text-indent': lambda v: _dimensions(v, _BOX, _INDENT, count=1, maximum=_INDENT),
     **dict.fromkeys(('width', 'height', 'max-width', 'max-height'),
                     lambda v: v in ('auto', 'none') or _dimensions(v, _SIZE_MINIMUM, count=1)),
@@ -176,7 +184,7 @@ _STYLE_RULES = {
     'display': lambda v: v in _DISPLAY_VALUES,
     'opacity': lambda v: bool(re.fullmatch(_NUMBER, v)) and 0.5 <= float(v) <= 1,
     'overflow': lambda v: v in ('visible', 'auto', 'hidden'),
-    '-webkit-text-stroke-width': lambda v: _dimensions(v, {'px': 0}, count=1, maximum={'px': 5}),
+    '-webkit-text-stroke-width': lambda v: _dimensions(v, {'px': 0}, count=1, maximum={'px': 1}),
     **dict.fromkeys(('orphans', 'widows'), lambda v: v.isascii() and v.isdigit()),
     # 글꼴 이름은 함수·이스케이프 없이 글자만 받는다.
     'font-family': lambda v: bool(re.fullmatch(r'[\w\s\'",.-]+', v)),
@@ -228,6 +236,9 @@ def _unsafe_body_tag(tag: str, attrs: dict, names: list[str]) -> bool:
     return (tag not in _BODY_TAGS or any(names.count(name) > 1 for name in _DISPLAY_ATTRS)
             or any(name not in _BODY_ATTRS and not name.startswith('data-') for name in names)
             or (tag == 'details' and 'open' not in attrs)
+            # 같은 name의 details는 하나만 열린다. 실제 본문의 name은 form·input에만 있었다.
+            or ('name' in attrs and tag not in ('a', 'form', 'input'))
+            or (tag == 'script' and (names != ['src'] or not _BODY_SCRIPT.fullmatch(attrs['src'] or '')))
             or (tag == 'input' and (attrs.get('type') or '').lower() != 'hidden')
             or not _style_allowed(attrs.get('style') or ''))
 
@@ -247,8 +258,8 @@ def _ends_double_escaped(data: str) -> bool:
             continue
         end = data.find('-->', i)
         if state == 'escaped':
-            match = _SCRIPT_OPEN.search(data, i)
-            if match and (end < 0 or match.start() < end):
+            match = _SCRIPT_OPEN.search(data, i, end if end >= 0 else len(data))
+            if match:
                 state, i = 'double', match.end()
                 continue
         if end < 0:
@@ -286,6 +297,7 @@ class _NoticeParser(HTMLParser):
         self.section = None
         self.section_depth = 0
         self.hidden_depth = 0
+        self.foreign_depth = 0
         self.attachment_open = False
         self.review_flags = set()
 
@@ -327,9 +339,13 @@ class _NoticeParser(HTMLParser):
         return super().parse_html_declaration(i)
 
     def handle_startendtag(self, tag, attrs):
-        # 브라우저는 빈 요소가 아닌 태그의 `/>`를 무시한다. 원문 텍스트 요소도 여기서 내용 읽기를 시작한다.
+        # HTML에서 브라우저는 빈 요소가 아닌 태그의 `/>`를 무시하고, 원문 텍스트 요소도 여기서 내용 읽기를 시작한다.
+        # svg·math 안과 `<svg/>`·`<math/>` 자신은 `/>`에서 닫힌다.
+        foreign = self.foreign_depth
         self.handle_starttag(tag, attrs)
-        if tag in self.CDATA_CONTENT_ELEMENTS:
+        if tag in _FOREIGN_TAGS:
+            self.foreign_depth -= 1
+        elif tag in self.CDATA_CONTENT_ELEMENTS and not foreign:
             self.set_cdata_mode(tag)
 
     def handle_starttag(self, tag, attrs):
@@ -337,6 +353,10 @@ class _NoticeParser(HTMLParser):
         if tag == 'plaintext' or not _STRICT_START_TAG.fullmatch(self.get_starttag_text() or ''):
             raise ValueError(_MARKUP_ERROR.format(self.label))
         names = [name for name, _ in attrs]
+        if tag in _FOREIGN_TAGS:
+            # shortcut: 브라우저가 div 등에서 svg를 닫는 탈출 규칙은 따라 하지 않는다. foreignObject 안에서는 닫지 않아
+            # 깊이를 줄이면 숨김을 받게 된다. 깊이를 크게 볼 뿐이라 원문 텍스트 거부만 늘어난다.
+            self.foreign_depth += 1
         view_form = tag == 'form' and ('id', 'viewForm') in attrs
         attrs = dict(attrs)
         classes = (attrs.get('class') or '').split()
@@ -414,6 +434,8 @@ class _NoticeParser(HTMLParser):
                 self.hidden_depth += 1
 
     def handle_endtag(self, tag):
+        if tag in _FOREIGN_TAGS and self.foreign_depth:
+            self.foreign_depth -= 1
         if not self.tags:
             if self.hidden_depth and tag in _HIDDEN_TAGS:
                 self.hidden_depth -= 1
@@ -473,6 +495,12 @@ class _NoticeParser(HTMLParser):
     def handle_data(self, data):
         if self.cdata_elem == 'script' and _ends_double_escaped(data):
             raise ValueError(_MARKUP_ERROR.format(self.label))
+        if self.cdata_elem and self.foreign_depth and '<' in data:
+            # 브라우저는 svg·math 안의 이 내용을 태그·주석으로 읽는다. 글자만 있을 때는 두 해석이 같다.
+            raise ValueError(_MARKUP_ERROR.format(self.label))
+        if self.cdata_elem == 'script' and self.tags and data.strip():
+            # 본문 안 인라인 스크립트는 읽는 도중 실행되어 뒤따르는 본문을 숨길 수 있다.
+            raise ValueError(_HIDDEN_ERROR.format(self.label))
         if self.script is not None and not self.tags and self.hidden_depth == 1:
             self.script.append(data)
         if self.section and not self.hidden_depth:
