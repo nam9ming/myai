@@ -308,7 +308,7 @@ class BoardNoticeTest(unittest.TestCase):
             '<p style="opacity:0.4">숨김</p>',
             f'<img width="0" height="0" src="{IMAGE}" alt="숨은 그림">', f'<img height="0" src="{IMAGE}">',
             f'<img width="0" width="100" src="{IMAGE}">', '<p><font size="2" size="1">숨김</font></p>',
-            '<table cellpadding="99999"><tr><td>밀린 문구</td></tr></table>', '<p align="center" align="left">본문</p>', '<p style="-webkit-text-fill-color:transparent">숨김</p>',
+            '<table cellpadding="99999"><tr><td>밀린 문구</td></tr></table>', '<table width="9999"><tr><td>밀린 문구</td></tr></table>', '<p align="center" align="left">본문</p>', '<p style="-webkit-text-fill-color:transparent">숨김</p>',
             '<template><svg><style></template>보이는 문구</style></svg></template><p>끝</p>',
             '<p>앞</p><script>document.write(\'<div hidden>\')</script><span>숨은 문구</span>',
             '<script src="https://invalid.example/x.js"></script><p>본문</p>', '<script></script><p>본문</p>',
@@ -376,7 +376,13 @@ class BoardNoticeTest(unittest.TestCase):
                                notice_id="203043")
         self.assertLess(time.monotonic() - started, 2)
         deep = '<script>var yh = {"a": ' + '[' * 100000 + ']' * 100000 + '};</script>'
-        self.assertEqual(parse_board_media(deep + _notice(), board="city", notice_id="203043"), [])
+        with self.assertRaisesRegex(ValueError, "페이지 설정"):
+            parse_board_media(deep + _notice(), board="city", notice_id="203043")
+        started = time.monotonic()
+        attrs = ' '.join(f'data-a{n}="1"' for n in range(40000))
+        self.assertEqual(parse_board_notice(_notice(body=f'<p {attrs}>본문</p>'), board="city",
+                                            notice_id="203043")["fields"]["description"], "본문")
+        self.assertLess(time.monotonic() - started, 3)  # 속성 중복 검사가 속성 수에 비례해야 한다.
         for unit in ('<!--', '<!---->', '<!-- -->'):
             script = '<script>' + unit * 80000 + '</script>'
             started = time.monotonic()

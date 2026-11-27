@@ -75,7 +75,8 @@ _BODY_ATTRS = frozenset('abbr action align alt bgcolor border cellpadding cellsp
                         'dir face headers height href id lang method name onclick open rel reversed rowspan scope size '
                         'span src start style summary target title type valign value width'.split())
 # 크기·여백 속성은 숫자만 받는다(0이나 큰 값은 그림·글자를 감추거나 밀어낸다). 실제 그림 크기는 500 이상이었다.
-_SIZE_ATTR = re.compile(r'[1-9]\d{1,3}|(?:[1-9]\d|100)%')
+_IMG_SIZE_ATTR = re.compile(r'[1-9]\d{1,3}|(?:[1-9]\d|100)%')
+_SIZE_ATTR = re.compile(r'[1-9]\d{1,2}|(?:[1-9]\d|100)%')
 _SPACING_ATTR = re.compile(r'\d{1,2}')
 # 브라우저와 Python 버전이 모두 같게 읽는 시작 태그 문법만 받는다(속성 사이 공백은 따옴표 뒤에서만 생략 가능).
 # 따옴표 밖의 유니코드 공백(\xa0 등)은 Python 3.13.5만 속성 구분자로 읽어 받지 않는다.
@@ -238,8 +239,10 @@ def _unsafe_body_tag(tag: str, attrs: dict, names: list[str]) -> bool:
     속성이 중복되면 이 파서는 마지막 값을, 브라우저는 첫 값을 쓰므로 중복 자체를 거부한다.
     src·href 중복은 매체 파서가 주소를 확정하지 않는 검토 후보로 따로 처리한다.
     """
-    return (tag not in _BODY_TAGS or any(names.count(name) > 1 for name in set(names) - {'src', 'href'})
-            or any(name in attrs and not _SIZE_ATTR.fullmatch(attrs[name] or '') for name in ('width', 'height'))
+    others = [name for name in names if name not in ('src', 'href')]
+    size = _IMG_SIZE_ATTR if tag == 'img' else _SIZE_ATTR  # 그림만 실제 크기(500~1920)를 받고, 다른 태그는 999까지다.
+    return (tag not in _BODY_TAGS or len(set(others)) != len(others)
+            or any(name in attrs and not size.fullmatch(attrs[name] or '') for name in ('width', 'height'))
             or any(name in attrs and not _SPACING_ATTR.fullmatch(attrs[name] or '')
                    for name in ('cellpadding', 'cellspacing', 'border'))
             or any(name not in _BODY_ATTRS and not name.startswith('data-') for name in names)
@@ -650,9 +653,12 @@ def _declared_context_paths(scripts: list[str]) -> list[object]:
         match = _PAGE_CONFIG.fullmatch(script)
         if match is None:
             continue
+        if len(match[1]) > 4096:
+            # 실제 설정은 227자였다. 깊은 중첩은 Python 버전마다 해석 한계가 달라 선언 검사를 우회하므로 받지 않는다.
+            raise ValueError('페이지 설정 스크립트가 너무 깁니다.')
         try:
             config = json.loads(match[1], object_pairs_hook=_unique_object)
-        except (ValueError, RecursionError):  # 깊은 중첩은 3.13에서만 RecursionError가 나 선언이 아닌 것으로 같게 다룬다.
+        except ValueError:
             continue
         if isinstance(config, dict) and 'contextPath' in config:
             values.append(config['contextPath'])
