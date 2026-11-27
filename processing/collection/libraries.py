@@ -345,7 +345,10 @@ class _NoticeParser(HTMLParser):
         self.handle_starttag(tag, attrs)
         if tag in _FOREIGN_TAGS:
             self.foreign_depth -= 1
-        elif tag in self.CDATA_CONTENT_ELEMENTS and not foreign:
+        elif tag in self.CDATA_CONTENT_ELEMENTS:
+            if foreign:
+                # foreignObject 같은 통합 지점에서는 브라우저가 `/>`를 무시하고 원문 텍스트를 시작한다. 위치를 가리지 않고 거부한다.
+                raise ValueError(_MARKUP_ERROR.format(self.label))
             self.set_cdata_mode(tag)
 
     def handle_starttag(self, tag, attrs):

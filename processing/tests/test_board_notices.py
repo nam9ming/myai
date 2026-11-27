@@ -349,6 +349,8 @@ class BoardNoticeTest(unittest.TestCase):
                      '<svg><style>' + _notice(body='<p>진짜 본문</p>') + '</style></svg>' + _notice(body='<p>가짜</p>'),
                      '<svg><title><!--</title>' + _notice() + '--></svg>', '<math><style><!--</style></math>' + _notice(),
                      '<svg><foreignObject><div></div></foreignObject><style><!--</style></svg>' + _notice(),
+                     '<svg><foreignObject><style/>' + _notice(body='<p>숨김</p>') + '</style></foreignObject></svg>'
+                     + _notice(body='<p>뒤</p>'),
                      _notice(body='<details title="x"\xa0open><summary>요약</summary><p>숨김</p></details>'),
                      _notice(body='<p class="a"\u3000title="b">본문</p>'),
                      _notice(body='<img alt="x"\xa0src="/common/imgView.do"><p>본문</p>')):
