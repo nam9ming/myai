@@ -88,7 +88,7 @@ class EduBoardTest(unittest.TestCase):
         page = _edu_notice(attachment=ATTACHMENT)
         self.assertEqual(parse_board_media(page, board="edu", notice_id="3838")[0]["source_url"],
                          f"https://www.anseong.go.kr/edu/cmm/fms/FileDown.do?atchFileId={ATTACH}&fileSn={FILE_SN}")
-        repeated = page.replace("</script>", '</script><script>var x = {"contextPath": "/edu"};</script>', 1)
+        repeated = page.replace("</script>", '</script><script>var yh = {"contextPath": "/edu"};</script>', 1)
         for variant in (_edu_notice(attachment=ATTACHMENT, context=None), repeated,
                         _edu_notice(attachment=ATTACHMENT, context=""), _edu_notice(attachment=ATTACHMENT, context="/portal")):
             with self.subTest(variant=variant[:60]), self.assertRaisesRegex(ValueError, "경로"):
@@ -113,6 +113,20 @@ class EduBoardTest(unittest.TestCase):
         self.assertEqual(parse_board_media(city, board="city", notice_id="3838"), [])
         inner = _edu_notice(attachment=ATTACHMENT).replace("<p>합성 본문</p>", f"<p>본문</p><script>var y = {fake};</script>")
         self.assertEqual(len(parse_board_media(inner, board="edu", notice_id="3838")), 1)
+
+    def test_context_path_requires_the_page_configuration_object(self):
+        no_config = _edu_notice(attachment=ATTACHMENT, context=None)
+        for script in ('<script>// {"contextPath": "/edu"}\n</script>',
+                       '<script>var note = \'{"contextPath": "/edu"}\';</script>',
+                       '<script>var yh = {"contextPath": "/edu"}; // 설정</script>',
+                       '<script>var yh = {"contextPath": "/edu", "contextPath": "/edu"};</script>',
+                       '<script>var yh = {"contextPath": 1};</script>'):
+            with self.subTest(script=script), self.assertRaisesRegex(ValueError, "경로"):
+                parse_board_media(script + no_config, board="edu", notice_id="3838")
+        mixed = '<script>// {"contextPath": "/portal"}\n</script>' + _edu_notice(attachment=ATTACHMENT)
+        self.assertEqual(len(parse_board_media(mixed, board="edu", notice_id="3838")), 1)
+        city = '<script>// {"contextPath": "/edu"}\n</script>' + _notice("3838")
+        self.assertEqual(parse_board_media(city, board="city", notice_id="3838"), [])
 
     @patch("processing.collection.official_web.HTTPSConnection")
     def test_edu_requests_use_edu_paths(self, connect):

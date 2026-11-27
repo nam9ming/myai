@@ -2,6 +2,7 @@ import csv
 from datetime import date
 from html.parser import HTMLParser
 from io import StringIO
+import json
 import re
 
 from . import official_url
@@ -325,7 +326,31 @@ def _parse_notice(text: str, notice_id: str, parser: _NoticeParser) -> str:
     return title
 
 
-_CONTEXT_PATH = re.compile(r'"contextPath"\s*:\s*"([^"]*)"')
+# 페이지 설정은 `<script>var yh = {...};</script>` 하나로 선언되고 객체는 JSON 형식이다.
+_PAGE_CONFIG = re.compile(r'\s*var\s+yh\s*=\s*(\{.*\})\s*;\s*', re.S)
+
+
+def _unique_object(pairs):
+    keys = [key for key, _ in pairs]
+    if len(set(keys)) != len(keys):
+        raise ValueError('duplicate key')
+    return dict(pairs)
+
+
+def _declared_context_paths(scripts: list[str]) -> list[object]:
+    """설정 스크립트 전체가 JSON 객체 대입일 때만 contextPath를 선언으로 본다. 주석·문자열·다른 스크립트는 무시한다."""
+    values = []
+    for script in scripts:
+        match = _PAGE_CONFIG.fullmatch(script)
+        if match is None:
+            continue
+        try:
+            config = json.loads(match[1], object_pairs_hook=_unique_object)
+        except ValueError:
+            continue
+        if isinstance(config, dict) and 'contextPath' in config:
+            values.append(config['contextPath'])
+    return values
 
 
 def _media(text: str, notice_id: str, parser: '_MediaParser') -> list[dict]:
@@ -334,7 +359,7 @@ def _media(text: str, notice_id: str, parser: '_MediaParser') -> list[dict]:
     루트가 아닌 사이트 경로를 쓰는 게시판은 그 선언이 정확히 한 번 있어야 주소를 만든다.
     """
     _parse_notice(text, notice_id, parser)
-    declared = [value for script in parser.scripts for value in _CONTEXT_PATH.findall(script)]
+    declared = _declared_context_paths(parser.scripts)
     if (any(value != parser.context_path for value in declared)
             or (parser.context_path and len(declared) != 1)):
         raise ValueError(parser.label + ' 페이지의 사이트 경로가 게시판과 일치하지 않습니다.')
