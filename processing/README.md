@@ -129,7 +129,43 @@ python3.13 -B -m processing.collection.batch living \
 
 기본 한도는 3페이지·20건이며 최대 20페이지·80건까지 지정할 수 있다. 요청을 하나씩 보내며 사이에 0.5초를 둔다. 목록 응답은 건당 2MiB, 상세는 건당 8MiB까지 받는다. HTTP 401·403·429·503을 받으면 이후 요청을 멈춘다. 조회 중 목록 건수나 페이지 수가 바뀌거나 ID가 중복되면 해당 페이지는 원본과 실패 사유를 보관하고 이전 페이지에서 확인한 번호만 사용한다.
 
-`data/private/collection-batches/<name>/`에 포털 CSV, 받은 목록·상세 원본, 성공한 상세의 비교 결과를 저장한다. `batch.json`에는 각 원본의 해시와 수신 시각, 목록·상세 처리 상태가 있다. 맨 마지막에 `batch.json`이 생긴 묶음만 사용한다. 종료 0은 수집 중 보고된 페이지와 선택한 상세를 모두 처리한 경우, 2는 한도 도달 또는 일부 실패를 기록한 경우, 1은 입력·보관 오류다. 사이트 목록의 전체 건수가 같아도 수집 중 게시물이 바뀔 수 있다. 정기 실행, 첨부 수집, D03 등록·승인·발행은 후속 단계다.
+`data/private/collection-batches/<name>/`에 포털 CSV, 받은 목록·상세 원본, 성공한 상세의 비교 결과를 저장한다. `batch.json`에는 각 원본의 해시와 수신 시각, 목록·상세 처리 상태가 있다. 맨 마지막에 `batch.json`이 생긴 묶음만 사용한다. 종료 0은 수집 중 보고된 페이지와 선택한 상세를 모두 처리한 경우, 2는 한도 도달 또는 일부 실패를 기록한 경우, 1은 입력·보관 오류다. 사이트 목록의 전체 건수가 같아도 수집 중 게시물이 바뀔 수 있다. 정기 실행과 첨부 수집은 후속 단계다.
+
+### 수집 원본을 D03 등록 입력으로 준비하기
+
+단건 수집은 `archive_kind=single`과 `capture.json`, 목록 수집은 `archive_kind=batch`와 `batch.json`을 사용한다. 등록할 포털 CSV는 `asset=portal`, 웹 상세는 게시물 번호를 지정한다. 부분 수집 묶음에서도 파싱에 성공한 상세를 선택할 수 있다. 명령은 수집 기록의 원본 해시와 파일을 대조하고 웹 상세의 게시물 번호를 다시 확인한다.
+
+다음은 이미 보관한 `synthetic-capture` 묶음의 합성 예다. 실제 등록 입력은 담당자가 원본·개인정보·추출 대상 문구를 대조해 작성한다. 게시일·공식 문서번호 미상은 `null`로 둔다. 웹 수신 시각은 수집 기록을 사용하므로 `collected_at`을 `null`로 둔다. 포털 CSV는 실제 다운로드 출처를 담당자가 확인하고, `official_url`에는 수집 기록의 `portal.catalog_url`, `collected_at`에는 실제로 받은 시각을 입력한다. `redaction_log`는 제거 위치와 범주를 `location`, `category`로 적고 제거한 실제 값은 적지 않는다.
+
+```json
+{
+  "archive_kind": "single",
+  "archive_name": "synthetic-capture",
+  "data_kind": "synthetic",
+  "documents": [
+    {
+      "asset": "17",
+      "official_url": "https://www.anseong.go.kr/event/program/popup/detail.do?idx=17",
+      "document_id": "10000000-0000-4000-8000-000000000001",
+      "document_version_id": "10000000-0000-4000-8000-000000000002",
+      "version_no": 1,
+      "publisher": "합성 기관",
+      "title": "합성 공지",
+      "published_date": null,
+      "official_number": null,
+      "collected_at": null,
+      "cleaned_text": "사람이 확인한 합성 본문",
+      "redaction_log": []
+    }
+  ]
+}
+```
+
+```sh
+python3.13 -B -m processing.collection.d03 --input data/private/source-review-input.json --name march-reviewed
+```
+
+`data/private/collection-d03/<name>/`에 검토 입력의 원본 `review.json`과 등록 입력 `source-import.json`을 저장한다. 같은 이름은 덮어쓰지 않는다. 제목·본문의 유니코드 NFC와 본문 줄바꿈을 정규화한다. 등록 입력에 원본 바이트나 다른 게시물 후보의 문구를 복사하지 않는다. 검토 입력과 등록 입력은 각각 8MiB, 수집 기록은 64MiB까지 사용한다. 수집 기록 한도를 넘으면 완료 파일 없이 이미 받은 원본을 남긴다. 수집 디렉터리와 원본·기록은 실행 사용자 소유와 비공개 권한을 유지한다. D03 초기 상태는 `pending`·`unchecked`다. [기존 Java 등록 명령](../backend/docs/extraction-run-import.md#수집-묶음에서-준비한-원문-등록)을 명시적으로 실행해야 DB에 반영된다.
 
 ## 시민 수동 추출·보관
 

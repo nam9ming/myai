@@ -56,7 +56,7 @@ def day(value, path, kind):
         raise ExtractionError('EXTRACTION_INVALID', path, kind) from None
 
 
-def decode(content, kind):
+def decode(content, kind, *, max_bytes=MAX_BYTES):
     def pairs(entries):
         result = {}
         for key, value in entries:
@@ -78,7 +78,7 @@ def decode(content, kind):
                 tree(key, depth + 1)
                 tree(entry, depth + 1)
 
-    require(type(content) is bytes and len(content) <= MAX_BYTES, kind=kind, code='JSON_LIMIT')
+    require(type(content) is bytes and len(content) <= max_bytes, kind=kind, code='JSON_LIMIT')
     try:
         value = json.loads(content.decode('utf-8', errors='strict'), object_pairs_hook=pairs,
                            parse_float=Decimal,
