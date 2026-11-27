@@ -83,7 +83,7 @@ python3.13 -m processing.extraction verify 71fb66f0-e610-4f9c-8f26-4bb77655ee8c
 
 ## 포털·공식 웹 수집 원본 비교 시범
 
-전국문화축제 CSV와 안성행사알림이 상세 JSON, 전국도서관 CSV와 안성시 도서관 공지 상세 HTML을 비교한다. 원본을 비공개 작업 디렉터리에 준비하고 저장소 루트에서 실행한다. 포털 CSV는 EUC-KR과 UTF-8, 공식 웹 상세는 UTF-8을 지원한다.
+전국문화축제 CSV와 안성행사알림이 상세 JSON, 전국도서관 CSV와 안성시 도서관 공지 상세 HTML을 비교한다. 원본을 비공개 작업 디렉터리에 준비하고 저장소 루트에서 실행한다. 포털 CSV는 EUC-KR과 UTF-8, 공식 웹 상세는 UTF-8을 지원한다. 이 절의 수집 명령은 모두 인자 오류를 종료 1로 알리고, 종료 2는 원본이나 실패 기록을 남긴 부분 결과에만 쓴다.
 
 ```sh
 python3.13 -B -m processing.collection culture \

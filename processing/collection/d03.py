@@ -1,6 +1,5 @@
 """수집 원본에 수동 검토 자료를 연결해 D03 등록 입력을 만든다."""
 
-import argparse
 from datetime import datetime
 import hashlib
 import json
@@ -14,6 +13,7 @@ from processing.extraction.validation import MAX_BYTES, day, decode, require, sh
 
 from .__main__ import read_raw
 from .capture import CAPTURE_ROOT, bundle_directory, validate_name, write_complete, write_new
+from .cli import CollectionArguments
 from .d03_sources import capture_assets
 
 PRIVATE_ROOT = CAPTURE_ROOT.parent
@@ -147,7 +147,7 @@ def prepare(input_path: Path, name: str, private_root: Path) -> dict:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = CollectionArguments(description=__doc__)
     parser.add_argument("--input", required=True, type=Path)
     parser.add_argument("--name", required=True)
     args = parser.parse_args()

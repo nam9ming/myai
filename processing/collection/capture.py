@@ -1,6 +1,5 @@
 """포털 CSV와 공식 웹 상세를 비공개 수집 묶음으로 보관한다."""
 
-import argparse
 from contextlib import ExitStack, contextmanager
 from datetime import UTC, datetime
 import hashlib
@@ -20,6 +19,7 @@ from .__main__ import (
     decode_input,
     read_raw,
 )
+from .cli import CollectionArguments
 from .official_web import DETAIL_MAX_BYTES, detail_url, fetch_detail
 
 CAPTURE_ROOT = Path(__file__).resolve().parents[2] / "data" / "private" / "collection"
@@ -192,7 +192,7 @@ def capture(category: str, portal_file: Path, web_id: str, name: str, root: Path
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = CollectionArguments(description=__doc__)
     parser.add_argument("category", choices=SOURCE_PAGES)
     parser.add_argument("--portal-csv", required=True, type=Path)
     parser.add_argument("--web-id", required=True)

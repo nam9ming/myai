@@ -1,6 +1,5 @@
 """안성시청 공지 게시판의 목록과 상세를 비공개 묶음으로 보관한다."""
 
-import argparse
 import json
 from pathlib import Path
 import sys
@@ -8,6 +7,7 @@ from time import sleep
 
 from .batch import LIST_MAX_BYTES
 from .capture import CAPTURE_ROOT
+from .cli import CollectionArguments
 from .libraries import BOARD_PARSER_VERSION, parse_board_notice
 from .library_listing import parse_board_listing
 from .official_web import (
@@ -46,14 +46,8 @@ def capture_board_batch(name: str, batch_name: str, root: Path, *, start_page: i
                              start_page=start_page, max_pages=max_pages, max_items=max_items)
 
 
-class _Arguments(argparse.ArgumentParser):
-    def error(self, message):
-        self.print_usage(sys.stderr)
-        self.exit(1, f"{self.prog}: 입력 오류: {message}\n")
-
-
 def main() -> int:
-    parser = _Arguments(description=__doc__)
+    parser = CollectionArguments(description=__doc__)
     parser.add_argument("board", choices=BOARDS)
     parser.add_argument("--name", required=True)
     parser.add_argument("--start-page", type=int, default=1)

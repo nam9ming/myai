@@ -1,6 +1,5 @@
 """공공데이터포털 표준 API 응답과 비교용 CSV를 비공개로 보관한다."""
 
-import argparse
 import csv
 from datetime import UTC, datetime
 import hashlib
@@ -18,6 +17,7 @@ from .capture import (
     CAPTURE_ROOT, PORTAL_SECTION, bundle_directory, capture_timestamp, open_archive, read_capture_file, read_receipt,
     validate_name, write_new, write_receipt,
 )
+from .cli import CollectionArguments
 from .portal_format import csv_header, csv_row, parse_page
 from .portal_transport import fetch_portal_page, portal_endpoint, validate_service_key
 
@@ -159,7 +159,7 @@ def read_portal_snapshot(private_root: Path, name: str) -> tuple[bytes, dict]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = CollectionArguments(description=__doc__)
     parser.add_argument("category", choices=SOURCE_PAGES)
     parser.add_argument("--name", required=True)
     args = parser.parse_args()
