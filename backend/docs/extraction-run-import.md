@@ -28,6 +28,20 @@ D03 `private_content_ref`는 상대 raw_asset_path이며 절대 source-root는 D
 
 같은 버전의 확인 시도·사용권 변경은 [local-source-review](source-review.md)로 추가한다. 최초 D03 metadata·hash·블록·경로는 바뀌지 않으므로 기존 source 파일과 D05 전체 입력 대조·정확한 재실행을 유지한다. 운영 권한·확인만 갱신하려고 원래 source JSON이나 동결 D05를 편집하거나 AI 실행을 다시 만들지 않는다. 승인·공개는 별도 운영 상태를 검사하며 새 제한이 이미 공개한 snapshot을 자동 철회하지 않는다.
 
+### 수집 묶음에서 준비한 원문 등록
+
+[수집 원본 준비 명령](../../processing/README.md#수집-원본을-d03-등록-입력으로-준비하기)으로 생성한 입력도 기존 `source-import-v1` 경로를 사용한다. 원본 상대 경로는 `data/private/` 기준이다. 등록 입력과 참조한 기존 수집 원본을 함께 보존하고, 이 작업들의 `source-root`를 같은 위치로 유지한다.
+
+```sh
+java -jar backend/build/libs/myai-backend-0.1.0.jar \
+  --spring.profiles.active=local-import \
+  --myai.import.file=data/private/collection-d03/march-reviewed/source-import.json \
+  --myai.import.source-root=data/private \
+  --myai.import.actor=review-operator
+```
+
+Java는 원본 SHA-256을 재검증한 뒤 문서·버전만 등록한다. 같은 준비본은 동일 등록 결과를 재사용한다. 내용이 바뀐 문서는 기존 문서 ID, 새 버전 ID와 다음 버전 번호를 지정한다. 준비와 등록으로 사건·AI 실행·승인·공개본은 생성되지 않는다.
+
 ## 같은 문서의 추출 입력 준비
 
 AI 입력은 D03의 `data_kind/document_version_id/title/published_date`와 `block_index`를 `blocks`로 옮긴5키다. 전체 블록 순서·ID·페이지·텍스트와 metadata.preprocessing_version까지 저장된 D03과 같아야 한다. 현재는 전체 문서 입력이며 chunk 입력은 지원하지 않는다.

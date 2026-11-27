@@ -22,6 +22,8 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -563,6 +565,110 @@ class ExtractionRunMySqlTest {
         assertThat(repeated.importId()).isEqualTo(first.importId()); assertThat(counts()).isEqualTo(before);
         assertThat(jdbc.queryForObject("SELECT source_kind FROM import_batches WHERE import_id = ?", String.class, first.importId())).isEqualTo("source");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM document_versions WHERE document_version_id = ?", Long.class, batch.documents().getFirst().versionId())).isEqualTo(1);
+    }
+
+    @Test
+    void capturedPortalAndWebOriginalsRegisterAsPendingSourcesThroughPython() throws Exception {
+        Path privateRoot = root.toRealPath();
+        byte[] portalRaw = "축제명,소재지도로명주소\r\n합성 문화행사 갂,경기도 안성시 가상길 17\r\n"
+                .getBytes(Charset.forName("MS949"));
+        String webRaw = "{\"idx\":17,\"title\":\"합성 행사 원문 😀\",\"contents\":\"원문 자료\"}\n";
+        Files.write(privateRoot.resolve("portal.csv"), portalRaw);
+        Files.writeString(privateRoot.resolve("web.json"), webRaw);
+        var review = mapper.createObjectNode().put("archive_kind", "single")
+                .put("archive_name", "synthetic-capture").put("data_kind", "synthetic");
+        var documents = review.putArray("documents");
+        List<String> assets = List.of("portal", "17");
+        List<String> urls = List.of("https://www.data.go.kr/data/15013104/standard.do",
+                "https://www.anseong.go.kr/event/program/popup/detail.do?idx=17");
+        List<String> versionIds = List.of(UUID.randomUUID().toString(), UUID.randomUUID().toString());
+        List<String> reviewedTexts = List.of("사람 검토 포털 합성 본문 😀\n비용 정보 미기재",
+                "사람 검토 웹 합성 본문 😀\n안내에 적힌 합성 내용");
+        for (int i = 0; i < assets.size(); i++) {
+            var doc = documents.addObject().put("asset", assets.get(i)).put("official_url", urls.get(i))
+                    .put("document_id", UUID.randomUUID().toString()).put("document_version_id", versionIds.get(i))
+                    .put("version_no", 1).put("publisher", "합성 기관").put("title", "검토한 합성 자료")
+                    .putNull("published_date").putNull("official_number").put("cleaned_text", reviewedTexts.get(i));
+            if (i == 0) doc.put("collected_at", "2026-11-03T01:00:00Z");
+            else doc.putNull("collected_at");
+            doc.putArray("redaction_log");
+        }
+        Files.writeString(privateRoot.resolve("review.json"), review.toString());
+        Path diagnostics = privateRoot.resolve("prepare.log");
+        var process = new ProcessBuilder(PythonProbe.PYTHON, "-B", "-c", """
+                import sys
+                from pathlib import Path
+                from unittest.mock import patch
+                from processing.collection.capture import capture
+                from processing.collection.d03 import prepare
+
+                root = Path(sys.argv[1])
+                with patch("processing.collection.capture.fetch_detail", return_value=(root / "web.json").read_bytes()):
+                    assert capture("culture", root / "portal.csv", "17", "synthetic-capture",
+                                   root / "collection")["status"] == "parsed"
+                prepare(root / "review.json", "synthetic-prepared", root)
+                """, privateRoot.toString()).directory(PythonProbe.REPO.toFile())
+                .redirectErrorStream(true).redirectOutput(diagnostics.toFile()).start();
+        try {
+            assertThat(process.waitFor(20, TimeUnit.SECONDS)).isTrue();
+            assertThat(process.exitValue()).as("Python D03 준비 결과 %s", Files.readString(diagnostics)).isZero();
+        } finally {
+            if (process.isAlive()) process.destroyForcibly().waitFor(5, TimeUnit.SECONDS);
+        }
+
+        Path prepared = privateRoot.resolve("collection-d03/synthetic-prepared/source-import.json");
+        var before = counts();
+        var beforeExtractionRuns = jdbc.queryForObject("SELECT COUNT(*) FROM extraction_runs", Long.class);
+        Path webArchive = privateRoot.resolve("collection/synthetic-capture/web.json");
+        Files.writeString(webArchive, webRaw + " ");
+        try {
+            assertThatThrownBy(() -> reader.read(prepared, privateRoot))
+                    .isInstanceOfSatisfying(kr.ac.myai.backend.importing.ImportException.class, error -> {
+                        assertThat(error.code()).isEqualTo("IMPORT_VALIDATION_ERROR");
+                        assertThat(error.field()).isEqualTo("documents.raw_sha256");
+                    });
+        } finally {
+            Files.writeString(webArchive, webRaw);
+        }
+        var first = importer.importBatch(reader.read(prepared, privateRoot), "synthetic-source-collector");
+        var repeated = importer.importBatch(reader.read(prepared, privateRoot), "synthetic-source-collector");
+        assertThat(first.alreadyImported()).isFalse();
+        assertThat(first.documentVersionIds()).containsExactlyElementsOf(versionIds);
+        assertThat(first.revisionIds()).isEmpty();
+        assertThat(repeated.alreadyImported()).isTrue();
+        assertThat(repeated.importId()).isEqualTo(first.importId());
+        assertThat(repeated.documentVersionIds()).containsExactlyElementsOf(versionIds);
+        assertThat(counts()).isEqualTo(before);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM extraction_runs", Long.class)).isEqualTo(beforeExtractionRuns);
+        List<String> filenames = List.of("portal.csv", "web.json");
+        List<byte[]> originals = List.of(portalRaw, webRaw.getBytes(StandardCharsets.UTF_8));
+        String receiptTime = mapper.readTree(privateRoot.resolve("collection/synthetic-capture/capture.json").toFile())
+                .path("web_fetched_at").asText().replace("+00:00", "Z");
+        List<String> collectedAt = List.of("2026-11-03T01:00:00Z", receiptTime);
+        for (int i = 0; i < assets.size(); i++) {
+            String id = versionIds.get(i);
+            var row = jdbc.queryForMap("""
+                    SELECT d.source_url, v.private_content_ref, v.text_sha256, v.metadata_json
+                    FROM document_versions v JOIN documents d ON v.document_id = d.document_id
+                    WHERE v.document_version_id = ?
+                    """, id);
+            String expectedRef = "collection/synthetic-capture/" + filenames.get(i);
+            byte[] original = originals.get(i);
+            String reviewedText = reviewedTexts.get(i);
+            assertThat(row.get("source_url")).isEqualTo(urls.get(i));
+            assertThat(row.get("private_content_ref")).isEqualTo(expectedRef);
+            assertThat(Files.readAllBytes(privateRoot.resolve(expectedRef))).isEqualTo(original);
+            assertThat(row.get("text_sha256")).isEqualTo(ReviewedImportReader.sha256(reviewedText.getBytes(StandardCharsets.UTF_8)));
+            var metadata = mapper.readTree((String) row.get("metadata_json"));
+            var doc = metadata.path("document");
+            assertThat(metadata.path("data_kind").asText()).isEqualTo("synthetic");
+            assertThat(doc.path("raw_sha256").asText()).isEqualTo(ReviewedImportReader.sha256(original));
+            assertThat(doc.path("cleaned_text").asText()).isEqualTo(reviewedText);
+            assertThat(doc.path("collected_at").asText()).isEqualTo(collectedAt.get(i));
+            assertThat(doc.path("use_review").asText()).isEqualTo("pending");
+            assertThat(doc.path("check_result").asText()).isEqualTo("unchecked");
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM source_checks WHERE document_version_id=?", Long.class, id)).isZero();
+        }
     }
 
     @Test

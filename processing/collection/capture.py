@@ -21,6 +21,7 @@ from .__main__ import (
 from .official_web import DETAIL_MAX_BYTES, detail_url, fetch_detail
 
 CAPTURE_ROOT = Path(__file__).resolve().parents[2] / "data" / "private" / "collection"
+CAPTURE_RECEIPT_MAX_BYTES = 64 * 1024 * 1024
 
 
 @contextmanager
@@ -48,7 +49,7 @@ def bundle_directory(root: Path, name: str):
         os.close(root_fd)
 
 
-def write_new(directory: int, name: str, content: bytes) -> None:
+def write_new(directory: int, name: str, content: bytes | bytearray) -> None:
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
     with os.fdopen(os.open(name, flags, mode=0o600, dir_fd=directory), "wb") as stream:
         stream.write(content)
@@ -62,9 +63,19 @@ def validate_name(name: str) -> None:
 
 
 def write_receipt(directory: int, name: str, record: dict) -> None:
-    receipt = (json.dumps(record, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    receipt = bytearray()
+    for chunk in json.JSONEncoder(ensure_ascii=False, indent=2).iterencode(record):
+        encoded = chunk.encode("utf-8")
+        if len(receipt) + len(encoded) + 1 > CAPTURE_RECEIPT_MAX_BYTES:
+            raise ValueError("수집 완료 기록이 64 MiB를 초과했습니다.")
+        receipt.extend(encoded)
+    receipt.extend(b"\n")
+    write_complete(directory, name, receipt)
+
+
+def write_complete(directory: int, name: str, content: bytes | bytearray) -> None:
     temporary = name + ".tmp"
-    write_new(directory, temporary, receipt)
+    write_new(directory, temporary, content)
     os.link(temporary, name, src_dir_fd=directory, dst_dir_fd=directory, follow_symlinks=False)
     os.unlink(temporary, dir_fd=directory)
 
