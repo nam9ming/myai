@@ -1,4 +1,4 @@
-"""안성시청 공지 게시판의 목록과 상세를 비공개 묶음으로 보관한다."""
+"""안성시청·안성배움e 공지 게시판의 목록과 상세를 비공개 묶음으로 보관한다."""
 
 import json
 from pathlib import Path
@@ -23,7 +23,7 @@ RECORD_SCHEMA = "citizen-board-notice-v1"
 
 
 def board_source(name: str) -> WebSource:
-    _, _, label, _ = board(name)
+    label = board(name).label
     return WebSource(
         label=label,
         item_label="게시물",

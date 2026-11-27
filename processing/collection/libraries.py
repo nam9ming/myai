@@ -2,6 +2,7 @@ import csv
 from datetime import date
 from html.parser import HTMLParser
 from io import StringIO
+import json
 import re
 
 from . import official_url
@@ -66,9 +67,16 @@ _LIBRARY_VIEW = '/library/bbs/view.do?ptIdx=16&mId=0401010000'
 class _NoticeParser(HTMLParser):
     """`view_action`은 본문 영역 밖 `form#viewForm`의 게시판 주소다. 다른 게시판의 HTML을 같은 구조라는 이유로 받지 않는다."""
 
-    def __init__(self, label='도서관 공지', view_action=_LIBRARY_VIEW, require_view=False):
+    def __init__(self, label='도서관 공지', view_action=_LIBRARY_VIEW, require_view=False, title_class=None,
+                 context_path=''):
         super().__init__()
         self.label = label
+        self.title_class = title_class
+        self.context_path = context_path
+        self.title_format_changed = False
+        # 본문 영역 밖 최상위 <script>의 내용. 페이지 설정(contextPath)은 여기서만 읽는다.
+        self.scripts = []
+        self.script = None
         self.view_action = view_action
         self.require_view = require_view
         self.view_actions = []
@@ -88,6 +96,8 @@ class _NoticeParser(HTMLParser):
         attrs = dict(attrs)
         classes = (attrs.get('class') or '').split()
         if not self.tags:
+            if tag == 'script' and not self.hidden_depth:
+                self.script = []
             if tag in _HIDDEN_TAGS:
                 self.hidden_depth += 1
             if self.hidden_depth:
@@ -127,6 +137,12 @@ class _NoticeParser(HTMLParser):
         if self.section is None and not self.hidden_depth:
             section = None
             if len(self.tags) == 1 and tag == 'h4':
+                if self.title_class:
+                    # 게시판 대조 오류가 먼저 보이도록 파싱이 끝난 뒤에 알린다.
+                    self.title_format_changed = True
+                else:
+                    section = 'title'
+            elif self.title_class and len(self.tags) == 1 and tag == 'div' and self.title_class in classes:
                 section = 'title'
             elif len(self.tags) == 1 and tag == 'div' and 'view_cont' in classes:
                 section = 'description'
@@ -152,6 +168,9 @@ class _NoticeParser(HTMLParser):
         if not self.tags:
             if self.hidden_depth and tag in _HIDDEN_TAGS:
                 self.hidden_depth -= 1
+            if tag == 'script' and self.script is not None and not self.hidden_depth:
+                self.scripts.append(''.join(self.script))
+                self.script = None
             return
         if tag in _VOID_TAGS:
             return
@@ -189,6 +208,8 @@ class _NoticeParser(HTMLParser):
             self.handle_endtag(self.tags[-1])
 
     def handle_data(self, data):
+        if self.script is not None and not self.tags and self.hidden_depth == 1:
+            self.script.append(data)
         if self.section and not self.hidden_depth:
             self.parts[self.section].append(data)
 
@@ -222,7 +243,7 @@ class _MediaParser(_NoticeParser):
             if (not self.tags and tag == 'input' and ('name', 'bIdx') in attrs
                     and (names.count('name') > 1 or names.count('value') > 1)):
                 raise ValueError(self.label + ' 번호의 HTML 속성이 중복되었습니다.')
-            classes = {'bod_view'} if not self.tags else {'view_cont', 'view_file'}
+            classes = {'bod_view'} if not self.tags else {'view_cont', 'view_file', self.title_class} - {None}
             if (len(self.tags) <= 1 and tag in ('div', 'dl') and names.count('class') > 1
                     and any(name == 'class' and classes.intersection((value or '').split()) for name, value in attrs)):
                 raise ValueError(self.label + ' 영역의 HTML 속성이 중복되었습니다.')
@@ -253,7 +274,8 @@ class _MediaParser(_NoticeParser):
         if values.get('href') == '#' and names.count('href') == names.count('onclick') == 1:
             match = _DOWNLOAD.fullmatch(script)
             if match:
-                url = f'{OFFICIAL_ORIGIN}/cmm/fms/FileDown.do?atchFileId={match[1]}&fileSn={match[2]}'
+                url = (f'{OFFICIAL_ORIGIN}{self.context_path}/cmm/fms/FileDown.do'
+                       f'?atchFileId={match[1]}&fileSn={match[2]}')
         self.anchor = (len(self.tags), url, [])
 
     def handle_data(self, data):
@@ -296,30 +318,70 @@ def _parse_notice(text: str, notice_id: str, parser: _NoticeParser) -> str:
     views = parser.view_actions
     if len(views) > 1 or (views and views[0] != parser.view_action) or (parser.require_view and not views):
         raise ValueError(parser.label + ' HTML의 게시판이 요청과 일치하지 않습니다.')
+    if parser.title_format_changed:
+        raise ValueError(parser.label + ' 제목 영역의 형식이 바뀌었습니다.')
     title = ' '.join(''.join(parser.parts.get('title', [])).split())
     if not title:
         raise ValueError(parser.label + ' 제목이 없습니다.')
     return title
 
 
+# 페이지 설정은 `<script>var yh = {...};</script>` 하나로 선언되고 객체는 JSON 형식이다.
+_PAGE_CONFIG = re.compile(r'\s*var\s+yh\s*=\s*(\{.*\})\s*;\s*', re.S)
+
+
+def _unique_object(pairs):
+    keys = [key for key, _ in pairs]
+    if len(set(keys)) != len(keys):
+        raise ValueError('duplicate key')
+    return dict(pairs)
+
+
+def _declared_context_paths(scripts: list[str]) -> list[object]:
+    """설정 스크립트 전체가 JSON 객체 대입일 때만 contextPath를 선언으로 본다. 주석·문자열·다른 스크립트는 무시한다."""
+    values = []
+    for script in scripts:
+        match = _PAGE_CONFIG.fullmatch(script)
+        if match is None:
+            continue
+        try:
+            config = json.loads(match[1], object_pairs_hook=_unique_object)
+        except ValueError:
+            continue
+        if isinstance(config, dict) and 'contextPath' in config:
+            values.append(config['contextPath'])
+    return values
+
+
+def _media(text: str, notice_id: str, parser: '_MediaParser') -> list[dict]:
+    """첨부 주소는 페이지 스크립트의 contextPath로 만들어지므로 선언값이 게시판과 다르면 받지 않는다.
+
+    루트가 아닌 사이트 경로를 쓰는 게시판은 그 선언이 정확히 한 번 있어야 주소를 만든다.
+    """
+    _parse_notice(text, notice_id, parser)
+    declared = _declared_context_paths(parser.scripts)
+    if (any(value != parser.context_path for value in declared)
+            or (parser.context_path and len(declared) != 1)):
+        raise ValueError(parser.label + ' 페이지의 사이트 경로가 게시판과 일치하지 않습니다.')
+    return parser.media
+
+
 def parse_library_media(text: str, *, notice_id: str) -> list[dict]:
     """공식 도서관 상세의 이미지와 첨부 후보를 확인한다."""
-    parser = _MediaParser()
-    _parse_notice(text, notice_id, parser)
-    return parser.media
+    return _media(text, notice_id, _MediaParser())
 
 
 def _board_options(board: str) -> dict:
-    prefix, menu, label, _ = board_info(board)
-    return {'label': label, 'view_action': f'{prefix}/view.do?ptIdx=16&mId={menu}', 'require_view': True}
+    info = board_info(board)
+    return {'label': info.label, 'view_action': f'{info.prefix}/view.do?ptIdx={info.pt_idx}&mId={info.menu}',
+            'require_view': True, 'title_class': info.title_class, 'context_path': info.context_path}
 
 
 def parse_board_media(text: str, *, board: str, notice_id: str) -> list[dict]:
-    """같은 게시판 구조를 쓰는 시청 공지 상세의 이미지와 첨부 후보를 확인한다."""
+    """같은 게시판 구조를 쓰는 시청·안성배움e 공지 상세의 이미지와 첨부 후보를 확인한다."""
     parser = _MediaParser(**_board_options(board))
     board_detail_url(board, notice_id)  # HTML을 읽기 전에 18자리 번호 한도를 확인한다.
-    _parse_notice(text, notice_id, parser)
-    return parser.media
+    return _media(text, notice_id, parser)
 
 
 def parse_library_notice(text: str, *, notice_id: str) -> dict:
@@ -329,12 +391,14 @@ def parse_library_notice(text: str, *, notice_id: str) -> dict:
 
 # parse_board_notice나 공유하는 _NoticeParser·_notice_record의 출력 또는 허용 규칙이 바뀌면 함께 올린다.
 # v2: 시청 상세의 viewForm 게시판 주소를 필수로 대조한다.
+# v2 유지: 안성배움e 추가는 새 게시판 설정만 더하며 시청 결과와 허용 규칙은 그대로다.
+# 버전은 모든 게시판이 함께 쓰므로 한 게시판의 규칙을 바꿔도 다른 게시판 기록을 다시 수집해야 한다.
 BOARD_PARSER_VERSION = 'board-notice-parser-v2'
 
 
 def parse_board_notice(text: str, *, board: str, notice_id: str) -> dict:
-    """같은 게시판 구조를 쓰는 시청 공지 상세의 본문 텍스트와 게시일만 준비한다."""
-    source = board_info(board)[3]
+    """같은 게시판 구조를 쓰는 시청·안성배움e 공지 상세의 본문 텍스트와 게시일만 준비한다."""
+    source = board_info(board).source
     url = board_detail_url(board, notice_id)
     return _notice_record(_NoticeParser(**_board_options(board)), text, notice_id, source, lambda: url)
 
