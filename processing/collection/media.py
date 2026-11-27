@@ -1,4 +1,4 @@
-"""도서관·시청·안성배움e 공지의 매체 링크를 확인하고 운영자가 확보한 원본을 보관한다."""
+"""도서관·시청·안성배움e·읍면동 공지의 매체 링크를 확인하고 운영자가 확보한 원본을 보관한다."""
 
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -11,12 +11,15 @@ import sys
 from zipfile import BadZipFile, ZIP_STORED, ZipFile
 
 from .__main__ import decode_input, read_raw
+from .batch import LIST_MAX_BYTES
+from .board_batch import BATCH_SCHEMA as BOARD_BATCH_SCHEMA, BOARD_SECTION
 from .capture import (
     CAPTURE_ROOT, bundle_directory, capture_timestamp, open_archive, read_capture_file, read_receipt,
     validate_name, write_new, write_receipt,
 )
 from .cli import CollectionArguments
 from .libraries import parse_board_media, parse_library_media
+from .library_listing import parse_board_listing
 from .official_web import (
     BOARDS, DETAIL_MAX_BYTES, board as board_info, board_detail_url, detail_url, fetch_board_detail, fetch_detail,
 )
@@ -47,12 +50,46 @@ def _route(board: str) -> tuple[str, Callable, Callable, Callable]:
             lambda text, web_id: parse_board_media(text, board=board, notice_id=web_id))
 
 
-def inspect_notice(private_root: Path, web_id: str, name: str, *, board: str = "library") -> dict:
+def _needs_listing(board: str) -> bool:
+    return board != "library" and board_info(board).check_list_form
+
+
+def _check_listed(private_root: Path, board: str, batch: object, web_id: str) -> None:
+    """읍면동 상세는 다른 읍면동 주소로도 열려 소속을 알 수 없으므로 같은 게시판 묶음의 목록 원본에 나온 번호만 받는다."""
+    label = board_info(board).label
+    if not isinstance(batch, str):
+        raise ValueError(f"{label}는 그 게시판 목록에 나온 번호인지 확인할 묶음 수집 이름(--batch)이 필요합니다.")
+    validate_name(batch)
+    invalid = f"{label} 묶음 수집 기록을 확인할 수 없습니다."
+    with open_archive(private_root, Path(BOARD_SECTION) / batch) as directory:
+        receipt = read_receipt(directory, "batch.json")
+        if (receipt.get("schema_version") != BOARD_BATCH_SCHEMA or receipt.get("batch_id") != batch
+                or receipt.get("board") != board or not isinstance(receipt.get("pages"), list)):
+            raise ValueError(invalid)
+        for entry in receipt["pages"]:
+            if not isinstance(entry, dict) or entry.get("status") != "parsed":
+                continue
+            page = entry.get("page")
+            if type(page) is not int or entry.get("file") != f"list-{page}.html":
+                raise ValueError(invalid)
+            raw = read_capture_file(directory, entry["file"], LIST_MAX_BYTES)
+            if entry.get("sha256") != hashlib.sha256(raw).hexdigest():
+                raise ValueError(f"{label} 목록 원본 해시가 수집 기록과 다릅니다.")
+            _, numbered, pinned = parse_board_listing(raw, board=board, page=page)
+            if web_id in numbered or web_id in pinned:
+                return
+    raise ValueError(f"{label} 묶음 {batch}의 목록 원본에 없는 공지 번호입니다({web_id}).")
+
+
+def inspect_notice(private_root: Path, web_id: str, name: str, *, board: str = "library",
+                   batch: str | None = None) -> dict:
     validate_name(name)
     label, detail, fetch, parse_media = _route(board)
     url = detail(web_id)
     if len(web_id) > 18:
         raise ValueError("공식 웹 게시물 번호는 최대 18자리여야 합니다.")
+    if batch is not None or _needs_listing(board):
+        _check_listed(private_root, board, batch, web_id)
     with bundle_directory(private_root / NOTICE_SECTION, name) as directory:
         fetched_at = digest = None
         status = "fetch_failed"
@@ -74,6 +111,8 @@ def inspect_notice(private_root: Path, web_id: str, name: str, *, board: str = "
                   "media": candidates, "error": error}
         if board != "library":
             record["board"] = board
+        if batch is not None:
+            record["listing_batch"] = batch
         write_receipt(directory, "notice.json", record)
     return {"notice_id": name, "status": status, "media": len(candidates)}
 
@@ -92,6 +131,8 @@ def _notice(private_root: Path, name: str) -> dict:
                 or not isinstance(web_id, str) or not re.fullmatch(r"[1-9][0-9]{0,17}", web_id)
                 or receipt.get("source_url") != detail(web_id)):
             raise ValueError(f"{label} 수집 기록을 확인할 수 없습니다.")
+        if "listing_batch" in receipt or _needs_listing(board):
+            _check_listed(private_root, board, receipt.get("listing_batch"), web_id)
         capture_timestamp(receipt.get("fetched_at"))
         raw = read_capture_file(directory, "notice.html", DETAIL_MAX_BYTES)
         text, digest = decode_input(raw, label)
@@ -186,10 +227,11 @@ def read_media_assets(private_root: Path, name: str, asset_keys: set[str]) -> di
 def main() -> int:
     parser = CollectionArguments(description=__doc__)
     commands = parser.add_subparsers(dest="action", required=True, parser_class=CollectionArguments)
-    inspect = commands.add_parser("inspect", help="도서관·시청·안성배움e 공지 HTML과 매체 목록을 보관한다.")
+    inspect = commands.add_parser("inspect", help="도서관·시청·안성배움e·읍면동 공지 HTML과 매체 목록을 보관한다.")
     inspect.add_argument("--board", choices=("library", *BOARDS), default="library")
     inspect.add_argument("--web-id", required=True)
     inspect.add_argument("--name", required=True)
+    inspect.add_argument("--batch", help="읍면동 공지는 필수. 이 번호가 목록에 나온 같은 게시판 board_batch 묶음 이름")
     store = commands.add_parser("store", help="운영자가 확보한 파일 한 개를 매체 항목과 연결한다.")
     store.add_argument("--notice", required=True)
     store.add_argument("--asset", required=True, type=int)
@@ -199,7 +241,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         if args.action == "inspect":
-            result = inspect_notice(PRIVATE_ROOT, args.web_id, args.name, board=args.board)
+            result = inspect_notice(PRIVATE_ROOT, args.web_id, args.name, board=args.board, batch=args.batch)
         else:
             result = store_media(PRIVATE_ROOT, args.notice, args.asset, args.file, args.name, args.downloaded_at)
     except ValueError as error:

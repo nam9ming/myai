@@ -154,7 +154,8 @@ class BoardListingTest(unittest.TestCase):
 class BoardNoticeTest(unittest.TestCase):
     def test_city_notice_uses_board_url_and_source(self):
         record = parse_board_notice(_notice(), board="city", notice_id="203043")
-        self.assertEqual(dict(BOARD_PARSER_VERSIONS), {"city": "city-notice-parser-v3", "edu": "edu-notice-parser-v3"},
+        self.assertEqual({key: BOARD_PARSER_VERSIONS[key] for key in ("city", "edu")},
+                         {"city": "city-notice-parser-v3", "edu": "edu-notice-parser-v3"},
                          "게시판의 출력·허용 규칙을 바꾸면 그 게시판의 파서 버전을 올린다.")
         self.assertEqual(set(BOARD_PARSER_VERSIONS), set(BOARDS), "모든 게시판에 파서 버전이 있어야 한다.")
         for board in ("library", "other", None):

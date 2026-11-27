@@ -1,4 +1,4 @@
-"""안성시 공식 행사·도서관·도로 공사현황·시청·안성배움e 공지의 공개 목록과 상세를 요청한다."""
+"""안성시 공식 행사·도서관·도로 공사현황·시청·안성배움e·읍면동 공지의 공개 목록과 상세를 요청한다."""
 
 from contextlib import closing
 from datetime import date
@@ -106,6 +106,7 @@ class Board(NamedTuple):
 
     title_class가 있으면 상세 제목을 `<h4>` 대신 본문 영역 바로 아래의 그 class 블록에서 읽는다.
     context_path는 페이지가 선언하는 `contextPath`이며 첨부 다운로드 주소 앞에 붙는다.
+    check_list_form이 참이면 목록 링크 인자만으로 다른 게시판과 구별되지 않으므로 `form#list`의 action을 대조한다.
     """
 
     prefix: str
@@ -115,12 +116,23 @@ class Board(NamedTuple):
     pt_idx: str = "16"
     title_class: str | None = None
     context_path: str = ""
+    check_list_form: bool = False
 
 
+# 읍면동 공지사항은 시청 공지(ptIdx=16)와 게시물 번호 공간을 공유하며 시청 공지 일부와 읍면동 자체 글을 보여 준다.
+# 도서관 공지(_DETAIL_PATHS의 living)도 같은 번호 공간을 쓴다.
+_TOWNS = (
+    ("gongdo", "공도읍"), ("bogae", "보개면"), ("geumgwang", "금광면"), ("seoun", "서운면"), ("miyang", "미양면"),
+    ("daedeok", "대덕면"), ("yangseong", "양성면"), ("wongok", "원곡면"), ("iljuk", "일죽면"), ("juksan", "죽산면"),
+    ("samjuk", "삼죽면"), ("gosam", "고삼면"), ("anseong1", "안성1동"), ("anseong2", "안성2동"), ("anseong3", "안성3동"),
+)
 BOARDS = MappingProxyType({
     "city": Board("/portal/bbs", "0501010000", "시청 공지", "city_notice"),
     "edu": Board("/edu/portal/bbs", "0901040000", "안성배움e 공지", "edu_notice",
                  pt_idx="300", title_class="bod_view_title", context_path="/edu"),
+    **{f"town-{slug}": Board(f"/csc/{slug}/bbs", "0500000000", f"{name} 공지", f"town_{slug}_notice",
+                             check_list_form=True)
+       for slug, name in _TOWNS},
 })
 _NOTICE_ID = _PROJECT_ID
 

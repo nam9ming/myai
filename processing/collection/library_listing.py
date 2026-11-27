@@ -1,9 +1,9 @@
-"""안성시 도서관·시청·안성배움e 공지 목록의 페이지 정보와 게시물 번호를 읽는다."""
+"""안성시 도서관·시청·안성배움e·읍면동 공지 목록의 페이지 정보와 게시물 번호를 읽는다."""
 
 from html.parser import HTMLParser
 import re
 
-from .official_web import board as board_info
+from .official_web import board as board_info, board_listing_path
 
 
 _PAGE_LABEL = re.compile(
@@ -22,8 +22,11 @@ def _notice_link(menu: str, pt_idx: str) -> re.Pattern:
 class _ListingParser(HTMLParser):
     """`detect_pins`가 거짓이면 기존 도서관 목록과 같은 기준으로만 행을 읽는다."""
 
-    def __init__(self, menu: str, invalid: str, *, detect_pins: bool, pt_idx: str = "16"):
+    def __init__(self, menu: str, invalid: str, *, detect_pins: bool, pt_idx: str = "16",
+                 list_form: tuple[str, str] | None = None):
         super().__init__()
+        # (기대 action, 불일치 오류). 없으면 기존 게시판처럼 action을 보지 않는다.
+        self.list_form = list_form
         self.link = _notice_link(menu, pt_idx)
         self.invalid = invalid
         self.detect_pins = detect_pins
@@ -54,6 +57,8 @@ class _ListingParser(HTMLParser):
             if attributes.get("id") == "list":
                 if self.form_closed or sum(key == "id" for key, _ in attrs) != 1:
                     raise ValueError(self.invalid)
+                if self.list_form and [value for key, value in attrs if key == "action"] != [self.list_form[0]]:
+                    raise ValueError(self.list_form[1])
                 self.in_form = True
             return
         if not self.in_form:
@@ -170,11 +175,13 @@ class _ListingParser(HTMLParser):
 
 
 def _parse(raw: bytes, page: int, menu: str, label: str, *, detect_pins: bool,
-           pt_idx: str = "16") -> tuple[int, list[tuple[str, bool]]]:
+           pt_idx: str = "16", list_action: str | None = None) -> tuple[int, list[tuple[str, bool]]]:
     invalid = f"{label} 목록 HTML 구조가 올바르지 않습니다."
     if type(page) is not int or page < 1 or not isinstance(raw, bytes) or b"\x00" in raw:
         raise ValueError(invalid)
-    parser = _ListingParser(menu, invalid, detect_pins=detect_pins, pt_idx=pt_idx)
+    mismatch = f"{label} 목록의 게시판이 요청과 일치하지 않습니다."
+    parser = _ListingParser(menu, invalid, detect_pins=detect_pins, pt_idx=pt_idx,
+                            list_form=(list_action, mismatch) if list_action else None)
     try:
         parser.feed(raw.decode("utf-8-sig"))
         parser.close()
@@ -198,7 +205,8 @@ def parse_board_listing(raw: bytes, *, board: str, page: int) -> tuple[int, list
     """전체 페이지 수와 번호가 붙은 글, 매 페이지에 반복되는 상단 고정 글을 원래 순서로 나누어 반환한다."""
     info = board_info(board)
     label = info.label
-    total_pages, rows = _parse(raw, page, info.menu, label, detect_pins=True, pt_idx=info.pt_idx)
+    total_pages, rows = _parse(raw, page, info.menu, label, detect_pins=True, pt_idx=info.pt_idx,
+                               list_action=board_listing_path(board) if info.check_list_form else None)
     numbered = [notice_id for notice_id, pinned in rows if not pinned]
     pinned = [notice_id for notice_id, pinned in rows if pinned]
     if not numbered:
