@@ -11,6 +11,7 @@ CASES = {
     "processing.collection.capture": (["capture", "living", "--web-id"], ["capture"]),
     "processing.collection.batch": (["batch", "living", "--max-pages", "x"], ["capture_batch"]),
     "processing.collection.portal": (["portal", "unknown"], ["collect_portal"]),
+    "processing.collection.odcloud": (["odcloud", "road-construction"], ["collect_odcloud"]),
     "processing.collection.media": (["media", "inspect", "--board", "other", "--web-id", "1", "--name", "x"],
                                     ["inspect_notice", "store_media"]),
     "processing.collection.d03": (["d03", "--name"], ["prepare"]),
