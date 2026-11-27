@@ -113,7 +113,23 @@ python3.13 -B -m processing.collection.capture living \
 
 종료 0은 원본 보관과 파싱 성공, 2는 원본 보관과 파싱 실패, 1은 입력·웹 요청·저장 오류다. 형식이 바뀌거나 본문이 없는 경우 종료 2로 원본과 파싱 사유를 남긴다. 저장이 중단되어 완료 파일이 없으면 그 묶음은 사용하지 않는다. 성공한 비교에도 이미지·첨부 확인 표시와 미확정 관계가 남을 수 있다.
 
-D03 등록이 필요하면 사람이 원문·추출할 내용·개인정보를 대조한 뒤 [기존 원문 등록](../backend/docs/extraction-run-import.md)에 원문 상대 경로·해시와 확인한 원출처 주소를 연결한다. `portal.catalog_url`은 비교 대상의 카탈로그 주소다. 현재 CSV를 어디서 받았는지는 운영자가 대조한다. 등록 초기 상태는 `pending`과 `unchecked`로 유지한다. 이 명령은 웹 상세 한 건과 제공된 CSV를 처리하며 목록 순회·정기 실행·첨부 다운로드·DB 등록·승인·발행은 후속 단계다.
+D03 등록이 필요하면 사람이 원문·추출할 내용·개인정보를 대조한 뒤 [기존 원문 등록](../backend/docs/extraction-run-import.md)에 원문 상대 경로·해시와 확인한 원출처 주소를 연결한다. `portal.catalog_url`은 비교 대상의 카탈로그 주소다. 현재 CSV를 어디서 받았는지는 운영자가 대조한다. 등록 초기 상태는 `pending`과 `unchecked`로 유지한다.
+
+### 공식 목록과 상세를 한 묶음으로 수집하기
+
+포털 CSV 한 개를 고정한 뒤 공식 목록의 첫 페이지부터 게시물 번호를 찾아 상세를 비교한다. 행사는 최대 31일의 날짜 범위를 받는다. 도서관은 공지 목록의 게시판·페이지 번호를 대조하며 날짜 옵션 없이 사용한다.
+
+```sh
+python3.13 -B -m processing.collection.batch culture \
+  --portal-csv data/private/festivals.csv --begin 2026-11-01 --end 2026-11-30 \
+  --max-pages 20 --max-items 80 --name events-november
+python3.13 -B -m processing.collection.batch living \
+  --portal-csv data/private/libraries.csv --max-pages 2 --max-items 20 --name recent-library
+```
+
+기본 한도는 3페이지·20건이며 최대 20페이지·80건까지 지정할 수 있다. 요청을 하나씩 보내며 사이에 0.5초를 둔다. 목록 응답은 건당 2MiB, 상세는 건당 8MiB까지 받는다. HTTP 401·403·429·503을 받으면 이후 요청을 멈춘다. 조회 중 목록 건수나 페이지 수가 바뀌거나 ID가 중복되면 해당 페이지는 원본과 실패 사유를 보관하고 이전 페이지에서 확인한 번호만 사용한다.
+
+`data/private/collection-batches/<name>/`에 포털 CSV, 받은 목록·상세 원본, 성공한 상세의 비교 결과를 저장한다. `batch.json`에는 각 원본의 해시와 수신 시각, 목록·상세 처리 상태가 있다. 맨 마지막에 `batch.json`이 생긴 묶음만 사용한다. 종료 0은 수집 중 보고된 페이지와 선택한 상세를 모두 처리한 경우, 2는 한도 도달 또는 일부 실패를 기록한 경우, 1은 입력·보관 오류다. 사이트 목록의 전체 건수가 같아도 수집 중 게시물이 바뀔 수 있다. 정기 실행, 첨부 수집, D03 등록·승인·발행은 후속 단계다.
 
 ## 시민 수동 추출·보관
 
