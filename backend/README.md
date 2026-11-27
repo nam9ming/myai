@@ -114,7 +114,7 @@ read -rs DB_PASSWORD; export DB_PASSWORD; echo
 
 기본 `public` 프로필은 DB 연결·Flyway 적용 후 기동한다. 공개 전 config는 `503 PUBLIC_DATA_NOT_READY`, 공개 후 config·상세는 고정 snapshot을 조회한다. matches는 snapshot·지점을 검증한 뒤 아래 설정의 Python을 호출한다. fixture로 자동 전환하거나 JSON seed를 넣지 않는다.
 
-스키마 생성은 Flyway만 담당하고 JPA는 `ddl-auto=validate`를 사용한다. canonical JSON은 LONGTEXT 원문과 별도 checksum으로 보존한다. ID/hash는 ASCII 대소문자를 구분한다. JDBC session·Hibernate는 UTC를 사용하고 격리 수준은 REPEATABLE READ로 설정한다. 적용된 V1·V2·V3·V4를 수정하지 말고 변경 사항은 후속 migration으로 추가한다. 개발 DB는 `docker compose stop`으로 종료하며 볼륨을 삭제하지 않는다.
+스키마 생성은 Flyway만 담당한다. 저장 계층은 Spring JDBC만 쓰고 JPA·Hibernate는 의존성에 없다. canonical JSON은 LONGTEXT 원문과 별도 checksum으로 보존한다. ID/hash는 ASCII 대소문자를 구분한다. JDBC session은 UTC를 사용하고 격리 수준은 REPEATABLE READ로 설정한다. 적용된 V1·V2·V3·V4를 수정하지 말고 변경 사항은 후속 migration으로 추가한다. 개발 DB는 `docker compose stop`으로 종료하며 볼륨을 삭제하지 않는다.
 
 B08의 DB·선택 원본 백업과 새 빈 전용 DB 복원·기동 인계는 [백업·복원 안내](docs/backup-recovery.md)를 따른다. 공개 포인터 rollback과 구별하며, 기존 전체 DB 시험은 자료를 삭제하므로 복원 DB에 실행하지 않는다. 안내의 독립 Recovery 시험과 실제 운영 복구·배포를 구별한다.
 

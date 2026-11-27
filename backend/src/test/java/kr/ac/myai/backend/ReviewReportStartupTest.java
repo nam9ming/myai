@@ -43,20 +43,12 @@ class ReviewReportStartupTest {
     @Test
     void overridesEverySchemaWriterAndDefaultMixedProfiles() {
         try (var context = new GenericApplicationContext()) {
-            var environment = new MockEnvironment().withProperty("spring.jpa.hibernate.ddl-auto", "create")
-                    .withProperty("spring.jpa.generate-ddl", "true").withProperty("spring.sql.init.mode", "always")
-                    .withProperty("spring.jpa.properties.hibernate.hbm2ddl.auto", "create-drop")
-                    .withProperty("spring.jpa.properties.jakarta.persistence.schema-generation.database.action", "drop-and-create")
-                    .withProperty("spring.jpa.properties.jakarta.persistence.schema-generation.scripts.action", "create");
+            // JPA가 없으므로 스키마를 쓸 수 있는 것은 Flyway와 SQL 초기화뿐이다.
+            var environment = new MockEnvironment().withProperty("spring.flyway.enabled", "true").withProperty("spring.sql.init.mode", "always");
             environment.setActiveProfiles("local-review-report"); context.setEnvironment(environment); guard.initialize(context);
-            assertThat(environment.getProperty("spring.jpa.hibernate.ddl-auto")).isEqualTo("validate");
-            assertThat(environment.getProperty("spring.jpa.properties.hibernate.hbm2ddl.auto")).isEqualTo("validate");
-            assertThat(environment.getProperty("spring.jpa.generate-ddl")).isEqualTo("false");
+            assertThat(environment.getProperty("spring.flyway.enabled")).isEqualTo("false");
             assertThat(environment.getProperty("spring.sql.init.mode")).isEqualTo("never");
-            assertThat(environment.getProperty("spring.jpa.properties.jakarta.persistence.schema-generation.database.action")).isEqualTo("none");
-            assertThat(environment.getProperty("spring.jpa.properties.jakarta.persistence.schema-generation.scripts.action")).isEqualTo("none");
             assertThat(environment.getProperty("spring.datasource.hikari.read-only")).isEqualTo("true");
-            assertThat(environment.getProperty("spring.autoconfigure.exclude")).contains("HibernateJpaAutoConfiguration", "JpaRepositoriesAutoConfiguration");
         }
         try (var context = new GenericApplicationContext()) {
             var environment = new MockEnvironment(); environment.setDefaultProfiles("local-review-report", "fixture"); context.setEnvironment(environment);

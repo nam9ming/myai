@@ -460,7 +460,7 @@ class CitizenHumanHandoffMySqlTest {
         var snapshot = mapper.readTree(canonical);
         assertThat(snapshot.path("notices")).hasSize(1);
         assertThat(snapshot.path("notices").get(0).path("evidence")).isEqualTo(expectedFirst);
-        var detail = notices.notice(UUID.fromString(fixture.eventId()), UUID.fromString(published.snapshotId()));
+        var detail = notices.notice(UUID.fromString(fixture.eventId()), UUID.fromString(published.snapshotId()), null, kr.ac.myai.backend.repository.PublicSnapshotRepository.MAX_CITIZEN_HISTORY);
         assertThat(detail.path("data").path("notice").path("evidence")).isEqualTo(expectedFirst);
         Path exportRoot = Files.createDirectory(root.resolve("first-only-export"));
         var exported = exporter.export(UUID.fromString(published.snapshotId()), exportRoot);

@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import kr.ac.myai.backend.exception.ApiException;
 import kr.ac.myai.backend.importing.ImportException;
+import kr.ac.myai.backend.importing.ReviewedImportReader;
 import kr.ac.myai.backend.logging.PublicRequestLogContext;
 import kr.ac.myai.backend.publication.CitizenPublicationContent;
 import kr.ac.myai.backend.publication.PublicationContent;
@@ -24,6 +25,7 @@ import java.time.DateTimeException;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -38,6 +40,13 @@ public class CitizenNoticeService {
     private final CitizenPublicationContent citizens;
     private final PublicationContent shared;
     private final ObjectMapper mapper;
+    // 검증을 마친 선택 공개본(현재본과 교체본). 공개본 행은 바뀌지 않으므로 checksum과 메타데이터가 같으면 다시
+    // 검증·파싱하지 않는다. 원문과 checksum의 대조는 매번 한다. 이력 공개본은 넣지 않는다(밀어내지 않게).
+    // shortcut: 8MiB 공개본은 파싱 후 약 30MiB라 2개까지만 둔다. 동시 선택 공개본이 늘면 크기 기준 상한으로 바꾼다.
+    private final Map<List<Object>, JsonNode> verifiedSnapshots = java.util.Collections.synchronizedMap(
+            new java.util.LinkedHashMap<>(8, 0.75f, true) {
+                @Override protected boolean removeEldestEntry(Map.Entry<List<Object>, JsonNode> eldest) { return size() > 2; }
+            });
 
     public CitizenNoticeService(PublicSnapshotRepository repository, CitizenPublicationContent citizens, PublicationContent shared, ObjectMapper mapper) {
         this.repository = repository; this.citizens = citizens; this.shared = shared; this.mapper = mapper;
@@ -46,10 +55,6 @@ public class CitizenNoticeService {
     public JsonNode list(UUID snapshotId) {
         JsonNode selected = select(snapshotId, new Reads());
         return envelope(selected, shared.select(selected, "created_at data_kind mode timezone notice_count notices sources"));
-    }
-
-    public JsonNode notice(UUID eventId, UUID snapshotId) {
-        return notice(eventId, snapshotId, null, PublicSnapshotRepository.MAX_CITIZEN_HISTORY);
     }
 
     public JsonNode notice(UUID eventId, UUID snapshotId, Long beforeVersion, int limit) {
@@ -83,14 +88,14 @@ public class CitizenNoticeService {
                 new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "PUBLIC_DATA_NOT_READY", "검토된 시민 공개본이 아직 없습니다.", null));
         var published = repository.citizenPublished(id).orElseThrow(() -> explicit
                 ? new ApiException(HttpStatus.NOT_FOUND, "SNAPSHOT_NOT_FOUND", "시민 공개본을 찾을 수 없습니다.", "snapshot_id") : invalid());
-        JsonNode selected = reads.verify(id, published);
+        JsonNode selected = reads.verify(id, published, true);
         if (!id.equals(published.currentId())) {
             if (!explicit) throw invalid();
             if (published.currentId() != null) {
                 var replacement = repository.citizenPublished(published.currentId()).orElseThrow(this::invalid);
                 if (!published.currentId().equals(replacement.currentId())) throw invalid();
                 // 교체본 검증을 이전 선택의 이력 누적 예산과 분리한다.
-                new Reads().verify(published.currentId(), replacement);
+                new Reads().verify(published.currentId(), replacement, true);
             }
             throw new ApiException(HttpStatus.CONFLICT, "SNAPSHOT_RETIRED", "공개본이 교체되었습니다. 새 버전을 선택해 주세요.", "snapshot_id", published.currentId());
         }
@@ -205,17 +210,27 @@ public class CitizenNoticeService {
         private JsonNode historic(String id) {
             JsonNode cached = verified.get(id);
             if (cached != null) return cached;
-            return verify(id, repository.citizenPublished(id).orElseThrow(CitizenNoticeService.this::invalid));
+            return verify(id, repository.citizenPublished(id).orElseThrow(CitizenNoticeService.this::invalid), false);
         }
 
-        private JsonNode verify(String id, PublicSnapshotRepository.Published published) {
+        private JsonNode verify(String id, PublicSnapshotRepository.Published published, boolean remember) {
             try {
                 var row = published.snapshot();
                 shared.check(row != null && id.equals(row.id()), "snapshot_id");
                 // 첫 선택도 여기서8MiB 이하로 검증하며, 아래 예산은 이력 누적 읽기를 제한한다.
-                citizens.verifySnapshot(row, published.schemaVersion(), published.createdAt());
-                JsonNode snapshot = shared.parse(row.canonical());
-                bytes += row.canonical().getBytes(StandardCharsets.UTF_8).length;
+                var key = java.util.Arrays.<Object>asList(row.id(), row.mode(), row.caseId(), row.checksum(), row.kind(),
+                        row.rulesVersion(), row.dictionaryVersion(), published.schemaVersion(), published.createdAt());
+                JsonNode snapshot = verifiedSnapshots.get(key);
+                byte[] canonical = row.canonical() == null ? null : row.canonical().getBytes(StandardCharsets.UTF_8);
+                if (snapshot == null) {
+                    citizens.verifySnapshot(row, published.schemaVersion(), published.createdAt());
+                    snapshot = shared.parse(row.canonical());
+                    if (remember) verifiedSnapshots.put(key, snapshot);
+                } else {
+                    // 파싱 결과만 재사용한다. 지금 읽은 원문이 검증 때와 같은지는 매번 checksum으로 확인한다.
+                    shared.check(canonical != null && ReviewedImportReader.sha256(canonical).equals(row.checksum()), "snapshot.checksum");
+                }
+                bytes += canonical.length;
                 if (bytes > HISTORY_BYTES) throw tooLarge();
                 verified.put(id, snapshot);
                 return snapshot;
