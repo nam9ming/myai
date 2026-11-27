@@ -1,4 +1,4 @@
-"""안성시 공식 행사·도서관의 공개 목록과 상세를 요청한다."""
+"""안성시 공식 행사·도서관·도로 공사현황의 공개 목록과 상세를 요청한다."""
 
 from contextlib import closing
 from datetime import date
@@ -56,6 +56,47 @@ def listing_request(category: str, page: int, begin: date | None, end: date | No
         path = "/library/bbs/list.do?ptIdx=16&mId=0401010000"
         return "POST", path, urlencode({"page": page}).encode("ascii")
     raise ValueError("지원하지 않는 공식 웹 수집 분야입니다.")
+
+
+ROAD_STATES = {
+    "planned": ("0", "0901020200", "예정"),
+    "ongoing": ("1", "0901020100", "진행중"),
+    "completed": ("2", "0901020300", "완료"),
+}
+_PROJECT_ID = re.compile(r"[1-9][0-9]{0,17}")
+
+
+def road_state(state: str) -> tuple[str, str, str]:
+    if not isinstance(state, str) or state not in ROAD_STATES:
+        raise ValueError("지원하지 않는 도로 공사현황 구분입니다.")
+    return ROAD_STATES[state]
+
+
+def road_listing_path(state: str, page: int) -> str:
+    code, menu, _ = road_state(state)
+    if type(page) is not int or page < 1:
+        raise ValueError("목록 페이지는 양의 정수여야 합니다.")
+    return "/depart/roadConstruction/list.do?" + urlencode(
+        {"searchGubun": 1, "state": code, "mId": menu, "page": page})
+
+
+def _road_detail_path(state: str, project_id: str) -> str:
+    code, menu, _ = road_state(state)
+    if not isinstance(project_id, str) or _PROJECT_ID.fullmatch(project_id) is None:
+        raise ValueError("도로 공사 번호는 18자리 이하의 양의 ASCII 정수여야 합니다.")
+    return "/depart/roadConstruction/view.do?" + urlencode({"idx": project_id, "mId": menu, "state": code})
+
+
+def road_detail_url(state: str, project_id: str) -> str:
+    return OFFICIAL_ORIGIN + _road_detail_path(state, project_id)
+
+
+def fetch_road_listing(state: str, page: int, *, limit: int) -> bytes:
+    return _fetch("GET", road_listing_path(state, page), None, limit)
+
+
+def fetch_road_detail(state: str, project_id: str, *, limit: int) -> bytes:
+    return _fetch("GET", _road_detail_path(state, project_id), None, limit)
 
 
 def fetch_listing(category: str, page: int, begin: date | None, end: date | None, *, limit: int) -> bytes:
