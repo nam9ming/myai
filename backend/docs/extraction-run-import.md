@@ -42,6 +42,8 @@ java -jar backend/build/libs/myai-backend-0.1.0.jar \
 
 Java는 원본 SHA-256을 재검증한 뒤 문서·버전만 등록한다. 같은 준비본은 동일 등록 결과를 재사용한다. 내용이 바뀐 문서는 기존 문서 ID, 새 버전 ID와 다음 버전 번호를 지정한다. 준비와 등록으로 사건·AI 실행·승인·공개본은 생성되지 않는다.
 
+MySQL 시험은 단건(`single`: 포털 CSV·웹 상세) 외에 `archive_kind` road(도로 공사현황), board(시청 공지 `city`, contextPath `/edu`·`ptIdx=300`인 안성배움e 공지 `edu`), media(시청 공지 매체)도 확인한다(`CivicCollectionSourceMySqlTest`). 공식 사이트 요청만 Python 시험 고정 HTML로 바꾸고 실제 수집·`d03.prepare`를 실행한 뒤 Java 등록으로 원본 hash 불일치 거부, 같은 등록 재사용, `private_content_ref`·`source_url`·`collection_method`(`official-web-road-works`/`official-web-board`/`official-web-media-manual`)·`collected_at`, pending/unchecked와 확인 이력·AI 실행 미생성을 대조한다. 합성 고정 자료이므로 실제 공식 페이지 형식의 정확도를 보증하지 않는다. `batch`·`portal`(API 응답 묶음)은 MySQL 등록 시험이 없다.
+
 ## 같은 문서의 추출 입력 준비
 
 AI 입력은 D03의 `data_kind/document_version_id/title/published_date`와 `block_index`를 `blocks`로 옮긴5키다. 전체 블록 순서·ID·페이지·텍스트와 metadata.preprocessing_version까지 저장된 D03과 같아야 한다. 현재는 전체 문서 입력이며 chunk 입력은 지원하지 않는다.
