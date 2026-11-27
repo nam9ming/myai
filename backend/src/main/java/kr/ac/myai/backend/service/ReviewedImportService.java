@@ -80,6 +80,7 @@ public class ReviewedImportService {
                 });
             }
         } catch (ExtractionException ex) {
+            if (ex.code().equals("EXTRACTION_RUNTIME_UNAVAILABLE")) throw ex; // Python 실행 불가·시간 초과는 503으로 알린다.
             if (ex.code().equals("EXTRACTION_CONFLICT")) throw conflict();
             throw reference("events.revision.originating_run_ids");
         } catch (DataIntegrityViolationException | TransientDataAccessException ex) {

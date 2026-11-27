@@ -27,8 +27,10 @@ public class CitizenNoticeController {
         UUID event = uuid(eventId, "event_id"), selected = snapshot(parameters, true);
         Long before = number(parameters, "history_before_version");
         Long limit = number(parameters, "history_limit");
-        if (limit != null && limit > 1000) throw ApiException.invalid("history_limit", "이력 개수는1~1000을 사용해 주세요.");
-        return notices.notice(event, selected, before, limit == null ? 1000 : limit.intValue());
+        int max = kr.ac.myai.backend.repository.PublicSnapshotRepository.MAX_CITIZEN_HISTORY;
+        // 범위 검사는 서비스가 한다. int로 바꿀 때 넘쳐 범위 안 값이 되지 않도록 범위 밖 값은 범위 밖으로 둔다.
+        int value = limit == null ? max : (int) Math.max(0, Math.min(limit, max + 1L));
+        return notices.notice(event, selected, before, value);
     }
 
     private UUID snapshot(MultiValueMap<String, String> parameters, boolean required) {

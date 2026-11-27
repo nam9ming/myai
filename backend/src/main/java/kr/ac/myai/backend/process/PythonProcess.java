@@ -12,9 +12,7 @@ import java.util.concurrent.*;
 public final class PythonProcess {
     private static final int LIMIT = 8 * 1024 * 1024;
 
-    public record Result(int exitCode, byte[] stdout, byte[] stderr) {
-        public Result(int exitCode, byte[] stdout) { this(exitCode, stdout, new byte[0]); }
-    }
+    public record Result(int exitCode, byte[] stdout, byte[] stderr) {}
 
     public static final class Failure extends RuntimeException {
         private final boolean retryable;
@@ -22,16 +20,8 @@ public final class PythonProcess {
         public boolean retryable() { return retryable; }
     }
 
-    public static Result execute(String executable, String workdir, List<String> arguments, byte[] input, long timeoutMillis) {
-        return execute(executable, workdir, arguments, input, timeoutMillis, false);
-    }
-
+    /** 부모 환경(비밀값 포함)을 물려주지 않고 PATH와 UTF-8 로캘만 넘겨 실행한다. */
     public static Result executeKeyless(String executable, String workdir, List<String> arguments, byte[] input, long timeoutMillis) {
-        return execute(executable, workdir, arguments, input, timeoutMillis, true);
-    }
-
-    private static Result execute(String executable, String workdir, List<String> arguments, byte[] input,
-                                  long timeoutMillis, boolean keyless) {
         Path directory;
         try { directory = Path.of(workdir); }
         catch (RuntimeException ex) { throw new Failure(false); }
@@ -44,14 +34,12 @@ public final class PythonProcess {
         try {
             var command = new ArrayList<String>(); command.add(executable); command.addAll(arguments);
             var builder = new ProcessBuilder(command).directory(directory.toFile());
-            if (keyless) {
-                var environment = builder.environment();
-                environment.clear();
-                String path = System.getenv("PATH");
-                if (path != null) environment.put("PATH", path);
-                environment.put("LANG", "C.UTF-8");
-                environment.put("LC_ALL", "C.UTF-8");
-            }
+            var environment = builder.environment();
+            environment.clear();
+            String path = System.getenv("PATH");
+            if (path != null) environment.put("PATH", path);
+            environment.put("LANG", "C.UTF-8");
+            environment.put("LC_ALL", "C.UTF-8");
             process = builder.start();
             Process child = process;
             var output = CompletableFuture.supplyAsync(() -> bounded(child.getInputStream(), LIMIT), workers);

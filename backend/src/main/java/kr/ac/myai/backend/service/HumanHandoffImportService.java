@@ -54,6 +54,7 @@ public class HumanHandoffImportService {
             ExtractionImportService.validateActor(actor);
             return importBytes(read(file), sourceRoot, handoffRoot, actor);
         } catch (ExtractionException ex) {
+            if (ex.code().equals("EXTRACTION_RUNTIME_UNAVAILABLE")) throw ex; // Python 실행 불가·시간 초과는 503으로 알린다.
             throw new ImportException("IMPORT_VALIDATION_ERROR", "인계 원본·실행 환경·담당자 설정을 검증할 수 없습니다.", "human_handoffs");
         } catch (IOException | IllegalArgumentException ex) {
             throw new ImportException("IMPORT_VALIDATION_ERROR", "인계 입력·원문·보관 경로를 읽고 검증할 수 없습니다.", "file");
@@ -143,6 +144,7 @@ public class HumanHandoffImportService {
         } catch (DataAccessException ex) {
             throw new ImportException("IMPORT_DATABASE_UNAVAILABLE", "DB 연결과 상태를 확인해 주세요.", null);
         } catch (ExtractionException ex) {
+            if (ex.code().equals("EXTRACTION_RUNTIME_UNAVAILABLE")) throw ex; // Python 실행 불가·시간 초과는 503으로 알린다.
             throw new ImportException("IMPORT_VALIDATION_ERROR", "인계 원본·실행 환경·담당자 설정을 검증할 수 없습니다.", "human_handoffs");
         } catch (IllegalArgumentException ex) {
             throw new ImportException("IMPORT_VALIDATION_ERROR", "인계 입력·원문·보관 경로를 읽고 검증할 수 없습니다.", "file");

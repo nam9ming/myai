@@ -72,7 +72,7 @@ public class CitizenPublicationService {
             events.add(content.validate(payload, sources, root));
         }
         boolean preview = command.action().equals("preview");
-        var references = preview ? extractions.verifyReadOnlyReferences(events) : extractions.verifyReferences(events);
+        var references = extractions.verifyReferences(events);
         String id = java.util.UUID.randomUUID().toString(); Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         for (var event : events) content.check(event.reviewedAt() != null && !event.reviewedAt().isAfter(now), "reviewed_at");
         var snapshot = citizenContent.snapshot(command, revisions, documents, id, now);

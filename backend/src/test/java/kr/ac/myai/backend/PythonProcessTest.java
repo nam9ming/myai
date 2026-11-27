@@ -27,11 +27,6 @@ class PythonProcessTest {
     }
 
     @Test
-    void existingEntryStillUsesItsCallersEnvironment() throws Exception {
-        assertThat(child("execute")).isEqualTo("5:True\n");
-    }
-
-    @Test
     void preservesTheExactFailureCodeSeparatelyFromStdout() {
         var result = run("sys.stdout.buffer.write(b'unchanged');sys.stderr.buffer.write(b'ARCHIVE_CONFLICT\\n');sys.exit(3)", 3000);
         assertThat(result.exitCode()).isEqualTo(3);

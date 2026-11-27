@@ -12,8 +12,6 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.Semaphore;
@@ -21,7 +19,6 @@ import java.util.concurrent.Semaphore;
 @Component
 @Profile("!fixture")
 public class PythonCalculator {
-    private static final int MAX_BYTES = 8 * 1024 * 1024;
     private final Semaphore slots = new Semaphore(4);
     private final ObjectMapper mapper;
     private final ReviewedImportReader json;
@@ -38,18 +35,12 @@ public class PythonCalculator {
     }
 
     public ObjectNode calculate(ObjectNode request) {
-        Path directory;
-        try { directory = Path.of(workdir); }
-        catch (RuntimeException ex) { throw unavailable(false); }
-        if (executable.isBlank() || !directory.isAbsolute() || !Files.isDirectory(directory)
-                || timeoutMillis < 1 || timeoutMillis > 60000) throw unavailable(false);
         if (Thread.currentThread().isInterrupted() || !slots.tryAcquire()) throw unavailable(true);
         try {
             byte[] input;
             try { input = mapper.writeValueAsBytes(request); }
             catch (JsonProcessingException ex) { throw protocolError(); }
-            if (input.length > MAX_BYTES) throw unavailable(false);
-            byte[] output = execute(directory, input);
+            byte[] output = execute(input);
             try {
                 JsonNode response = json.parseJson(output);
                 require(keys(response).equals(Set.of("protocol_version", "request_id", "snapshot_id", "input_sha256", "rules_version", "data", "diagnostics")));
@@ -63,10 +54,11 @@ public class PythonCalculator {
         } finally { slots.release(); }
     }
 
-    private byte[] execute(Path directory, byte[] input) {
+    private byte[] execute(byte[] input) {
         try {
-            var result = kr.ac.myai.backend.process.PythonProcess.execute(executable, directory.toString(),
-                    java.util.List.of("-m", "processing.matching"), input, timeoutMillis);
+            // 실행 파일·작업 폴더·제한 시간·입력 크기는 PythonProcess가 검사한다. 비밀값은 물려주지 않는다.
+            var result = kr.ac.myai.backend.process.PythonProcess.executeKeyless(executable, workdir,
+                    java.util.List.of("-B", "-s", "-m", "processing.matching"), input, timeoutMillis);
             if (result.exitCode() != 0) throw unavailable(false);
             return result.stdout();
         } catch (kr.ac.myai.backend.process.PythonProcess.Failure ex) {
