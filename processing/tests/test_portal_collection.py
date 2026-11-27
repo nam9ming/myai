@@ -129,3 +129,9 @@ class PortalCollectionTest(unittest.TestCase):
         self.assertEqual((doc["use_review"], doc["check_result"]), ("pending", "unchecked"))
         with self.assertRaisesRegex(ValueError, "응답 페이지"):
             capture_assets(self.private, "portal", "run", {"portal"})
+        # 한 응답 페이지의 여러 행을 각각 문서로 등록할 수 있다.
+        shared = json.loads(review.read_text())
+        shared["documents"].append({**shared["documents"][0], "document_id": "40000000-0000-4000-8000-000000000002",
+                                    "document_version_id": "50000000-0000-4000-8000-000000000002"})
+        review.write_text(json.dumps(shared))
+        self.assertEqual(prepare(review, "shared-page", self.private)["documents"], 2)

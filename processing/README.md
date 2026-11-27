@@ -153,7 +153,7 @@ python3.13 -B -m processing.collection.odcloud road-construction --name road-odc
 
 경로·인자·응답 구조는 2026-11-27에 받은 공개 Swagger 문서([15134509](https://infuser.odcloud.kr/oas/docs?namespace=15134509/v1), [15052289](https://infuser.odcloud.kr/oas/docs?namespace=15052289/v1))를 근거로 했다. 두 문서 모두 GET `page`·`perPage`·`returnType`, 인증은 `serviceKey` 쿼리 또는 `Authorization` 헤더, 응답은 `page`·`perPage`·`totalCount`·`currentCount`·`matchCount`·`data`다. 수집기는 `returnType=JSON`과 `serviceKey` 쿼리를 쓴다. 교육장 열은 `관리지역`·`시군구`·`배움터명`·`배움터주소`·`배움터 유형`·`이용정원`이고, 도로 공사 열은 `발주청`·`공사명`·`공사구분`·`주요사업지`·`사업개요`·`노선명`·`공사위치`·`시공사`·`현장주소`·`시작일`·`준공일`·`도급액(원)`이다. 같은 자료의 이전 항목(`_20240830`·`_20250820`, `_20230829`)은 수집하지 않는다.
 
-자료가 개정되면 같은 namespace에 새 uddi 항목이 붙는다. 수집기는 위 표의 uddi만 받으므로 새 항목이 공개되어도 스스로 알지 못하고 옛 항목을 계속 완료로 남긴다. 그래서 실행 전에 Swagger 문서에서 가장 최근 항목(제목 끝 날짜)이 표의 항목과 같은지 확인한다. 더 새 항목이 있으면 `processing/collection/odcloud_format.py`의 `DATASETS`(uddi·제목·열)와 이 표·시험을 함께 고친 뒤 새 이름으로 다시 수집한다. 옛 항목으로 만든 보관본은 지우지 않고 남긴다. 판독은 같은 자료의 다른 uddi로 만든 보관본을 변조와 구별되는 오류(`현재 코드와 다른 파일데이터 API 항목(uddi)`)로 거부하므로, 새 수집본을 선택한다.
+자료가 개정되면 같은 namespace에 새 uddi 항목이 붙는다. 수집기는 위 표의 uddi만 받으므로 새 항목이 공개되어도 스스로 알지 못하고 옛 항목을 계속 완료로 남긴다. 그래서 실행 전에 Swagger 문서에서 가장 최근 항목(제목 끝 날짜)이 표의 항목과 같은지 확인한다. 더 새 항목이 있으면 `processing/collection/odcloud_format.py`의 `DATASETS`(uddi·제목·열)와 이 표·시험을 함께 고친 뒤 새 이름으로 다시 수집한다. 옛 항목으로 만든 보관본은 지우지 않고 남긴다. 판독과 D03은 같은 자료의 다른 uddi로 만든 보관본을 변조와 구별되는 오류(`현재 코드와 다른 파일데이터 API 항목(uddi)`)로 거부하므로, 새 수집본을 선택한다.
 
 **인증된 실제 응답은 확인하지 않았다.** 이 환경에는 키가 없어 합성 응답으로만 시험했다. 그래서 문서와 다른 응답은 추정하지 않고 거부한다. 응답 최상위 키나 행의 열 이름이 Swagger와 정확히 같지 않거나, 요청한 `page`·`perPage`와 다르거나, `currentCount`가 행 수와 다르거나, 행 수가 전체 건수로 계산한 페이지 건수와 다르면 실패로 남긴다. 조건 인자를 보내지 않으므로 `matchCount`가 `totalCount`와 다른 경우도 실패다. 값은 문자열·정수·`null`만 받는다. 페이지 사이에 전체 건수가 바뀌거나, 앞 페이지에서 받은 행이 뒤 페이지에 다시 오면 멈춘다. 정렬 인자 없이 페이지를 넘기므로 서버 정렬이 흔들리면 행이 겹치고 그만큼 다른 행이 빠지기 때문이다. 원본 자료에 같은 행이 실제로 두 번 있어 페이지 경계에 걸린 경우도 구별할 수 없어 실패로 남긴다. 한 응답 안의 같은 행은 원본 자료의 중복일 수 있어 그대로 둔다. 전국 자료의 전체 건수가 0건이면 API 항목 변경이나 오류일 수 있어 `안성시 자료 없음`과 구별해 실패로 남긴다. HTTP 오류는 `파일데이터 API HTTP 응답 오류(상태 코드)`로 기록한다. 크기 초과·대기 시간 초과·연결 실패·지원하지 않는 인코딩 같은 전송 오류도 `파일데이터 API 응답…` 문구로 기록한다(예: `파일데이터 API 응답을 받지 못했습니다.`). 첫 실제 실행에서 이 규칙과 다른 점이 나오면 원본과 실패 사유를 보고 문서와 코드를 함께 고친다.
 
@@ -244,7 +244,9 @@ python3.13 -B -m processing.collection.board_batch city --name city-20261127 --m
 
 단건 수집은 `archive_kind=single`과 `capture.json`, 목록 수집은 `archive_kind=batch`와 `batch.json`을 사용한다. 직접 내려받은 포털 CSV는 `asset=portal`, 웹 상세는 게시물 번호를 지정한다. 부분 수집 묶음에서도 파싱에 성공한 상세를 선택할 수 있다. 명령은 수집 기록의 원본 해시와 파일을 대조하고 웹 상세의 게시물 번호를 다시 확인한다.
 
-API 수집은 `archive_kind=portal`, API 수집 이름, `asset="1"` 같은 응답 페이지 번호를 지정한다. `official_url`은 `portal.json`의 해당 `source_url`과 맞추고 `collected_at`은 `null`로 둔다. D03은 해당 응답 원본과 기록된 수신 시각을 연결한다. 비교에 API 묶음을 사용했다면 D03 원본은 해당 API 응답 페이지를 선택한다.
+API 수집은 `archive_kind=portal`, API 수집 이름, `asset="1"` 같은 응답 페이지 번호를 지정한다. `official_url`은 `portal.json`의 해당 `source_url`과 맞추고 `collected_at`은 `null`로 둔다. D03은 해당 응답 원본과 기록된 수신 시각을 연결한다. 비교에 API 묶음을 사용했다면 D03 원본은 해당 API 응답 페이지를 선택한다. 한 응답 페이지에 등록할 행이 여러 개면 문서마다 같은 `asset`을 지정한다. 문서 번호·버전 번호는 문서마다 달라야 하며, API 응답이 아닌 수집 종류는 문서마다 다른 원본을 써야 한다.
+
+파일데이터 API 수집은 `archive_kind=odcloud`, `archive_name`에는 `odcloud --name` 값, `asset`에는 응답 페이지 번호를 넣는다. `official_url`은 `odcloud.json`의 해당 `source_url`, `collected_at`은 `null`로 둔다. 명령은 모든 응답 원본의 해시·응답 구조·건수를 다시 확인하고 `anseong.json`을 원본에서 다시 만들어 대조한 뒤 해당 페이지 원본을 연결한다. 등록 방식은 `data-go-kr-odcloud-api`로 기록된다. 교육장처럼 안성시 행 여러 개가 한 페이지에 있으면 포털 API와 같이 문서마다 같은 페이지 번호를 지정한다.
 
 도서관·시청·안성배움e 매체는 `archive_kind=media`, `archive_name`에는 `store --name` 값, `asset`에는 같은 항목 번호를 문자열로 넣는다. `official_url`은 `notice.json`의 `source_url`(해당 게시판의 부모 공지 주소), `collected_at`은 `null`로 둔다. D03이 운영자 입력 다운로드 시각과 매체 원본 해시를 연결한다. 사람 검토를 마친 제목·본문을 전달하고 기존 D03 명령으로 등록한다.
 

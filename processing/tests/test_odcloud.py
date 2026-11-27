@@ -10,6 +10,8 @@ from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
 from processing.collection import odcloud
+from processing.collection.d03 import prepare
+from processing.collection.d03_sources import capture_assets
 from processing.collection.official_web import DETAIL_MAX_BYTES
 from processing.collection.odcloud_format import DATASETS, parse_page, select_rows
 
@@ -294,6 +296,9 @@ class OdcloudCollectionTest(unittest.TestCase):
     def collect(self, name="road-construction"):
         return odcloud.collect_odcloud(name, "run", self.root, _KEY)
 
+    def receipt(self):
+        return json.loads((self.bundle / "odcloud.json").read_bytes())
+
     def test_snapshot_keeps_raw_pages_and_selection(self):
         self.assertEqual(self.collect(), {"snapshot_id": "run", "status": "complete", "pages": 2, "rows": 3})
         self.sleep.assert_called_once_with(0.6)
@@ -430,7 +435,50 @@ class OdcloudCollectionTest(unittest.TestCase):
         (self.bundle / "odcloud.json").write_bytes(initial)
         odcloud.read_odcloud_snapshot(self.private, "run")
 
-    def test_learning_snapshot_keeps_selection(self):
+    def review(self, *extra, **document):
+        path = self.private / "review.json"
+        path.write_text(json.dumps({
+            "archive_kind": "odcloud", "archive_name": "run", "data_kind": "synthetic",
+            "documents": [{
+                "asset": "1", "official_url": odcloud.page_source("road-construction", 1, 2),
+                "publisher": "합성 기관", "document_id": "40000000-0000-4000-8000-000000000002",
+                "document_version_id": "50000000-0000-4000-8000-000000000002", "version_no": 1,
+                "title": "검토한 공사", "official_number": None, "published_date": None, "collected_at": None,
+                "cleaned_text": "검토한 공사 정보", "redaction_log": [], **document, **changes,
+            } for changes in ({}, *extra)],
+        }, ensure_ascii=False))
+        return path
+
+    def test_d03_prepares_raw_page_and_rejects_tampering(self):
+        self.collect()
+        self.assertEqual(prepare(self.review(), "prepared", self.private)["documents"], 1)
+        doc, = json.loads((self.private / "collection-d03" / "prepared" / "source-import.json").read_bytes())["documents"]
+        self.assertEqual(doc["raw_asset_path"], "collection-odcloud/run/page-1.json")
+        self.assertEqual(doc["raw_sha256"], hashlib.sha256(self.pages[0]).hexdigest())
+        self.assertEqual(doc["collection_method"], "data-go-kr-odcloud-api")
+        self.assertEqual(doc["collected_at"], self.receipt()["responses"][0]["fetched_at"].replace("+00:00", "Z"))
+        self.assertEqual((doc["use_review"], doc["check_result"]), ("pending", "unchecked"))
+        for keys, reason in (({"portal"}, "응답 페이지"), ({"3"}, "응답 페이지")):
+            with self.subTest(keys=keys), self.assertRaisesRegex(ValueError, reason):
+                capture_assets(self.private, "odcloud", "run", keys)
+        with self.assertRaises(ValueError):
+            prepare(self.review(official_url=odcloud.page_source("road-construction", 2, 2)), "wrong-url", self.private)
+        # 한 응답 페이지의 안성시 행 여러 개를 각각 문서로 등록할 수 있다.
+        second = {"document_id": "40000000-0000-4000-8000-000000000003",
+                  "document_version_id": "50000000-0000-4000-8000-000000000003", "title": "검토한 다른 공사"}
+        self.assertEqual(prepare(self.review(second), "shared-page", self.private)["documents"], 2)
+        shared = json.loads((self.private / "collection-d03" / "shared-page" / "source-import.json").read_bytes())
+        self.assertEqual({(doc["raw_asset_path"], doc["raw_sha256"]) for doc in shared["documents"]},
+                         {("collection-odcloud/run/page-1.json", hashlib.sha256(self.pages[0]).hexdigest())})
+        with self.assertRaisesRegex(ValueError, "document_id"):
+            prepare(self.review({"document_version_id": second["document_version_id"]}), "same-doc", self.private)
+        (self.bundle / "page-2.json").write_bytes(self.pages[1].replace(b'"page": 2', b'"page": 2 '))
+        with self.assertRaisesRegex(ValueError, "해시"):
+            prepare(self.review(), "tampered", self.private)
+        self.assertFalse((self.private / "collection-d03" / "tampered").exists())
+
+
+    def test_learning_snapshot_round_trips_to_d03(self):
         rows = [learning(), learning(district="평택시", name="평택 배움터", address="경기도 평택시 합성로 4")]
         page = envelope(1, 2, 2, rows)
         self.fetch.side_effect = [page]
@@ -448,6 +496,13 @@ class OdcloudCollectionTest(unittest.TestCase):
         self.assertIs(type(entry["record"]["이용정원"]), int)
         self.assertEqual((entry["page"], entry["position"], entry["missing"]), (1, 1, []))
         self.assertEqual(receipt["selection"]["rows"], 1)
+        source_url = odcloud.page_source("digital-learning", 1, 2)
+        self.assertEqual(prepare(self.review(official_url=source_url, title="합성 배움터"), "learning",
+                                 self.private)["documents"], 1)
+        doc, = json.loads((self.private / "collection-d03" / "learning" / "source-import.json").read_bytes())["documents"]
+        self.assertEqual((doc["raw_asset_path"], doc["raw_sha256"], doc["official_url"], doc["collection_method"]), (
+            "collection-odcloud/run/page-1.json", hashlib.sha256(page).hexdigest(), source_url, "data-go-kr-odcloud-api"))
+        self.assertEqual(doc["collected_at"], receipt["responses"][0]["fetched_at"].replace("+00:00", "Z"))
 
 
 class OdcloudCliTest(unittest.TestCase):
