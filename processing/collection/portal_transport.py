@@ -40,9 +40,13 @@ def fetch_portal_page(category: str, page: int, page_size: int, service_key: str
     service_key = validate_service_key(service_key)
     query = urlencode({"pageNo": page, "numOfRows": page_size, "type": "json", "serviceKey": service_key})
     raw = _fetch("GET", f"{path}?{query}", None, DETAIL_MAX_BYTES, host=_HOST)
+    reject_key_echo(raw, service_key)
+    return raw
 
+
+def reject_key_echo(raw: bytes, service_key: str) -> None:
+    """응답이 키를 그대로·URL 인코딩·JSON 이스케이프 형태로 되돌려 보내면 저장 전에 거부한다."""
     key = service_key.encode("ascii")
     decoded = _ASCII_ESCAPE.sub(lambda match: bytes([int(match[1], 16)]), raw)
     if key in raw or key in unquote_to_bytes(decoded.replace(rb"\/", b"/")):
         raise ValueError("공공데이터포털 응답에 인증 키가 포함되어 수집을 중단했습니다.")
-    return raw
