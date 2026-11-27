@@ -216,6 +216,41 @@ python3.13 -B -m processing.collection.board_batch city --name city-20261127 --m
 
 교육 프로그램 안내가 올라오는 [안성배움e 프로그램 안내](https://www.anseong.go.kr/edu/portal/bbs/list.do?ptIdx=300&mId=0901040000)는 게시판 키 `edu`로 같은 명령을 쓴다(`board_batch edu`, `media inspect --board edu`). 경로는 `/edu/portal/bbs`, 메뉴 번호는 `0901040000`, 게시판 번호(`ptIdx`)는 시청·도서관의 16이 아닌 300이며, `/edu/` 경로는 [robots.txt](https://www.anseong.go.kr/robots.txt)의 제한 목록에 없다. 같은 CMS지만 상세 제목이 `<h4>`가 아니라 본문 영역 바로 아래 `div.bod_view_title`에 있으므로 이 게시판은 그 블록에서만 제목을 읽고, 그 자리에 `<h4>`가 나오면 형식 변경으로 거부한다. 2026-11-27 1~2페이지(전체 33페이지)의 20건은 고정 글 없이 모두 파싱·D03 재검증을 통과했고, 모두 첨부가 있었다(HWPX 6개·JPEG 11개·PNG 9개).
 
+### 지자체복지서비스 OpenAPI 목록·상세 수집
+
+지원·혜택 분야의 안성시 복지서비스는 [한국사회보장정보원_지자체복지서비스](https://www.data.go.kr/data/15108347/openapi.do)(공공데이터포털 15108347)에서 받는다. `processing/collection/welfare_api.py`는 이 API의 목록·상세 요청과 XML 응답 검증만 맡는다. 원본을 보관하는 명령은 아직 없다. **이 모듈은 합성 XML 응답으로만 시험했고 인증 키가 필요한 실제 API는 호출하지 않았다.** 아래 요소 이름과 검증 기준은 공개 문서에서 옮긴 것이며, 실제 응답과 다르면 추정해 고치지 않고 거부한다.
+
+인증 키는 공공데이터포털에서 활용 신청을 마친 디코딩 키를 호출하는 쪽이 넘긴다. 키는 요청 주소에만 붙고 오류 문구에는 쓰지 않는다. 응답 본문에 키가 그대로, URL 인코딩, JSON 이스케이프(`\/`·`\u00XX`), XML 문자 참조로 들어 있거나 `+`가 공백으로 풀린 형태로 들어 있으면 그 응답을 돌려주지 않고 `WelfareResultError`로 거부한다. 겹친 인코딩은 다섯 번까지 풀어 보고, 그래도 끝나지 않으면 키 포함 여부를 확인할 수 없으므로 같은 방식으로 거부한다. NUL 바이트가 있는 본문(UTF-16·UTF-32 등)과 UTF-8로 읽을 수 없는 본문(EBCDIC 등)은 키가 원문이든 URL 인코딩이든 이 비교를 빠져나갈 수 있으므로 키 확인 전에 같은 방식으로 거부한다. 키 확인도 파서처럼 앞의 UTF-8 BOM을 떼고 엄격한 UTF-8로 읽는다. 이런 본문은 어차피 UTF-8 XML 파서가 읽지 않는다.
+
+- 요청: `https://apis.data.go.kr/B554287/LocalGovernmentWelfareInformations`의 `/LcgvWelfarelist`(목록)와 `/LcgvWelfaredetailed`(상세)만 GET으로 보낸다. 리디렉션은 따르지 않는다. 목록은 `pageNo`·`numOfRows`·`ctpvNm=경기도`·`sggNm=안성시`·`arrgOrd=001`(최신순)을, 상세는 `servId`를 쓴다. 조회수로 순서가 바뀌는 인기순 대신 최신순을 고정했다. `list_source_url`·`detail_source_url`은 키를 뺀 같은 주소를 돌려준다.
+- 한도: 응답당 2 MiB. HTTP 200이 아닌 응답은 상태 코드를 담은 `SourceHTTPError`로 거부한다. HTTP 200이라도 서비스 오류로 보이는 응답은 `WelfareResultError`로 거부한다. 서비스 오류는 UTF-8 XML로 읽을 수 없는 본문, 문서와 다른 최상위 요소(예: 게이트웨이의 `OpenAPI_ServiceResponse`), 최상위 바로 아래의 `resultCode`가 없거나 성공 코드가 아닌 경우다. 그 밖의 봉투·항목 불일치는 `ValueError`로 거부한다.
+- XML: UTF-8만 받고, `<!--`·`<![CDATA[`가 아닌 `<!` 선언(DOCTYPE·ENTITY)이 있으면 파싱 전에 거부한다. 파싱은 표준 라이브러리 `xml.etree.ElementTree`로 하며 새 의존성은 없다. 정의되지 않은 엔터티와 문법 오류는 형식 오류다.
+- 봉투 검증: 최상위 요소, `resultCode`가 성공 코드인지, 응답의 `pageNo`·`numOfRows`가 요청과 같은지, `totalCount`와 페이지 항목 수가 맞는지 확인한다. 목록 항목마다 `servId`(`WLF`+숫자 8자리)·`servNm`과 `ctpvNm=경기도`·`sggNm=안성시`가 있어야 한다. 상세는 `servId`가 요청과 같아야 하고, 시도·시군구가 있으면 안성시여야 한다. 문서에 없는 하위 구조, 같은 요소의 반복, 최상위·`servList`·하위 목록 요소에 하위 요소 없이 들어 있는 글자는 형식 변경으로 거부한다.
+
+파싱 결과는 API 요소 이름을 키로 원문 텍스트를 그대로 둔다. 앞뒤 공백·줄바꿈도 바꾸지 않는다. 문서의 요소가 없거나 공백뿐이면 값을 `null`로 두고 `unknown`에 `missing`·`empty`를 남긴다. 문서에 없는 단일 값 요소는 `undocumented`에 원문 그대로 보관한다. 시행기간(`enfcBgngYmd`·`enfcEndYmd`)은 날짜로 해석하지 않고, 지원대상·선정기준에서 자격·연령·소득을, 급여서비스 내용에서 금액·비용을 추정하지 않는다. 서비스 URL은 상세 응답에 없고 목록 항목의 `servDtlLink`에만 있다. 상세 하위 목록(`inqplCtadrList` 등)의 서비스구분코드가 코드표와 다르면 거부한다. 목록 항목에는 이 코드가 없다.
+
+요소 이름의 출처는 다음과 같다. 2026-11-27에 공개 페이지와 첨부 문서를 받아 확인했다.
+
+| 용도 | 요소 | 근거 |
+| --- | --- | --- |
+| 요청 | `serviceKey`·`pageNo`·`numOfRows`·`ctpvNm`·`sggNm`·`arrgOrd`, 상세 `servId` | 상세 페이지 요청변수 표·Swagger |
+| 목록 봉투 | `resultCode`·`resultMessage`·`numOfRows`·`pageNo`·`totalCount`, 반복 항목 `servList` | Swagger `LcgvWelfarelist` 응답 |
+| 서비스명·ID | `servNm`·`servId` | Swagger 목록·상세 응답 |
+| 시행기간 | `enfcBgngYmd`·`enfcEndYmd` | Swagger 상세 응답 |
+| 지원주기·제공유형 | `sprtCycNm`·`srvPvsnNm` | Swagger 목록·상세 응답 |
+| 지원대상·선정기준·급여서비스 | `sprtTrgtCn`·`slctCritCn`·`alwServCn` | Swagger 상세 응답 |
+| 신청방법 | `aplyMtdNm`(목록·상세), `aplyMtdCn`(상세) | Swagger |
+| 문의처·관련 사이트·근거법령·서식 | `inqplCtadrList`·`inqplHmpgReldList`·`baslawList`·`basfrmList`의 `wlfareInfoDtlCd`·`wlfareInfoReldNm`·`wlfareInfoReldCn` | Swagger 상세 응답 |
+| 서비스구분코드 010·020·030·040, 정렬순서 001 | `wlfareInfoDtlCd`, `arrgOrd` | 첨부 `지자체복지서비스_코드표(v1.0).doc` |
+| 서비스 URL | `servDtlLink` | Swagger 목록 응답(상세 응답에는 없음) |
+| 기타 | `servDgst`·`bizChrDeptNm`·`lifeNmArray`·`trgterIndvdlNmArray`·`intrsThemaNmArray`·`inqNum`·`lastModYmd` | Swagger |
+| 최상위 요소 | `response` | Swagger의 `xml.name` |
+| 최상위 요소 | `wantedList`·`wantedDtl` | 같은 기관의 다른 API인 [중앙부처복지서비스](https://www.data.go.kr/data/15090532/openapi.do) `활용가이드_중앙부처복지서비스(v2.2).doc`의 응답 예시 |
+| 성공 코드 | `0` | 같은 활용가이드 v2.2의 오류 코드표 |
+| 성공 코드 | `00` | 공공데이터포털 표준 API(`portal_format.py`) 기준 |
+
+이 API 상세 페이지의 참고문서는 코드표 하나이며 응답 XML 예시와 오류 코드표가 없다. 같은 기관의 중앙부처 API는 Swagger에 `response`로 적혀 있지만 활용가이드 예시는 `wantedList`·`wantedDtl`을 쓴다. 그래서 두 문서의 이름을 모두 허용했다. 이 API의 실제 최상위 이름·성공 코드는 미확인이다. 최대 `numOfRows`, 한글 지역 인자의 인코딩, 목록 항목의 `ctpvNm`·`sggNm` 포함 여부, 게이트웨이 오류 응답 형식, 최신순 정렬의 페이지 안정성도 실제 응답으로 확인하지 않았다. 게이트웨이가 200과 함께 다른 최상위 요소(예: `OpenAPI_ServiceResponse`)를 보내면 최상위 요소 불일치로 거부한다. 다음 세 가지도 실제 응답으로 확인하지 않았고, 해당하면 응답이 거부된다. 첫째, `servDtlLink`의 `&`가 `&amp;`로 이스케이프되지 않으면 목록 페이지 전체가 XML 형식 오류가 된다. 둘째, 경기도 공통 서비스처럼 `sggNm`이 빈 목록 항목이 있으면 그 페이지 전체가 거부된다. 셋째, 중앙부처 API의 신청방법 목록 `applmetList` 같은 하위 목록이 상세에 나오면 문서에 없는 하위 구조로 거부한다. XML 문법 오류는 오류 화면과 구별할 수 없어 서비스 오류(`WelfareResultError`)로 본다. 첫 실제 호출에서 응답 원본을 보고 위 항목을 확인한 뒤 이 표를 갱신한다. 이전 조사에서 확인한 안성시 공공근로사업 `WLF00000915`([복지로 상세](https://www.bokjiro.go.kr/ssis-tbu/twataa/wlfareInfo/moveTWAT52011M.do?wlfareInfoId=WLF00000915))도 이번 작업에서 다시 조회하지 않았다.
+
 ### 수집 원본을 D03 등록 입력으로 준비하기
 
 단건 수집은 `archive_kind=single`과 `capture.json`, 목록 수집은 `archive_kind=batch`와 `batch.json`을 사용한다. 직접 내려받은 포털 CSV는 `asset=portal`, 웹 상세는 게시물 번호를 지정한다. 부분 수집 묶음에서도 파싱에 성공한 상세를 선택할 수 있다. 명령은 수집 기록의 원본 해시와 파일을 대조하고 웹 상세의 게시물 번호를 다시 확인한다.

@@ -20,9 +20,9 @@ _DETAIL_PATHS = {
 
 
 class SourceHTTPError(ValueError):
-    def __init__(self, status: int):
+    def __init__(self, status: int, source: str = "공식 웹"):
         self.status = status
-        super().__init__(f"공식 웹 HTTP 응답 오류({status}).")
+        super().__init__(f"{source} HTTP 응답 오류({status}).")
 
 
 def _detail_path(category: str, web_id: str) -> str:
@@ -163,7 +163,9 @@ def fetch_listing(category: str, page: int, begin: date | None, end: date | None
     return _fetch(method, path, body, limit)
 
 
-def _fetch(method: str, path: str, body: bytes | None, limit: int, *, host: str = _HOST) -> bytes:
+def _fetch(method: str, path: str, body: bytes | None, limit: int, *, host: str = _HOST,
+           source: str = "공식 웹") -> bytes:
+    """`source`는 오류 문구에 쓰는 출처 이름이다."""
     if type(limit) is not int or not 1 <= limit <= DETAIL_MAX_BYTES:
         raise ValueError("공식 웹 수집의 원문 크기 한도가 유효하지 않습니다.")
 
@@ -181,30 +183,30 @@ def _fetch(method: str, path: str, body: bytes | None, limit: int, *, host: str 
                 connection.request(method, path, body=body, headers=headers)
             with connection.getresponse() as response:
                 if response.status != 200:
-                    raise SourceHTTPError(response.status)
+                    raise SourceHTTPError(response.status, source)
                 if (response.getheader("Content-Encoding") or "identity").lower() != "identity":
-                    raise ValueError("공식 웹 상세 응답의 인코딩을 지원하지 않습니다.")
+                    raise ValueError(f"{source} 응답의 인코딩을 지원하지 않습니다.")
 
                 declared = response.getheader("Content-Length")
                 transfer = response.getheader("Transfer-Encoding")
                 if transfer is not None and (transfer.lower() != "chunked" or declared is not None):
-                    raise ValueError("공식 웹 상세 응답의 전송 형식을 확인할 수 없습니다.")
+                    raise ValueError(f"{source} 응답의 전송 형식을 확인할 수 없습니다.")
                 if declared is not None:
                     declared = declared.strip(" \t")
                     if re.fullmatch(r"[0-9]{1,19}", declared) is None:
-                        raise ValueError("공식 웹 상세 응답의 길이가 유효하지 않습니다.")
+                        raise ValueError(f"{source} 응답의 길이가 유효하지 않습니다.")
                     declared = int(declared)
                     if declared > limit:
-                        raise ValueError("공식 웹 상세 응답이 허용 크기를 초과했습니다.")
+                        raise ValueError(f"{source} 응답이 허용 크기를 초과했습니다.")
 
                 raw = response.read(limit + 1)
                 if len(raw) > limit:
-                    raise ValueError("공식 웹 상세 응답이 허용 크기를 초과했습니다.")
+                    raise ValueError(f"{source} 응답이 허용 크기를 초과했습니다.")
                 if declared is not None and len(raw) != declared:
-                    raise ValueError("공식 웹 상세 응답이 전송 중 중단되었습니다.")
+                    raise ValueError(f"{source} 응답이 전송 중 중단되었습니다.")
                 return raw
     except TimeoutError:
-        message = "공식 웹 상세 응답의 대기 시간을 초과했습니다."
+        message = f"{source} 응답의 대기 시간을 초과했습니다."
     except (OSError, HTTPException):
-        message = "공식 웹 상세 응답을 받지 못했습니다."
+        message = f"{source} 응답을 받지 못했습니다."
     raise ValueError(message) from None
