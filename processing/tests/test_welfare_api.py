@@ -113,7 +113,8 @@ class WelfareTransportTest(unittest.TestCase):
                        "example%2f-_%2b%3d123", "%65xample/-_+=123", "example&amp;#47;-_+=123",
                        "example\\/-_\\u002B=123", "\\u0065xample/-_+=123", "example/-_ =123", nested,
                        # 주석·CDATA·처리 지시로 나뉘어도 XML 파싱 뒤에는 키가 합쳐진다.
-                       "example/<![CDATA[-_+=123]]>", "exam<!-- 나눔 -->ple/-_+=123", "exam<?x y?>ple/-_+=123"):
+                       "example/<![CDATA[-_+=123]]>", "exam<!-- 나눔 -->ple/-_+=123", "exam<?x y?>ple/-_+=123",
+                       "<![CDATA[<!--example/]]><![CDATA[-_+=123-->]]>", 'x</resultMessage><a b="example/-_+&#61;123"/><resultMessage>'):
             raw = f"<response><resultMessage>{echoed}</resultMessage></response>".encode()
             self.reply(raw)
             with self.subTest(echoed=echoed), self.assertRaisesRegex(WelfareResultError, "인증 키") as caught:

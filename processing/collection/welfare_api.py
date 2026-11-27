@@ -79,9 +79,6 @@ def service_page_url(service_id: str) -> str:
     return f"{SERVICE_PAGE}?{urlencode({'wlfareInfoId': serv_id(service_id)})}"
 
 
-_XML_SPLITTERS = re.compile(r"<!--.*?-->|<\?.*?\?>", re.S)
-
-
 def reject_key_echo(raw: bytes, service_key: str) -> None:
     """원문·URL 인코딩·JSON 이스케이프(`\\/`·`\\u00XX`)·XML 문자 참조로 바뀐 형태까지 키가 있으면 거부한다.
 
@@ -99,10 +96,19 @@ def reject_key_echo(raw: bytes, service_key: str) -> None:
         raise WelfareResultError("복지 API 응답이 UTF-8이 아니어서 인증 키 포함 여부를 확인할 수 없으므로 수집을 중단했습니다.") from None
     # 폼 인코딩으로 `+`가 공백으로 풀린 형태도 키를 되살릴 수 있다.
     forms = (service_key, service_key.replace("+", " "))
-    # 주석·CDATA·처리 지시로 나뉜 키는 XML 파싱 뒤에 합쳐지므로 그 표시를 지운 본문도 확인한다.
-    flat = _XML_SPLITTERS.sub("", text).replace("<![CDATA[", "").replace("]]>", "")
-    for candidate in dict.fromkeys((text, flat)):
-        _reject_forms(candidate, forms)
+    _reject_forms(text, forms)
+    # 주석·CDATA·처리 지시로 나뉜 키는 XML 파싱 뒤에 합쳐진다. 파서가 읽을 본문이면 읽은 글자와 속성 값도 본다.
+    # DTD 선언이 있거나 파싱할 수 없는 본문은 `_document`가 거부하므로 합쳐지는 글자가 없다.
+    if re.search(r"<!(?!--|\[CDATA\[)", text):
+        return
+    try:
+        root = ElementTree.fromstring(text)
+    except ElementTree.ParseError:
+        return
+    for element in root.iter():
+        for value in (element.text, element.tail, *element.attrib.values()):
+            if value:
+                _reject_forms(value, forms)
 
 
 def _reject_forms(text: str, forms: tuple[str, ...]) -> None:
