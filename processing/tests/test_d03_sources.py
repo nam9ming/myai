@@ -157,7 +157,7 @@ class D03SourcesTest(unittest.TestCase):
     def test_limits_receipt_read(self):
         self._single()
         with (
-            patch("processing.collection.d03_sources.CAPTURE_RECEIPT_MAX_BYTES", 128),
+            patch("processing.collection.capture.CAPTURE_RECEIPT_MAX_BYTES", 128),
             self.assertRaisesRegex(ValueError, "허용 크기"),
         ):
             capture_assets(self.root, "single", "one", {"77"})

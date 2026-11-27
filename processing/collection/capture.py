@@ -1,7 +1,7 @@
 """포털 CSV와 공식 웹 상세를 비공개 수집 묶음으로 보관한다."""
 
 import argparse
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from datetime import UTC, datetime
 import hashlib
 import json
@@ -10,6 +10,8 @@ from pathlib import Path
 import re
 import stat
 import sys
+
+from processing.extraction.validation import decode
 
 from .__main__ import (
     PORTAL_MAX_BYTES,
@@ -22,6 +24,10 @@ from .official_web import DETAIL_MAX_BYTES, detail_url, fetch_detail
 
 CAPTURE_ROOT = Path(__file__).resolve().parents[2] / "data" / "private" / "collection"
 CAPTURE_RECEIPT_MAX_BYTES = 64 * 1024 * 1024
+PORTAL_SECTION = "collection-portal"
+_UTC_TIME = re.compile(
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?(?:\+00:00|Z)"
+)
 
 
 @contextmanager
@@ -47,6 +53,66 @@ def bundle_directory(root: Path, name: str):
             os.close(bundle_fd)
     finally:
         os.close(root_fd)
+
+
+def private_stat(descriptor: int) -> os.stat_result:
+    info = os.fstat(descriptor)
+    if info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) & 0o077:
+        raise ValueError("수집 디렉터리와 원본은 실행 사용자만 접근할 수 있어야 합니다.")
+    return info
+
+
+@contextmanager
+def open_archive(private_root: Path, relative: Path):
+    options = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    try:
+        with ExitStack() as stack:
+            if (relative.is_absolute() or not relative.parts or ".." in relative.parts
+                    or not private_root.is_absolute() or private_root.resolve(strict=True) != private_root):
+                raise ValueError("수집 원본 루트와 상대 경로에 심볼릭 링크를 사용할 수 없습니다.")
+            descriptor = os.open(private_root, options)
+            stack.callback(os.close, descriptor)
+            if (private_root.resolve(strict=True) != private_root
+                    or not os.path.samestat(os.fstat(descriptor), private_root.lstat())):
+                raise ValueError("수집 원본 루트가 확인 중에 바뀌었습니다.")
+            for part in relative.parts:
+                descriptor = os.open(part, options, dir_fd=descriptor)
+                stack.callback(os.close, descriptor)
+                private_stat(descriptor)
+            yield descriptor
+    except OSError:
+        raise ValueError("수집 원본 또는 기록을 안전하게 읽을 수 없습니다.") from None
+
+
+def read_capture_file(directory: int, filename: str, limit: int) -> bytes:
+    if filename in ("", ".", "..") or Path(filename).name != filename:
+        raise ValueError("수집 원본 파일 이름이 올바르지 않습니다.")
+    options = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+    with os.fdopen(os.open(filename, options, dir_fd=directory), "rb") as stream:
+        if not stat.S_ISREG(private_stat(stream.fileno()).st_mode):
+            raise ValueError("수집 원본과 기록은 일반 파일이어야 합니다.")
+        raw = stream.read(limit + 1)
+    if len(raw) > limit:
+        raise ValueError("수집 원본 또는 기록이 허용 크기를 초과했습니다.")
+    return raw
+
+
+def read_receipt(directory: int, filename: str) -> dict:
+    data = decode(read_capture_file(directory, filename, CAPTURE_RECEIPT_MAX_BYTES),
+                  "input", max_bytes=CAPTURE_RECEIPT_MAX_BYTES)
+    if not isinstance(data, dict):
+        raise ValueError("수집 기록 형식을 확인할 수 없습니다.")
+    return data
+
+
+def capture_timestamp(value: object) -> str:
+    if isinstance(value, str) and _UTC_TIME.fullmatch(value):
+        try:
+            datetime.fromisoformat(value)
+            return value
+        except ValueError:
+            pass
+    raise ValueError("수집 기록의 수신 시각은 UTC 날짜와 시각이어야 합니다.")
 
 
 def write_new(directory: int, name: str, content: bytes | bytearray) -> None:

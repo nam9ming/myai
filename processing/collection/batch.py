@@ -15,6 +15,7 @@ from .library_listing import parse_library_listing
 from .official_web import (
     DETAIL_MAX_BYTES, OFFICIAL_ORIGIN, SourceHTTPError, detail_url, fetch_detail, fetch_listing, listing_request,
 )
+from .portal import read_portal_snapshot
 
 BATCH_ROOT = CAPTURE_ROOT.with_name("collection-batches")
 LIST_MAX_BYTES = 2 * 1024 * 1024
@@ -94,15 +95,27 @@ def capture_detail(directory: int, category: str, web_id: str, records: list[dic
     return item, None
 
 
-def capture_batch(category: str, portal_file: Path, name: str, root: Path, *,
-                  begin: date | None = None, end: date | None = None, max_pages: int = 3, max_items: int = 20) -> dict:
+def capture_batch(category: str, portal_file: Path | None, name: str, root: Path, *,
+                  begin: date | None = None, end: date | None = None, max_pages: int = 3, max_items: int = 20,
+                  portal_snapshot: str | None = None) -> dict:
     validate_name(name)
     listing_request(category, 1, begin, end)
     if type(max_pages) is not int or not 1 <= max_pages <= 20 or type(max_items) is not int or not 1 <= max_items <= 80:
         raise ValueError("요청 한도는 페이지 1~20장, 게시물 1~80건입니다.")
-    portal_raw = read_raw(portal_file, PORTAL_MAX_BYTES, "포털 CSV")
+    if (portal_file is None) == (portal_snapshot is None):
+        raise ValueError("포털 CSV 또는 API 수집 이름 중 하나를 지정해 주세요.")
+    if portal_snapshot is not None:
+        portal_raw, snapshot = read_portal_snapshot(root.parent, portal_snapshot)
+        if snapshot["category"] != category:
+            raise ValueError("포털 API 수집 분야가 웹 목록 수집 분야와 다릅니다.")
+    else:
+        portal_raw = read_raw(portal_file, PORTAL_MAX_BYTES, "포털 CSV")
     portal_text, portal_sha = decode_input(portal_raw, "포털 CSV", portal_csv=True)
     records = parse_portal(category, portal_text)
+    portal = {"file": "portal.csv", "catalog_url": SOURCE_PAGES[category][0],
+              "sha256": portal_sha, "records": records}
+    if portal_snapshot is not None:
+        portal["api_snapshot"] = portal_snapshot
     with bundle_directory(root, name) as directory:
         write_new(directory, "portal.csv", portal_raw)
         pages, ids, discovery, stop = discover(directory, category, begin, end, max_pages, max_items)
@@ -126,8 +139,7 @@ def capture_batch(category: str, portal_file: Path, name: str, root: Path, *,
             "max_pages": max_pages,
             "max_items": max_items,
             "stop_http_status": stop,
-            "portal": {"file": "portal.csv", "catalog_url": SOURCE_PAGES[category][0],
-                       "sha256": portal_sha, "records": records},
+            "portal": portal,
             "pages": pages,
             "items": items,
         })
@@ -137,7 +149,9 @@ def capture_batch(category: str, portal_file: Path, name: str, root: Path, *,
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("category", choices=SOURCE_PAGES)
-    parser.add_argument("--portal-csv", required=True, type=Path)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--portal-csv", type=Path)
+    source.add_argument("--portal-snapshot")
     parser.add_argument("--name", required=True)
     parser.add_argument("--begin", type=date.fromisoformat)
     parser.add_argument("--end", type=date.fromisoformat)
@@ -146,7 +160,8 @@ def main() -> int:
     args = parser.parse_args()
     try:
         summary = capture_batch(args.category, args.portal_csv, args.name, BATCH_ROOT,
-                                begin=args.begin, end=args.end, max_pages=args.max_pages, max_items=args.max_items)
+                                begin=args.begin, end=args.end, max_pages=args.max_pages, max_items=args.max_items,
+                                portal_snapshot=args.portal_snapshot)
     except ValueError as error:
         print(f"묶음 수집 실패: {error}", file=sys.stderr)
         return 1
