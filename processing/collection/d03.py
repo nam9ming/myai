@@ -26,7 +26,7 @@ DOCUMENT_FIELDS = ("asset official_url document_id document_version_id version_n
 UTC_STAMP = r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?Z"
 D03_SECTION = "collection-d03"
 _BOARD_ID = re.compile(r"[?&]bIdx=([1-9][0-9]{0,17})(?:&|$)")
-_BODY = "official-web-board"
+_MEDIA = "official-web-media-manual"
 
 
 def kept_text(value, field: str, limit: int, *, multiline: bool = False) -> str:
@@ -153,7 +153,8 @@ def _check_board_notices(private_root: Path, name: str, documents: list[dict]) -
     """시청·도서관·읍면동 공지는 게시물 번호(ptIdx=16)를 공유하고 원본 해시가 게시판마다 달라 같은 공지가 별개 문서로 들어간다.
 
     그래서 같은 번호 공간의 같은 공지 번호는 모든 준비본에서 한 게시판 주소만 쓰고, 공지 본문 문서는 한 문서 ID(그 문서의
-    새 버전 포함)만 허용한다. 같은 게시판의 매체 문서는 여러 개일 수 있다. 도서관 본문은 등록 방식이 달라 주소만 대조한다.
+    새 버전 포함)만 허용한다. 같은 게시판의 매체 문서는 여러 개일 수 있다. 도서관 본문(official-web-capture)도 게시판 본문과
+    같이 본문 문서 ID를 대조하므로, 같은 도서관 공지를 별개 단건·목록 묶음에서 다른 문서 ID로 준비하면 거부한다.
     안성배움e(ptIdx=300)는 따로 대조한다.
     shortcut: 동시에 실행한 준비끼리는 서로 보지 못한다. 여러 운영자가 동시에 준비하게 되면 잠금을 둔다.
     """
@@ -172,7 +173,8 @@ def _check_board_notices(private_root: Path, name: str, documents: list[dict]) -
             if other["official_url"] != document["official_url"]:
                 raise ValueError(f"공지 번호 {key[1]}의 문서가 D03 준비본 {source}에 다른 게시판 주소로 이미 있습니다. "
                                  "같은 공지는 한 게시판의 원본만 등록합니다.")
-            if (_BODY == document["collection_method"] == other.get("collection_method")
+            # 주소가 같으므로 등록 방식이 같으면 같은 게시판의 같은 공지 본문이다(매체 문서는 여러 개를 허용).
+            if (document["collection_method"] == other.get("collection_method") != _MEDIA
                     and other["document_id"] != document["document_id"]):
                 raise ValueError(f"공지 번호 {key[1]}의 본문이 D03 준비본 {source}에 다른 문서 ID로 이미 있습니다. "
                                  "내용이 바뀌었으면 기존 문서 ID의 새 버전으로 준비합니다.")

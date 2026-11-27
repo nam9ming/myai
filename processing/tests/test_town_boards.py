@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from processing.collection import media
 from processing.collection.board_batch import BOARD_SECTION, capture_board_batch
+from processing.collection.capture import capture
 from processing.collection.d03 import _board_notice, prepare
 from processing.collection.d03_sources import capture_assets
 from processing.collection.libraries import (
@@ -292,6 +293,24 @@ class TownDuplicateTest(unittest.TestCase):
         self.prepare_library_media("203001", 6)
         with self.assertRaisesRegex(ValueError, "^공지 번호 203001의 문서가 D03 준비본 library-203001-media에 다른"):
             self.prepare("city-second", "board", "city", "203001", "city", "203001", 7)
+
+    def test_library_body_allows_only_one_document_id(self):
+        # 도서관 본문은 수집할 때마다 원본 해시가 달라, 별개 단건 묶음 두 개로 같은 공지가 두 문서가 될 수 있었다.
+        portal = self.private.parent / "library.csv"
+        portal.write_bytes("도서관명,시도명,시군구명\n합성 도서관,경기도,안성시\n".encode("cp949"))
+        detail = ('<input name="bIdx" value="203001"><div class="bod_view"><h4>합성 도서관 안내</h4>'
+                  '<div class="view_cont"><p>시설 점검</p></div></div>').encode()
+        with patch("processing.collection.capture.fetch_detail", return_value=detail):
+            for name in ("library-1", "library-2"):
+                self.assertEqual(capture("living", portal, "203001", name, self.private / "collection")["status"],
+                                 "parsed")
+        url = detail_url("living", "203001")
+        self.prepare("library-body", "single", "library-1", "203001", None, "203001", 2, url=url)
+        with self.assertRaisesRegex(ValueError, "^공지 번호 203001의 본문이 D03 준비본 library-body에 다른 문서 ID"):
+            self.prepare("library-again", "single", "library-2", "203001", None, "203001", 3, url=url)
+        self.assertFalse((self.d03 / "library-again").exists())
+        self.assertEqual(self.prepare("library-v2", "single", "library-2", "203001", None, "203001", 2, 2, url=url),
+                         {"preparation_id": "library-v2", "documents": 1})
 
     def prepare_library_media(self, notice_id, document):
         return self.prepare(f"library-{notice_id}-media", "media", f"library-{notice_id}-file", "1", None, notice_id,
