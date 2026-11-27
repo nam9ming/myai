@@ -1,9 +1,10 @@
-"""안성시 공식 행사·도서관·도로 공사현황의 공개 목록과 상세를 요청한다."""
+"""안성시 공식 행사·도서관·도로 공사현황·시청 공지의 공개 목록과 상세를 요청한다."""
 
 from contextlib import closing
 from datetime import date
 from http.client import HTTPException, HTTPSConnection
 import re
+from types import MappingProxyType
 from urllib.parse import urlencode
 
 
@@ -97,6 +98,46 @@ def fetch_road_listing(state: str, page: int, *, limit: int) -> bytes:
 
 def fetch_road_detail(state: str, project_id: str, *, limit: int) -> bytes:
     return _fetch("GET", _road_detail_path(state, project_id), None, limit)
+
+
+# 게시판 키: (경로, 메뉴 번호, 오류 문구에 쓰는 이름, 파싱 결과의 source)
+BOARDS = MappingProxyType({
+    "city": ("/portal/bbs", "0501010000", "시청 공지", "city_notice"),
+})
+_NOTICE_ID = _PROJECT_ID
+
+
+def board(name: str) -> tuple[str, str, str, str]:
+    if not isinstance(name, str) or name not in BOARDS:
+        raise ValueError("지원하지 않는 공식 게시판입니다.")
+    return BOARDS[name]
+
+
+def _board_detail_path(name: str, notice_id: str) -> str:
+    prefix, menu, _, _ = board(name)
+    if not isinstance(notice_id, str) or _NOTICE_ID.fullmatch(notice_id) is None:
+        raise ValueError("공지 번호는 18자리 이하의 양의 ASCII 정수여야 합니다.")
+    return f"{prefix}/view.do?bIdx={notice_id}&mId={menu}&ptIdx=16"
+
+
+def board_detail_url(name: str, notice_id: str) -> str:
+    return OFFICIAL_ORIGIN + _board_detail_path(name, notice_id)
+
+
+def board_listing_path(name: str) -> str:
+    prefix, menu, _, _ = board(name)
+    return f"{prefix}/list.do?ptIdx=16&mId={menu}"
+
+
+def fetch_board_listing(name: str, page: int, *, limit: int) -> bytes:
+    path = board_listing_path(name)
+    if type(page) is not int or page < 1:
+        raise ValueError("목록 페이지는 양의 정수여야 합니다.")
+    return _fetch("POST", path, urlencode({"page": page}).encode("ascii"), limit)
+
+
+def fetch_board_detail(name: str, notice_id: str, *, limit: int) -> bytes:
+    return _fetch("GET", _board_detail_path(name, notice_id), None, limit)
 
 
 def fetch_listing(category: str, page: int, begin: date | None, end: date | None, *, limit: int) -> bytes:

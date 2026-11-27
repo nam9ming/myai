@@ -5,7 +5,7 @@ from io import StringIO
 import re
 
 from . import official_url
-from .official_web import OFFICIAL_ORIGIN, detail_url
+from .official_web import OFFICIAL_ORIGIN, board as board_info, board_detail_url, detail_url
 
 
 _LOCATION_COLUMNS = ('시도명', '시군구명', '도서관명')
@@ -61,8 +61,9 @@ def parse_library_csv(text: str) -> list[dict]:
 
 
 class _NoticeParser(HTMLParser):
-    def __init__(self):
+    def __init__(self, label='도서관 공지'):
         super().__init__()
+        self.label = label
         self.tags = []
         self.found_board = False
         self.notice_ids = set()
@@ -85,7 +86,7 @@ class _NoticeParser(HTMLParser):
                 self.notice_ids.add(attrs.get('value'))
             if tag == 'div' and 'bod_view' in classes:
                 if self.found_board:
-                    raise ValueError('도서관 공지 본문 영역이 중복되었습니다.')
+                    raise ValueError(self.label + ' 본문 영역이 중복되었습니다.')
                 self.found_board = True
                 self.tags.append(tag)
             return
@@ -119,7 +120,7 @@ class _NoticeParser(HTMLParser):
                 section = 'published_date'
             if section:
                 if section in self.parts:
-                    raise ValueError('도서관 공지 필드가 중복되었습니다.')
+                    raise ValueError(self.label + ' 필드가 중복되었습니다.')
                 self.section = section
                 self.section_depth = len(self.tags) + 1
                 self.parts[section] = []
@@ -155,7 +156,7 @@ class _NoticeParser(HTMLParser):
             if self.tags[-1] != tag:
                 self.close_optional(optional - {tag})
         if self.tags[-1] != tag:
-            raise ValueError('도서관 공지 HTML 구조가 올바르지 않습니다.')
+            raise ValueError(self.label + ' HTML 구조가 올바르지 않습니다.')
         if tag == 'dl' and len(self.tags) == 2:
             self.attachment_open = False
         if tag in _HIDDEN_TAGS:
@@ -185,8 +186,8 @@ _ATTACHMENT_FORMATS = {'pdf', 'hwp', 'hwpx', 'png', 'jpg', 'jpeg'}
 
 
 class _MediaParser(_NoticeParser):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, label='도서관 공지'):
+        super().__init__(label)
         self.media = []
         self.seen_links = set()
         self.anchor = None
@@ -198,7 +199,7 @@ class _MediaParser(_NoticeParser):
                 return
             self.seen_links.add((kind, url))
         if len(self.media) == _MEDIA_LIMIT:
-            raise ValueError('도서관 공지의 이미지·첨부 후보가 40개를 초과했습니다.')
+            raise ValueError(self.label + '의 이미지·첨부 후보가 40개를 초과했습니다.')
         self.media.append({'kind': kind, 'source_url': url, 'label': label, 'format': format_name})
 
     def handle_starttag(self, tag, attrs):
@@ -206,11 +207,11 @@ class _MediaParser(_NoticeParser):
         if not self.hidden_depth and not self.explicit_hidden_depth:
             if (not self.tags and tag == 'input' and ('name', 'bIdx') in attrs
                     and (names.count('name') > 1 or names.count('value') > 1)):
-                raise ValueError('도서관 공지 번호의 HTML 속성이 중복되었습니다.')
+                raise ValueError(self.label + ' 번호의 HTML 속성이 중복되었습니다.')
             classes = {'bod_view'} if not self.tags else {'view_cont', 'view_file'}
             if (len(self.tags) <= 1 and tag in ('div', 'dl') and names.count('class') > 1
                     and any(name == 'class' and classes.intersection((value or '').split()) for name, value in attrs)):
-                raise ValueError('도서관 공지 영역의 HTML 속성이 중복되었습니다.')
+                raise ValueError(self.label + ' 영역의 HTML 속성이 중복되었습니다.')
         super().handle_starttag(tag, attrs)
         if self.hidden_depth or self.explicit_hidden_depth or not self.tags:
             return
@@ -231,7 +232,7 @@ class _MediaParser(_NoticeParser):
         if 'btn_preview' in (values.get('class') or '').split() and script.startswith('fn_egov_preview('):
             return
         if self.anchor is not None:
-            raise ValueError('도서관 공지의 첨부 링크가 중첩되었습니다.')
+            raise ValueError(self.label + '의 첨부 링크가 중첩되었습니다.')
         if not (values.get('href') or script):
             return
         url = None
@@ -267,20 +268,20 @@ class _MediaParser(_NoticeParser):
 
 def _parse_notice(text: str, notice_id: str, parser: _NoticeParser) -> str:
     if not isinstance(text, str) or '\x00' in text:
-        raise ValueError('도서관 공지 HTML 형식이 올바르지 않습니다.')
+        raise ValueError(parser.label + ' HTML 형식이 올바르지 않습니다.')
     if not isinstance(notice_id, str) or not re.fullmatch(r'[1-9][0-9]*', notice_id):
-        raise ValueError('도서관 공지 번호가 올바르지 않습니다.')
+        raise ValueError(parser.label + ' 번호가 올바르지 않습니다.')
     parser.feed(text)
     parser.close()
     if parser.tags or not parser.found_board:
-        raise ValueError('도서관 공지 본문 영역을 확인할 수 없습니다.')
+        raise ValueError(parser.label + ' 본문 영역을 확인할 수 없습니다.')
     if not parser.notice_ids:
-        raise ValueError('도서관 공지 HTML에 게시물 번호가 없습니다.')
+        raise ValueError(parser.label + ' HTML에 게시물 번호가 없습니다.')
     if parser.notice_ids != {notice_id}:
-        raise ValueError('도서관 공지 HTML의 번호가 요청과 일치하지 않습니다.')
+        raise ValueError(parser.label + ' HTML의 번호가 요청과 일치하지 않습니다.')
     title = ' '.join(''.join(parser.parts.get('title', [])).split())
     if not title:
-        raise ValueError('도서관 공지 제목이 없습니다.')
+        raise ValueError(parser.label + ' 제목이 없습니다.')
     return title
 
 
@@ -293,13 +294,23 @@ def parse_library_media(text: str, *, notice_id: str) -> list[dict]:
 
 def parse_library_notice(text: str, *, notice_id: str) -> dict:
     """안성시 도서관 상세의 본문 텍스트와 게시일만 준비한다."""
-    parser = _NoticeParser()
+    return _notice_record(_NoticeParser(), text, notice_id, 'library_notice', lambda: detail_url('living', notice_id))
+
+
+def parse_board_notice(text: str, *, board: str, notice_id: str) -> dict:
+    """같은 게시판 구조를 쓰는 시청 공지 상세의 본문 텍스트와 게시일만 준비한다."""
+    _, _, label, source = board_info(board)
+    url = board_detail_url(board, notice_id)
+    return _notice_record(_NoticeParser(label), text, notice_id, source, lambda: url)
+
+
+def _notice_record(parser: _NoticeParser, text: str, notice_id: str, source: str, url) -> dict:
     title = _parse_notice(text, notice_id, parser)
     lines = [' '.join(line.split()) for line in ''.join(parser.parts.get('description', [])).splitlines()]
     body = '\n'.join(line for line in lines if line)
     if not body:
         detail = ' 이미지·첨부를 확인해 주세요.' if parser.review_flags else ''
-        raise ValueError('도서관 공지 본문 텍스트가 없습니다.' + detail)
+        raise ValueError(parser.label + ' 본문 텍스트가 없습니다.' + detail)
     fields = {'description': body}
     published = ' '.join(''.join(parser.parts.get('published_date', [])).split())
     if match := re.fullmatch(r'등록일\s*:\s*(\d{4}-\d{2}-\d{2})', published):
@@ -308,10 +319,10 @@ def parse_library_notice(text: str, *, notice_id: str) -> dict:
         except ValueError:
             pass
     result = {
-        'source': 'library_notice',
+        'source': source,
         'external_id': notice_id,
         'title': title,
-        'official_url': detail_url('living', notice_id),
+        'official_url': url(),
         'fields': fields,
     }
     if parser.review_flags:
