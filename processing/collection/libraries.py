@@ -73,6 +73,9 @@ class _NoticeParser(HTMLParser):
         self.title_class = title_class
         self.context_path = context_path
         self.title_format_changed = False
+        # 본문 영역 밖 최상위 <script>의 내용. 페이지 설정(contextPath)은 여기서만 읽는다.
+        self.scripts = []
+        self.script = None
         self.view_action = view_action
         self.require_view = require_view
         self.view_actions = []
@@ -92,6 +95,8 @@ class _NoticeParser(HTMLParser):
         attrs = dict(attrs)
         classes = (attrs.get('class') or '').split()
         if not self.tags:
+            if tag == 'script' and not self.hidden_depth:
+                self.script = []
             if tag in _HIDDEN_TAGS:
                 self.hidden_depth += 1
             if self.hidden_depth:
@@ -162,6 +167,9 @@ class _NoticeParser(HTMLParser):
         if not self.tags:
             if self.hidden_depth and tag in _HIDDEN_TAGS:
                 self.hidden_depth -= 1
+            if tag == 'script' and self.script is not None and not self.hidden_depth:
+                self.scripts.append(''.join(self.script))
+                self.script = None
             return
         if tag in _VOID_TAGS:
             return
@@ -199,6 +207,8 @@ class _NoticeParser(HTMLParser):
             self.handle_endtag(self.tags[-1])
 
     def handle_data(self, data):
+        if self.script is not None and not self.tags and self.hidden_depth == 1:
+            self.script.append(data)
         if self.section and not self.hidden_depth:
             self.parts[self.section].append(data)
 
@@ -324,7 +334,7 @@ def _media(text: str, notice_id: str, parser: '_MediaParser') -> list[dict]:
     루트가 아닌 사이트 경로를 쓰는 게시판은 그 선언이 정확히 한 번 있어야 주소를 만든다.
     """
     _parse_notice(text, notice_id, parser)
-    declared = _CONTEXT_PATH.findall(text)
+    declared = [value for script in parser.scripts for value in _CONTEXT_PATH.findall(script)]
     if (any(value != parser.context_path for value in declared)
             or (parser.context_path and len(declared) != 1)):
         raise ValueError(parser.label + ' 페이지의 사이트 경로가 게시판과 일치하지 않습니다.')

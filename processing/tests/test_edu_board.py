@@ -102,6 +102,18 @@ class EduBoardTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "속성이 중복"):
             parse_board_media(duplicate, board="edu", notice_id="3838")
 
+    def test_context_path_is_read_only_from_page_scripts(self):
+        fake = '{"contextPath": "/portal"}'
+        body_only = _edu_notice(attachment=ATTACHMENT, context=None, body=f"<p>예시 {fake}</p>")
+        with self.assertRaisesRegex(ValueError, "경로"):
+            parse_board_media(body_only, board="edu", notice_id="3838")
+        noisy = _edu_notice(attachment=ATTACHMENT, body=f"<p>예시 {fake}</p>") + f"<!-- {fake} -->"
+        self.assertEqual(len(parse_board_media(noisy, board="edu", notice_id="3838")), 1)
+        city = f'<script>var yh = {{"contextPath": ""}};</script><!-- {fake} -->' + _notice("3838", f"<p>{fake}</p>")
+        self.assertEqual(parse_board_media(city, board="city", notice_id="3838"), [])
+        inner = _edu_notice(attachment=ATTACHMENT).replace("<p>합성 본문</p>", f"<p>본문</p><script>var y = {fake};</script>")
+        self.assertEqual(len(parse_board_media(inner, board="edu", notice_id="3838")), 1)
+
     @patch("processing.collection.official_web.HTTPSConnection")
     def test_edu_requests_use_edu_paths(self, connect):
         response = connect.return_value.getresponse.return_value.__enter__.return_value
