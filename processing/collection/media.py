@@ -1,6 +1,7 @@
-"""도서관 공지의 매체 링크를 확인하고 운영자가 확보한 원본을 보관한다."""
+"""도서관·시청 공지의 매체 링크를 확인하고 운영자가 확보한 원본을 보관한다."""
 
 import argparse
+from collections.abc import Callable
 from datetime import UTC, datetime
 import hashlib
 from io import BytesIO
@@ -15,8 +16,10 @@ from .capture import (
     CAPTURE_ROOT, bundle_directory, capture_timestamp, open_archive, read_capture_file, read_receipt,
     validate_name, write_new, write_receipt,
 )
-from .libraries import parse_library_media
-from .official_web import DETAIL_MAX_BYTES, detail_url, fetch_detail
+from .libraries import parse_board_media, parse_library_media
+from .official_web import (
+    BOARDS, DETAIL_MAX_BYTES, board as board_info, board_detail_url, detail_url, fetch_board_detail, fetch_detail,
+)
 
 NOTICE_SECTION = "collection-media-notices"
 MEDIA_SECTION = "collection-media"
@@ -33,9 +36,21 @@ SIGNATURES = {
 MEDIA_FILES = {"media.hwpx", *("media." + fmt for fmt in SIGNATURES)}
 
 
-def inspect_notice(private_root: Path, web_id: str, name: str) -> dict:
+def _route(board: str) -> tuple[str, Callable, Callable, Callable]:
+    """게시판별 문구·원문 주소·요청·매체 파서를 돌려준다. 요청 함수는 호출 시점에 찾는다."""
+    if board == "library":
+        return ("도서관 공지", lambda web_id: detail_url("living", web_id),
+                lambda web_id: fetch_detail("living", web_id, limit=DETAIL_MAX_BYTES),
+                lambda text, web_id: parse_library_media(text, notice_id=web_id))
+    return (board_info(board)[2], lambda web_id: board_detail_url(board, web_id),
+            lambda web_id: fetch_board_detail(board, web_id, limit=DETAIL_MAX_BYTES),
+            lambda text, web_id: parse_board_media(text, board=board, notice_id=web_id))
+
+
+def inspect_notice(private_root: Path, web_id: str, name: str, *, board: str = "library") -> dict:
     validate_name(name)
-    url = detail_url("living", web_id)
+    label, detail, fetch, parse_media = _route(board)
+    url = detail(web_id)
     if len(web_id) > 18:
         raise ValueError("공식 웹 게시물 번호는 최대 18자리여야 합니다.")
     with bundle_directory(private_root / NOTICE_SECTION, name) as directory:
@@ -43,21 +58,23 @@ def inspect_notice(private_root: Path, web_id: str, name: str) -> dict:
         status = "fetch_failed"
         error = None
         try:
-            raw = fetch_detail("living", web_id, limit=DETAIL_MAX_BYTES)
+            raw = fetch(web_id)
             fetched_at = datetime.now(UTC).isoformat()
             write_new(directory, "notice.html", raw)
             digest = hashlib.sha256(raw).hexdigest()
             status = "parse_failed"
-            text, _ = decode_input(raw, "도서관 공지")
-            candidates = parse_library_media(text, notice_id=web_id)
+            text, _ = decode_input(raw, label)
+            candidates = parse_media(text, web_id)
             status = "parsed"
         except ValueError as failure:
             candidates, error = [], str(failure)
-        write_receipt(directory, "notice.json", {
-            "schema_version": NOTICE_SCHEMA, "notice_id": name, "web_id": web_id, "status": status,
-            "source_url": url, "fetched_at": fetched_at, "sha256": digest,
-            "media": candidates, "error": error,
-        })
+        # 도서관 기록은 기존 형식을 유지하고 다른 게시판만 board를 남긴다.
+        record = {"schema_version": NOTICE_SCHEMA, "notice_id": name, "web_id": web_id, "status": status,
+                  "source_url": url, "fetched_at": fetched_at, "sha256": digest,
+                  "media": candidates, "error": error}
+        if board != "library":
+            record["board"] = board
+        write_receipt(directory, "notice.json", record)
     return {"notice_id": name, "status": status, "media": len(candidates)}
 
 
@@ -66,16 +83,20 @@ def _notice(private_root: Path, name: str) -> dict:
     with open_archive(private_root, Path(NOTICE_SECTION) / name) as directory:
         receipt = read_receipt(directory, "notice.json")
         web_id = receipt.get("web_id")
+        board = receipt.get("board", "library")
+        if "board" in receipt and (not isinstance(board, str) or board == "library" or board not in BOARDS):
+            raise ValueError("공지 수집 기록을 확인할 수 없습니다.")
+        label, detail, _, parse_media = _route(board)
         if (receipt.get("schema_version") != NOTICE_SCHEMA or receipt.get("notice_id") != name
                 or receipt.get("status") != "parsed" or receipt.get("error") is not None
                 or not isinstance(web_id, str) or not re.fullmatch(r"[1-9][0-9]{0,17}", web_id)
-                or receipt.get("source_url") != detail_url("living", web_id)):
-            raise ValueError("도서관 공지 수집 기록을 확인할 수 없습니다.")
+                or receipt.get("source_url") != detail(web_id)):
+            raise ValueError(f"{label} 수집 기록을 확인할 수 없습니다.")
         capture_timestamp(receipt.get("fetched_at"))
         raw = read_capture_file(directory, "notice.html", DETAIL_MAX_BYTES)
-        text, digest = decode_input(raw, "도서관 공지")
-        if receipt.get("sha256") != digest or receipt.get("media") != parse_library_media(text, notice_id=web_id):
-            raise ValueError("도서관 공지 원본 또는 매체 목록이 수집 기록과 다릅니다.")
+        text, digest = decode_input(raw, label)
+        if receipt.get("sha256") != digest or receipt.get("media") != parse_media(text, web_id):
+            raise ValueError(f"{label} 원본 또는 매체 목록이 수집 기록과 다릅니다.")
         return receipt
 
 
@@ -145,7 +166,8 @@ def read_media_assets(private_root: Path, name: str, asset_keys: set[str]) -> di
         notice = _notice(private_root, notice_name)
         candidate = _chosen(notice, number)
         if receipt.get("notice_sha256") != notice["sha256"] or receipt.get("linked_source_url") != candidate["source_url"]:
-            raise ValueError("보관 파일과 도서관 공지의 연결 기록이 일치하지 않습니다.")
+            label = _route(notice.get("board", "library"))[0]
+            raise ValueError(f"보관 파일과 {label}의 연결 기록이 일치하지 않습니다.")
         filename = receipt.get("file")
         if not isinstance(filename, str) or filename not in MEDIA_FILES:
             raise ValueError("보관 파일 이름을 확인할 수 없습니다.")
@@ -164,7 +186,8 @@ def read_media_assets(private_root: Path, name: str, asset_keys: set[str]) -> di
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="action", required=True)
-    inspect = commands.add_parser("inspect", help="도서관 공지 HTML과 매체 목록을 보관한다.")
+    inspect = commands.add_parser("inspect", help="도서관·시청 공지 HTML과 매체 목록을 보관한다.")
+    inspect.add_argument("--board", choices=("library", *BOARDS), default="library")
     inspect.add_argument("--web-id", required=True)
     inspect.add_argument("--name", required=True)
     store = commands.add_parser("store", help="운영자가 확보한 파일 한 개를 매체 항목과 연결한다.")
@@ -176,7 +199,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         if args.action == "inspect":
-            result = inspect_notice(PRIVATE_ROOT, args.web_id, args.name)
+            result = inspect_notice(PRIVATE_ROOT, args.web_id, args.name, board=args.board)
         else:
             result = store_media(PRIVATE_ROOT, args.notice, args.asset, args.file, args.name, args.downloaded_at)
     except ValueError as error:

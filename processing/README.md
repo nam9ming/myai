@@ -153,7 +153,7 @@ python3.13 -B -m processing.collection.batch living \
 
 `data/private/collection-batches/<name>/`에 포털 CSV, 받은 목록·상세 원본, 성공한 상세의 비교 결과를 저장한다. `batch.json`에는 각 원본의 해시와 수신 시각, 목록·상세 처리 상태가 있다. 맨 마지막에 `batch.json`이 생긴 묶음만 사용한다. 종료 0은 수집 중 보고된 페이지와 선택한 상세를 모두 처리한 경우, 2는 한도 도달 또는 일부 실패를 기록한 경우, 1은 입력·보관 오류다. 사이트 목록의 전체 건수가 같아도 수집 중 게시물이 바뀔 수 있다. 정기 실행은 후속 단계다.
 
-### 도서관 공지 이미지·첨부 원본 보관
+### 도서관·시청 공지 이미지·첨부 원본 보관
 
 게시물 번호로 공식 상세 HTML을 보관하고 본문 이미지와 첨부 목록을 확인한다. 읽을 수 있는 본문이 없는 공지도 게시물 번호와 제목이 확인되면 후보를 남긴다. 실제 다운로드 동작은 HTML에서 확인된 규격으로만 해석한다. [안성시 robots.txt](https://www.anseong.go.kr/robots.txt)에서 제한한 이미지 경로와 확인 요청에 HTTP 403을 반환한 파일 경로는 목록에만 기록한다.
 
@@ -170,6 +170,8 @@ python3.13 -B -m processing.collection.media store \
 ```
 
 이미지는 PNG·JPEG, 첨부는 PDF·HWP·HWPX·PNG·JPEG를 파일당 8MiB까지 받는다. 파일 헤더 또는 컨테이너 표식을 확인하고 부모 HTML, 연결 주소, SHA-256, 운영자가 입력한 수신 시각을 다시 대조한다. 부모 HTML과 매체 파일을 각각 `collection-media-notices/`, `collection-media/`에 보관한다. 두 묶음을 함께 보존한다. 운영자가 원문과 파일의 대응을 확인한다. 본문 추출·OCR·QR 판독은 별도 단계다.
+
+시청 공지는 `inspect --board city --web-id <공지 번호>`로 같은 방식으로 보관한다. 이때 `notice.json`에 `board: "city"`와 시청 상세 주소가 남고, `store`·D03 준비는 기록된 게시판의 주소와 파서로 다시 대조한다. 두 게시판 상세는 마크업이 같으므로 본문 영역 밖 `viewForm`의 게시판 주소(`/portal/bbs/view.do?ptIdx=16&mId=0501010000`)도 대조한다. 시청은 이 표식이 반드시 있어야 하고, 도서관은 표식이 있으면 도서관 주소여야 한다. 도서관 기록은 `board` 없이 기존 형식을 유지한다. 2026-11-27 시청 공지 203043(포스터 이미지 1개)과 203050(PDF 2개·HWPX 1개)에서 매체 주소를 모두 확인했다. 시청 묶음 수집에서 본문 텍스트가 없어 `parse_failed`가 된 이미지형 공지는 같은 번호를 `inspect --board city`로 다시 받아 별도 묶음으로 보관한다. 이 묶음은 묶음 수집 기록과 연결되지 않으며, 그 사이 게시물이 바뀌었으면 원본도 다르다.
 
 ### 도로 공사현황 목록·상세 수집
 
@@ -218,7 +220,7 @@ python3.13 -B -m processing.collection.board_batch city --name city-20261127 --m
 
 API 수집은 `archive_kind=portal`, API 수집 이름, `asset="1"` 같은 응답 페이지 번호를 지정한다. `official_url`은 `portal.json`의 해당 `source_url`과 맞추고 `collected_at`은 `null`로 둔다. D03은 해당 응답 원본과 기록된 수신 시각을 연결한다. 비교에 API 묶음을 사용했다면 D03 원본은 해당 API 응답 페이지를 선택한다.
 
-도서관 매체는 `archive_kind=media`, `archive_name`에는 `store --name` 값, `asset`에는 같은 항목 번호를 문자열로 넣는다. `official_url`은 `notice.json`의 부모 공지 주소, `collected_at`은 `null`로 둔다. D03이 운영자 입력 다운로드 시각과 매체 원본 해시를 연결한다. 사람 검토를 마친 제목·본문을 전달하고 기존 D03 명령으로 등록한다.
+도서관·시청 매체는 `archive_kind=media`, `archive_name`에는 `store --name` 값, `asset`에는 같은 항목 번호를 문자열로 넣는다. `official_url`은 `notice.json`의 `source_url`(도서관 또는 시청 부모 공지 주소), `collected_at`은 `null`로 둔다. D03이 운영자 입력 다운로드 시각과 매체 원본 해시를 연결한다. 사람 검토를 마친 제목·본문을 전달하고 기존 D03 명령으로 등록한다.
 
 도로 공사현황은 `archive_kind=road`, `archive_name`에는 `road_batch --name` 값, `asset`에는 공사 번호를 넣는다. 포털 원본은 선택할 수 없다. `official_url`은 `batch.json`의 해당 상세 `source_url`, `collected_at`은 `null`로 둔다. 명령은 상세 원본 해시와 함께 보관된 파싱 결과를 원본에서 다시 만든 값과 대조한다. 파싱 결과의 `parser_version`이 현재 파서와 다르면 변조와 구분되는 오류로 거부하므로 현재 버전으로 다시 수집한다. 시청 공지는 `archive_kind=board`, `archive_name`에는 `board_batch --name` 값, `asset`에는 공지 번호를 넣고 같은 방식으로 대조한다. 등록 방식은 `official-web-board`로 기록된다.
 

@@ -25,8 +25,13 @@ def _listing(rows, *, current=1, total=3):
       <tbody>{rows}</tbody></table></form>"""
 
 
-def _notice(notice_id="203043", body="<p>합성 본문</p>"):
-    return f"""<input type="hidden" name="bIdx" value="{notice_id}"/>
+CITY_VIEW = "/portal/bbs/view.do?ptIdx=16&amp;mId=0501010000"
+LIBRARY_VIEW = "/library/bbs/view.do?ptIdx=16&amp;mId=0401010000"
+
+
+def _notice(notice_id="203043", body="<p>합성 본문</p>", view=CITY_VIEW):
+    form = f'<form id="viewForm" action="{view}" method="post"></form>' if view else ""
+    return f"""{form}<input type="hidden" name="bIdx" value="{notice_id}"/>
     <div class="bod_wrap"><div class="bod_view"><h4>합성 시청 공지</h4>
       <div class="view_info"><ul class="clFix"><li class="view_date"><span>등록일</span> : 2026-11-27</li></ul></div>
       <div class="view_cont">{body}</div></div></div>"""
@@ -142,7 +147,7 @@ class BoardListingTest(unittest.TestCase):
 class BoardNoticeTest(unittest.TestCase):
     def test_city_notice_uses_board_url_and_source(self):
         record = parse_board_notice(_notice(), board="city", notice_id="203043")
-        self.assertEqual(BOARD_PARSER_VERSION, "board-notice-parser-v1", "출력 형식을 바꾸면 파서 버전도 올린다.")
+        self.assertEqual(BOARD_PARSER_VERSION, "board-notice-parser-v2", "출력·허용 규칙을 바꾸면 파서 버전도 올린다.")
         flagged = parse_board_notice(_notice(body='<p>본문</p><p><img src="/x.png" alt=""></p>'),
                                      board="city", notice_id="203043")
         self.assertEqual(flagged["review_flags"], ["inline_image"])
@@ -166,13 +171,29 @@ class BoardNoticeTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_board_notice(_notice(), board="library", notice_id="203043")
 
+    def test_notice_html_must_belong_to_the_requested_board(self):
+        for view in (None, LIBRARY_VIEW, "/portal/bbs/view.do?ptIdx=16&amp;mId=0501020000"):
+            with self.subTest(view=view), self.assertRaisesRegex(ValueError, "게시판"):
+                parse_board_notice(_notice(view=view), board="city", notice_id="203043")
+        for fixture in (_notice() + _notice(), _notice().replace('id="viewForm"', 'id="viewForm" id="x"')):
+            with self.assertRaises(ValueError):
+                parse_board_notice(fixture, board="city", notice_id="203043")
+        with self.assertRaisesRegex(ValueError, "^도서관 공지 .*게시판"):
+            parse_library_notice(_notice(view=CITY_VIEW), notice_id="203043")
+        for duplicated in ('id="viewForm" id="x"', 'id="x" id="viewForm"'):
+            fixture = _notice(view=LIBRARY_VIEW).replace('id="viewForm"', duplicated)
+            with self.subTest(duplicated=duplicated), self.assertRaisesRegex(ValueError, "속성이 중복"):
+                parse_library_notice(fixture, notice_id="203043")
+        self.assertEqual(parse_library_notice(_notice(view=LIBRARY_VIEW), notice_id="203043")["source"],
+                         "library_notice")
+
     def test_library_notice_is_unchanged(self):
-        record = parse_library_notice(_notice(), notice_id="203043")
+        record = parse_library_notice(_notice(view=None), notice_id="203043")
         self.assertEqual(record["source"], "library_notice")
         self.assertEqual(record["official_url"],
                          "https://www.anseong.go.kr/library/bbs/view.do?bIdx=203043&mId=0401010000&ptIdx=16")
         with self.assertRaisesRegex(ValueError, "^도서관 공지 "):
-            parse_library_notice(_notice("1"), notice_id="203043")
+            parse_library_notice(_notice("1", view=None), notice_id="203043")
 
 
 if __name__ == "__main__":
