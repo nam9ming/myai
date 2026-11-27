@@ -63,7 +63,7 @@ def fetch_listing(category: str, page: int, begin: date | None, end: date | None
     return _fetch(method, path, body, limit)
 
 
-def _fetch(method: str, path: str, body: bytes | None, limit: int) -> bytes:
+def _fetch(method: str, path: str, body: bytes | None, limit: int, *, host: str = _HOST) -> bytes:
     if type(limit) is not int or not 1 <= limit <= DETAIL_MAX_BYTES:
         raise ValueError("공식 웹 수집의 원문 크기 한도가 유효하지 않습니다.")
 
@@ -73,7 +73,7 @@ def _fetch(method: str, path: str, body: bytes | None, limit: int) -> bytes:
         "Connection": "close",
     }
     try:
-        with closing(HTTPSConnection(_HOST, timeout=_TIMEOUT)) as connection:
+        with closing(HTTPSConnection(host, timeout=_TIMEOUT)) as connection:
             if body is None:
                 connection.request(method, path, headers=headers)
             else:
@@ -104,6 +104,7 @@ def _fetch(method: str, path: str, body: bytes | None, limit: int) -> bytes:
                     raise ValueError("공식 웹 상세 응답이 전송 중 중단되었습니다.")
                 return raw
     except TimeoutError:
-        raise ValueError("공식 웹 상세 응답의 대기 시간을 초과했습니다.") from None
+        message = "공식 웹 상세 응답의 대기 시간을 초과했습니다."
     except (OSError, HTTPException):
-        raise ValueError("공식 웹 상세 응답을 받지 못했습니다.") from None
+        message = "공식 웹 상세 응답을 받지 못했습니다."
+    raise ValueError(message) from None

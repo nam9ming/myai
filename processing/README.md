@@ -96,9 +96,17 @@ python3.13 -B -m processing.collection living \
 
 표준 데이터는 안성시 행을 골라 읽는다. 축제 주소가 비어 있으면 안성시 주최기관 또는 공식 도메인을 기준으로 후보에 넣는다. 결과에는 각 입력 파일의 SHA-256, CSV 원본 레코드 번호(헤더와 빈 줄 제외), 검토할 두 출처의 값, 관계 후보가 들어 있다. 행사에서 공식 링크·제목·시작일·종료일이 모두 일치하면 후보로 표시하고, 중복 후보는 함께 남긴다. 겹치는 값이 다르면 출처별 값을 보여준다. 도서관 이름이 공지에 독립된 이름으로 등장하면 운영 기준과의 관계 후보를 표시한다. 시민 공지 등록 전에 출처, 적용 날짜·시간과 예외를 확인한다.
 
-같은 게시판에서도 정보가 들어 있는 위치가 다르다. 안성시청 [4404번 개통 공지](https://www.anseong.go.kr/portal/bbs/view.do?bIdx=201589&mId=0501010000&ptIdx=16)는 시간표와 요금이 본문에 있고, [15번 변경 공지](https://www.anseong.go.kr/portal/bbs/view.do?bIdx=201456&mId=0501010000&ptIdx=16)는 세부 시간표가 이미지에 있다. 도서관은 [본문형](https://www.anseong.go.kr/library/bbs/view.do?bIdx=195773&mId=0401010000&ptIdx=16), [이미지 포함형](https://www.anseong.go.kr/library/bbs/view.do?bIdx=201918&mId=0401010000&ptIdx=16), [HWPX 첨부형](https://www.anseong.go.kr/library/bbs/view.do?bIdx=203047&mId=0401010000&ptIdx=16)을 표본으로 확인했다.
+게시물별 본문·첨부 형식은 2026-11-27에 공식 상세 HTML로 확인했다.
+
+| 게시판 | 확인한 형식 |
+| --- | --- |
+| 안성시청 공지 | [4404번 개통](https://www.anseong.go.kr/portal/bbs/view.do?bIdx=201589&mId=0501010000&ptIdx=16)은 이미지와 함께 시간표·요금을 본문으로 제공한다. [15번 변경](https://www.anseong.go.kr/portal/bbs/view.do?bIdx=201456&mId=0501010000&ptIdx=16)은 적용일을 본문으로, 시간표를 이미지로 안내한다. |
+| 안성시청 공지 | [진로체험 캠프](https://www.anseong.go.kr/portal/bbs/view.do?bIdx=203043&mId=0501010000&ptIdx=16)는 일정·대상을 본문과 이미지 대체 텍스트에 싣고 신청은 포스터 QR로 안내한다. [바우처 지원사업](https://www.anseong.go.kr/portal/bbs/view.do?bIdx=192611&mId=0501010000&ptIdx=16)은 요약과 상세 공고 PDF를 함께 제공한다. |
+| 안성시 도서관 공지 | [휴관 일정](https://www.anseong.go.kr/library/bbs/view.do?bIdx=195773&mId=0401010000&ptIdx=16)은 본문형, [서비스 전환](https://www.anseong.go.kr/library/bbs/view.do?bIdx=201918&mId=0401010000&ptIdx=16)은 본문·이미지 혼합형, [작은도서관 위탁](https://www.anseong.go.kr/library/bbs/view.do?bIdx=202585&mId=0401010000&ptIdx=16)은 본문·공고문·평가기준·제출서식 HWPX 혼합형이다. |
 
 도서관 HTML은 본문과 이미지·첨부 유무를 구분한다. 읽을 수 있는 본문이 없는 글은 오류로 남긴다. 행사 상세는 원문 주소와 선택 링크를 함께 다루며, 썸네일이나 첨부 이미지가 있으면 확인 표시를 남긴다. 설명에 섞인 HTML은 원문 필드로 보관한다. 두 공식 웹 상세 모두 입력에 포함된 게시물 번호를 `--web-id`와 대조한다.
+
+시청 공지 게시판은 수집 대상 확대 후보다. 추가할 때 게시판별 목록·상세 탐색과 본문·첨부·이미지 처리를 분리한다. 본문에 없는 일정·조건·신청 링크는 별도 원본을 확인할 때까지 미상으로 둔다. 같은 제목의 다른 게시물은 원문 ID별로 보관하고, 정정이나 재게시 관계는 내용과 게시 시각을 대조한다.
 
 ### 공식 웹 상세 내려받기 및 보관
 
@@ -114,6 +122,18 @@ python3.13 -B -m processing.collection.capture living \
 종료 0은 원본 보관과 파싱 성공, 2는 원본 보관과 파싱 실패, 1은 입력·웹 요청·저장 오류다. 형식이 바뀌거나 본문이 없는 경우 종료 2로 원본과 파싱 사유를 남긴다. 저장이 중단되어 완료 파일이 없으면 그 묶음은 사용하지 않는다. 성공한 비교에도 이미지·첨부 확인 표시와 미확정 관계가 남을 수 있다.
 
 D03 등록이 필요하면 사람이 원문·추출할 내용·개인정보를 대조한 뒤 [기존 원문 등록](../backend/docs/extraction-run-import.md)에 원문 상대 경로·해시와 확인한 원출처 주소를 연결한다. `portal.catalog_url`은 비교 대상의 카탈로그 주소다. 현재 CSV를 어디서 받았는지는 운영자가 대조한다. 등록 초기 상태는 `pending`과 `unchecked`로 유지한다.
+
+### 공공데이터포털 표준 OpenAPI 수집
+
+공공데이터포털에서 해당 표준 API의 활용 신청을 완료하고 실행 환경의 `DATA_GO_KR_SERVICE_KEY`에 디코딩된 키를 넣는다. 실행 인자와 수집 기록에는 키를 넣지 않는다.
+
+```sh
+python3.13 -B -m processing.collection.portal culture --name festival-portal
+python3.13 -B -m processing.collection.batch culture \
+  --portal-snapshot festival-portal --begin 2026-11-01 --end 2026-11-30 --name festival-compare
+```
+
+`living`으로 도서관 표준 API도 수집할 수 있다. 전국 응답을 페이지당 500건씩 최대 20페이지, 응답당 8 MiB까지 받는다. 응답 원본·해시·키를 뺀 요청 주소·수신 시각은 `data/private/collection-portal/<name>/`에 보관한다. 모든 페이지가 확인되어야 기존 안성시 필터를 적용할 수 있는 비교용 `portal.csv`를 만든다. 종료 0은 완료, 2는 실패 기록 보관, 1은 설정 또는 저장 실패다. `--portal-snapshot`은 원본에서 CSV를 다시 만들어 보관본과 대조한 뒤 목록을 수집한다. 수동 CSV는 `--portal-csv`로 계속 받는다.
 
 ### 공식 목록과 상세를 한 묶음으로 수집하기
 
@@ -133,7 +153,9 @@ python3.13 -B -m processing.collection.batch living \
 
 ### 수집 원본을 D03 등록 입력으로 준비하기
 
-단건 수집은 `archive_kind=single`과 `capture.json`, 목록 수집은 `archive_kind=batch`와 `batch.json`을 사용한다. 등록할 포털 CSV는 `asset=portal`, 웹 상세는 게시물 번호를 지정한다. 부분 수집 묶음에서도 파싱에 성공한 상세를 선택할 수 있다. 명령은 수집 기록의 원본 해시와 파일을 대조하고 웹 상세의 게시물 번호를 다시 확인한다.
+단건 수집은 `archive_kind=single`과 `capture.json`, 목록 수집은 `archive_kind=batch`와 `batch.json`을 사용한다. 직접 내려받은 포털 CSV는 `asset=portal`, 웹 상세는 게시물 번호를 지정한다. 부분 수집 묶음에서도 파싱에 성공한 상세를 선택할 수 있다. 명령은 수집 기록의 원본 해시와 파일을 대조하고 웹 상세의 게시물 번호를 다시 확인한다.
+
+API 수집은 `archive_kind=portal`, API 수집 이름, `asset="1"` 같은 응답 페이지 번호를 지정한다. `official_url`은 `portal.json`의 해당 `source_url`과 맞추고 `collected_at`은 `null`로 둔다. D03은 해당 응답 원본과 기록된 수신 시각을 연결한다. 비교에 API 묶음을 사용했다면 D03 원본은 해당 API 응답 페이지를 선택한다.
 
 다음은 이미 보관한 `synthetic-capture` 묶음의 합성 예다. 실제 등록 입력은 담당자가 원본·개인정보·추출 대상 문구를 대조해 작성한다. 게시일·공식 문서번호 미상은 `null`로 둔다. 웹 수신 시각은 수집 기록을 사용하므로 `collected_at`을 `null`로 둔다. 포털 CSV는 실제 다운로드 출처를 담당자가 확인하고, `official_url`에는 수집 기록의 `portal.catalog_url`, `collected_at`에는 실제로 받은 시각을 입력한다. `redaction_log`는 제거 위치와 범주를 `location`, `category`로 적고 제거한 실제 값은 적지 않는다.
 

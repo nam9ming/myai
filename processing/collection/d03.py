@@ -93,7 +93,7 @@ def document(review: dict, asset: dict, path: str) -> dict:
         "preprocessing_version": "collection-manual-v1",
         "use_review": "pending",
         "use_note": "수집 원본 등록용입니다. 사용권과 원문 검증은 별도 기록합니다.",
-        "collection_method": "portal-csv-manual" if is_portal else "official-web-capture",
+        "collection_method": "portal-csv-manual" if is_portal else asset.get("collection_method", "official-web-capture"),
         "latest_check_attempt_at": None,
         "last_verified_at": None,
         "check_result": "unchecked",
@@ -107,7 +107,7 @@ def prepare(input_path: Path, name: str, private_root: Path) -> dict:
     review = decode(input_bytes, "input")
     shape(review, "archive_kind archive_name data_kind documents", kind="input")
     kind = review["archive_kind"]
-    require(kind in ("single", "batch"), "$.archive_kind", "input")
+    require(kind in ("single", "batch", "portal"), "$.archive_kind", "input")
     archive_name = text(review["archive_name"], "$.archive_name", "input")
     validate_name(archive_name)
     require(review["data_kind"] in ("real", "synthetic"), "$.data_kind", "input")
