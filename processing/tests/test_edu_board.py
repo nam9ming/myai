@@ -184,10 +184,12 @@ class EduVersionTest(unittest.TestCase):
                      _edu_notice().replace('<div class="bod_view">', '<div class="bod_view" hidden>'),
                      _edu_notice(body='<p>본문<img hidden src="/common/imgView.do" alt=""></p>'),
                      _edu_notice(body='<p style="display:none">숨김</p>'),
-                     _edu_notice(attachment=ATTACHMENT.replace("<dd>", "<dd hidden>"))):
+                     _edu_notice(attachment=ATTACHMENT.replace("<dd>", "<dd hidden>")),
+                     _edu_notice(body='<p>앞</p><!--->보임-->'),
+                     _edu_notice(body='<iframe>숨김</iframe>')):
             for parse in (parse_board_notice, parse_board_media):
                 with self.subTest(parse=parse.__name__, page=page[-70:]), \
-                        self.assertRaisesRegex(ValueError, "^안성배움e 공지 .*숨김"):
+                        self.assertRaisesRegex(ValueError, "^안성배움e 공지 .*(숨김|해석이 갈리는)"):
                     parse(page, board="edu", notice_id="3838")
 
 

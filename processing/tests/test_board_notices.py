@@ -232,25 +232,58 @@ class BoardNoticeTest(unittest.TestCase):
             _notice(body='<p style="font-size:0px">숨김</p>'),
             _notice(body='<p style="visibility: collapse">숨김</p>'),
             _notice(body='<p style="content-visibility:hidden">숨김</p>'),
+            _notice(body='<svg><text>숨김</text></svg>'),
+            _notice(body='<math><mi>숨김</mi></math>'),
+            _notice(body='<p>앞</p><!--->보임-->'),
+            _notice(body='<p>앞</p><script><!--<script></script>--><p>숨김</p>'),
+            *(_notice(body=f'<{tag}>숨김</{tag}>') for tag in (
+                'video', 'audio', 'canvas', 'object', 'noembed', 'noframes', 'datalist', 'rp', 'select', 'xmp',
+                'textarea')),
+            *(_notice(body=f'<p style="{style}">숨김</p>') for style in (
+                'position:absolute;left:-9999px', 'text-indent:-9999px', 'margin-left: -120px',
+                'width:0;height:0;overflow:hidden', 'transform:scale(0)', 'clip-path:inset(50%)',
+                'color:transparent', 'color: rgba(0,0,0,0)', 'opacity:0.001', 'opacity:calc(0)',
+                'font-size:calc(0px)')),
         ]
         for page in pages:
             with self.subTest(page=page[-90:]):
-                with self.assertRaisesRegex(ValueError, "^시청 공지 .*숨김"):
+                with self.assertRaisesRegex(ValueError, "^시청 공지 .*(숨김|해석이 갈리는)"):
                     parse_board_notice(page, board="city", notice_id="203043")
-                with self.assertRaisesRegex(ValueError, "숨김"):
+                with self.assertRaisesRegex(ValueError, "숨김|해석이 갈리는"):
                     parse_board_media(page, board="city", notice_id="203043")
                 library = page.replace(CITY_VIEW, LIBRARY_VIEW)
-                with self.assertRaisesRegex(ValueError, "^도서관 공지 .*숨김"):
+                with self.assertRaisesRegex(ValueError, "^도서관 공지 .*(숨김|해석이 갈리는)"):
                     parse_library_notice(library, notice_id="203043")
-                with self.assertRaisesRegex(ValueError, "숨김"):
+                with self.assertRaisesRegex(ValueError, "숨김|해석이 갈리는"):
                     parse_library_media(library, notice_id="203043")
-        outside = '<div hidden><span>메뉴</span></div><p style="display:none">메뉴</p>' + _notice()
+        outside = ('<div hidden><span>메뉴</span></div><p style="display:none;position:absolute">메뉴</p>'
+                   '<svg><title>아이콘</title></svg>' + _notice())
         self.assertEqual(parse_board_notice(outside, board="city", notice_id="203043")["title"], "합성 시청 공지")
-        shown = _notice(body='<p>본문</p><!-- 정상 주석 --><details open><summary>요약</summary>내용</details>'
-                             '<script>var x = "<div hidden>";</script><p style="color:red">강조</p>'
-                             '<p style="opacity:0.95; font-size:16px; display:inline-block; font-family:\'맑은 고딕\'">글꼴</p>')
+        self.assertEqual(parse_board_media(outside, board="city", notice_id="203043"), [])
+        library = outside.replace(CITY_VIEW, LIBRARY_VIEW)
+        self.assertEqual(parse_library_notice(library, notice_id="203043")["title"], "합성 시청 공지")
+        self.assertEqual(parse_library_media(library, notice_id="203043"), [])
+        shown = _notice(body='<p>본문</p><!-- 정상 주석 --><!----><details open><summary>요약</summary>내용</details>'
+                             '<script>var x = "<div hidden>"; /*<!-- Al Chat -- >*/</script><p style="color:red">강조</p>'
+                             '<p style="opacity:0.95; font-size:16px; display:inline-block; font-family:\'맑은 고딕\';'
+                             ' text-indent:-31.4pt; letter-spacing:-0.57px; background-color: rgba(0,0,0,0.1);'
+                             ' max-width:800px; overflow:hidden">글꼴</p><template><p hidden>틀</p><style>y</style></template>'
+                             '<p>&lt;!-- 예시 문구</p><!-- 메모 -- ><p>숨은 내용</p> --><p>끝</p>')
         self.assertEqual(parse_board_notice(shown, board="city", notice_id="203043")["fields"]["description"],
-                         "본문\n요약내용\n강조\n글꼴")
+                         "본문\n요약내용\n강조\n글꼴\n<!-- 예시 문구\n끝")
+
+    def test_comment_rules_do_not_depend_on_python_patch_version(self):
+        """3.13.5와 3.14는 `--!>`·`-- >`·`<!-->`에서 주석을 닫는지가 달랐다. 결과가 같도록 종료 규칙을 고정한다."""
+        for markup in ('<!-- a --!><p>본문</p>', '<!-- a --!><div hidden>--><p>본문</p>', '<!--><p>본문</p>',
+                       '<!-- 끝나지 않는 주석<p>본문</p>'):
+            for where in ('body', 'before'):
+                page = _notice(body=markup) if where == 'body' else markup + _notice()
+                with self.subTest(markup=markup, where=where), \
+                        self.assertRaisesRegex(ValueError, "^시청 공지 페이지에 브라우저와 해석이 갈리는"):
+                    parse_board_notice(page, board="city", notice_id="203043")
+        swallowed = '<!-- x -- >' + _notice() + '-->'
+        with self.assertRaisesRegex(ValueError, "본문 영역을 확인할 수 없습니다"):
+            parse_board_notice(swallowed, board="city", notice_id="203043")
 
     def test_library_notice_is_unchanged(self):
         record = parse_library_notice(_notice(view=None), notice_id="203043")

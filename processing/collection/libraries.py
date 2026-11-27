@@ -64,30 +64,48 @@ def parse_library_csv(text: str) -> list[dict]:
 
 _LIBRARY_VIEW = '/library/bbs/view.do?ptIdx=16&mId=0401010000'
 _HIDDEN_ERROR = '{} 본문 영역에 화면 표시를 확정할 수 없는 숨김·중복 표기가 있습니다.'
-# 본문 영역에서 화면 표시를 바꾸거나 이 파서와 브라우저의 해석이 갈리는 요소. 실제 본문에는 없었다.
-_CONCEALING_TAGS = frozenset(('svg', 'math', 'iframe', 'noscript', 'title', 'style', 'dialog'))
+_MARKUP_ERROR = '{} 페이지에 브라우저와 해석이 갈리는 주석·스크립트 표기가 있습니다.'
+# 본문 영역에서 화면 표시를 바꾸거나 대체 내용만 담는 요소, Python 버전마다 원문 텍스트로 읽는지가 다른 요소.
+# 2026-11-27 확인한 실제 본문에는 없었다.
+_CONCEALING_TAGS = frozenset(('svg', 'math', 'iframe', 'noscript', 'title', 'style', 'dialog', 'video', 'audio',
+                              'canvas', 'object', 'noembed', 'noframes', 'datalist', 'rp', 'select', 'xmp',
+                              'textarea', 'plaintext'))
 _DISPLAY_ATTRS = ('hidden', 'style', 'class', 'open')
+# 위치 이동·잘라내기·변형은 실제 본문에 없어 선언이 있기만 해도 거부한다.
+_MOVING_PROPERTIES = frozenset(('position', 'clip', 'clip-path', 'transform', 'mask', 'mask-image', 'filter'))
 _ZERO = re.compile(r'[+-]?(?:0+(?:\.0*)?|\.0+)(?:px|pt|em|rem|ex|ch|%|vw|vh|vmin|vmax)?')
+_FAR_NEGATIVE = re.compile(r'-\s*\d{3,}')
 _HIDING_DECLARATIONS = {
     'display': lambda value: value.split()[:1] == ['none'],
     'visibility': lambda value: value.split()[:1] in (['hidden'], ['collapse']),
     'content-visibility': lambda value: value.split()[:1] == ['hidden'],
-    'opacity': lambda value: bool(_ZERO.fullmatch(value)),
-    'font-size': lambda value: bool(_ZERO.fullmatch(value)),
+    'opacity': lambda value: not re.fullmatch(r'(?:0?\.\d+|\d+(?:\.\d*)?)', value) or float(value) < 0.5,
+    'font-size': lambda value: bool(_ZERO.fullmatch(value)) or '(' in value,
+    'color': lambda value: 'transparent' in value or '(' in value,
+    '-webkit-text-fill-color': lambda value: 'transparent' in value or '(' in value,
 }
+_SIZES = ('width', 'height', 'max-width', 'max-height')
+_SCRIPT_DOUBLE_ESCAPE = re.compile(r'<!--.*<script[\t\n\f\r />]', re.S | re.I)
 
 
 def _hiding_style(style: str) -> bool:
-    """인라인 스타일을 선언 단위로 읽는다. 주석·이스케이프는 브라우저와 해석이 갈릴 수 있어 그 자체로 거부한다."""
+    """인라인 스타일을 선언 단위로 읽는다. 주석·이스케이프는 브라우저와 해석이 갈릴 수 있어 그 자체로 거부한다.
+
+    shortcut: 나열한 선언과 크기 0·큰 음수 이동만 본다. class 스타일시트와 그 밖의 CSS 숨김 기법은 해석하지 않는다.
+    """
     if '/*' in style or '\\' in style:
         return True
+    declarations = {}
     for declaration in style.split(';'):
         name, colon, value = declaration.partition(':')
-        value = value.lower().replace('!important', '').strip()
-        check = _HIDING_DECLARATIONS.get(name.strip().lower())
-        if colon and check and check(value):
+        name, value = name.strip().lower(), value.lower().replace('!important', '').strip()
+        if not colon:
+            continue
+        check = _HIDING_DECLARATIONS.get(name)
+        if name in _MOVING_PROPERTIES or (check and check(value)) or _FAR_NEGATIVE.search(value):
             return True
-    return False
+        declarations[name] = value
+    return 'overflow' in declarations and any(_ZERO.fullmatch(declarations.get(size, '-')) for size in _SIZES)
 
 
 def _conceals(tag: str, attrs: dict, names: list[str]) -> bool:
@@ -247,10 +265,19 @@ class _NoticeParser(HTMLParser):
         while self.tags[-1] in tags:
             self.handle_endtag(self.tags[-1])
 
-    def handle_comment(self, data):
-        # 브라우저는 `<!-->`·`<!--->`·`--!>`에서 주석을 닫지만 이 파서는 `-->`까지 삼킨다.
-        if self.tags and not self.hidden_depth and (data.startswith(('>', '->')) or '--!>' in data):
-            raise ValueError(_HIDDEN_ERROR.format(self.label))
+    def parse_comment(self, i, report=True):
+        """주석 종료 규칙을 Python 패치 버전과 무관하게 `-->`로 고정한다.
+
+        3.13.5는 `--\\s*>`, 3.14는 `--!?>`와 `<!-->`에서 닫아 같은 HTML의 결과가 달랐다. 브라우저와 해석이 갈리는
+        `<!-->`·`<!--->`·`--!>`와 닫히지 않은 주석(문서를 한 번에 넣으므로 문서 끝까지 이어진다)은 문서 어디서든 거부한다.
+        """
+        rawdata = self.rawdata
+        end = rawdata.find('-->', i + 4)
+        if end < 0 or rawdata.startswith(('>', '->'), i + 4) or '--!>' in rawdata[i + 4:end]:
+            raise ValueError(_MARKUP_ERROR.format(self.label))
+        if report:
+            self.handle_comment(rawdata[i + 4:end])
+        return end + 3
 
     def unknown_decl(self, data):
         # CDATA 구역은 HTML 본문에서 브라우저가 주석으로 다르게 끝내므로 본문 영역에서 받지 않는다.
@@ -258,9 +285,9 @@ class _NoticeParser(HTMLParser):
             raise ValueError(_HIDDEN_ERROR.format(self.label))
 
     def handle_data(self, data):
-        if self.tags and not self.hidden_depth and data.startswith('<!--'):
-            # 닫는 `-->`가 없어 주석으로 읽지 못한 조각이다. 브라우저는 숨기므로 본문 글자로 받지 않는다.
-            raise ValueError(_HIDDEN_ERROR.format(self.label))
+        if self.cdata_elem == 'script' and _SCRIPT_DOUBLE_ESCAPE.search(data):
+            # 브라우저는 `<!--<script>` 뒤의 `</script>`에서 스크립트를 끝내지 않아 뒤따르는 HTML을 숨긴다.
+            raise ValueError(_MARKUP_ERROR.format(self.label))
         if self.script is not None and not self.tags and self.hidden_depth == 1:
             self.script.append(data)
         if self.section and not self.hidden_depth:
@@ -439,7 +466,8 @@ def parse_library_notice(text: str, *, notice_id: str) -> dict:
 # 게시판별 파서 버전. 그 게시판의 parse_board_notice 출력이나 허용 규칙이 바뀌면 해당 값만 올린다.
 # 공유하는 _NoticeParser·_notice_record를 바꾸면 영향을 받는 모든 게시판의 값을 올린다.
 # 이력(이전 공유 이름 board-notice-parser): v1 시작, v2 시청 viewForm 필수, 안성배움e 추가.
-# v3: 본문 영역(div.bod_view 포함)의 hidden 속성·인라인 숨김 스타일·표시를 바꾸는 태그·비정상 주석·CDATA를 거부한다.
+# v3: 본문 영역(div.bod_view 포함)의 hidden 속성·인라인 숨김 스타일·표시를 바꾸는 태그·CDATA와
+#     문서 전체의 비정상 주석·스크립트 이중 이스케이프를 거부한다.
 BOARD_PARSER_VERSIONS = MappingProxyType({
     'city': 'city-notice-parser-v3',
     'edu': 'edu-notice-parser-v3',
