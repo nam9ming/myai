@@ -39,11 +39,12 @@ public class CitizenNoticeService {
     private final CitizenPublicationContent citizens;
     private final PublicationContent shared;
     private final ObjectMapper mapper;
-    // 검증을 마친 공개본. 공개본 행은 바뀌지 않으므로 checksum과 메타데이터가 같으면 다시 검증·파싱하지 않는다.
-    // 행의 원문만 바뀐 경우에도 이미 검증한 내용만 내보낸다.
+    // 검증을 마친 선택 공개본(현재본과 교체본). 공개본 행은 바뀌지 않으므로 checksum과 메타데이터가 같으면 다시
+    // 검증·파싱하지 않는다. 행의 원문만 바뀐 경우에도 이미 검증한 내용만 내보낸다. 이력 공개본은 넣지 않는다(밀어내지 않게).
+    // shortcut: 8MiB 공개본은 파싱 후 약 30MiB라 2개까지만 둔다. 동시 선택 공개본이 늘면 크기 기준 상한으로 바꾼다.
     private final Map<List<Object>, JsonNode> verifiedSnapshots = java.util.Collections.synchronizedMap(
             new java.util.LinkedHashMap<>(8, 0.75f, true) {
-                @Override protected boolean removeEldestEntry(Map.Entry<List<Object>, JsonNode> eldest) { return size() > 4; }
+                @Override protected boolean removeEldestEntry(Map.Entry<List<Object>, JsonNode> eldest) { return size() > 2; }
             });
 
     public CitizenNoticeService(PublicSnapshotRepository repository, CitizenPublicationContent citizens, PublicationContent shared, ObjectMapper mapper) {
@@ -86,14 +87,14 @@ public class CitizenNoticeService {
                 new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "PUBLIC_DATA_NOT_READY", "검토된 시민 공개본이 아직 없습니다.", null));
         var published = repository.citizenPublished(id).orElseThrow(() -> explicit
                 ? new ApiException(HttpStatus.NOT_FOUND, "SNAPSHOT_NOT_FOUND", "시민 공개본을 찾을 수 없습니다.", "snapshot_id") : invalid());
-        JsonNode selected = reads.verify(id, published);
+        JsonNode selected = reads.verify(id, published, true);
         if (!id.equals(published.currentId())) {
             if (!explicit) throw invalid();
             if (published.currentId() != null) {
                 var replacement = repository.citizenPublished(published.currentId()).orElseThrow(this::invalid);
                 if (!published.currentId().equals(replacement.currentId())) throw invalid();
                 // 교체본 검증을 이전 선택의 이력 누적 예산과 분리한다.
-                new Reads().verify(published.currentId(), replacement);
+                new Reads().verify(published.currentId(), replacement, true);
             }
             throw new ApiException(HttpStatus.CONFLICT, "SNAPSHOT_RETIRED", "공개본이 교체되었습니다. 새 버전을 선택해 주세요.", "snapshot_id", published.currentId());
         }
@@ -208,10 +209,10 @@ public class CitizenNoticeService {
         private JsonNode historic(String id) {
             JsonNode cached = verified.get(id);
             if (cached != null) return cached;
-            return verify(id, repository.citizenPublished(id).orElseThrow(CitizenNoticeService.this::invalid));
+            return verify(id, repository.citizenPublished(id).orElseThrow(CitizenNoticeService.this::invalid), false);
         }
 
-        private JsonNode verify(String id, PublicSnapshotRepository.Published published) {
+        private JsonNode verify(String id, PublicSnapshotRepository.Published published, boolean remember) {
             try {
                 var row = published.snapshot();
                 shared.check(row != null && id.equals(row.id()), "snapshot_id");
@@ -222,7 +223,7 @@ public class CitizenNoticeService {
                 if (snapshot == null) {
                     citizens.verifySnapshot(row, published.schemaVersion(), published.createdAt());
                     snapshot = shared.parse(row.canonical());
-                    verifiedSnapshots.put(key, snapshot);
+                    if (remember) verifiedSnapshots.put(key, snapshot);
                 }
                 bytes += row.canonical().getBytes(StandardCharsets.UTF_8).length;
                 if (bytes > HISTORY_BYTES) throw tooLarge();

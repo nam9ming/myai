@@ -172,6 +172,19 @@ class CitizenNoticeServiceTest {
     }
 
     @Test
+    void selectedSnapshotIsVerifiedOnceAndHistoryReadsDoNotEvictIt() {
+        var counted = org.mockito.Mockito.spy(new CitizenPublicationContent(shared, mapper));
+        var cached = new CitizenNoticeService(repository, counted, shared, mapper);
+        cached.list(null);
+        cached.notice(UUID.fromString(EVENT), UUID.fromString(CURRENT), null, kr.ac.myai.backend.repository.PublicSnapshotRepository.MAX_CITIZEN_HISTORY);
+        cached.list(null);
+        // 현재 공개본은 첫 목록에서만 검증한다. 상세의 이력 읽기가 캐시를 밀어내지 않는다.
+        org.mockito.Mockito.verify(counted, org.mockito.Mockito.times(1)).verifySnapshot(
+                org.mockito.ArgumentMatchers.argThat(row -> row != null && row.id().equals(CURRENT)),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
     void omittedHeadAbsenceIsUnavailableAndBrokenHeadIsInvalid() {
         head = null;
         error(() -> service.list(null), HttpStatus.SERVICE_UNAVAILABLE, "PUBLIC_DATA_NOT_READY");
