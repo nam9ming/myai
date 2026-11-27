@@ -1,10 +1,13 @@
 import unittest
 from unittest.mock import patch
 
-from processing.collection.libraries import BOARD_PARSER_VERSION, parse_board_notice, parse_library_notice
+from processing.collection.libraries import (
+    BOARD_PARSER_VERSIONS, board_parser_version, parse_board_media, parse_board_notice, parse_library_media,
+    parse_library_notice,
+)
 from processing.collection.library_listing import parse_board_listing, parse_library_listing
 from processing.collection.official_web import (
-    SourceHTTPError, board_detail_url, fetch_board_detail, fetch_board_listing,
+    BOARDS, SourceHTTPError, board_detail_url, fetch_board_detail, fetch_board_listing,
 )
 
 
@@ -147,7 +150,12 @@ class BoardListingTest(unittest.TestCase):
 class BoardNoticeTest(unittest.TestCase):
     def test_city_notice_uses_board_url_and_source(self):
         record = parse_board_notice(_notice(), board="city", notice_id="203043")
-        self.assertEqual(BOARD_PARSER_VERSION, "board-notice-parser-v2", "출력·허용 규칙을 바꾸면 파서 버전도 올린다.")
+        self.assertEqual(dict(BOARD_PARSER_VERSIONS), {"city": "city-notice-parser-v3", "edu": "edu-notice-parser-v3"},
+                         "게시판의 출력·허용 규칙을 바꾸면 그 게시판의 파서 버전을 올린다.")
+        self.assertEqual(set(BOARD_PARSER_VERSIONS), set(BOARDS), "모든 게시판에 파서 버전이 있어야 한다.")
+        for board in ("library", "other", None):
+            with self.subTest(board=board), self.assertRaises(ValueError):
+                board_parser_version(board)
         flagged = parse_board_notice(_notice(body='<p>본문</p><p><img src="/x.png" alt=""></p>'),
                                      board="city", notice_id="203043")
         self.assertEqual(flagged["review_flags"], ["inline_image"])
@@ -186,6 +194,53 @@ class BoardNoticeTest(unittest.TestCase):
                 parse_library_notice(fixture, notice_id="203043")
         self.assertEqual(parse_library_notice(_notice(view=LIBRARY_VIEW), notice_id="203043")["source"],
                          "library_notice")
+
+    def test_hidden_elements_in_body_are_rejected(self):
+        """브라우저 표시를 확정할 수 없으므로 hidden 요소가 있는 본문 영역은 추정하지 않고 거부한다."""
+        pages = [
+            _notice().replace("<h4>", "<h4 hidden>"),
+            _notice().replace('<div class="bod_view">', '<div class="bod_view" hidden>'),
+            _notice(body='<p>앞</p><p hidden>숨김<div>보이는 조건</div></p>'),
+            _notice(body='<ul><li hidden>숨김<li>보임</ul>'),
+            _notice(body='<p>본문<img hidden src="/common/imgView.do" alt=""></p>'),
+            _notice(body='<p>앞</p><div hidden/><p>뒤</p>'),
+            _notice(body='<p hidden style="display:block">보이는 조건</p>'),
+            _notice(body='<dl><dd hidden><a href="#">첨부</a></dd></dl>'),
+            _notice().replace("</div></div></div>",
+                              '</div><dl class="view_file"><dd hidden><a href="#" onclick="x">첨부</a></dd></dl></div></div>'),
+            _notice(body='<p>앞</p><svg><style><div hidden></style></svg><p>본문</p>'),
+            _notice(body='<p>앞</p><math><style>x</style></math>'),
+            _notice(body='<p>앞</p><!--><div hidden>--><p>본문</p>'),
+            _notice(body='<p>앞</p><!-- a --!><p>본문</p>'),
+            _notice(body='<p>앞</p><!-- a --!><div hidden>--><p>본문</p>'),
+            _notice(body='<p>앞</p><![CDATA[><div hidden>]]><p>본문</p>'),
+            _notice(body='<p style="display: none">숨김</p>'),
+            _notice(body='<p style="color:red; VISIBILITY:hidden">숨김</p>'),
+            _notice(body='<style>.x{display:none}</style><p class="x">숨김</p>'),
+            _notice(body='<noscript>숨김</noscript>'),
+            _notice(body='<iframe>숨김</iframe>'),
+            _notice(body='<details><summary>요약</summary>숨김</details>'),
+            _notice(body='<dialog>숨김</dialog>'),
+            _notice(body='<title>숨김</title>'),
+            _notice().replace('<div class="bod_view">', '<div class="bod_view" style="display:none">'),
+        ]
+        for page in pages:
+            with self.subTest(page=page[-90:]):
+                with self.assertRaisesRegex(ValueError, "^시청 공지 .*숨김"):
+                    parse_board_notice(page, board="city", notice_id="203043")
+                with self.assertRaisesRegex(ValueError, "숨김"):
+                    parse_board_media(page, board="city", notice_id="203043")
+                library = page.replace(CITY_VIEW, LIBRARY_VIEW)
+                with self.assertRaisesRegex(ValueError, "^도서관 공지 .*숨김"):
+                    parse_library_notice(library, notice_id="203043")
+                with self.assertRaisesRegex(ValueError, "숨김"):
+                    parse_library_media(library, notice_id="203043")
+        outside = '<div hidden><span>메뉴</span></div><p style="display:none">메뉴</p>' + _notice()
+        self.assertEqual(parse_board_notice(outside, board="city", notice_id="203043")["title"], "합성 시청 공지")
+        shown = _notice(body='<p>본문</p><!-- 정상 주석 --><details open><summary>요약</summary>내용</details>'
+                             '<script>var x = "<div hidden>";</script><p style="color:red">강조</p>')
+        self.assertEqual(parse_board_notice(shown, board="city", notice_id="203043")["fields"]["description"],
+                         "본문\n요약내용\n강조")
 
     def test_library_notice_is_unchanged(self):
         record = parse_library_notice(_notice(view=None), notice_id="203043")

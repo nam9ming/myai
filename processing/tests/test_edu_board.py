@@ -169,6 +169,28 @@ class EduPipelineTest(unittest.TestCase):
         self.assertEqual(asset["official_url"], board_detail_url("edu", "3838"))
 
 
+class EduVersionTest(unittest.TestCase):
+    def test_edu_batch_records_edu_parser_version(self):
+        root = Path(self.enterContext(TemporaryDirectory())).resolve() / "private"
+        root.mkdir(mode=0o700)
+        with (patch("processing.collection.board_batch.sleep"),
+              patch("processing.collection.board_batch.fetch_board_listing",
+                    return_value=_listing(_edu_row("3838", "330"), total=1).encode()),
+              patch("processing.collection.board_batch.fetch_board_detail", return_value=_edu_notice().encode())):
+            capture_board_batch("edu", "edu", root / BOARD_SECTION)
+        parsed = json.loads((root / BOARD_SECTION / "edu" / "parsed-3838.json").read_bytes())
+        self.assertEqual(parsed["parser_version"], "edu-notice-parser-v3")
+        for page in (_edu_notice(title_markup='<div class="bod_view_title" hidden>숨김</div>'),
+                     _edu_notice().replace('<div class="bod_view">', '<div class="bod_view" hidden>'),
+                     _edu_notice(body='<p>본문<img hidden src="/common/imgView.do" alt=""></p>'),
+                     _edu_notice(body='<p style="display:none">숨김</p>'),
+                     _edu_notice(attachment=ATTACHMENT.replace("<dd>", "<dd hidden>"))):
+            for parse in (parse_board_notice, parse_board_media):
+                with self.subTest(parse=parse.__name__, page=page[-70:]), \
+                        self.assertRaisesRegex(ValueError, "^안성배움e 공지 .*숨김"):
+                    parse(page, board="edu", notice_id="3838")
+
+
 class CityTitleTest(unittest.TestCase):
     def test_city_ignores_edu_title_block(self):
         city = _notice("3838").replace("<h4>합성 시청 공지</h4>",

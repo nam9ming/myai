@@ -8,7 +8,7 @@ from time import sleep
 from .batch import LIST_MAX_BYTES
 from .capture import CAPTURE_ROOT
 from .cli import CollectionArguments
-from .libraries import BOARD_PARSER_VERSION, parse_board_notice
+from .libraries import board_parser_version, parse_board_notice
 from .library_listing import parse_board_listing
 from .official_web import (
     BOARDS, DETAIL_MAX_BYTES, OFFICIAL_ORIGIN, board, board_detail_url, board_listing_path, fetch_board_detail,
@@ -35,7 +35,7 @@ def board_source(name: str) -> WebSource:
         fetch_detail=lambda notice_id: fetch_board_detail(name, notice_id, limit=DETAIL_MAX_BYTES),
         parse_detail=lambda text, notice_id: parse_board_notice(text, board=name, notice_id=notice_id),
         record_schema=RECORD_SCHEMA,
-        parser_version=BOARD_PARSER_VERSION,
+        parser_version=board_parser_version(name),
         pause=lambda: sleep(0.5),
     )
 

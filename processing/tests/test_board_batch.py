@@ -57,7 +57,7 @@ class BoardBatchTest(unittest.TestCase):
         self.assertEqual(item["sha256"], hashlib.sha256(board_detail("3")).hexdigest())
         parsed = json.loads((directory / item["parsed_file"]).read_text(encoding="utf-8"))
         self.assertEqual((parsed["schema_version"], parsed["parser_version"]),
-                         ("citizen-board-notice-v1", "board-notice-parser-v2"))
+                         ("citizen-board-notice-v1", "city-notice-parser-v3"))
         self.assertEqual(parsed["record"]["source"], "city_notice")
 
     def test_pinned_notice_listed_again_as_numbered_row_is_captured_once(self):
@@ -183,7 +183,7 @@ class BoardD03Test(unittest.TestCase):
         self.assertIn("9", capture_assets(self.root, "board", "trial", {"9"}))
 
         parsed = json.loads((self.directory / "parsed-9.json").read_bytes())
-        for older in ("board-notice-parser-v0", "board-notice-parser-v1"):
+        for older in ("board-notice-parser-v1", "board-notice-parser-v2", "edu-notice-parser-v3"):
             self.rewrite("parsed-9.json", json.dumps(dict(parsed, parser_version=older)).encode())
             with self.subTest(older=older), self.assertRaisesRegex(ValueError, "파서 버전.*다시 수집"):
                 capture_assets(self.root, "board", "trial", {"9"})

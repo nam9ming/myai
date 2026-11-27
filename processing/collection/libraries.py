@@ -4,6 +4,7 @@ from html.parser import HTMLParser
 from io import StringIO
 import json
 import re
+from types import MappingProxyType
 
 from . import official_url
 from .official_web import OFFICIAL_ORIGIN, board as board_info, board_detail_url, detail_url
@@ -62,6 +63,16 @@ def parse_library_csv(text: str) -> list[dict]:
 
 
 _LIBRARY_VIEW = '/library/bbs/view.do?ptIdx=16&mId=0401010000'
+_HIDDEN_ERROR = '{} 본문 영역에 숨김(hidden) 요소가 있어 화면 표시를 확정할 수 없습니다.'
+# 본문 영역에서 화면 표시를 바꾸거나 이 파서와 브라우저의 해석이 갈리는 요소. 실제 본문에는 없었다.
+_CONCEALING_TAGS = frozenset(('svg', 'math', 'iframe', 'noscript', 'title', 'style', 'dialog'))
+_INLINE_HIDING = re.compile(r'display\s*:\s*none|visibility\s*:\s*hidden', re.I)
+
+
+def _conceals(tag: str, attrs: dict) -> bool:
+    """이 파서는 암묵적 태그 닫기를 일부만 재현하고 CSS를 해석하지 않으므로 숨김 범위를 추정하지 않고 거부한다."""
+    return ('hidden' in attrs or tag in _CONCEALING_TAGS or (tag == 'details' and 'open' not in attrs)
+            or bool(_INLINE_HIDING.search(attrs.get('style') or '')))
 
 
 class _NoticeParser(HTMLParser):
@@ -111,10 +122,14 @@ class _NoticeParser(HTMLParser):
             if tag == 'div' and 'bod_view' in classes:
                 if self.found_board:
                     raise ValueError(self.label + ' 본문 영역이 중복되었습니다.')
+                if _conceals(tag, attrs):
+                    raise ValueError(_HIDDEN_ERROR.format(self.label))
                 self.found_board = True
                 self.tags.append(tag)
             return
 
+        if not self.hidden_depth and _conceals(tag, attrs):
+            raise ValueError(_HIDDEN_ERROR.format(self.label))
         if self.section == 'description' and not self.hidden_depth:
             optional = {
                 'li': {'li'},
@@ -207,7 +222,20 @@ class _NoticeParser(HTMLParser):
         while self.tags[-1] in tags:
             self.handle_endtag(self.tags[-1])
 
+    def handle_comment(self, data):
+        # 브라우저는 `<!-->`·`<!--->`·`--!>`에서 주석을 닫지만 이 파서는 `-->`까지 삼킨다.
+        if self.tags and not self.hidden_depth and (data.startswith(('>', '->')) or '--!>' in data):
+            raise ValueError(_HIDDEN_ERROR.format(self.label))
+
+    def unknown_decl(self, data):
+        # CDATA 구역은 HTML 본문에서 브라우저가 주석으로 다르게 끝내므로 본문 영역에서 받지 않는다.
+        if self.tags and not self.hidden_depth:
+            raise ValueError(_HIDDEN_ERROR.format(self.label))
+
     def handle_data(self, data):
+        if self.tags and not self.hidden_depth and data.startswith('<!--'):
+            # 닫는 `-->`가 없어 주석으로 읽지 못한 조각이다. 브라우저는 숨기므로 본문 글자로 받지 않는다.
+            raise ValueError(_HIDDEN_ERROR.format(self.label))
         if self.script is not None and not self.tags and self.hidden_depth == 1:
             self.script.append(data)
         if self.section and not self.hidden_depth:
@@ -226,7 +254,6 @@ class _MediaParser(_NoticeParser):
         self.media = []
         self.seen_links = set()
         self.anchor = None
-        self.explicit_hidden_depth = 0
 
     def add_media(self, kind, url, label, format_name=None):
         if url is not None:
@@ -239,7 +266,7 @@ class _MediaParser(_NoticeParser):
 
     def handle_starttag(self, tag, attrs):
         names = [name for name, _ in attrs]
-        if not self.hidden_depth and not self.explicit_hidden_depth:
+        if not self.hidden_depth:
             if (not self.tags and tag == 'input' and ('name', 'bIdx') in attrs
                     and (names.count('name') > 1 or names.count('value') > 1)):
                 raise ValueError(self.label + ' 번호의 HTML 속성이 중복되었습니다.')
@@ -247,14 +274,11 @@ class _MediaParser(_NoticeParser):
             if (len(self.tags) <= 1 and tag in ('div', 'dl') and names.count('class') > 1
                     and any(name == 'class' and classes.intersection((value or '').split()) for name, value in attrs)):
                 raise ValueError(self.label + ' 영역의 HTML 속성이 중복되었습니다.')
+        # 본문 영역의 hidden 요소는 기반 파서가 거부하므로 여기서 따로 건너뛰지 않는다.
         super().handle_starttag(tag, attrs)
-        if self.hidden_depth or self.explicit_hidden_depth or not self.tags:
+        if self.hidden_depth or not self.tags:
             return
         values = dict(attrs)
-        if 'hidden' in values:
-            if tag not in _VOID_TAGS:
-                self.explicit_hidden_depth = len(self.tags)
-            return
 
         if tag == 'img' and self.section == 'description':
             source = values.get('src') or ''
@@ -280,14 +304,12 @@ class _MediaParser(_NoticeParser):
 
     def handle_data(self, data):
         super().handle_data(data)
-        if self.anchor is not None and not self.hidden_depth and not self.explicit_hidden_depth:
+        if self.anchor is not None and not self.hidden_depth:
             self.anchor[2].append(data)
 
     def handle_endtag(self, tag):
         depth = len(self.tags)
         super().handle_endtag(tag)
-        if self.explicit_hidden_depth == depth and len(self.tags) < depth:
-            self.explicit_hidden_depth = 0
         if tag == 'a' and self.anchor is not None and self.anchor[0] == depth:
             _, url, parts = self.anchor
             self.anchor = None
@@ -389,11 +411,21 @@ def parse_library_notice(text: str, *, notice_id: str) -> dict:
     return _notice_record(_NoticeParser(), text, notice_id, 'library_notice', lambda: detail_url('living', notice_id))
 
 
-# parse_board_notice나 공유하는 _NoticeParser·_notice_record의 출력 또는 허용 규칙이 바뀌면 함께 올린다.
-# v2: 시청 상세의 viewForm 게시판 주소를 필수로 대조한다.
-# v2 유지: 안성배움e 추가는 새 게시판 설정만 더하며 시청 결과와 허용 규칙은 그대로다.
-# 버전은 모든 게시판이 함께 쓰므로 한 게시판의 규칙을 바꿔도 다른 게시판 기록을 다시 수집해야 한다.
-BOARD_PARSER_VERSION = 'board-notice-parser-v2'
+# 게시판별 파서 버전. 그 게시판의 parse_board_notice 출력이나 허용 규칙이 바뀌면 해당 값만 올린다.
+# 공유하는 _NoticeParser·_notice_record를 바꾸면 영향을 받는 모든 게시판의 값을 올린다.
+# 이력(이전 공유 이름 board-notice-parser): v1 시작, v2 시청 viewForm 필수, 안성배움e 추가.
+# v3: 본문 영역(div.bod_view 포함)의 hidden 속성·인라인 숨김 스타일·표시를 바꾸는 태그·비정상 주석·CDATA를 거부한다.
+BOARD_PARSER_VERSIONS = MappingProxyType({
+    'city': 'city-notice-parser-v3',
+    'edu': 'edu-notice-parser-v3',
+})
+
+
+def board_parser_version(board: str) -> str:
+    board_info(board)
+    if board not in BOARD_PARSER_VERSIONS:  # 시험이 BOARDS와 키가 같음을 보장하지만 등록 누락을 ValueError로 알린다.
+        raise ValueError('게시판의 파서 버전이 등록되지 않았습니다.')
+    return BOARD_PARSER_VERSIONS[board]
 
 
 def parse_board_notice(text: str, *, board: str, notice_id: str) -> dict:
