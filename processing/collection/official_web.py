@@ -1,10 +1,11 @@
-"""안성시 공식 행사·도서관·도로 공사현황·시청 공지의 공개 목록과 상세를 요청한다."""
+"""안성시 공식 행사·도서관·도로 공사현황·시청·안성배움e 공지의 공개 목록과 상세를 요청한다."""
 
 from contextlib import closing
 from datetime import date
 from http.client import HTTPException, HTTPSConnection
 import re
 from types import MappingProxyType
+from typing import NamedTuple
 from urllib.parse import urlencode
 
 
@@ -100,24 +101,41 @@ def fetch_road_detail(state: str, project_id: str, *, limit: int) -> bytes:
     return _fetch("GET", _road_detail_path(state, project_id), None, limit)
 
 
-# 게시판 키: (경로, 메뉴 번호, 오류 문구에 쓰는 이름, 파싱 결과의 source)
+class Board(NamedTuple):
+    """같은 게시판 CMS를 쓰는 공식 게시판. label은 오류 문구, source는 파싱 결과에 쓴다.
+
+    title_class가 있으면 상세 제목을 `<h4>` 대신 본문 영역 바로 아래의 그 class 블록에서 읽는다.
+    context_path는 페이지가 선언하는 `contextPath`이며 첨부 다운로드 주소 앞에 붙는다.
+    """
+
+    prefix: str
+    menu: str
+    label: str
+    source: str
+    pt_idx: str = "16"
+    title_class: str | None = None
+    context_path: str = ""
+
+
 BOARDS = MappingProxyType({
-    "city": ("/portal/bbs", "0501010000", "시청 공지", "city_notice"),
+    "city": Board("/portal/bbs", "0501010000", "시청 공지", "city_notice"),
+    "edu": Board("/edu/portal/bbs", "0901040000", "안성배움e 공지", "edu_notice",
+                 pt_idx="300", title_class="bod_view_title", context_path="/edu"),
 })
 _NOTICE_ID = _PROJECT_ID
 
 
-def board(name: str) -> tuple[str, str, str, str]:
+def board(name: str) -> Board:
     if not isinstance(name, str) or name not in BOARDS:
         raise ValueError("지원하지 않는 공식 게시판입니다.")
     return BOARDS[name]
 
 
 def _board_detail_path(name: str, notice_id: str) -> str:
-    prefix, menu, _, _ = board(name)
+    info = board(name)
     if not isinstance(notice_id, str) or _NOTICE_ID.fullmatch(notice_id) is None:
         raise ValueError("공지 번호는 18자리 이하의 양의 ASCII 정수여야 합니다.")
-    return f"{prefix}/view.do?bIdx={notice_id}&mId={menu}&ptIdx=16"
+    return f"{info.prefix}/view.do?bIdx={notice_id}&mId={info.menu}&ptIdx={info.pt_idx}"
 
 
 def board_detail_url(name: str, notice_id: str) -> str:
@@ -125,8 +143,8 @@ def board_detail_url(name: str, notice_id: str) -> str:
 
 
 def board_listing_path(name: str) -> str:
-    prefix, menu, _, _ = board(name)
-    return f"{prefix}/list.do?ptIdx=16&mId={menu}"
+    info = board(name)
+    return f"{info.prefix}/list.do?ptIdx={info.pt_idx}&mId={info.menu}"
 
 
 def fetch_board_listing(name: str, page: int, *, limit: int) -> bytes:

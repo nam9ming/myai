@@ -1,4 +1,4 @@
-"""안성시 도서관·시청 공지 목록의 페이지 정보와 게시물 번호를 읽는다."""
+"""안성시 도서관·시청·안성배움e 공지 목록의 페이지 정보와 게시물 번호를 읽는다."""
 
 from html.parser import HTMLParser
 import re
@@ -14,16 +14,17 @@ _ROW_NUMBER = re.compile(r"[1-9][0-9]{0,17}")
 _IGNORED_TAGS = {"script", "style", "template", "noscript"}
 
 
-def _notice_link(menu: str) -> re.Pattern:
-    return re.compile(r"goTo\.view\('list',\s*'([1-9][0-9]{0,17})',\s*'16',\s*'" + menu + r"'\);\s*return false;")
+def _notice_link(menu: str, pt_idx: str) -> re.Pattern:
+    return re.compile(r"goTo\.view\('list',\s*'([1-9][0-9]{0,17})',\s*'" + pt_idx + r"',\s*'" + menu
+                      + r"'\);\s*return false;")
 
 
 class _ListingParser(HTMLParser):
     """`detect_pins`가 거짓이면 기존 도서관 목록과 같은 기준으로만 행을 읽는다."""
 
-    def __init__(self, menu: str, invalid: str, *, detect_pins: bool):
+    def __init__(self, menu: str, invalid: str, *, detect_pins: bool, pt_idx: str = "16"):
         super().__init__()
-        self.link = _notice_link(menu)
+        self.link = _notice_link(menu, pt_idx)
         self.invalid = invalid
         self.detect_pins = detect_pins
         self.rows: list[tuple[str, bool]] = []
@@ -168,11 +169,12 @@ class _ListingParser(HTMLParser):
         self.rows.append((self.row_id, pinned))
 
 
-def _parse(raw: bytes, page: int, menu: str, label: str, *, detect_pins: bool) -> tuple[int, list[tuple[str, bool]]]:
+def _parse(raw: bytes, page: int, menu: str, label: str, *, detect_pins: bool,
+           pt_idx: str = "16") -> tuple[int, list[tuple[str, bool]]]:
     invalid = f"{label} 목록 HTML 구조가 올바르지 않습니다."
     if type(page) is not int or page < 1 or not isinstance(raw, bytes) or b"\x00" in raw:
         raise ValueError(invalid)
-    parser = _ListingParser(menu, invalid, detect_pins=detect_pins)
+    parser = _ListingParser(menu, invalid, detect_pins=detect_pins, pt_idx=pt_idx)
     try:
         parser.feed(raw.decode("utf-8-sig"))
         parser.close()
@@ -194,8 +196,9 @@ def parse_library_listing(raw: bytes, *, page: int) -> tuple[int, list[str]]:
 
 def parse_board_listing(raw: bytes, *, board: str, page: int) -> tuple[int, list[str], list[str]]:
     """전체 페이지 수와 번호가 붙은 글, 매 페이지에 반복되는 상단 고정 글을 원래 순서로 나누어 반환한다."""
-    _, menu, label, _ = board_info(board)
-    total_pages, rows = _parse(raw, page, menu, label, detect_pins=True)
+    info = board_info(board)
+    label = info.label
+    total_pages, rows = _parse(raw, page, info.menu, label, detect_pins=True, pt_idx=info.pt_idx)
     numbered = [notice_id for notice_id, pinned in rows if not pinned]
     pinned = [notice_id for notice_id, pinned in rows if pinned]
     if not numbered:

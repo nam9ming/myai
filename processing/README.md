@@ -106,7 +106,7 @@ python3.13 -B -m processing.collection living \
 
 도서관 HTML은 본문과 이미지·첨부 유무를 구분한다. 읽을 수 있는 본문이 없는 글은 오류로 남긴다. 행사 상세는 원문 주소와 선택 링크를 함께 다루며, 썸네일이나 첨부 이미지가 있으면 확인 표시를 남긴다. 설명에 섞인 HTML은 원문 필드로 보관한다. 두 공식 웹 상세 모두 입력에 포함된 게시물 번호를 `--web-id`와 대조한다.
 
-시청 공지 게시판(`board="city"`)은 도서관 공지와 같은 목록·상세 구조라 같은 파서를 게시판별 메뉴 번호와 문구로 사용한다. 목록은 POST `page`로, 상세는 `view.do?bIdx=…&mId=0501010000&ptIdx=16` GET으로 요청한다. 목록 맨 위의 번호 없는 `공지` 아이콘 글은 매 페이지에 반복되므로 `parse_board_listing`이 번호가 붙은 글과 나누어 반환한다. 번호 칸은 숫자 또는 `공지` 아이콘 하나만 허용하고 그 밖의 표시는 형식 변경으로 본다. 고정 글만 있는 페이지도 거부한다. 고정 글이 원래 게시 위치의 번호 행에 함께 나오는 경우는 보관한 1~3페이지와 따로 조회한 6~15페이지(원본 미보관)에서 관찰되지 않았지만 허용한다. 도서관 목록은 이 번호 칸 검사를 적용하지 않고 기존 기준을 유지한다. 묶음 수집과 D03 연결은 아래 [시청 공지 게시판 목록·상세 수집](#시청-공지-게시판-목록상세-수집)을 따른다.
+시청 공지 게시판(`board="city"`)은 도서관 공지와 같은 목록·상세 구조라 같은 파서를 게시판별 메뉴 번호와 문구로 사용한다. 목록은 POST `page`로, 상세는 `view.do?bIdx=…&mId=0501010000&ptIdx=16` GET으로 요청한다. 목록 맨 위의 번호 없는 `공지` 아이콘 글은 매 페이지에 반복되므로 `parse_board_listing`이 번호가 붙은 글과 나누어 반환한다. 번호 칸은 숫자 또는 `공지` 아이콘 하나만 허용하고 그 밖의 표시는 형식 변경으로 본다. 고정 글만 있는 페이지도 거부한다. 고정 글이 원래 게시 위치의 번호 행에 함께 나오는 경우는 보관한 1~3페이지와 따로 조회한 6~15페이지(원본 미보관)에서 관찰되지 않았지만 허용한다. 도서관 목록은 이 번호 칸 검사를 적용하지 않고 기존 기준을 유지한다. 묶음 수집과 D03 연결은 아래 [시청·안성배움e 공지 게시판 목록·상세 수집](#시청안성배움e-공지-게시판-목록상세-수집)을 따른다.
 
 2026-11-27 시청 공지 1~3페이지에서는 같은 고정 글 3건이 모두 반복됐다. 고정 글 3건, 번호 글 30건 중 15건, 아래 진로체험 캠프 1건까지 19건의 상세에서 본문만 있는 글 4건, 본문과 본문 이미지가 함께 있는 글 9건, 본문과 첨부가 함께 있는 글 6건을 확인했다. [진로체험 캠프](https://www.anseong.go.kr/portal/bbs/view.do?bIdx=203043&mId=0501010000&ptIdx=16)처럼 포스터 이미지의 대체 텍스트에 본문 전체가 다시 들어간 글도 있다. 본문에 없는 일정·조건·신청 링크는 별도 원본을 확인할 때까지 미상으로 둔다. 같은 제목의 다른 게시물은 원문 ID별로 보관하고, 정정이나 재게시 관계는 내용과 게시 시각을 대조한다.
 
@@ -153,7 +153,7 @@ python3.13 -B -m processing.collection.batch living \
 
 `data/private/collection-batches/<name>/`에 포털 CSV, 받은 목록·상세 원본, 성공한 상세의 비교 결과를 저장한다. `batch.json`에는 각 원본의 해시와 수신 시각, 목록·상세 처리 상태가 있다. 맨 마지막에 `batch.json`이 생긴 묶음만 사용한다. 종료 0은 수집 중 보고된 페이지와 선택한 상세를 모두 처리한 경우, 2는 한도 도달 또는 일부 실패를 기록한 경우, 1은 입력·보관 오류다. 사이트 목록의 전체 건수가 같아도 수집 중 게시물이 바뀔 수 있다. 정기 실행은 후속 단계다.
 
-### 도서관·시청 공지 이미지·첨부 원본 보관
+### 도서관·시청·안성배움e 공지 이미지·첨부 원본 보관
 
 게시물 번호로 공식 상세 HTML을 보관하고 본문 이미지와 첨부 목록을 확인한다. 읽을 수 있는 본문이 없는 공지도 게시물 번호와 제목이 확인되면 후보를 남긴다. 실제 다운로드 동작은 HTML에서 확인된 규격으로만 해석한다. [안성시 robots.txt](https://www.anseong.go.kr/robots.txt)에서 제한한 이미지 경로와 확인 요청에 HTTP 403을 반환한 파일 경로는 목록에만 기록한다.
 
@@ -171,7 +171,7 @@ python3.13 -B -m processing.collection.media store \
 
 이미지는 PNG·JPEG, 첨부는 PDF·HWP·HWPX·PNG·JPEG를 파일당 8MiB까지 받는다. 파일 헤더 또는 컨테이너 표식을 확인하고 부모 HTML, 연결 주소, SHA-256, 운영자가 입력한 수신 시각을 다시 대조한다. 부모 HTML과 매체 파일을 각각 `collection-media-notices/`, `collection-media/`에 보관한다. 두 묶음을 함께 보존한다. 운영자가 원문과 파일의 대응을 확인한다. 본문 추출·OCR·QR 판독은 별도 단계다.
 
-시청 공지는 `inspect --board city --web-id <공지 번호>`로 같은 방식으로 보관한다. 이때 `notice.json`에 `board: "city"`와 시청 상세 주소가 남고, `store`·D03 준비는 기록된 게시판의 주소와 파서로 다시 대조한다. 두 게시판 상세는 마크업이 같으므로 본문 영역 밖 `viewForm`의 게시판 주소(`/portal/bbs/view.do?ptIdx=16&mId=0501010000`)도 대조한다. 시청은 이 표식이 반드시 있어야 하고, 도서관은 표식이 있으면 도서관 주소여야 한다. 도서관 기록은 `board` 없이 기존 형식을 유지한다. 2026-11-27 시청 공지 203043(포스터 이미지 1개)과 203050(PDF 2개·HWPX 1개)에서 매체 주소를 모두 확인했다. 시청 묶음 수집에서 본문 텍스트가 없어 `parse_failed`가 된 이미지형 공지는 같은 번호를 `inspect --board city`로 다시 받아 별도 묶음으로 보관한다. 이 묶음은 묶음 수집 기록과 연결되지 않으며, 그 사이 게시물이 바뀌었으면 원본도 다르다.
+시청·안성배움e 공지는 `inspect --board city|edu --web-id <공지 번호>`로 같은 방식으로 보관한다. 이때 `notice.json`에 `board`(`city` 또는 `edu`)와 해당 게시판 상세 주소가 남고, `store`·D03 준비는 기록된 게시판의 주소와 파서로 다시 대조한다. 게시판 상세는 마크업이 같으므로 본문 영역 밖 `viewForm`의 게시판 주소(시청 `/portal/bbs/view.do?ptIdx=16&mId=0501010000`, 안성배움e `/edu/portal/bbs/view.do?ptIdx=300&mId=0901040000`)도 대조한다. 시청·안성배움e는 이 표식이 반드시 있어야 하고, 도서관은 표식이 있으면 도서관 주소여야 한다. 도서관 기록은 `board` 없이 기존 형식을 유지한다. 첨부 주소는 페이지 스크립트의 `contextPath`(도서관·시청은 빈 값, 안성배움e는 `/edu`)에 `/cmm/fms/FileDown.do`를 붙여 만들고, 페이지가 선언한 값이 게시판과 다르면 매체 목록을 거부한다. 안성배움e는 이 선언이 정확히 한 번 있어야 한다. 안성배움e 주소는 페이지 스크립트와 `/edu/common/js/common/EgovFileUtils.js`의 정의로 정했다. 그 함수가 먼저 쓰는 `G_CONTEXT_PATH`는 페이지 HTML과 확인한 `lib.js`·`common.js`에 정의가 없었다. 본문 이미지는 HTML의 루트 `/common/imgView.do` 주소만 연결하므로 다른 경로의 이미지는 `source_url=null`로 남는다(안성배움e 표본에는 본문 이미지가 없었다). 자동 확인 요청은 루트와 `/edu` 경로 모두 HTTP 403이라 실제 응답은 운영자가 내려받을 때 확인한다. 2026-11-27 시청 공지 203043(포스터 이미지 1개)과 203050(PDF 2개·HWPX 1개)에서 매체 주소를 모두 확인했다. 시청 묶음 수집에서 본문 텍스트가 없어 `parse_failed`가 된 이미지형 공지는 같은 번호를 `inspect --board city`로 다시 받아 별도 묶음으로 보관한다. 이 묶음은 묶음 수집 기록과 연결되지 않으며, 그 사이 게시물이 바뀌었으면 원본도 다르다.
 
 ### 도로 공사현황 목록·상세 수집
 
@@ -200,7 +200,7 @@ python3.13 -B -m processing.collection.road_batch completed --name road-complete
 | `공사기간` | [1608번](https://www.anseong.go.kr/depart/roadConstruction/view.do?idx=1608&mId=0901020300&state=2)은 `2021-08-26 ~ 2021-06-22`로 역전되어 있다. 예정 12건 중 10건이 `2027-03-01 ~ 2028-12-31`이어서 실제 일정인지 담당 부서 확인이 필요하다. |
 | 명령 실행 | 예정 12건·진행중 26건 전체, 완료 앞 20건(건수 한도)과 완료 14페이지 15건(`--start-page 14`)을 받아 73건 모두 파싱했고 D03 준비 경로의 원본·파싱 결과 재검증을 통과했다. 1608번만 `period_inverted`로 표시됐다. |
 
-### 시청 공지 게시판 목록·상세 수집
+### 시청·안성배움e 공지 게시판 목록·상세 수집
 
 교육·지원·교통 통제 안내가 함께 올라오는 시청 공지는 게시판 키 `city`로 받는다. 목록은 POST `page`, 상세는 GET으로 요청하며 두 경로(`/portal/bbs/list.do`, `/portal/bbs/view.do`)는 [robots.txt](https://www.anseong.go.kr/robots.txt)의 제한 목록에 없다. 한도·간격·중단 HTTP 상태·`--start-page`는 도로 공사현황과 같은 공통 묶음 규칙(`web_batch.py`)을 쓰고, 종료 코드도 도로 공사현황과 같다.
 
@@ -214,15 +214,17 @@ python3.13 -B -m processing.collection.board_batch city --name city-20261127 --m
 
 본문 텍스트가 없는 이미지형 공지는 원본과 함께 `parse_failed`로 남는다. 본문 이미지·첨부 확보와 OCR은 별도 단계다. 2026-11-27 실행에서는 1~2페이지의 고정 글 3건과 번호 글 20건, 23건을 모두 파싱했고 D03 준비 경로의 재검증을 통과했다.
 
+교육 프로그램 안내가 올라오는 [안성배움e 프로그램 안내](https://www.anseong.go.kr/edu/portal/bbs/list.do?ptIdx=300&mId=0901040000)는 게시판 키 `edu`로 같은 명령을 쓴다(`board_batch edu`, `media inspect --board edu`). 경로는 `/edu/portal/bbs`, 메뉴 번호는 `0901040000`, 게시판 번호(`ptIdx`)는 시청·도서관의 16이 아닌 300이며, `/edu/` 경로는 [robots.txt](https://www.anseong.go.kr/robots.txt)의 제한 목록에 없다. 같은 CMS지만 상세 제목이 `<h4>`가 아니라 본문 영역 바로 아래 `div.bod_view_title`에 있으므로 이 게시판은 그 블록에서만 제목을 읽고, 그 자리에 `<h4>`가 나오면 형식 변경으로 거부한다. 2026-11-27 1~2페이지(전체 33페이지)의 20건은 고정 글 없이 모두 파싱·D03 재검증을 통과했고, 모두 첨부가 있었다(HWPX 6개·JPEG 11개·PNG 9개).
+
 ### 수집 원본을 D03 등록 입력으로 준비하기
 
 단건 수집은 `archive_kind=single`과 `capture.json`, 목록 수집은 `archive_kind=batch`와 `batch.json`을 사용한다. 직접 내려받은 포털 CSV는 `asset=portal`, 웹 상세는 게시물 번호를 지정한다. 부분 수집 묶음에서도 파싱에 성공한 상세를 선택할 수 있다. 명령은 수집 기록의 원본 해시와 파일을 대조하고 웹 상세의 게시물 번호를 다시 확인한다.
 
 API 수집은 `archive_kind=portal`, API 수집 이름, `asset="1"` 같은 응답 페이지 번호를 지정한다. `official_url`은 `portal.json`의 해당 `source_url`과 맞추고 `collected_at`은 `null`로 둔다. D03은 해당 응답 원본과 기록된 수신 시각을 연결한다. 비교에 API 묶음을 사용했다면 D03 원본은 해당 API 응답 페이지를 선택한다.
 
-도서관·시청 매체는 `archive_kind=media`, `archive_name`에는 `store --name` 값, `asset`에는 같은 항목 번호를 문자열로 넣는다. `official_url`은 `notice.json`의 `source_url`(도서관 또는 시청 부모 공지 주소), `collected_at`은 `null`로 둔다. D03이 운영자 입력 다운로드 시각과 매체 원본 해시를 연결한다. 사람 검토를 마친 제목·본문을 전달하고 기존 D03 명령으로 등록한다.
+도서관·시청·안성배움e 매체는 `archive_kind=media`, `archive_name`에는 `store --name` 값, `asset`에는 같은 항목 번호를 문자열로 넣는다. `official_url`은 `notice.json`의 `source_url`(해당 게시판의 부모 공지 주소), `collected_at`은 `null`로 둔다. D03이 운영자 입력 다운로드 시각과 매체 원본 해시를 연결한다. 사람 검토를 마친 제목·본문을 전달하고 기존 D03 명령으로 등록한다.
 
-도로 공사현황은 `archive_kind=road`, `archive_name`에는 `road_batch --name` 값, `asset`에는 공사 번호를 넣는다. 포털 원본은 선택할 수 없다. `official_url`은 `batch.json`의 해당 상세 `source_url`, `collected_at`은 `null`로 둔다. 명령은 상세 원본 해시와 함께 보관된 파싱 결과를 원본에서 다시 만든 값과 대조한다. 파싱 결과의 `parser_version`이 현재 파서와 다르면 변조와 구분되는 오류로 거부하므로 현재 버전으로 다시 수집한다. 시청 공지는 `archive_kind=board`, `archive_name`에는 `board_batch --name` 값, `asset`에는 공지 번호를 넣고 같은 방식으로 대조한다. 등록 방식은 `official-web-board`로 기록된다.
+도로 공사현황은 `archive_kind=road`, `archive_name`에는 `road_batch --name` 값, `asset`에는 공사 번호를 넣는다. 포털 원본은 선택할 수 없다. `official_url`은 `batch.json`의 해당 상세 `source_url`, `collected_at`은 `null`로 둔다. 명령은 상세 원본 해시와 함께 보관된 파싱 결과를 원본에서 다시 만든 값과 대조한다. 파싱 결과의 `parser_version`이 현재 파서와 다르면 변조와 구분되는 오류로 거부하므로 현재 버전으로 다시 수집한다. 시청·안성배움e 공지는 `archive_kind=board`, `archive_name`에는 `board_batch --name` 값, `asset`에는 공지 번호를 넣고 같은 방식으로 대조한다. 등록 방식은 `official-web-board`로 기록된다.
 
 다음은 이미 보관한 `synthetic-capture` 묶음의 합성 예다. 실제 등록 입력은 담당자가 원본·개인정보·추출 대상 문구를 대조해 작성한다. 게시일·공식 문서번호 미상은 `null`로 둔다. 웹 수신 시각은 수집 기록을 사용하므로 `collected_at`을 `null`로 둔다. 포털 CSV는 실제 다운로드 출처를 담당자가 확인하고, `official_url`에는 수집 기록의 `portal.catalog_url`, `collected_at`에는 실제로 받은 시각을 입력한다. `redaction_log`는 제거 위치와 범주를 `location`, `category`로 적고 제거한 실제 값은 적지 않는다.
 

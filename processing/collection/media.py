@@ -1,4 +1,4 @@
-"""도서관·시청 공지의 매체 링크를 확인하고 운영자가 확보한 원본을 보관한다."""
+"""도서관·시청·안성배움e 공지의 매체 링크를 확인하고 운영자가 확보한 원본을 보관한다."""
 
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -42,7 +42,7 @@ def _route(board: str) -> tuple[str, Callable, Callable, Callable]:
         return ("도서관 공지", lambda web_id: detail_url("living", web_id),
                 lambda web_id: fetch_detail("living", web_id, limit=DETAIL_MAX_BYTES),
                 lambda text, web_id: parse_library_media(text, notice_id=web_id))
-    return (board_info(board)[2], lambda web_id: board_detail_url(board, web_id),
+    return (board_info(board).label, lambda web_id: board_detail_url(board, web_id),
             lambda web_id: fetch_board_detail(board, web_id, limit=DETAIL_MAX_BYTES),
             lambda text, web_id: parse_board_media(text, board=board, notice_id=web_id))
 
@@ -186,7 +186,7 @@ def read_media_assets(private_root: Path, name: str, asset_keys: set[str]) -> di
 def main() -> int:
     parser = CollectionArguments(description=__doc__)
     commands = parser.add_subparsers(dest="action", required=True, parser_class=CollectionArguments)
-    inspect = commands.add_parser("inspect", help="도서관·시청 공지 HTML과 매체 목록을 보관한다.")
+    inspect = commands.add_parser("inspect", help="도서관·시청·안성배움e 공지 HTML과 매체 목록을 보관한다.")
     inspect.add_argument("--board", choices=("library", *BOARDS), default="library")
     inspect.add_argument("--web-id", required=True)
     inspect.add_argument("--name", required=True)
