@@ -297,6 +297,10 @@ def parse_library_notice(text: str, *, notice_id: str) -> dict:
     return _notice_record(_NoticeParser(), text, notice_id, 'library_notice', lambda: detail_url('living', notice_id))
 
 
+# parse_board_notice나 공유하는 _NoticeParser·_notice_record의 출력이 바뀌면 함께 올린다.
+BOARD_PARSER_VERSION = 'board-notice-parser-v1'
+
+
 def parse_board_notice(text: str, *, board: str, notice_id: str) -> dict:
     """같은 게시판 구조를 쓰는 시청 공지 상세의 본문 텍스트와 게시일만 준비한다."""
     _, _, label, source = board_info(board)
