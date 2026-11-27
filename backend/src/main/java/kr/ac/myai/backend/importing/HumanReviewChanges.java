@@ -46,10 +46,6 @@ public final class HumanReviewChanges {
         citations.forEach(ids::add);
     }
 
-    public static void validate(JsonNode previous, JsonNode next) {
-        validate(previous, next, false);
-    }
-
     public static void validate(JsonNode previous, JsonNode next, boolean generatedHandoff) {
         validate(previous, next, generatedHandoff, FIELDS);
     }

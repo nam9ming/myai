@@ -51,7 +51,7 @@ preview의 snapshot ID·checksum은 검토용이며 실제 포인터를 바꾸�
 
 ## 읽기 전용·한도·제한
 
-DB 행은 읽기 전용 `REPEATABLE_READ`로 수집합니다. 운영 상태·파일 검증·preview는 별도 검사 시각을 표시하므로 동일 순간의 snapshot으로 간주하지 않습니다. 웹·다른 프로필 혼합, Flyway·Hibernate DDL·SQL 초기화는 기동 전에 차단합니다. D05는 `verify-sealed`로 이미 봉인된 원본만 검사하며 파일 생성·복사·수리·chmod를 하지 않습니다. 변경 가능한 원본은 기존 등록부터 완료해야 합니다.
+DB 행은 읽기 전용 `REPEATABLE_READ`로 수집합니다. 운영 상태·파일 검증·preview는 별도 검사 시각을 표시하므로 동일 순간의 snapshot으로 간주하지 않습니다. 웹·다른 프로필 혼합, Flyway·SQL 초기화는 기동 전에 차단합니다(JPA·Hibernate는 의존성에 없습니다). D05는 `verify-sealed`로 이미 봉인된 원본만 검사하며 파일 생성·복사·수리·chmod를 하지 않습니다. 변경 가능한 원본은 기존 등록부터 완료해야 합니다.
 
 조회당1000행, D03 raw 원문 파일당20MiB, AI artifact 파일당8MiB, 전체 JSON/HTML64MiB 한도입니다. raw 원문은 UTF-8 text 또는 base64 전체를 embed하며 생략하거나 자르지 않습니다. raw20MiB 허용이 여러 원문·AI 출력·인코딩을 합친 보고서의64MiB 이내를 보장하지는 않습니다. 초과는 전체 `REPORT_TOO_LARGE`이며 원래 파일은 유지합니다. 보존된 수동 실패 output은8MiB를 넘을 수 있어 별도 검토가 필요합니다. 기존 JSON/CLI/AI입력8MiB는 유지합니다.
 

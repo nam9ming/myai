@@ -24,6 +24,7 @@ import java.time.DateTimeException;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -38,6 +39,12 @@ public class CitizenNoticeService {
     private final CitizenPublicationContent citizens;
     private final PublicationContent shared;
     private final ObjectMapper mapper;
+    // 검증을 마친 공개본. 공개본 행은 바뀌지 않으므로 checksum과 메타데이터가 같으면 다시 검증·파싱하지 않는다.
+    // 행의 원문만 바뀐 경우에도 이미 검증한 내용만 내보낸다.
+    private final Map<List<Object>, JsonNode> verifiedSnapshots = java.util.Collections.synchronizedMap(
+            new java.util.LinkedHashMap<>(8, 0.75f, true) {
+                @Override protected boolean removeEldestEntry(Map.Entry<List<Object>, JsonNode> eldest) { return size() > 4; }
+            });
 
     public CitizenNoticeService(PublicSnapshotRepository repository, CitizenPublicationContent citizens, PublicationContent shared, ObjectMapper mapper) {
         this.repository = repository; this.citizens = citizens; this.shared = shared; this.mapper = mapper;
@@ -46,10 +53,6 @@ public class CitizenNoticeService {
     public JsonNode list(UUID snapshotId) {
         JsonNode selected = select(snapshotId, new Reads());
         return envelope(selected, shared.select(selected, "created_at data_kind mode timezone notice_count notices sources"));
-    }
-
-    public JsonNode notice(UUID eventId, UUID snapshotId) {
-        return notice(eventId, snapshotId, null, PublicSnapshotRepository.MAX_CITIZEN_HISTORY);
     }
 
     public JsonNode notice(UUID eventId, UUID snapshotId, Long beforeVersion, int limit) {
@@ -213,8 +216,14 @@ public class CitizenNoticeService {
                 var row = published.snapshot();
                 shared.check(row != null && id.equals(row.id()), "snapshot_id");
                 // 첫 선택도 여기서8MiB 이하로 검증하며, 아래 예산은 이력 누적 읽기를 제한한다.
-                citizens.verifySnapshot(row, published.schemaVersion(), published.createdAt());
-                JsonNode snapshot = shared.parse(row.canonical());
+                var key = java.util.Arrays.<Object>asList(row.id(), row.mode(), row.caseId(), row.checksum(), row.kind(),
+                        row.rulesVersion(), row.dictionaryVersion(), published.schemaVersion(), published.createdAt());
+                JsonNode snapshot = verifiedSnapshots.get(key);
+                if (snapshot == null) {
+                    citizens.verifySnapshot(row, published.schemaVersion(), published.createdAt());
+                    snapshot = shared.parse(row.canonical());
+                    verifiedSnapshots.put(key, snapshot);
+                }
                 bytes += row.canonical().getBytes(StandardCharsets.UTF_8).length;
                 if (bytes > HISTORY_BYTES) throw tooLarge();
                 verified.put(id, snapshot);

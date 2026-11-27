@@ -122,7 +122,7 @@ class CitizenNoticeServiceTest {
         ((ObjectNode) metadata.path("document")).put("document_id", otherDoc).put("document_version_id", otherVersion).put("title", "다른 문서");
         var second = new PublicationRepository.Document(otherDoc, otherVersion, 1, document.textHash(), metadata.toString(), document.privateRef());
         records.put(CURRENT, published(CURRENT, "synthetic", Map.of(document.versionId(), new SourceView(document), otherVersion, new SourceView(second)), payload, extra));
-        var result = service.notice(UUID.fromString(EVENT), UUID.fromString(CURRENT));
+        var result = service.notice(UUID.fromString(EVENT), UUID.fromString(CURRENT), null, kr.ac.myai.backend.repository.PublicSnapshotRepository.MAX_CITIZEN_HISTORY);
         var data = result.path("data");
         assertThat(fields(data)).containsExactlyInAnyOrder("created_at", "data_kind", "mode", "timezone", "notice", "sources", "history");
         assertThat(data.path("notice").path("event_id").asText()).isEqualTo(EVENT);
@@ -168,7 +168,7 @@ class CitizenNoticeServiceTest {
         assertThat(data.path("notice_count").intValue()).isZero();
         assertThat(data.path("notices")).isEmpty();
         assertThat(data.path("sources")).isEmpty();
-        error(() -> service.notice(UUID.fromString(EVENT), UUID.fromString(CURRENT)), HttpStatus.NOT_FOUND, "NOTICE_NOT_FOUND");
+        error(() -> service.notice(UUID.fromString(EVENT), UUID.fromString(CURRENT), null, kr.ac.myai.backend.repository.PublicSnapshotRepository.MAX_CITIZEN_HISTORY), HttpStatus.NOT_FOUND, "NOTICE_NOT_FOUND");
     }
 
     @Test
@@ -441,14 +441,14 @@ class CitizenNoticeServiceTest {
         var maximum = published(CURRENT, "synthetic", payload);
         assertThat(maximum.snapshot().canonical().getBytes(StandardCharsets.UTF_8).length).isEqualTo(LIMIT);
         records.put(CURRENT, maximum);
-        var result = org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> service.notice(UUID.fromString(EVENT), UUID.fromString(CURRENT)));
+        var result = org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> service.notice(UUID.fromString(EVENT), UUID.fromString(CURRENT), null, kr.ac.myai.backend.repository.PublicSnapshotRepository.MAX_CITIZEN_HISTORY));
         assertThat(result.path("data").path("notice").path("title").asText()).hasSize(titleBytes);
         assertThat(result.path("data").path("history").path("status").asText()).isEqualTo("unavailable");
         assertThat(result.path("data").path("history").path("entries").isNull()).isTrue();
         assertThat(mapper.writeValueAsBytes(result).length).isLessThanOrEqualTo(LIMIT + 1024);
     }
 
-    private JsonNode detail() { return service.notice(UUID.fromString(EVENT), UUID.fromString(CURRENT)).path("data"); }
+    private JsonNode detail() { return service.notice(UUID.fromString(EVENT), UUID.fromString(CURRENT), null, kr.ac.myai.backend.repository.PublicSnapshotRepository.MAX_CITIZEN_HISTORY).path("data"); }
     private void tooLarge() {
         var data = detail();
         assertThat(data.path("notice").path("event_id").asText()).isEqualTo(EVENT);

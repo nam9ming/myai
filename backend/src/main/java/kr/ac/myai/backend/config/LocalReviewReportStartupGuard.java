@@ -20,13 +20,7 @@ public class LocalReviewReportStartupGuard implements ApplicationContextInitiali
         if (context instanceof WebApplicationContext || !environment.getProperty("spring.main.web-application-type", "none").equalsIgnoreCase("none")) throw new ModeException("spring.main.web-application-type");
         environment.getPropertySources().addFirst(new MapPropertySource("local-review-report-read-only", Map.of(
                 "spring.flyway.enabled", false,
-                "spring.jpa.hibernate.ddl-auto", "validate",
-                "spring.jpa.properties.hibernate.hbm2ddl.auto", "validate",
-                "spring.jpa.generate-ddl", false,
                 "spring.sql.init.mode", "never",
-                "spring.jpa.properties.jakarta.persistence.schema-generation.database.action", "none",
-                "spring.jpa.properties.jakarta.persistence.schema-generation.scripts.action", "none",
-                "spring.autoconfigure.exclude", "org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration,org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration",
                 "spring.datasource.hikari.read-only", true)));
     }
 

@@ -50,7 +50,7 @@ public class SnapshotNoticeService implements PublicNoticeService {
     @Override
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public JsonNode config(String mode, UUID caseId) {
-        JsonNode snapshot = active(mode, caseId);
+        JsonNode snapshot = active(mode, caseId).snapshot();
         PublicRequestLogContext.selected(snapshot.path("snapshot_id").textValue(), snapshot.path("rules_version").textValue());
         var data = content.select(snapshot, "created_at data_kind timezone window_days radius_m document_count event_count mode case_id anchor_date reference_instant knowledge_cutoff history_fidelity collection_range last_check_min last_check_max rules_version dictionary_version");
         data.put("server_now", Instant.now().toString());
@@ -66,7 +66,7 @@ public class SnapshotNoticeService implements PublicNoticeService {
         var cases = data.putArray("cases");
         // shortcut: 소수의 시연 사례를 순차 검증한다. 사례가 늘면 checksum을 검증하는 목록 projection으로 전환한다.
         for (String id : repository.replayHeads(snapshot.path("area_id").asText(), snapshot.path("data_kind").asText())) {
-            JsonNode replay = load(id, true);
+            JsonNode replay = load(id, true).snapshot();
             cases.add(content.select(replay, "case_id snapshot_id anchor_date reference_instant knowledge_cutoff history_fidelity"));
         }
         return envelope(snapshot, data);
@@ -83,7 +83,8 @@ public class SnapshotNoticeService implements PublicNoticeService {
     private record CalculationInput(JsonNode snapshot, ObjectNode input) {}
 
     private CalculationInput calculationInput(MatchRequest query) {
-        JsonNode snapshot = query.snapshotId() == null ? active(query.mode(), query.caseId()) : load(query.snapshotId().toString(), true);
+        Loaded loaded = query.snapshotId() == null ? active(query.mode(), query.caseId()) : load(query.snapshotId().toString(), true);
+        JsonNode snapshot = loaded.snapshot();
         PublicRequestLogContext.selected(snapshot.path("snapshot_id").textValue(), snapshot.path("rules_version").textValue());
         if (!snapshot.path("mode").asText().equals(query.mode()) || !Objects.equals(snapshot.path("case_id").textValue(), query.caseId() == null ? null : query.caseId().toString())) {
             throw ApiException.invalid("snapshot_id", "선택한 모드·사례와 같은 snapshot을 사용해 주세요.");
@@ -94,8 +95,7 @@ public class SnapshotNoticeService implements PublicNoticeService {
         Instant now = clock.instant();
         var input = mapper.createObjectNode().put("protocol_version", "calc-v1").put("request_id", UUID.randomUUID().toString())
                 .put("snapshot_id", snapshot.path("snapshot_id").asText());
-        String checksum = repository.published(snapshot.path("snapshot_id").asText()).orElseThrow(this::invalidSnapshot).snapshot().checksum();
-        input.put("snapshot_checksum", checksum);
+        input.put("snapshot_checksum", loaded.checksum());
         var context = content.select(snapshot, "mode case_id anchor_date reference_instant knowledge_cutoff history_fidelity data_kind window_days radius_m rules_version dictionary_version");
         context.put("server_now", now.toString());
         if (query.mode().equals("current")) context.put("anchor_date", now.atZone(ZoneId.of("Asia/Seoul")).toLocalDate().toString());
@@ -112,7 +112,7 @@ public class SnapshotNoticeService implements PublicNoticeService {
     @Override
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public JsonNode event(UUID eventId, UUID snapshotId) {
-        JsonNode snapshot = load(snapshotId.toString(), true);
+        JsonNode snapshot = load(snapshotId.toString(), true).snapshot();
         PublicRequestLogContext.selected(snapshot.path("snapshot_id").textValue(), snapshot.path("rules_version").textValue());
         JsonNode facts = findEvent(snapshot, eventId.toString());
         if (facts == null) throw new ApiException(HttpStatus.NOT_FOUND, "EVENT_NOT_FOUND", "공개 사건을 찾을 수 없습니다.", "event_id");
@@ -123,16 +123,20 @@ public class SnapshotNoticeService implements PublicNoticeService {
         return envelope(snapshot, data);
     }
 
-    private JsonNode active(String mode, UUID caseId) {
+    // 같은 행을 다시 읽지 않도록 검증한 공개본과 그 checksum을 함께 돌려준다.
+    private record Loaded(JsonNode snapshot, String checksum) {}
+
+    private Loaded active(String mode, UUID caseId) {
         String id = repository.head(channel(mode, caseId == null ? null : caseId.toString())).orElseThrow(() -> mode.equals("replay")
                 ? new ApiException(HttpStatus.NOT_FOUND, "CASE_NOT_FOUND", "등록된 재현 사례가 없습니다.", "case_id")
                 : new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "PUBLIC_DATA_NOT_READY", "검토된 공개 snapshot이 아직 없습니다.", null));
-        JsonNode snapshot = load(id, false);
+        Loaded loaded = load(id, false);
+        JsonNode snapshot = loaded.snapshot();
         if (!snapshot.path("mode").asText().equals(mode) || !Objects.equals(snapshot.path("case_id").textValue(), caseId == null ? null : caseId.toString())) throw invalidSnapshot();
-        return snapshot;
+        return loaded;
     }
 
-    private JsonNode load(String id, boolean requireActive) {
+    private Loaded load(String id, boolean requireActive) {
         var published = repository.published(id).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SNAPSHOT_NOT_FOUND", "공개 snapshot을 찾을 수 없습니다.", "snapshot_id"));
         var row = published.snapshot();
         if (requireActive && !id.equals(published.currentId())) {
@@ -145,7 +149,7 @@ public class SnapshotNoticeService implements PublicNoticeService {
             content.check(snapshot.path("points").isArray() && snapshot.path("points").size() == 5
                     && snapshot.path("event_public_payloads").isArray() && snapshot.path("sources").isArray()
                     && snapshot.path("event_count").asInt(-1) == snapshot.path("event_public_payloads").size(), "snapshot");
-            return snapshot;
+            return new Loaded(snapshot, row.checksum());
         } catch (PublicationException | ImportException | java.time.DateTimeException ex) {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "SNAPSHOT_INVALID", "공개 snapshot의 무결성을 확인할 수 없습니다.", null);
         }
@@ -196,7 +200,7 @@ public class SnapshotNoticeService implements PublicNoticeService {
         ObjectNode previous = null;
         String eventId = selectedEvent.path("event_id").asText();
         for (var item : repository.history(eventId, channel(selected.path("mode").asText(), selected.path("case_id").textValue()), selected.path("snapshot_id").asText())) {
-            JsonNode snapshot = item.snapshotId().equals(selected.path("snapshot_id").asText()) ? selected : load(item.snapshotId(), false);
+            JsonNode snapshot = item.snapshotId().equals(selected.path("snapshot_id").asText()) ? selected : load(item.snapshotId(), false).snapshot();
             if (!sameContext(selected, snapshot) || previous != null && previous.path("revision_id").asText().equals(item.revisionId())) continue;
             JsonNode facts = findEvent(snapshot, eventId);
             if (facts == null || !facts.path("revision_id").asText().equals(item.revisionId())) throw invalidSnapshot();
