@@ -143,7 +143,10 @@ def _prepared_documents(private_root: Path) -> list[tuple[str, dict]]:
             documents = receipt.get("documents")
             if not isinstance(documents, list) or not all(
                     isinstance(document, dict) and isinstance(document.get("official_url"), str)
-                    and isinstance(document.get("document_id"), str) for document in documents):
+                    and isinstance(document.get("document_id"), str)
+                    # 등록 방식이 없거나 형식이 다르면 본문 중복 대조를 할 수 없으므로 준비본 전체를 믿지 않는다.
+                    and re.fullmatch(r"[a-z0-9-]{1,100}", str(document.get("collection_method"))) is not None
+                    for document in documents):
                 raise ValueError("기존 D03 준비본을 확인할 수 없습니다.")
             found.extend((name, document) for document in documents)
     return found

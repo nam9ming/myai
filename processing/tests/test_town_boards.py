@@ -1,4 +1,5 @@
 import json
+import json
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -331,6 +332,12 @@ class TownDuplicateTest(unittest.TestCase):
         broken.mkdir(mode=0o700)
         (broken / "source-import.json").write_text('{"documents": "x"}', encoding="utf-8")
         os.chmod(broken / "source-import.json", 0o600)
+        with self.assertRaisesRegex(ValueError, "기존 D03 준비본"):
+            self.prepare("city-later-body", "board", "city-later", "203001", "city", "203001", 3)
+        # 등록 방식이 빠진 준비본은 같은 공지를 다른 문서로 등록하는 길이 되므로 믿지 않는다.
+        receipt = json.loads((self.d03 / "city-body" / "source-import.json").read_text(encoding="utf-8"))
+        receipt["documents"][0].pop("collection_method")
+        (broken / "source-import.json").write_text(json.dumps(receipt), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "기존 D03 준비본"):
             self.prepare("city-later-body", "board", "city-later", "203001", "city", "203001", 3)
 
