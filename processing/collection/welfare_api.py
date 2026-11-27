@@ -98,9 +98,10 @@ def reject_key_echo(raw: bytes, service_key: str) -> None:
     forms = (service_key, service_key.replace("+", " "))
     _reject_forms(text, forms)
     # 주석·CDATA·처리 지시로 나뉜 키는 XML 파싱 뒤에 합쳐진다. 파서가 읽을 본문이면 읽은 글자와 속성 값도 본다.
-    # DTD 선언이 있거나 파싱할 수 없는 본문은 `_document`가 거부하므로 합쳐지는 글자가 없다.
+    # DTD 선언(주석·CDATA 안의 같은 글자 포함)이 있으면 `_document`도 거부하므로 저장하기 전에 여기서 거부한다.
+    # 파싱할 수 없는 본문은 합쳐지는 글자가 없고 `_document`가 거부한다.
     if re.search(r"<!(?!--|\[CDATA\[)", text):
-        return
+        raise WelfareResultError("복지 API 응답에 XML 선언이 있어 인증 키 포함 여부를 확인할 수 없으므로 수집을 중단했습니다.")
     try:
         root = ElementTree.fromstring(text)
     except ElementTree.ParseError:

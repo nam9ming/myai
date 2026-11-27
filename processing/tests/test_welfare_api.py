@@ -135,6 +135,11 @@ class WelfareTransportTest(unittest.TestCase):
                   self.assertRaisesRegex(WelfareResultError, "UTF-8이 아니어서 인증 키") as caught):
                 fetch_list(1, 10, KEY)
             self.assertNotIn(KEY, str(caught.exception))
+        # 주석 안의 선언 글자로 파싱 검사를 건너뛰게 한 뒤 주석으로 키를 나눠도 저장 전에 거부한다.
+        self.reply("<response><!-- <!DOCTYPE x> --><resultMessage>exam<!-- a -->ple/-_+=123</resultMessage></response>".encode())
+        with self.assertRaisesRegex(WelfareResultError, "XML 선언") as caught:
+            fetch_list(1, 10, KEY)
+        self.assertNotIn(KEY, str(caught.exception))
         self.reply(b"\xef\xbb\xbf" + f"<response>{KEY}</response>".encode())
         with self.assertRaisesRegex(WelfareResultError, "인증 키가 포함"):
             fetch_list(1, 10, KEY)
