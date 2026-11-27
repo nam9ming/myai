@@ -33,6 +33,9 @@ CITY_VIEW = "/portal/bbs/view.do?ptIdx=16&amp;mId=0501010000"
 LIBRARY_VIEW = "/library/bbs/view.do?ptIdx=16&amp;mId=0401010000"
 
 
+IMAGE = "/common/imgView.do?attachId=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&amp;fileSn=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb&amp;mode=origin"
+
+
 def _notice(notice_id="203043", body="<p>합성 본문</p>", view=CITY_VIEW):
     form = f'<form id="viewForm" action="{view}" method="post"></form>' if view else ""
     return f"""{form}<input type="hidden" name="bIdx" value="{notice_id}"/>
@@ -302,7 +305,10 @@ class BoardNoticeTest(unittest.TestCase):
             '<p style="width:0 !important;width:100px;height:0 !important;height:10px;overflow:hidden">숨김</p>',
             '<p style="display:none! important">숨김</p>', '<p style="background:url(/img/a.png)">보임</p>',
             '<p style="line-height:0">숨김</p>', '<p style="letter-spacing:-50px">숨김</p>',
-            '<p style="opacity:0.4">숨김</p>', '<p style="-webkit-text-fill-color:transparent">숨김</p>',
+            '<p style="opacity:0.4">숨김</p>',
+            f'<img width="0" height="0" src="{IMAGE}" alt="숨은 그림">', f'<img height="0" src="{IMAGE}">',
+            f'<img width="0" width="100" src="{IMAGE}">', '<p><font size="2" size="1">숨김</font></p>',
+            '<table cellpadding="99999"><tr><td>밀린 문구</td></tr></table>', '<p align="center" align="left">본문</p>', '<p style="-webkit-text-fill-color:transparent">숨김</p>',
             '<template><svg><style></template>보이는 문구</style></svg></template><p>끝</p>',
             '<p>앞</p><script>document.write(\'<div hidden>\')</script><span>숨은 문구</span>',
             '<script src="https://invalid.example/x.js"></script><p>본문</p>', '<script></script><p>본문</p>',
@@ -349,6 +355,11 @@ class BoardNoticeTest(unittest.TestCase):
                      '<svg><style>' + _notice(body='<p>진짜 본문</p>') + '</style></svg>' + _notice(body='<p>가짜</p>'),
                      '<svg><title><!--</title>' + _notice() + '--></svg>', '<math><style><!--</style></math>' + _notice(),
                      '<svg><foreignObject><div></div></foreignObject><style><!--</style></svg>' + _notice(),
+                     '<svg></math><style><!--</style>' + _notice(), '<math></svg><style><!--</style>' + _notice(),
+                     '<svg><foreignObject><div></svg></div></foreignObject><style><!--</style>' + _notice(),
+                     '<math><mi></svg></mi><style><!--</style>' + _notice(),
+                     '<svg><template/></svg>' + _notice(body='<p>진짜</p>') + '</template>' + _notice(body='<p>가짜</p>'),
+                     _notice() + '<?x<b', _notice() + '<!x<b', _notice() + '<!DOCTYPE x<b',
                      '<svg><foreignObject><style/>' + _notice(body='<p>숨김</p>') + '</style></foreignObject></svg>'
                      + _notice(body='<p>뒤</p>'),
                      _notice(body='<details title="x"\xa0open><summary>요약</summary><p>숨김</p></details>'),
@@ -359,6 +370,13 @@ class BoardNoticeTest(unittest.TestCase):
                 description(page)
 
     def test_script_escape_scan_is_linear(self):
+        started = time.monotonic()
+        with self.assertRaisesRegex(ValueError, "숨김"):
+            parse_board_notice(_notice(body='<p style="color:a' + ' ' * 80000 + 'b">x</p>'), board="city",
+                               notice_id="203043")
+        self.assertLess(time.monotonic() - started, 2)
+        deep = '<script>var yh = {"a": ' + '[' * 100000 + ']' * 100000 + '};</script>'
+        self.assertEqual(parse_board_media(deep + _notice(), board="city", notice_id="203043"), [])
         for unit in ('<!--', '<!---->', '<!-- -->'):
             script = '<script>' + unit * 80000 + '</script>'
             started = time.monotonic()

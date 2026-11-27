@@ -74,7 +74,9 @@ _BODY_TAGS = frozenset('a abbr address article aside b bdi bdo big blockquote br
 _BODY_ATTRS = frozenset('abbr action align alt bgcolor border cellpadding cellspacing cite class color colspan datetime '
                         'dir face headers height href id lang method name onclick open rel reversed rowspan scope size '
                         'span src start style summary target title type valign value width'.split())
-_DISPLAY_ATTRS = ('style', 'class', 'type')
+# 크기·여백 속성은 숫자만 받는다(0이나 큰 값은 그림·글자를 감추거나 밀어낸다). 실제 그림 크기는 500 이상이었다.
+_SIZE_ATTR = re.compile(r'[1-9]\d{1,3}|(?:[1-9]\d|100)%')
+_SPACING_ATTR = re.compile(r'\d{1,2}')
 # 브라우저와 Python 버전이 모두 같게 읽는 시작 태그 문법만 받는다(속성 사이 공백은 따옴표 뒤에서만 생략 가능).
 # 따옴표 밖의 유니코드 공백(\xa0 등)은 Python 3.13.5만 속성 구분자로 읽어 받지 않는다.
 _STRICT_START_TAG = re.compile(
@@ -212,7 +214,10 @@ def _style_allowed(style: str) -> bool:
             continue
         name, colon, value = declaration.partition(':')
         name = name.strip().lower()
-        value = re.sub(r'\s*!\s*important\s*$', '', value.strip().lower())
+        value = value.strip().lower()
+        head, bang, tail = value.rpartition('!')
+        if bang and tail.strip() == 'important':  # 정규식 `\s*!`는 긴 공백에서 제곱 시간이 걸린다.
+            value = head.rstrip()
         if not colon or not value or '!' in value or name in seen:
             return False
         seen.add(name)
@@ -230,10 +235,13 @@ def _style_allowed(style: str) -> bool:
 def _unsafe_body_tag(tag: str, attrs: dict, names: list[str]) -> bool:
     """본문 영역의 태그·속성·스타일이 허용 목록 밖이면 숨김 범위를 추정하지 않고 거부한다.
 
-    표시에 관여하는 속성이 중복되면 이 파서는 마지막 값을, 브라우저는 첫 값을 쓰므로 중복 자체를 거부한다.
+    속성이 중복되면 이 파서는 마지막 값을, 브라우저는 첫 값을 쓰므로 중복 자체를 거부한다.
     src·href 중복은 매체 파서가 주소를 확정하지 않는 검토 후보로 따로 처리한다.
     """
-    return (tag not in _BODY_TAGS or any(names.count(name) > 1 for name in _DISPLAY_ATTRS)
+    return (tag not in _BODY_TAGS or any(names.count(name) > 1 for name in set(names) - {'src', 'href'})
+            or any(name in attrs and not _SIZE_ATTR.fullmatch(attrs[name] or '') for name in ('width', 'height'))
+            or any(name in attrs and not _SPACING_ATTR.fullmatch(attrs[name] or '')
+                   for name in ('cellpadding', 'cellspacing', 'border'))
             or any(name not in _BODY_ATTRS and not name.startswith('data-') for name in names)
             or (tag == 'details' and 'open' not in attrs)
             # 같은 name의 details는 하나만 열린다. 실제 본문의 name은 form·input에만 있었다.
@@ -332,9 +340,16 @@ class _NoticeParser(HTMLParser):
         # 원문 텍스트는 브라우저처럼 `</이름` 뒤에 공백·`/`·`>`가 올 때만 끝난다(3.13.5는 `</ 이름`에서도 끝냈다).
         self.interesting = re.compile(r'</%s(?=[\t\n\f\r />])' % re.escape(self.cdata_elem), re.I | re.A)
 
+    def parse_pi(self, i):
+        if self.rawdata.find('>', i + 2) < 0:
+            # 닫히지 않은 `<?`는 3.13.5는 글자로, 3.14는 문서 끝까지의 처리 지시로 읽었다.
+            raise ValueError(_MARKUP_ERROR.format(self.label))
+        return super().parse_pi(i)
+
     def parse_html_declaration(self, i):
-        if self.rawdata.startswith('<![', i):
+        if self.rawdata.startswith('<![', i) or self.rawdata.find('>', i + 2) < 0:
             # HTML 문서에서 브라우저는 `<![CDATA[`를 첫 `>`에서 끝나는 가짜 주석으로 읽고, Python은 `]]>`까지 삼킨다.
+            # 닫히지 않은 `<!`도 Python 버전마다 글자 또는 문서 끝까지의 선언으로 달리 읽는다.
             raise ValueError(_MARKUP_ERROR.format(self.label))
         return super().parse_html_declaration(i)
 
@@ -357,9 +372,12 @@ class _NoticeParser(HTMLParser):
             raise ValueError(_MARKUP_ERROR.format(self.label))
         names = [name for name, _ in attrs]
         if tag in _FOREIGN_TAGS:
-            # shortcut: 브라우저가 div 등에서 svg를 닫는 탈출 규칙은 따라 하지 않는다. foreignObject 안에서는 닫지 않아
-            # 깊이를 줄이면 숨김을 받게 된다. 깊이를 크게 볼 뿐이라 원문 텍스트 거부만 늘어난다.
+            # shortcut: 브라우저가 svg를 닫는 규칙(탈출 태그, 무시되는 `</svg>`)은 따라 하지 않고 종료 태그에서도 깊이를
+            # 줄이지 않는다. 한 번 열리면 문서 끝까지 외래 콘텐츠로 볼 뿐이라 원문 텍스트·template 거부만 늘어난다.
             self.foreign_depth += 1
+        elif tag == 'template' and self.foreign_depth:
+            # svg·math 안의 template은 HTML template이 아니라 내용을 숨기지 않는다. 숨김 깊이를 셀 수 없어 받지 않는다.
+            raise ValueError(_MARKUP_ERROR.format(self.label))
         view_form = tag == 'form' and ('id', 'viewForm') in attrs
         attrs = dict(attrs)
         classes = (attrs.get('class') or '').split()
@@ -437,8 +455,6 @@ class _NoticeParser(HTMLParser):
                 self.hidden_depth += 1
 
     def handle_endtag(self, tag):
-        if tag in _FOREIGN_TAGS and self.foreign_depth:
-            self.foreign_depth -= 1
         if not self.tags:
             if self.hidden_depth and tag in _HIDDEN_TAGS:
                 self.hidden_depth -= 1
@@ -636,7 +652,7 @@ def _declared_context_paths(scripts: list[str]) -> list[object]:
             continue
         try:
             config = json.loads(match[1], object_pairs_hook=_unique_object)
-        except ValueError:
+        except (ValueError, RecursionError):  # 깊은 중첩은 3.13에서만 RecursionError가 나 선언이 아닌 것으로 같게 다룬다.
             continue
         if isinstance(config, dict) and 'contextPath' in config:
             values.append(config['contextPath'])
