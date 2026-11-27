@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -6,15 +7,17 @@ from unittest.mock import patch
 
 from processing.collection import media
 from processing.collection.board_batch import BOARD_SECTION, capture_board_batch
+from processing.collection.d03 import _board_notice, prepare
 from processing.collection.d03_sources import capture_assets
 from processing.collection.libraries import (
     BOARD_PARSER_VERSIONS, board_parser_version, parse_board_media, parse_board_notice,
 )
 from processing.collection.library_listing import parse_board_listing
 from processing.collection.official_web import (
-    BOARDS, board_detail_url, board_listing_path, fetch_board_detail, fetch_board_listing,
+    BOARDS, board_detail_url, board_listing_path, detail_url, fetch_board_detail, fetch_board_listing,
 )
 from processing.tests.test_board_notices import CITY_VIEW, _listing, _notice, _row
+from processing.tests.test_collection_media import hwpx
 from processing.tests.test_edu_board import ATTACH, ATTACHMENT, FILE_SN
 
 # 2026-11-27 공식 읍면동 메뉴에서 확인한 경로 이름과 읍면동 이름
@@ -126,32 +129,164 @@ class TownNoticeTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "경로"):
             parse_board_media(_town_notice(attachment=ATTACHMENT, context="/csc"), board="town-yangseong",
                               notice_id="203049")
-        hidden = _town_notice(body='<p style="display:none">숨김</p>')
-        with self.assertRaisesRegex(ValueError, "^양성면 공지 .*숨김"):
-            parse_board_notice(hidden, board="town-yangseong", notice_id="203049")
+        # 읍면동도 v3 숨김 규칙(중복 표시 속성·회피 스타일·비정상 주석)을 그대로 적용한다.
+        for body, error in (('<p style="display:none">숨김</p>', "숨김"),
+                            ('<p style="color:red" style="display:none">숨김</p>', "숨김"),
+                            ('<p style="opacity:0.1">숨김</p>', "숨김"),
+                            ('<p>보임</p><!--->숨김-->', "주석")):
+            with self.subTest(body=body), self.assertRaisesRegex(ValueError, f"^양성면 공지 .*{error}"):
+                parse_board_notice(_town_notice(body=body), board="town-yangseong", notice_id="203049")
+
+
+def _city_notice(notice_id):
+    return _notice(notice_id).replace("</div></div>", "</div>" + ATTACHMENT + "</div>", 1)
+
+
+def _capture(private, board, name, listing, detail):
+    with (patch("processing.collection.board_batch.sleep"),
+          patch("processing.collection.board_batch.fetch_board_listing", return_value=listing),
+          patch("processing.collection.board_batch.fetch_board_detail",
+                side_effect=lambda _board, notice_id, limit: detail(notice_id).encode())):
+        return capture_board_batch(board, name, private / BOARD_SECTION)
 
 
 class TownPipelineTest(unittest.TestCase):
     def setUp(self):
         self.private = Path(self.enterContext(TemporaryDirectory())).resolve() / "private"
         self.private.mkdir(mode=0o700)
+        listing = _town_listing(_town_rows(), "miyang", total=1)
+        summary = _capture(self.private, "town-miyang", "miyang", listing, lambda notice_id: _town_notice(notice_id, "miyang"))
+        self.assertEqual((summary["status"], summary["parsed"]), ("complete", 2))
+        self.fetch = self.enterContext(patch.object(
+            media, "fetch_board_detail", return_value=_town_notice(slug="miyang", attachment=ATTACHMENT).encode()))
 
     def test_batch_media_and_d03_round_trip(self):
-        with (patch("processing.collection.board_batch.sleep"),
-              patch("processing.collection.board_batch.fetch_board_listing",
-                    return_value=_town_listing(_town_rows(), "miyang", total=1)),
-              patch("processing.collection.board_batch.fetch_board_detail",
-                    side_effect=lambda _name, notice_id, limit: _town_notice(notice_id, "miyang").encode())):
-            summary = capture_board_batch("town-miyang", "miyang", self.private / BOARD_SECTION)
-        self.assertEqual((summary["status"], summary["parsed"]), ("complete", 2))
         parsed = json.loads((self.private / BOARD_SECTION / "miyang" / "parsed-203049.json").read_bytes())
         self.assertEqual(parsed["parser_version"], "town-miyang-notice-parser-v1")
         assets = capture_assets(self.private, "board", "miyang", {"201926", "203049"})
         self.assertEqual(assets["203049"]["official_url"], board_detail_url("town-miyang", "203049"))
+        media.inspect_notice(self.private, "203049", "notice", board="town-miyang", batch="miyang")
+        notice = media._notice(self.private, "notice")
+        self.assertEqual((notice["board"], notice["listing_batch"]), ("town-miyang", "miyang"))
+
+    def test_media_inspect_needs_the_id_on_that_boards_listing(self):
+        # 상세 주소는 어느 읍면동 경로로도 열리므로 같은 게시판 묶음의 목록 원본만 소속 근거로 쓴다.
+        _capture(self.private, "town-gongdo", "gongdo", _town_listing(_town_rows(), "gongdo", total=1),
+                 lambda notice_id: _town_notice(notice_id, "gongdo"))
+        for web_id, batch, error in (("203049", None, "--batch"), ("202988", "miyang", "목록 원본에 없는 공지 번호"),
+                                     ("203049", "gongdo", "묶음 수집 기록"), ("203049", "absent", "안전하게")):
+            with self.subTest(web_id=web_id, batch=batch), self.assertRaisesRegex(ValueError, error):
+                media.inspect_notice(self.private, web_id, "rejected", board="town-miyang", batch=batch)
+        self.fetch.assert_not_called()
+        self.assertFalse((self.private / media.NOTICE_SECTION / "rejected").exists())
+        with self.assertRaisesRegex(ValueError, "지원하지 않는"):
+            media.inspect_notice(self.private, "17", "library", batch="miyang")
+
+        listing = self.private / BOARD_SECTION / "miyang" / "list-1.html"
+        original = listing.read_bytes()
+        listing.unlink()
+        listing.write_bytes(original + b" ")
+        os.chmod(listing, 0o600)
+        with self.assertRaisesRegex(ValueError, "목록 원본 해시"):
+            media.inspect_notice(self.private, "203049", "tampered", board="town-miyang", batch="miyang")
+
+    def test_stored_notice_rechecks_its_listing_batch(self):
+        media.inspect_notice(self.private, "203049", "notice", board="town-miyang", batch="miyang")
+        path = self.private / media.NOTICE_SECTION / "notice" / "notice.json"
+        receipt = json.loads(path.read_bytes())
+        for change in ({"listing_batch": None}, {"listing_batch": "other"}):
+            path.unlink()
+            path.write_text(json.dumps(dict(receipt, **change), ensure_ascii=False), encoding="utf-8")
+            os.chmod(path, 0o600)
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                media._notice(self.private, "notice")
+        path.unlink()
+        path.write_text(json.dumps({key: value for key, value in receipt.items() if key != "listing_batch"},
+                                   ensure_ascii=False), encoding="utf-8")
+        os.chmod(path, 0o600)
+        with self.assertRaisesRegex(ValueError, "--batch"):
+            media._notice(self.private, "notice")
+
+
+class TownDuplicateTest(unittest.TestCase):
+    """시청·읍면동 공지는 번호 공간을 공유하므로 D03에는 같은 공지를 한 게시판의 원본으로만 준비한다."""
+
+    def setUp(self):
+        self.private = Path(self.enterContext(TemporaryDirectory())).resolve() / "private"
+        self.private.mkdir(mode=0o700)
+        city_rows = _row("201926", pinned=True) + _row("203001")
+        for name in ("city", "city-later"):
+            _capture(self.private, "city", name, _listing(city_rows, total=1).encode(), _city_notice)
+        _capture(self.private, "town-gongdo", "gongdo",
+                 _town_listing(_row("201926", pinned=True, menu=MENU) + _row("203001", menu=MENU), "gongdo", total=1),
+                 lambda notice_id: _town_notice(notice_id, "gongdo", attachment=ATTACHMENT))
+        self.d03 = self.private / "collection-d03"
+
+    def prepare(self, name, kind, archive, asset, board, notice_id, document, version=1):
+        review = self.private.parent / f"{name}.json"
+        review.write_text(json.dumps({
+            "archive_kind": kind, "archive_name": archive, "data_kind": "synthetic",
+            "documents": [{
+                "asset": asset, "official_url": board_detail_url(board, notice_id),
+                "document_id": f"40000000-0000-4000-8000-{document:012d}",
+                "document_version_id": f"50000000-0000-4000-8000-{document * 10 + version:012d}",
+                "version_no": version, "publisher": "안성시", "title": "검토한 공지", "published_date": None,
+                "official_number": None, "collected_at": None, "cleaned_text": "검토한 본문", "redaction_log": [],
+            }],
+        }, ensure_ascii=False), encoding="utf-8")
+        return prepare(review, name, self.private)
+
+    def test_notice_id_keys_share_one_space_for_city_and_towns(self):
+        self.assertEqual(_board_notice(board_detail_url("city", "201926")), ("16", "201926"))
+        self.assertEqual(_board_notice(board_detail_url("town-anseong3", "201926")), ("16", "201926"))
+        self.assertEqual(_board_notice(board_detail_url("edu", "201926")), ("300", "201926"))
+        self.assertIsNone(_board_notice(detail_url("living", "201926")))
+
+    def test_same_notice_from_another_board_is_rejected(self):
+        self.prepare("city-body", "board", "city", "201926", "city", "201926", 1)
+        for document in (2, 1):
+            with self.subTest(document=document), self.assertRaisesRegex(ValueError, "다른 게시판 주소"):
+                self.prepare("town-body", "board", "gongdo", "201926", "town-gongdo", "201926", document)
+        self.assertFalse((self.d03 / "town-body").exists())
+        # 먼저 준비한 게시판이 기준이 되므로 읍면동을 먼저 준비한 공지는 시청 원본을 거부한다.
+        self.prepare("town-first", "board", "gongdo", "203001", "town-gongdo", "203001", 3)
+        with self.assertRaisesRegex(ValueError, "^공지 번호 203001의 문서가 D03 준비본 town-first에 다른 게시판 주소"):
+            self.prepare("city-second", "board", "city", "203001", "city", "203001", 4)
+
+    def test_same_board_allows_only_one_body_document(self):
+        self.prepare("city-body", "board", "city", "201926", "city", "201926", 1)
+        with self.assertRaisesRegex(ValueError, "다른 문서 ID"):
+            self.prepare("city-again", "board", "city-later", "201926", "city", "201926", 2)
+        # 같은 문서의 새 버전은 기존 Java 등록 규칙(기존 문서 ID·다음 버전 번호)을 따른다.
+        self.assertEqual(self.prepare("city-v2", "board", "city-later", "201926", "city", "201926", 1, 2)["documents"], 1)
+
+    def test_media_must_come_from_the_registered_board(self):
+        self.prepare("city-body", "board", "city", "201926", "city", "201926", 1)
+        package = self.private.parent / "notice.hwpx"
+        package.write_bytes(hwpx(b"application/hwp+zip"))
         with patch.object(media, "fetch_board_detail",
-                          return_value=_town_notice(slug="miyang", attachment=ATTACHMENT).encode()):
-            media.inspect_notice(self.private, "203049", "notice", board="town-miyang")
-        self.assertEqual(media._notice(self.private, "notice")["board"], "town-miyang")
+                          side_effect=lambda board, notice_id, limit: (
+                              _city_notice(notice_id) if board == "city"
+                              else _town_notice(notice_id, "gongdo", attachment=ATTACHMENT)).encode()):
+            media.inspect_notice(self.private, "201926", "city-notice", board="city")
+            media.inspect_notice(self.private, "201926", "town-notice", board="town-gongdo", batch="gongdo")
+        for notice in ("city-notice", "town-notice"):
+            media.store_media(self.private, notice, 1, package, notice + "-file", "2026-11-27T08:00:00Z")
+        self.prepare("city-media", "media", "city-notice-file", "1", "city", "201926", 5)
+        with self.assertRaisesRegex(ValueError, "다른 게시판 주소"):
+            self.prepare("town-media", "media", "town-notice-file", "1", "town-gongdo", "201926", 6)
+
+    def test_unreadable_earlier_preparation_fails_closed(self):
+        self.prepare("city-body", "board", "city", "201926", "city", "201926", 1)
+        unfinished = self.d03 / "unfinished"
+        unfinished.mkdir(mode=0o700)  # 완료 파일이 없는 준비본은 등록할 수 없으므로 건너뛴다.
+        self.prepare("town-other", "board", "gongdo", "203001", "town-gongdo", "203001", 2)
+        broken = self.d03 / "broken"
+        broken.mkdir(mode=0o700)
+        (broken / "source-import.json").write_text('{"documents": "x"}', encoding="utf-8")
+        os.chmod(broken / "source-import.json", 0o600)
+        with self.assertRaisesRegex(ValueError, "기존 D03 준비본"):
+            self.prepare("city-later-body", "board", "city-later", "203001", "city", "203001", 3)
 
 
 if __name__ == "__main__":
