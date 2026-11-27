@@ -64,6 +64,10 @@ public class LocalImportCommand implements ApplicationRunner, ExitCodeGenerator 
                 default -> 1;
             };
             error(ex.code(), ex.getMessage(), ex.field(), exitCode == 4);
+        } catch (kr.ac.myai.backend.extraction.ExtractionException ex) {
+            // 서비스는 Python 실행 불가·시간 초과만 그대로 던진다. DB 장애처럼 실행 환경을 확인할 문제로 알린다.
+            exitCode = 4;
+            error(ex.code(), "Python 실행 환경을 확인한 뒤 다시 시도해 주세요.", null, ex.retryable());
         } catch (IllegalArgumentException ex) {
             exitCode = 2;
             error("IMPORT_VALIDATION_ERROR", "import 파일·원문 디렉터리·담당자 설정을 확인해 주세요.", null, false);

@@ -81,6 +81,7 @@ public class PublicationService {
             if (ex.code().equals("IMPORT_CONFLICT")) throw new PublicationException("PUBLICATION_CONFLICT", "검토 revision이 변경되었습니다. 최신 상태를 확인해 주세요.", ex.field());
             throw new PublicationException("PUBLICATION_VALIDATION_ERROR", ex.getMessage(), ex.field());
         } catch (ExtractionException ex) {
+            if (ex.code().equals("EXTRACTION_RUNTIME_UNAVAILABLE")) throw ex; // Python 실행 불가·시간 초과는 503으로 알린다.
             throw new PublicationException(ex.code().equals("EXTRACTION_CONFLICT") ? "PUBLICATION_CONFLICT" : "PUBLICATION_VALIDATION_ERROR",
                     "AI 원본 또는 등록 기록을 다시 검증할 수 없습니다. 기존 검토·공개 상태는 보존됩니다.", "originating_run_ids");
         } catch (DataIntegrityViolationException | TransientDataAccessException ex) {
@@ -142,8 +143,7 @@ public class PublicationService {
             // shortcut: 사건별 원문 재검증은 소규모 수동 배치용이며 대량 공개 시 공통 원문 검증을 합친다.
             events.add(content.validate(payload, sources, root));
         }
-        var runReferences = command.action().equals("preview") ? extractions.verifyReadOnlyReferences(events)
-                : extractions.verifyReferences(events);
+        var runReferences = extractions.verifyReferences(events);
         String id = UUID.randomUUID().toString(); Instant now = now();
         var snapshot = content.snapshot(command, revisions, documents, id, now);
         if (command.action().equals("preview")) return previewTransaction.execute(status -> {

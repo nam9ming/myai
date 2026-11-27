@@ -69,7 +69,9 @@ public class LocalApiStartupGuard implements ApplicationContextInitializer<Confi
             }
             if (suffix.endsWith("_ROOT")) {
                 try {
-                    if (!Path.of(value).isAbsolute()) throw new ModeException(field);
+                    // 업로드 저장소와 같은 규칙: 정규화된 절대 경로만 받아 설정 실수를 기동 때 알린다.
+                    Path root = Path.of(value);
+                    if (!root.isAbsolute() || !root.normalize().equals(root)) throw new ModeException(field);
                 } catch (InvalidPathException error) {
                     throw new ModeException(field);
                 }

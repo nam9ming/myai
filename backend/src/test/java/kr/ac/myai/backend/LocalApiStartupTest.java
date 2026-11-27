@@ -68,6 +68,15 @@ class LocalApiStartupTest {
     }
 
     @ParameterizedTest
+    @ValueSource(strings = {"SOURCE_ROOT", "EXTRACTION_ROOT", "HANDOFF_ROOT", "REQUEST_ROOT"})
+    void unnormalizedRootIsRejectedBeforeDatabaseAndWeb(String name) throws Exception {
+        var environment = validEnvironment();
+        // 업로드 저장소는 정규화되지 않은 경로를 거부하므로 기동 검사도 같은 규칙을 쓴다.
+        environment.put("MYAI_LOCAL_API_" + name, "/SYNTHETIC_PRIVATE_PATH/./root");
+        rejected(environment);
+    }
+
+    @ParameterizedTest
     @ValueSource(strings = {"public", "fixture", "local-import", "local-extraction", "local-publication", "local-export", "local-source-review", "local-review-report", "unknown"})
     void everyMixedProfileIsRejectedBeforeDatabaseAndWeb(String profile) throws Exception {
         rejected(validEnvironment(), "--spring.profiles.active=local-api," + profile);

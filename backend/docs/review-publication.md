@@ -31,7 +31,7 @@ java -jar backend/build/libs/myai-backend-0.1.0.jar \
 
 `myai.publication.file`을 [publish.json](../examples/publish.json) 또는 [rollback.json](../examples/rollback.json) 작업본으로 바꾸면 같은 명령으로 공개·복구할 수 있다. 공개 작업본의 action을 preview로 바꿔 먼저 확인하고 publish로 바꿔 실행한다. **예제의 revision/snapshot ID는 실제 명령 결과로 교체해야 한다.** 공개 예제의 `revision_ids`에는 approve 결과의 `revision_id`를 넣는다. 예제를 복사해 수정하며 원본 파일을 실제 작업 데이터로 덮어쓰지 않는다.
 
-명령은 HTTP 서버 없이 한 번 실행하고 종료한다. 결과 JSON은 stdout, 로그는 stderr에 출력한다. `result`의 `action`, `event_id`, `revision_id`, `snapshot_id`, `checksum`, `head_version` 중 해당 작업에 필요한 값만 채워진다. preview는 `result.preview`에 공개 예정 내용을 반환한다. 이때 ID·생성 시각·checksum은 미리보기용이며 실제 공개 결과와 구분한다. 성공은 종료 코드 `0`, 입력 오류·미등록 ID는 `2`, 버전 충돌은 `3`, DB 접근 실패는 `4`다. 예상하지 못한 오류 또는 Spring/DB 초기 기동 실패는 `1`이며 기동 실패에는 결과 JSON이 없을 수 있다. 오류 응답에는 원문·SQL·비밀값·절대 경로를 담지 않는다.
+명령은 HTTP 서버 없이 한 번 실행하고 종료한다. 결과 JSON은 stdout, 로그는 stderr에 출력한다. `result`의 `action`, `event_id`, `revision_id`, `snapshot_id`, `checksum`, `head_version` 중 해당 작업에 필요한 값만 채워진다. preview는 `result.preview`에 공개 예정 내용을 반환한다. 이때 ID·생성 시각·checksum은 미리보기용이며 실제 공개 결과와 구분한다. 성공은 종료 코드 `0`, 입력 오류·미등록 ID는 `2`, 버전 충돌은 `3`, DB 접근 실패·Python 실행 불가(`EXTRACTION_RUNTIME_UNAVAILABLE`)는 `4`다. 예상하지 못한 오류 또는 Spring/DB 초기 기동 실패는 `1`이며 기동 실패에는 결과 JSON이 없을 수 있다. 오류 응답에는 원문·SQL·비밀값·절대 경로를 담지 않는다.
 
 preview는 원본·운영 이력을 SELECT와 공유 잠금으로 재확인하며 DB에 기록하지 않는다. 쓰기 계정으로 V4까지 먼저 적용한 DB에서 SELECT 전용 계정을 사용할 때는 Flyway를 비활성화한다. `data/private/preview.json`은 publish 작업본의 action을 preview로 바꾸고 실제 revision/예상 버전을 넣어 준비한다.
 

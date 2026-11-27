@@ -170,7 +170,7 @@ public class ReviewReportService {
                 JsonNode payload = content.payload(revision(row)); revision.set("payload", payload);
                 var envelope = envelope(payload, originals);
                 var checked = json.validateStored(envelope, sourceRoot);
-                this.extractions.verifyReadOnlyReferences(checked.events()); return null;
+                this.extractions.verifyReferences(checked.events()); return null;
             }));
             var proofs = revision.putArray("handoffs");
             var payload = revision.path("payload");

@@ -11,6 +11,9 @@ import java.util.function.Function;
 import static kr.ac.myai.backend.calculation.PythonCalculator.*;
 
 public final class CalculationResponse {
+    // Python은 정수를 정밀도 그대로, 소수는 double로 읽는다. 소수끼리만 같은 double인지 비교하고 나머지는 정확히 비교한다.
+    static final Comparator<JsonNode> SAME_NUMBER = (left, right) -> left.isFloatingPointNumber() && right.isFloatingPointNumber()
+            ? Double.compare(left.doubleValue(), right.doubleValue()) : left.equals(right) ? 0 : 1;
     private static final String METRICS = "classification reason_codes warnings distance_m distance_basis time_overlap_minutes matched_occurrence_ids";
     private static final Set<String> REASONS = Set.of("WINDOW_OUTSIDE", "BUSINESS_CLOSED", "TIME_NO_OVERLAP", "DISTANCE_OUTSIDE", "DATE_UNKNOWN", "TIME_UNKNOWN",
             "BUSINESS_UNKNOWN", "LOCATION_UNKNOWN", "AREA_UNCERTAIN", "SOURCE_STALE", "SOURCE_UNREACHABLE", "RELATION_UNCERTAIN", "CANCELLED");
@@ -64,7 +67,8 @@ public final class CalculationResponse {
             ObjectNode expected = publicFacts.apply(id);
             var allowed = new HashSet<>(keys(expected)); allowed.addAll(Set.of(METRICS.split(" ")));
             require(keys(item).equals(allowed));
-            expected.fieldNames().forEachRemaining(field -> require(item.path(field).equals(expected.path(field))));
+            // 계산 원본인 Python은 숫자를 double로 읽는다. 고정밀 좌표(18자리 이상)도 같은 double이면 같은 값으로 본다.
+            expected.fieldNames().forEachRemaining(field -> require(item.path(field).equals(SAME_NUMBER, expected.path(field))));
             require(REASONS.containsAll(strings(item.path("reason_codes"))));
             require(item.path("warnings").isArray());
             for (JsonNode warning : item.path("warnings")) require(warning.isTextual() && !warning.textValue().isBlank());

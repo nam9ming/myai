@@ -93,36 +93,19 @@ public class ExtractionImportService {
     }
 
     public List<Reference> verifyReferences(List<ReviewedBatch.Event> events) {
-        return verifyReferences(events, null, List.of());
-    }
-
-    public List<Reference> verifyReadOnlyReferences(List<ReviewedBatch.Event> events) {
-        return verifyReferences(events, null, List.of(), List.of(), true);
-    }
-
-    public List<Reference> verifyReferences(List<ReviewedBatch.Event> events, String batchRun, List<String> batchDocuments) {
-        return verifyReferences(events, batchRun, batchDocuments, List.of());
+        return verifyReferences(events, null, List.of(), List.of(), null);
     }
 
     public List<Reference> verifyReferences(ReviewedBatch batch) {
         var references = batch.handoffJson() == null ? List.<HandoffReference>of()
                 : HandoffReference.list(json.parseJson(batch.handoffJson().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
         return verifyReferences(batch.events(), batch.originatingRunId(), batch.documents().stream().map(ReviewedBatch.Document::versionId).toList(),
-                references, false, batch.schemaVersion());
+                references, batch.schemaVersion());
     }
 
+    // 미리보기와 공개 모두 봉인된 D05만 읽는다(freeze/copy 없음).
     private List<Reference> verifyReferences(List<ReviewedBatch.Event> events, String batchRun, List<String> batchDocuments,
-                                            List<HandoffReference> batchHandoffs) {
-        return verifyReferences(events, batchRun, batchDocuments, batchHandoffs, false);
-    }
-
-    private List<Reference> verifyReferences(List<ReviewedBatch.Event> events, String batchRun, List<String> batchDocuments,
-                                            List<HandoffReference> batchHandoffs, boolean readOnly) {
-        return verifyReferences(events, batchRun, batchDocuments, batchHandoffs, readOnly, null);
-    }
-
-    private List<Reference> verifyReferences(List<ReviewedBatch.Event> events, String batchRun, List<String> batchDocuments,
-                                            List<HandoffReference> batchHandoffs, boolean readOnly, String batchSchema) {
+                                            List<HandoffReference> batchHandoffs, String batchSchema) {
         var verified = new LinkedHashMap<String, Reference>();
         var images = new LinkedHashMap<HandoffReference, VerifiedHandoff>();
         for (var event : events) {
@@ -140,13 +123,13 @@ public class ExtractionImportService {
                     throw new ExtractionException("EXTRACTION_ARCHIVE_INVALID", null, false);
                 }
                 proofs.put(run, image);
-                verifyReference(run, event.sourceVersionIds(), verified, image, readOnly);
+                verifyReference(run, event.sourceVersionIds(), verified, image);
             }
             for (String id : event.originatingRunIds()) {
                 // 사건별 증거를 먼저 검사하며 다른 사건의 run 캐시로 failed를 허용하지 않는다.
                 if (!proofs.containsKey(id)) {
                     if (citizen) throw new ExtractionException("EXTRACTION_ARCHIVE_INVALID", null, false);
-                    verifyReference(id, event.sourceVersionIds(), verified, null, readOnly);
+                    verifyReference(id, event.sourceVersionIds(), verified, null);
                 }
             }
         }
@@ -156,9 +139,9 @@ public class ExtractionImportService {
                     || ReviewedImportReader.CITIZEN_IMPORT_VERSION.equals(batchSchema));
             String run = image.projection().path("parent").path("run_id").asText();
             if (batchRun != null && !batchRun.equals(run)) throw new ExtractionException("EXTRACTION_ARCHIVE_INVALID", null, false);
-            verifyReference(run, batchDocuments, verified, image, readOnly);
+            verifyReference(run, batchDocuments, verified, image);
         }
-        if (batchRun != null && batchHandoffs.isEmpty()) verifyReference(batchRun, batchDocuments, verified, null, readOnly);
+        if (batchRun != null && batchHandoffs.isEmpty()) verifyReference(batchRun, batchDocuments, verified, null);
         return verified.values().stream().sorted(Comparator.comparing(Reference::runId)).toList();
     }
 
@@ -169,8 +152,7 @@ public class ExtractionImportService {
         }
     }
 
-    private void verifyReference(String id, List<String> documents, Map<String, Reference> verified, VerifiedHandoff handoff,
-                                 boolean readOnly) {
+    private void verifyReference(String id, List<String> documents, Map<String, Reference> verified, VerifiedHandoff handoff) {
         var reference = verified.get(id);
         Path directory;
         try { directory = Path.of(handoff == null ? repository.referenceDirectory(id) : repository.handoffParentDirectory(id, handoff)); }
