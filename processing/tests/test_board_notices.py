@@ -376,8 +376,10 @@ class BoardNoticeTest(unittest.TestCase):
                                notice_id="203043")
         self.assertLess(time.monotonic() - started, 2)
         deep = '<script>var yh = {"a": ' + '[' * 100000 + ']' * 100000 + '};</script>'
-        with self.assertRaisesRegex(ValueError, "페이지 설정"):
-            parse_board_media(deep + _notice(), board="city", notice_id="203043")
+        nested = '<script>var yh = {"a": ' + '[' * 1100 + ']' * 1100 + '};</script>'  # 4096자 안의 깊은 중첩
+        for script in (deep, nested):
+            with self.subTest(size=len(script)), self.assertRaisesRegex(ValueError, "페이지 설정"):
+                parse_board_media(script + _notice(), board="city", notice_id="203043")
         started = time.monotonic()
         attrs = ' '.join(f'data-a{n}="1"' for n in range(40000))
         self.assertEqual(parse_board_notice(_notice(body=f'<p {attrs}>본문</p>'), board="city",

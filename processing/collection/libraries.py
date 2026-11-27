@@ -653,9 +653,9 @@ def _declared_context_paths(scripts: list[str]) -> list[object]:
         match = _PAGE_CONFIG.fullmatch(script)
         if match is None:
             continue
-        if len(match[1]) > 4096:
-            # 실제 설정은 227자였다. 깊은 중첩은 Python 버전마다 해석 한계가 달라 선언 검사를 우회하므로 받지 않는다.
-            raise ValueError('페이지 설정 스크립트가 너무 깁니다.')
+        if len(match[1]) > 4096 or match[1].count('[') + match[1].count('{') > 64:
+            # 실제 설정은 227자였다. 깊은 중첩은 Python 버전마다 재귀 한계가 달라 결과가 갈리므로 받지 않는다.
+            raise ValueError('페이지 설정 스크립트가 너무 길거나 깊습니다.')
         try:
             config = json.loads(match[1], object_pairs_hook=_unique_object)
         except ValueError:
