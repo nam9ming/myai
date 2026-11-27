@@ -350,7 +350,9 @@ class _NoticeParser(HTMLParser):
         return super().parse_pi(i)
 
     def parse_html_declaration(self, i):
-        if self.rawdata.startswith('<![', i) or self.rawdata.find('>', i + 2) < 0:
+        end = self.rawdata.find('>', i + 2)
+        # 따옴표가 든 선언(`<!DOCTYPE html PUBLIC "x>`)은 브라우저가 닫는 따옴표까지 읽어 경계가 갈린다. 실제 문서는 `<!DOCTYPE html>`뿐이다.
+        if self.rawdata.startswith('<![', i) or end < 0 or '"' in self.rawdata[i:end] or "'" in self.rawdata[i:end]:
             # HTML 문서에서 브라우저는 `<![CDATA[`를 첫 `>`에서 끝나는 가짜 주석으로 읽고, Python은 `]]>`까지 삼킨다.
             # 닫히지 않은 `<!`도 Python 버전마다 글자 또는 문서 끝까지의 선언으로 달리 읽는다.
             raise ValueError(_MARKUP_ERROR.format(self.label))

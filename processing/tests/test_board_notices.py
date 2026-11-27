@@ -360,6 +360,7 @@ class BoardNoticeTest(unittest.TestCase):
                      '<math><mi></svg></mi><style><!--</style>' + _notice(),
                      '<svg><template/></svg>' + _notice(body='<p>진짜</p>') + '</template>' + _notice(body='<p>가짜</p>'),
                      _notice() + '<?x<b', _notice() + '<!x<b', _notice() + '<!DOCTYPE x<b',
+                     '<!DOCTYPE html PUBLIC "x>' + _notice().replace('"', "'") + '">' + _notice(body='<p>가짜</p>'),
                      '<svg><foreignObject><style/>' + _notice(body='<p>숨김</p>') + '</style></foreignObject></svg>'
                      + _notice(body='<p>뒤</p>'),
                      _notice(body='<details title="x"\xa0open><summary>요약</summary><p>숨김</p></details>'),
