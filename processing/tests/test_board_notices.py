@@ -147,7 +147,7 @@ class BoardListingTest(unittest.TestCase):
 class BoardNoticeTest(unittest.TestCase):
     def test_city_notice_uses_board_url_and_source(self):
         record = parse_board_notice(_notice(), board="city", notice_id="203043")
-        self.assertEqual(BOARD_PARSER_VERSION, "board-notice-parser-v1", "출력 형식을 바꾸면 파서 버전도 올린다.")
+        self.assertEqual(BOARD_PARSER_VERSION, "board-notice-parser-v2", "출력·허용 규칙을 바꾸면 파서 버전도 올린다.")
         flagged = parse_board_notice(_notice(body='<p>본문</p><p><img src="/x.png" alt=""></p>'),
                                      board="city", notice_id="203043")
         self.assertEqual(flagged["review_flags"], ["inline_image"])

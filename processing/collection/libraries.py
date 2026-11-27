@@ -327,8 +327,9 @@ def parse_library_notice(text: str, *, notice_id: str) -> dict:
     return _notice_record(_NoticeParser(), text, notice_id, 'library_notice', lambda: detail_url('living', notice_id))
 
 
-# parse_board_notice나 공유하는 _NoticeParser·_notice_record의 출력이 바뀌면 함께 올린다.
-BOARD_PARSER_VERSION = 'board-notice-parser-v1'
+# parse_board_notice나 공유하는 _NoticeParser·_notice_record의 출력 또는 허용 규칙이 바뀌면 함께 올린다.
+# v2: 시청 상세의 viewForm 게시판 주소를 필수로 대조한다.
+BOARD_PARSER_VERSION = 'board-notice-parser-v2'
 
 
 def parse_board_notice(text: str, *, board: str, notice_id: str) -> dict:
