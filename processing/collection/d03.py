@@ -18,7 +18,7 @@ from .capture import (
 )
 from .cli import CollectionArguments
 from .d03_sources import capture_assets
-from .official_web import BOARDS, board_detail_url
+from .official_web import BOARDS, board_detail_url, detail_url
 
 PRIVATE_ROOT = CAPTURE_ROOT.parent
 DOCUMENT_FIELDS = ("asset official_url document_id document_version_id version_no publisher title "
@@ -109,9 +109,12 @@ def document(review: dict, asset: dict, path: str) -> dict:
 
 
 def _board_notice(url: str) -> tuple[str, str] | None:
-    """게시판 공지·매체 문서의 주소면 (게시물 번호 공간 ptIdx, 공지 번호)를 돌려준다."""
+    """게시판·도서관 공지와 그 매체 문서의 주소면 (게시물 번호 공간 ptIdx, 공지 번호)를 돌려준다."""
     match = _BOARD_ID.search(url)
     if match:
+        # 도서관 상세도 시청과 같은 ptIdx=16 번호를 쓰고, 같은 공지가 시청 목록에도 실린다(예: 202960).
+        if url == detail_url("living", match[1]):
+            return "16", match[1]
         for key, info in BOARDS.items():
             if url == board_detail_url(key, match[1]):
                 return info.pt_idx, match[1]
@@ -147,10 +150,11 @@ def _prepared_documents(private_root: Path) -> list[tuple[str, dict]]:
 
 
 def _check_board_notices(private_root: Path, name: str, documents: list[dict]) -> None:
-    """시청·읍면동 공지는 게시물 번호(ptIdx=16)를 공유하고 원본 해시가 게시판마다 달라 같은 공지가 별개 문서로 들어간다.
+    """시청·도서관·읍면동 공지는 게시물 번호(ptIdx=16)를 공유하고 원본 해시가 게시판마다 달라 같은 공지가 별개 문서로 들어간다.
 
     그래서 같은 번호 공간의 같은 공지 번호는 모든 준비본에서 한 게시판 주소만 쓰고, 공지 본문 문서는 한 문서 ID(그 문서의
-    새 버전 포함)만 허용한다. 같은 게시판의 매체 문서는 여러 개일 수 있다. 안성배움e(ptIdx=300)는 따로 대조한다.
+    새 버전 포함)만 허용한다. 같은 게시판의 매체 문서는 여러 개일 수 있다. 도서관 본문은 등록 방식이 달라 주소만 대조한다.
+    안성배움e(ptIdx=300)는 따로 대조한다.
     shortcut: 동시에 실행한 준비끼리는 서로 보지 못한다. 여러 운영자가 동시에 준비하게 되면 잠금을 둔다.
     """
     keys = [_board_notice(document["official_url"]) for document in documents]

@@ -120,6 +120,7 @@ class Board(NamedTuple):
 
 
 # 읍면동 공지사항은 시청 공지(ptIdx=16)와 게시물 번호 공간을 공유하며 시청 공지 일부와 읍면동 자체 글을 보여 준다.
+# 도서관 공지(_DETAIL_PATHS의 living)도 같은 번호 공간을 쓴다.
 _TOWNS = (
     ("gongdo", "공도읍"), ("bogae", "보개면"), ("geumgwang", "금광면"), ("seoun", "서운면"), ("miyang", "미양면"),
     ("daedeok", "대덕면"), ("yangseong", "양성면"), ("wongok", "원곡면"), ("iljuk", "일죽면"), ("juksan", "죽산면"),

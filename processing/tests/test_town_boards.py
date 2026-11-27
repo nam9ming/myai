@@ -17,7 +17,7 @@ from processing.collection.official_web import (
     BOARDS, board_detail_url, board_listing_path, detail_url, fetch_board_detail, fetch_board_listing,
 )
 from processing.tests.test_board_notices import CITY_VIEW, _listing, _notice, _row
-from processing.tests.test_collection_media import hwpx
+from processing.tests.test_collection_media import PNG, hwpx, notice as _library_notice
 from processing.tests.test_edu_board import ATTACH, ATTACHMENT, FILE_SN
 
 # 2026-11-27 공식 읍면동 메뉴에서 확인한 경로 이름과 읍면동 이름
@@ -209,7 +209,7 @@ class TownPipelineTest(unittest.TestCase):
 
 
 class TownDuplicateTest(unittest.TestCase):
-    """시청·읍면동 공지는 번호 공간을 공유하므로 D03에는 같은 공지를 한 게시판의 원본으로만 준비한다."""
+    """시청·도서관·읍면동 공지는 번호 공간을 공유하므로 D03에는 같은 공지를 한 게시판의 원본으로만 준비한다."""
 
     def setUp(self):
         self.private = Path(self.enterContext(TemporaryDirectory())).resolve() / "private"
@@ -222,12 +222,12 @@ class TownDuplicateTest(unittest.TestCase):
                  lambda notice_id: _town_notice(notice_id, "gongdo", attachment=ATTACHMENT))
         self.d03 = self.private / "collection-d03"
 
-    def prepare(self, name, kind, archive, asset, board, notice_id, document, version=1):
+    def prepare(self, name, kind, archive, asset, board, notice_id, document, version=1, url=None):
         review = self.private.parent / f"{name}.json"
         review.write_text(json.dumps({
             "archive_kind": kind, "archive_name": archive, "data_kind": "synthetic",
             "documents": [{
-                "asset": asset, "official_url": board_detail_url(board, notice_id),
+                "asset": asset, "official_url": url or board_detail_url(board, notice_id),
                 "document_id": f"40000000-0000-4000-8000-{document:012d}",
                 "document_version_id": f"50000000-0000-4000-8000-{document * 10 + version:012d}",
                 "version_no": version, "publisher": "안성시", "title": "검토한 공지", "published_date": None,
@@ -240,7 +240,7 @@ class TownDuplicateTest(unittest.TestCase):
         self.assertEqual(_board_notice(board_detail_url("city", "201926")), ("16", "201926"))
         self.assertEqual(_board_notice(board_detail_url("town-anseong3", "201926")), ("16", "201926"))
         self.assertEqual(_board_notice(board_detail_url("edu", "201926")), ("300", "201926"))
-        self.assertIsNone(_board_notice(detail_url("living", "201926")))
+        self.assertEqual(_board_notice(detail_url("living", "201926")), ("16", "201926"))
 
     def test_same_notice_from_another_board_is_rejected(self):
         self.prepare("city-body", "board", "city", "201926", "city", "201926", 1)
@@ -275,6 +275,27 @@ class TownDuplicateTest(unittest.TestCase):
         self.prepare("city-media", "media", "city-notice-file", "1", "city", "201926", 5)
         with self.assertRaisesRegex(ValueError, "다른 게시판 주소"):
             self.prepare("town-media", "media", "town-notice-file", "1", "town-gongdo", "201926", 6)
+
+    def test_library_shares_the_city_notice_space(self):
+        # 2026-11-27 시청 1페이지 묶음의 202960은 도서관 상세에도 같은 제목·본문으로 있었다.
+        self.prepare("city-body", "board", "city", "201926", "city", "201926", 1)
+        image = self.private.parent / "notice.png"
+        image.write_bytes(PNG)
+        with patch.object(media, "fetch_detail", side_effect=lambda category, notice_id, limit:
+                          _library_notice().replace(b'value="17"', f'value="{notice_id}"'.encode())):
+            for notice_id in ("201926", "203001"):
+                media.inspect_notice(self.private, notice_id, f"library-{notice_id}")
+                media.store_media(self.private, f"library-{notice_id}", 1, image, f"library-{notice_id}-file",
+                                  "2026-11-27T08:00:00Z")
+        with self.assertRaisesRegex(ValueError, "^공지 번호 201926의 문서가 D03 준비본 city-body에 다른 게시판 주소"):
+            self.prepare_library_media("201926", 5)
+        self.prepare_library_media("203001", 6)
+        with self.assertRaisesRegex(ValueError, "^공지 번호 203001의 문서가 D03 준비본 library-203001-media에 다른"):
+            self.prepare("city-second", "board", "city", "203001", "city", "203001", 7)
+
+    def prepare_library_media(self, notice_id, document):
+        return self.prepare(f"library-{notice_id}-media", "media", f"library-{notice_id}-file", "1", None, notice_id,
+                            document, url=detail_url("living", notice_id))
 
     def test_unreadable_earlier_preparation_fails_closed(self):
         self.prepare("city-body", "board", "city", "201926", "city", "201926", 1)
