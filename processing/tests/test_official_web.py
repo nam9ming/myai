@@ -1,7 +1,8 @@
+from datetime import date
 import unittest
 from unittest.mock import patch
 
-from processing.collection.official_web import DETAIL_MAX_BYTES, detail_url, fetch_detail
+from processing.collection.official_web import DETAIL_MAX_BYTES, SourceHTTPError, detail_url, fetch_detail, fetch_listing
 
 
 class OfficialWebTest(unittest.TestCase):
@@ -106,4 +107,32 @@ class OfficialWebTest(unittest.TestCase):
         for limit in (0, -1, True, DETAIL_MAX_BYTES + 1):
             with self.subTest(limit=limit), self.assertRaises(ValueError):
                 fetch_detail("culture", "17", limit=limit)
+        self.connect.assert_not_called()
+
+    def test_event_listing_uses_exact_public_query(self):
+        self.assertEqual(fetch_listing("culture", 2, date(2026, 11, 1), date(2026, 11, 30), limit=64), b"{}")
+        method, path = self.connection.request.call_args.args
+        self.assertEqual(method, "GET")
+        self.assertEqual(path, "/event/program/list/json.do?page=2&searchSdate=2026-11-01&searchEdate=2026-11-30")
+        self.assertNotIn("body", self.connection.request.call_args.kwargs)
+
+    def test_library_listing_posts_only_page_to_the_notice_board(self):
+        self.response.status = 429
+        with self.assertRaises(SourceHTTPError) as caught:
+            fetch_listing("living", 2, None, None, limit=64)
+        self.assertEqual(caught.exception.status, 429)
+        method, path = self.connection.request.call_args.args
+        self.assertEqual((method, path), ("POST", "/library/bbs/list.do?ptIdx=16&mId=0401010000"))
+        self.assertEqual(self.connection.request.call_args.kwargs["body"], b"page=2")
+        self.assertEqual(self.connection.request.call_args.kwargs["headers"]["Content-Type"],
+                         "application/x-www-form-urlencoded")
+        self.response.read.assert_not_called()
+
+    def test_listing_rejects_invalid_page_or_period_before_request(self):
+        day = date(2026, 11, 1)
+        for args in (("culture", 0, day, day), ("culture", 1, None, None),
+                     ("culture", 1, day, date(2027, 1, 1)), ("living", 1, day, day),
+                     ("unknown", 1, None, None)):
+            with self.subTest(args=args), self.assertRaises(ValueError):
+                fetch_listing(*args, limit=64)
         self.connect.assert_not_called()

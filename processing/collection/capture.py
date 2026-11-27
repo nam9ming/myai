@@ -56,9 +56,21 @@ def write_new(directory: int, name: str, content: bytes) -> None:
         os.fsync(stream.fileno())
 
 
-def capture(category: str, portal_file: Path, web_id: str, name: str, root: Path) -> dict:
+def validate_name(name: str) -> None:
     if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,79}", name) is None:
         raise ValueError("수집 이름은 영문자 또는 숫자로 시작하는 영문자·숫자·밑줄·하이픈 1~80자여야 합니다.")
+
+
+def write_receipt(directory: int, name: str, record: dict) -> None:
+    receipt = (json.dumps(record, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    temporary = name + ".tmp"
+    write_new(directory, temporary, receipt)
+    os.link(temporary, name, src_dir_fd=directory, dst_dir_fd=directory, follow_symlinks=False)
+    os.unlink(temporary, dir_fd=directory)
+
+
+def capture(category: str, portal_file: Path, web_id: str, name: str, root: Path) -> dict:
+    validate_name(name)
     directory = root / name
     if root.resolve() != root:
         raise ValueError("수집 디렉터리에 심볼릭 링크를 사용할 수 없습니다.")
@@ -98,10 +110,7 @@ def capture(category: str, portal_file: Path, web_id: str, name: str, root: Path
             "comparison": comparison,
             "parse_error": parse_error,
         }
-        receipt = (json.dumps(record, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
-        write_new(bundle, "capture.tmp", receipt)
-        os.link("capture.tmp", "capture.json", src_dir_fd=bundle, dst_dir_fd=bundle, follow_symlinks=False)
-        os.unlink("capture.tmp", dir_fd=bundle)
+        write_receipt(bundle, "capture.json", record)
     return {"capture_id": name, "status": status}
 
 

@@ -113,16 +113,20 @@ def preview(category: str, portal: list[dict], web: dict,
     }
 
 
+def parse_portal(category: str, text: str) -> list[dict]:
+    return parse_festival_csv(text) if category == "culture" else parse_library_csv(text)
+
+
+def parse_detail(category: str, text: str, web_id: str) -> dict:
+    return (parse_event_detail(text, event_id=web_id) if category == "culture"
+            else parse_library_notice(text, notice_id=web_id))
+
+
 def compare_sources(category: str, portal: tuple[str, str], web: tuple[str, str], web_id: str) -> dict:
     portal_text, portal_sha = portal
     web_text, web_sha = web
-    if category == "culture":
-        records = parse_festival_csv(portal_text)
-        record = parse_event_detail(web_text, event_id=web_id)
-    else:
-        records = parse_library_csv(portal_text)
-        record = parse_library_notice(web_text, notice_id=web_id)
-    return preview(category, records, record, portal_sha, web_sha)
+    return preview(category, parse_portal(category, portal_text), parse_detail(category, web_text, web_id),
+                   portal_sha, web_sha)
 
 
 def main() -> int:
