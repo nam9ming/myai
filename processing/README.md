@@ -169,6 +169,33 @@ python3.13 -B -m processing.collection.media store \
 
 이미지는 PNG·JPEG, 첨부는 PDF·HWP·HWPX·PNG·JPEG를 파일당 8MiB까지 받는다. 파일 헤더 또는 컨테이너 표식을 확인하고 부모 HTML, 연결 주소, SHA-256, 운영자가 입력한 수신 시각을 다시 대조한다. 부모 HTML과 매체 파일을 각각 `collection-media-notices/`, `collection-media/`에 보관한다. 두 묶음을 함께 보존한다. 운영자가 원문과 파일의 대응을 확인한다. 본문 추출·OCR·QR 판독은 별도 단계다.
 
+### 도로 공사현황 목록·상세 수집
+
+공사·교통 분야의 공사 사업 정보는 안성시 [도로 공사현황](https://www.anseong.go.kr/depart/contents.do?mId=0901020100)에서 수집한다. 포털 비교 원본 없이 공식 웹만 사용하며, 공식 메뉴의 `예정`·`진행중`·`완료` 구분을 각각 `planned`·`ongoing`·`completed`로 지정한다. 목록은 공식 메뉴가 쓰는 `searchGubun=1`·`state`·`mId` 조합에 수집기가 `page`를 붙인 GET 주소로 요청한다. 공식 화면은 페이지 이동을 POST로 보내지만 같은 GET 주소가 같은 목록을 반환하는 것을 확인했다. 공식 목록은 상세를 `req.post`로 열지만, 수집기는 같은 공사 번호와 구분의 `view.do?idx=…&mId=…&state=…` GET 주소로 요청한다. 리디렉션은 따르지 않는다. 경로는 [robots.txt](https://www.anseong.go.kr/robots.txt)의 제한 목록에 없다.
+
+```sh
+python3.13 -B -m processing.collection.road_batch ongoing --name road-ongoing-20261127 --max-items 30
+python3.13 -B -m processing.collection.road_batch completed --name road-completed-p5 --start-page 5 --max-pages 4 --max-items 80
+```
+
+한 번에 최대 20페이지·80건이므로 그보다 긴 목록은 `--start-page`로 나누어 받는다. 시작 페이지가 1이 아니면 마지막 페이지에 도달해도 `discovery_status=end_reached`, 묶음 상태는 `partial`이다. 실행 사이에 공사가 추가·이동되면 페이지 경계가 밀린다. 나누어 받을 때는 연달아 실행하고, 각 묶음 `batch.json`의 `pages[].reported_pages`와 `web_ids`를 이어 붙여 페이지 수 변화와 번호 중복을 확인한다. 앞쪽 공사가 삭제되거나 다른 구분으로 옮겨져 생긴 누락은 이 방법으로 드러나지 않는다. 보관된 `list-N.html`의 `번호` 열은 1페이지 첫 값이 전체 건수이고 1씩 줄어들므로, 묶음 경계에서 번호가 이어지는지도 대조한다.
+
+`data/private/collection-road-works/<name>/`에 목록·상세 HTML 원본과 파싱 결과 `parsed-<번호>.json`, 마지막으로 `batch.json`을 저장한다. 요청 간격·중단 HTTP 상태와 종료 코드 0·2는 위 목록 수집과 같다. 인자 오류를 포함한 입력·보관 오류는 종료 1이다. 목록 표의 구분 제목과 페이지 번호, 상세의 숨은 공사 번호와 목록 복귀 주소를 요청과 대조한다.
+
+상세의 `지역`·`사업위치`·`사업량`·`공사기간`·`현재현황`·`담당부서`·`전화번호`는 표시 문구 그대로 `fields`에 보관한다. 제목과 값 안에서는 `span`·`a`·`b`·`strong`·`font` 같은 인라인 태그와 `br`·`p`·`li`·`ul`·`ol`만 허용하고, 줄바꿈·문단 경계는 공백 하나로 바꾼다. 그 밖의 태그가 나오면 형식 변경으로 본다. 빈 값은 `null`과 `missing:<필드>` 표시로 남긴다. 7개 항목 중 하나라도 없거나 다른 항목명이 나오거나 항목이 중복되면 형식 변경으로 보고 원본과 파싱 실패 사유를 남긴다. `공사기간`이 정확히 `YYYY-MM-DD ~ YYYY-MM-DD`이고 시작일이 종료일보다 늦지 않을 때만 `construction_period_range`에 날짜를 넣는다. 신청·행사 일정과 섞지 않도록 공사기간임을 이름에 남긴다. 날짜가 뒤집혔으면 `period_inverted`, 다른 형식이면 `period_unparsed`로 표시하고 원문을 고치지 않는다.
+
+`listing_state`는 수집 시점에 공식 사이트가 분류한 메뉴 구분이다. `현재현황`에서 진행·종료를 추정하지 않으며 실제 도로 통제 구간·시간·우회 안내와 구별한다. 통제 안내는 시청 공지 등 별도 원본에서 수집해 공사 사업과 연결한다. 상세에 저장된 지도 화면은 타일과 화면 좌표뿐이어서 읽지 않는다.
+
+2026-11-27 공식 HTML로 확인한 형식은 다음과 같다.
+
+| 확인 범위 | 결과 |
+| --- | --- |
+| 목록 | 예정 1페이지 12건, 진행중 2페이지 26건, 완료 14페이지 275건. 세 구분 모두 결과가 있었다. 결과가 없는 응답은 다른 조회 조건(`searchGubun=2`)에서 `검색된 결과가 없습니다.` 한 행으로 확인했다. |
+| 상세 표본 24건 (예정 3·진행중 7·완료 14) | 모두 같은 7개 항목. 지도 영역은 글마다 타일·경로 도형 구성이 달라 HTML 크기가 약 35만~37만 바이트로 차이가 있다. |
+| `현재현황` | `설계중(용역사:…)`, `보상중(10%)`, `공정률 20%`, `준공`처럼 자유 서술이다. 완료 구분에도 `공사 중`, `공사중 [10%]`으로 남은 글이 있다. |
+| `공사기간` | [1608번](https://www.anseong.go.kr/depart/roadConstruction/view.do?idx=1608&mId=0901020300&state=2)은 `2021-08-26 ~ 2021-06-22`로 역전되어 있다. 예정 12건 중 10건이 `2027-03-01 ~ 2028-12-31`이어서 실제 일정인지 담당 부서 확인이 필요하다. |
+| 명령 실행 | 예정 12건·진행중 26건 전체, 완료 앞 20건(건수 한도)과 완료 14페이지 15건(`--start-page 14`)을 받아 73건 모두 파싱했고 D03 준비 경로의 원본·파싱 결과 재검증을 통과했다. 1608번만 `period_inverted`로 표시됐다. |
+
 ### 수집 원본을 D03 등록 입력으로 준비하기
 
 단건 수집은 `archive_kind=single`과 `capture.json`, 목록 수집은 `archive_kind=batch`와 `batch.json`을 사용한다. 직접 내려받은 포털 CSV는 `asset=portal`, 웹 상세는 게시물 번호를 지정한다. 부분 수집 묶음에서도 파싱에 성공한 상세를 선택할 수 있다. 명령은 수집 기록의 원본 해시와 파일을 대조하고 웹 상세의 게시물 번호를 다시 확인한다.
@@ -176,6 +203,8 @@ python3.13 -B -m processing.collection.media store \
 API 수집은 `archive_kind=portal`, API 수집 이름, `asset="1"` 같은 응답 페이지 번호를 지정한다. `official_url`은 `portal.json`의 해당 `source_url`과 맞추고 `collected_at`은 `null`로 둔다. D03은 해당 응답 원본과 기록된 수신 시각을 연결한다. 비교에 API 묶음을 사용했다면 D03 원본은 해당 API 응답 페이지를 선택한다.
 
 도서관 매체는 `archive_kind=media`, `archive_name`에는 `store --name` 값, `asset`에는 같은 항목 번호를 문자열로 넣는다. `official_url`은 `notice.json`의 부모 공지 주소, `collected_at`은 `null`로 둔다. D03이 운영자 입력 다운로드 시각과 매체 원본 해시를 연결한다. 사람 검토를 마친 제목·본문을 전달하고 기존 D03 명령으로 등록한다.
+
+도로 공사현황은 `archive_kind=road`, `archive_name`에는 `road_batch --name` 값, `asset`에는 공사 번호를 넣는다. 포털 원본은 선택할 수 없다. `official_url`은 `batch.json`의 해당 상세 `source_url`, `collected_at`은 `null`로 둔다. 명령은 상세 원본 해시와 함께 보관된 파싱 결과를 원본에서 다시 만든 값과 대조한다. 파싱 결과의 `parser_version`이 현재 파서와 다르면 변조와 구분되는 오류로 거부하므로 현재 버전으로 다시 수집한다.
 
 다음은 이미 보관한 `synthetic-capture` 묶음의 합성 예다. 실제 등록 입력은 담당자가 원본·개인정보·추출 대상 문구를 대조해 작성한다. 게시일·공식 문서번호 미상은 `null`로 둔다. 웹 수신 시각은 수집 기록을 사용하므로 `collected_at`을 `null`로 둔다. 포털 CSV는 실제 다운로드 출처를 담당자가 확인하고, `official_url`에는 수집 기록의 `portal.catalog_url`, `collected_at`에는 실제로 받은 시각을 입력한다. `redaction_log`는 제거 위치와 범주를 `location`, `category`로 적고 제거한 실제 값은 적지 않는다.
 

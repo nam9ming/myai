@@ -8,8 +8,10 @@ from .capture import PORTAL_SECTION, capture_timestamp, open_archive, validate_n
 from .capture import read_capture_file as _read
 from .capture import read_receipt as _receipt
 from .media import read_media_assets
-from .official_web import DETAIL_MAX_BYTES, detail_url
+from .official_web import DETAIL_MAX_BYTES, ROAD_STATES, detail_url, road_detail_url
 from .portal import read_portal_snapshot
+from .road_batch import BATCH_SCHEMA as ROAD_BATCH_SCHEMA, RECORD_SCHEMA as ROAD_RECORD_SCHEMA, ROAD_SECTION
+from .road_works import PARSER_VERSION as ROAD_PARSER_VERSION, parse_road_detail
 
 
 _ARCHIVES = {
@@ -34,7 +36,7 @@ def _reference(record: object, filename: str, url_key: str, url: str) -> str:
     return digest
 
 
-def _batch_items(record: dict, category: str) -> dict[str, dict]:
+def _batch_items(record: dict, source_url) -> dict[str, dict]:
     rows = record.get("items")
     if not isinstance(rows, list) or record.get("status") not in ("complete", "partial"):
         raise ValueError("묶음 수집 기록의 상태 또는 게시물 목록이 맞지 않습니다.")
@@ -45,7 +47,7 @@ def _batch_items(record: dict, category: str) -> dict[str, dict]:
         web_id = row["web_id"]
         if web_id in items:
             raise ValueError("묶음 수집 기록에 중복 게시물 번호가 있습니다.")
-        if row.get("source_url") != detail_url(category, web_id):
+        if row.get("source_url") != source_url(web_id):
             raise ValueError("수집 기록의 게시물 원문 주소가 맞지 않습니다.")
         items[web_id] = row
     parsed = sum(row["status"] == "parsed" for row in items.values())
@@ -100,10 +102,47 @@ def _web_asset(directory: int, archive_kind: str, receipt: dict, items: dict[str
     return filename, digest, url, collected_at
 
 
+def _road_assets(private_root: Path, name: str, asset_keys: set[str]) -> dict[str, dict]:
+    """보관한 공사 상세 원본·해시·파싱 결과를 다시 대조한다."""
+    relative = Path(ROAD_SECTION) / name
+    with open_archive(private_root, relative) as directory:
+        receipt = _receipt(directory, "batch.json")
+        state = receipt.get("state")
+        if (receipt.get("schema_version") != ROAD_BATCH_SCHEMA or receipt.get("batch_id") != name
+                or not isinstance(state, str) or state not in ROAD_STATES):
+            raise ValueError("도로 공사현황 수집 기록의 규격·이름·구분이 맞지 않습니다.")
+        items = _batch_items(receipt, lambda web_id: road_detail_url(state, web_id))
+        assets = {}
+        for key in sorted(asset_keys):
+            row = items.get(key)
+            if row is None or row["status"] != "parsed" or row.get("parsed_file") != f"parsed-{key}.json":
+                raise ValueError("선택한 공사는 파싱이 완료된 도로 공사현황 수집 원본이어야 합니다.")
+            filename = f"detail-{key}.html"
+            recorded = _reference(row, filename, "source_url", road_detail_url(state, key))
+            text, digest = decode_input(_read(directory, filename, DETAIL_MAX_BYTES), "도로 공사현황 상세")
+            if digest != recorded:
+                raise ValueError("도로 공사현황 상세 원본 해시가 수집 기록과 다릅니다.")
+            parsed = _receipt(directory, row["parsed_file"])
+            if parsed.get("parser_version") != ROAD_PARSER_VERSION:
+                raise ValueError("다른 파서 버전으로 만든 파싱 결과입니다. 현재 버전으로 다시 수집해 주세요.")
+            if parsed != {"schema_version": ROAD_RECORD_SCHEMA, "parser_version": ROAD_PARSER_VERSION,
+                          "sha256": digest, "record": parse_road_detail(text, state=state, project_id=key)}:
+                raise ValueError("도로 공사현황 파싱 결과가 원본과 다릅니다.")
+            assets[key] = {
+                "raw_asset_path": (relative / filename).as_posix(),
+                "raw_sha256": digest,
+                "official_url": row["source_url"],
+                "collected_at": capture_timestamp(row.get("fetched_at")),
+                "collection_method": "official-web-road-works",
+            }
+        return assets
+
+
 def capture_assets(private_root: Path, archive_kind: str, archive_name: str,
                    asset_keys: set[str]) -> dict[str, dict]:
     """정해진 수집 경로 안의 원본만 읽으며 파일이나 기록을 바꾸지 않는다."""
-    if not isinstance(archive_kind, str) or (archive_kind not in _ARCHIVES and archive_kind not in ("portal", "media")):
+    if not isinstance(archive_kind, str) or (archive_kind not in _ARCHIVES
+                                             and archive_kind not in ("portal", "media", "road")):
         raise ValueError("지원하지 않는 수집 기록 종류입니다.")
     if not isinstance(archive_name, str):
         raise ValueError("수집 이름이 유효하지 않습니다.")
@@ -114,6 +153,10 @@ def capture_assets(private_root: Path, archive_kind: str, archive_name: str,
         raise ValueError("선택한 수집 원본 키가 유효하지 않습니다.")
     if archive_kind == "media":
         return read_media_assets(private_root, archive_name, asset_keys)
+    if archive_kind == "road":
+        if "portal" in asset_keys:
+            raise ValueError("도로 공사현황 수집에는 포털 원본이 없습니다.")
+        return _road_assets(private_root, archive_name, asset_keys)
     if archive_kind == "portal":
         _, receipt = read_portal_snapshot(private_root, archive_name)
         pages = {str(entry["page"]): entry for entry in receipt["responses"]}
@@ -141,7 +184,7 @@ def capture_assets(private_root: Path, archive_kind: str, archive_name: str,
         if archive_kind == "single" and (receipt.get("status") != "parsed"
                 or receipt.get("parse_error") is not None or not _web_id(receipt.get("web_id"))):
             raise ValueError("단건 수집은 원본을 정상 파싱한 기록이어야 합니다.")
-        items = _batch_items(receipt, category) if archive_kind == "batch" else {}
+        items = _batch_items(receipt, lambda web_id: detail_url(category, web_id)) if archive_kind == "batch" else {}
         url = SOURCE_PAGES[category][0]
         portal_hash = _reference(receipt.get("portal"), "portal.csv", "catalog_url", url)
 
