@@ -5,7 +5,7 @@ from io import StringIO
 import re
 
 from . import official_url
-from .official_web import detail_url
+from .official_web import OFFICIAL_ORIGIN, detail_url
 
 
 _LOCATION_COLUMNS = ('시도명', '시군구명', '도서관명')
@@ -178,13 +178,98 @@ class _NoticeParser(HTMLParser):
             self.parts[self.section].append(data)
 
 
-def parse_library_notice(text: str, *, notice_id: str) -> dict:
-    """안성시 도서관 상세의 본문 텍스트와 게시일만 준비한다."""
+_MEDIA_LIMIT = 40
+_IMAGE_PATH = re.compile(r'/common/imgView\.do\?attachId=[0-9a-f]{64}&fileSn=[0-9a-f]{32}&mode=origin')
+_DOWNLOAD = re.compile(r"fn_egov_downFile\('([0-9a-f]{64})',[ \t]*'([0-9a-f]{32})'\);[ \t]*return false;")
+_ATTACHMENT_FORMATS = {'pdf', 'hwp', 'hwpx', 'png', 'jpg', 'jpeg'}
+
+
+class _MediaParser(_NoticeParser):
+    def __init__(self):
+        super().__init__()
+        self.media = []
+        self.seen_links = set()
+        self.anchor = None
+        self.explicit_hidden_depth = 0
+
+    def add_media(self, kind, url, label, format_name=None):
+        if url is not None:
+            if (kind, url) in self.seen_links:
+                return
+            self.seen_links.add((kind, url))
+        if len(self.media) == _MEDIA_LIMIT:
+            raise ValueError('도서관 공지의 이미지·첨부 후보가 40개를 초과했습니다.')
+        self.media.append({'kind': kind, 'source_url': url, 'label': label, 'format': format_name})
+
+    def handle_starttag(self, tag, attrs):
+        names = [name for name, _ in attrs]
+        if not self.hidden_depth and not self.explicit_hidden_depth:
+            if (not self.tags and tag == 'input' and ('name', 'bIdx') in attrs
+                    and (names.count('name') > 1 or names.count('value') > 1)):
+                raise ValueError('도서관 공지 번호의 HTML 속성이 중복되었습니다.')
+            classes = {'bod_view'} if not self.tags else {'view_cont', 'view_file'}
+            if (len(self.tags) <= 1 and tag in ('div', 'dl') and names.count('class') > 1
+                    and any(name == 'class' and classes.intersection((value or '').split()) for name, value in attrs)):
+                raise ValueError('도서관 공지 영역의 HTML 속성이 중복되었습니다.')
+        super().handle_starttag(tag, attrs)
+        if self.hidden_depth or self.explicit_hidden_depth or not self.tags:
+            return
+        values = dict(attrs)
+        if 'hidden' in values:
+            if tag not in _VOID_TAGS:
+                self.explicit_hidden_depth = len(self.tags)
+            return
+
+        if tag == 'img' and self.section == 'description':
+            source = values.get('src') or ''
+            url = OFFICIAL_ORIGIN + source if names.count('src') == 1 and _IMAGE_PATH.fullmatch(source) else None
+            label = ' '.join((values.get('alt') or '').split()) or None
+            self.add_media('image', url, label)
+        if tag != 'a' or not self.attachment_open:
+            return
+        script = values.get('onclick') or ''
+        if 'btn_preview' in (values.get('class') or '').split() and script.startswith('fn_egov_preview('):
+            return
+        if self.anchor is not None:
+            raise ValueError('도서관 공지의 첨부 링크가 중첩되었습니다.')
+        if not (values.get('href') or script):
+            return
+        url = None
+        if values.get('href') == '#' and names.count('href') == names.count('onclick') == 1:
+            match = _DOWNLOAD.fullmatch(script)
+            if match:
+                url = f'{OFFICIAL_ORIGIN}/cmm/fms/FileDown.do?atchFileId={match[1]}&fileSn={match[2]}'
+        self.anchor = (len(self.tags), url, [])
+
+    def handle_data(self, data):
+        super().handle_data(data)
+        if self.anchor is not None and not self.hidden_depth and not self.explicit_hidden_depth:
+            self.anchor[2].append(data)
+
+    def handle_endtag(self, tag):
+        depth = len(self.tags)
+        super().handle_endtag(tag)
+        if self.explicit_hidden_depth == depth and len(self.tags) < depth:
+            self.explicit_hidden_depth = 0
+        if tag == 'a' and self.anchor is not None and self.anchor[0] == depth:
+            _, url, parts = self.anchor
+            self.anchor = None
+            label = ' '.join(''.join(parts).split()) or None
+            filename = label or ''
+            before_size, bracket, _ = filename.rpartition('[')
+            if bracket and filename.endswith(']'):
+                filename = before_size.rstrip()
+            _, dot, extension = filename.rpartition('.')
+            extension = extension.lower()
+            format_name = extension if dot and extension in _ATTACHMENT_FORMATS else None
+            self.add_media('attachment', url, label, 'jpeg' if format_name == 'jpg' else format_name)
+
+
+def _parse_notice(text: str, notice_id: str, parser: _NoticeParser) -> str:
     if not isinstance(text, str) or '\x00' in text:
         raise ValueError('도서관 공지 HTML 형식이 올바르지 않습니다.')
     if not isinstance(notice_id, str) or not re.fullmatch(r'[1-9][0-9]*', notice_id):
         raise ValueError('도서관 공지 번호가 올바르지 않습니다.')
-    parser = _NoticeParser()
     parser.feed(text)
     parser.close()
     if parser.tags or not parser.found_board:
@@ -194,10 +279,24 @@ def parse_library_notice(text: str, *, notice_id: str) -> dict:
     if parser.notice_ids != {notice_id}:
         raise ValueError('도서관 공지 HTML의 번호가 요청과 일치하지 않습니다.')
     title = ' '.join(''.join(parser.parts.get('title', [])).split())
-    lines = [' '.join(line.split()) for line in ''.join(parser.parts.get('description', [])).splitlines()]
-    body = '\n'.join(line for line in lines if line)
     if not title:
         raise ValueError('도서관 공지 제목이 없습니다.')
+    return title
+
+
+def parse_library_media(text: str, *, notice_id: str) -> list[dict]:
+    """공식 도서관 상세의 이미지와 첨부 후보를 확인한다."""
+    parser = _MediaParser()
+    _parse_notice(text, notice_id, parser)
+    return parser.media
+
+
+def parse_library_notice(text: str, *, notice_id: str) -> dict:
+    """안성시 도서관 상세의 본문 텍스트와 게시일만 준비한다."""
+    parser = _NoticeParser()
+    title = _parse_notice(text, notice_id, parser)
+    lines = [' '.join(line.split()) for line in ''.join(parser.parts.get('description', [])).splitlines()]
+    body = '\n'.join(line for line in lines if line)
     if not body:
         detail = ' 이미지·첨부를 확인해 주세요.' if parser.review_flags else ''
         raise ValueError('도서관 공지 본문 텍스트가 없습니다.' + detail)

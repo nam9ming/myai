@@ -149,13 +149,33 @@ python3.13 -B -m processing.collection.batch living \
 
 기본 한도는 3페이지·20건이며 최대 20페이지·80건까지 지정할 수 있다. 요청을 하나씩 보내며 사이에 0.5초를 둔다. 목록 응답은 건당 2MiB, 상세는 건당 8MiB까지 받는다. HTTP 401·403·429·503을 받으면 이후 요청을 멈춘다. 조회 중 목록 건수나 페이지 수가 바뀌거나 ID가 중복되면 해당 페이지는 원본과 실패 사유를 보관하고 이전 페이지에서 확인한 번호만 사용한다.
 
-`data/private/collection-batches/<name>/`에 포털 CSV, 받은 목록·상세 원본, 성공한 상세의 비교 결과를 저장한다. `batch.json`에는 각 원본의 해시와 수신 시각, 목록·상세 처리 상태가 있다. 맨 마지막에 `batch.json`이 생긴 묶음만 사용한다. 종료 0은 수집 중 보고된 페이지와 선택한 상세를 모두 처리한 경우, 2는 한도 도달 또는 일부 실패를 기록한 경우, 1은 입력·보관 오류다. 사이트 목록의 전체 건수가 같아도 수집 중 게시물이 바뀔 수 있다. 정기 실행과 첨부 수집은 후속 단계다.
+`data/private/collection-batches/<name>/`에 포털 CSV, 받은 목록·상세 원본, 성공한 상세의 비교 결과를 저장한다. `batch.json`에는 각 원본의 해시와 수신 시각, 목록·상세 처리 상태가 있다. 맨 마지막에 `batch.json`이 생긴 묶음만 사용한다. 종료 0은 수집 중 보고된 페이지와 선택한 상세를 모두 처리한 경우, 2는 한도 도달 또는 일부 실패를 기록한 경우, 1은 입력·보관 오류다. 사이트 목록의 전체 건수가 같아도 수집 중 게시물이 바뀔 수 있다. 정기 실행은 후속 단계다.
+
+### 도서관 공지 이미지·첨부 원본 보관
+
+게시물 번호로 공식 상세 HTML을 보관하고 본문 이미지와 첨부 목록을 확인한다. 읽을 수 있는 본문이 없는 공지도 게시물 번호와 제목이 확인되면 후보를 남긴다. 실제 다운로드 동작은 HTML에서 확인된 규격으로만 해석한다. [안성시 robots.txt](https://www.anseong.go.kr/robots.txt)에서 제한한 이미지 경로와 확인 요청에 HTTP 403을 반환한 파일 경로는 목록에만 기록한다.
+
+```sh
+python3.13 -B -m processing.collection.media inspect --web-id 202585 --name library-notice
+```
+
+`data/private/collection-media-notices/library-notice/notice.json`의 `media` 배열에서 순서대로 1부터 번호를 센다. 주소를 확인할 수 없는 항목은 `source_url=null`로 남긴다. 원문과 첨부를 비교해 용도·사용 조건·개인정보를 확인한 운영자가 확보한 파일을 해당 항목에 연결한다. 아래 시각은 예시이며 `--downloaded-at`에는 실제로 내려받은 시각을 UTC로 적는다.
+
+```sh
+python3.13 -B -m processing.collection.media store \
+  --notice library-notice --asset 1 --file data/private/notice.hwpx \
+  --downloaded-at 2026-11-27T08:00:00Z --name reviewed-attachment
+```
+
+이미지는 PNG·JPEG, 첨부는 PDF·HWP·HWPX·PNG·JPEG를 파일당 8MiB까지 받는다. 파일 헤더 또는 컨테이너 표식을 확인하고 부모 HTML, 연결 주소, SHA-256, 운영자가 입력한 수신 시각을 다시 대조한다. 부모 HTML과 매체 파일을 각각 `collection-media-notices/`, `collection-media/`에 보관한다. 두 묶음을 함께 보존한다. 운영자가 원문과 파일의 대응을 확인한다. 본문 추출·OCR·QR 판독은 별도 단계다.
 
 ### 수집 원본을 D03 등록 입력으로 준비하기
 
 단건 수집은 `archive_kind=single`과 `capture.json`, 목록 수집은 `archive_kind=batch`와 `batch.json`을 사용한다. 직접 내려받은 포털 CSV는 `asset=portal`, 웹 상세는 게시물 번호를 지정한다. 부분 수집 묶음에서도 파싱에 성공한 상세를 선택할 수 있다. 명령은 수집 기록의 원본 해시와 파일을 대조하고 웹 상세의 게시물 번호를 다시 확인한다.
 
 API 수집은 `archive_kind=portal`, API 수집 이름, `asset="1"` 같은 응답 페이지 번호를 지정한다. `official_url`은 `portal.json`의 해당 `source_url`과 맞추고 `collected_at`은 `null`로 둔다. D03은 해당 응답 원본과 기록된 수신 시각을 연결한다. 비교에 API 묶음을 사용했다면 D03 원본은 해당 API 응답 페이지를 선택한다.
+
+도서관 매체는 `archive_kind=media`, `archive_name`에는 `store --name` 값, `asset`에는 같은 항목 번호를 문자열로 넣는다. `official_url`은 `notice.json`의 부모 공지 주소, `collected_at`은 `null`로 둔다. D03이 운영자 입력 다운로드 시각과 매체 원본 해시를 연결한다. 사람 검토를 마친 제목·본문을 전달하고 기존 D03 명령으로 등록한다.
 
 다음은 이미 보관한 `synthetic-capture` 묶음의 합성 예다. 실제 등록 입력은 담당자가 원본·개인정보·추출 대상 문구를 대조해 작성한다. 게시일·공식 문서번호 미상은 `null`로 둔다. 웹 수신 시각은 수집 기록을 사용하므로 `collected_at`을 `null`로 둔다. 포털 CSV는 실제 다운로드 출처를 담당자가 확인하고, `official_url`에는 수집 기록의 `portal.catalog_url`, `collected_at`에는 실제로 받은 시각을 입력한다. `redaction_log`는 제거 위치와 범주를 `location`, `category`로 적고 제거한 실제 값은 적지 않는다.
 

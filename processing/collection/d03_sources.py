@@ -7,6 +7,7 @@ from .__main__ import PORTAL_MAX_BYTES, SOURCE_PAGES, decode_input, parse_detail
 from .capture import PORTAL_SECTION, capture_timestamp, open_archive, validate_name
 from .capture import read_capture_file as _read
 from .capture import read_receipt as _receipt
+from .media import read_media_assets
 from .official_web import DETAIL_MAX_BYTES, detail_url
 from .portal import read_portal_snapshot
 
@@ -102,7 +103,7 @@ def _web_asset(directory: int, archive_kind: str, receipt: dict, items: dict[str
 def capture_assets(private_root: Path, archive_kind: str, archive_name: str,
                    asset_keys: set[str]) -> dict[str, dict]:
     """정해진 수집 경로 안의 원본만 읽으며 파일이나 기록을 바꾸지 않는다."""
-    if not isinstance(archive_kind, str) or (archive_kind not in _ARCHIVES and archive_kind != "portal"):
+    if not isinstance(archive_kind, str) or (archive_kind not in _ARCHIVES and archive_kind not in ("portal", "media")):
         raise ValueError("지원하지 않는 수집 기록 종류입니다.")
     if not isinstance(archive_name, str):
         raise ValueError("수집 이름이 유효하지 않습니다.")
@@ -111,6 +112,8 @@ def capture_assets(private_root: Path, archive_kind: str, archive_name: str,
         key != "portal" and not _web_id(key) for key in asset_keys
     ):
         raise ValueError("선택한 수집 원본 키가 유효하지 않습니다.")
+    if archive_kind == "media":
+        return read_media_assets(private_root, archive_name, asset_keys)
     if archive_kind == "portal":
         _, receipt = read_portal_snapshot(private_root, archive_name)
         pages = {str(entry["page"]): entry for entry in receipt["responses"]}
