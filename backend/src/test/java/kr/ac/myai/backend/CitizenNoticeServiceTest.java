@@ -185,6 +185,18 @@ class CitizenNoticeServiceTest {
     }
 
     @Test
+    void cachedSnapshotStillRejectsAnOriginalThatNoLongerMatchesItsChecksum() {
+        service.list(null);
+        var stored = records.get(CURRENT);
+        var row = stored.snapshot();
+        // 캐시에 넣은 뒤 원문만 손상돼도 이전 내용을 정상으로 내보내지 않는다.
+        records.put(CURRENT, new PublicSnapshotRepository.Published(new kr.ac.myai.backend.repository.PublicationRepository.Snapshot(
+                row.id(), row.mode(), row.caseId(), row.canonical() + " ", row.checksum(), row.kind(), row.rulesVersion(),
+                row.dictionaryVersion()), stored.schemaVersion(), stored.createdAt(), stored.currentId()));
+        error(() -> service.list(null), HttpStatus.INTERNAL_SERVER_ERROR, "SNAPSHOT_INVALID");
+    }
+
+    @Test
     void omittedHeadAbsenceIsUnavailableAndBrokenHeadIsInvalid() {
         head = null;
         error(() -> service.list(null), HttpStatus.SERVICE_UNAVAILABLE, "PUBLIC_DATA_NOT_READY");

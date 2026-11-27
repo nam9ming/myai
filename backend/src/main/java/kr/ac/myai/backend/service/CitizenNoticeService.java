@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import kr.ac.myai.backend.exception.ApiException;
 import kr.ac.myai.backend.importing.ImportException;
+import kr.ac.myai.backend.importing.ReviewedImportReader;
 import kr.ac.myai.backend.logging.PublicRequestLogContext;
 import kr.ac.myai.backend.publication.CitizenPublicationContent;
 import kr.ac.myai.backend.publication.PublicationContent;
@@ -40,7 +41,7 @@ public class CitizenNoticeService {
     private final PublicationContent shared;
     private final ObjectMapper mapper;
     // 검증을 마친 선택 공개본(현재본과 교체본). 공개본 행은 바뀌지 않으므로 checksum과 메타데이터가 같으면 다시
-    // 검증·파싱하지 않는다. 행의 원문만 바뀐 경우에도 이미 검증한 내용만 내보낸다. 이력 공개본은 넣지 않는다(밀어내지 않게).
+    // 검증·파싱하지 않는다. 원문과 checksum의 대조는 매번 한다. 이력 공개본은 넣지 않는다(밀어내지 않게).
     // shortcut: 8MiB 공개본은 파싱 후 약 30MiB라 2개까지만 둔다. 동시 선택 공개본이 늘면 크기 기준 상한으로 바꾼다.
     private final Map<List<Object>, JsonNode> verifiedSnapshots = java.util.Collections.synchronizedMap(
             new java.util.LinkedHashMap<>(8, 0.75f, true) {
@@ -220,12 +221,16 @@ public class CitizenNoticeService {
                 var key = java.util.Arrays.<Object>asList(row.id(), row.mode(), row.caseId(), row.checksum(), row.kind(),
                         row.rulesVersion(), row.dictionaryVersion(), published.schemaVersion(), published.createdAt());
                 JsonNode snapshot = verifiedSnapshots.get(key);
+                byte[] canonical = row.canonical() == null ? null : row.canonical().getBytes(StandardCharsets.UTF_8);
                 if (snapshot == null) {
                     citizens.verifySnapshot(row, published.schemaVersion(), published.createdAt());
                     snapshot = shared.parse(row.canonical());
                     if (remember) verifiedSnapshots.put(key, snapshot);
+                } else {
+                    // 파싱 결과만 재사용한다. 지금 읽은 원문이 검증 때와 같은지는 매번 checksum으로 확인한다.
+                    shared.check(canonical != null && ReviewedImportReader.sha256(canonical).equals(row.checksum()), "snapshot.checksum");
                 }
-                bytes += row.canonical().getBytes(StandardCharsets.UTF_8).length;
+                bytes += canonical.length;
                 if (bytes > HISTORY_BYTES) throw tooLarge();
                 verified.put(id, snapshot);
                 return snapshot;
