@@ -309,7 +309,7 @@ python3.13 -B -m processing.collection.sports_batch --name sports-20261128 --ver
 - 허용 목록은 이 호스트의 원본이 없어 `data/private`의 안성시 누리집 실제 원본(상세 234개와 그 가운데 제목 `h4` 202개, 목록 35개)에서 쓰인 표기만 옮겼다. 문서 전체에서 종료 태그는 가장 안쪽의 열린 요소를 닫아야 하고 문서 끝에 열린 요소가 없어야 한다(svg 안 `<path/>`도 거부된다). 브라우저가 속성을 합치는 `html`·`body` 태그는 나올 때마다 조상 목록으로 보고 `frameset`은 거부한다. 강제 줄바꿈 문자(U+000B·U+000C·U+0085·U+2028·U+2029)와 그 숫자 참조(`…`가 되는 `&#133;` 제외)는 문서 어디서든 거부한다. 태그·주석 경계는 공용 `PinnedHTMLParser`를 따른다.
 - 확인하지 않는 것: 읽는 영역·조상 밖 요소의 영향(겹쳐 덮는 형제 요소, 문서 안·외부 스크립트의 실행 결과), 스타일시트가 class·id·속성 선택자나 글꼴로 거는 숨김(`class="blind"` 등), 조상에서 시작 태그가 닫는 요소(`td` 안의 `td` 등. 조상이 줄어들 뿐이다), 허용한 값끼리의 조합(글자색과 배경색이 같음, 작은 글자, `height`·`overflow:hidden` 상자의 잘림 등), `img`의 `width`·`height` 값, 링크 글자가 비었는지.
 
-`data/private/collection-sports-notices/<name>/`에 `robots.txt`·`list-1.html`·`detail-<seq>.html`·`parsed-<seq>.json`(파서 `sports-notice-parser-v6`)을 쓰고 마지막에 `batch.json`을 쓴다. 종료 코드는 0 완료, 2 robots 미허용·한도 도달·일부 실패, 1 입력·보관·재검증 오류다. `--verify`는 새 요청 없이 원본 해시, robots.txt 허용, 목록 원본의 공지 번호·순서, 현재 파서로 다시 만든 파싱 결과를 대조한다. **D03 연결은 후속이다.** `batch.json`은 게시판 키 `board=notice`와 공통 묶음(`web_batch.py`)의 상세 기록 형식을 따른다.
+`data/private/collection-sports-notices/<name>/`에 `robots.txt`·`list-1.html`·`detail-<seq>.html`·`parsed-<seq>.json`(파서 `sports-notice-parser-v7`)을 쓰고 마지막에 `batch.json`을 쓴다. 종료 코드는 0 완료, 2 robots 미허용·한도 도달·일부 실패, 1 입력·보관·재검증 오류다. `--verify`는 새 요청 없이 원본 해시, robots.txt 허용, 목록 원본의 공지 번호·순서, 현재 파서로 다시 만든 파싱 결과를 대조한다. **D03 연결은 후속이다.** `batch.json`은 게시판 키 `board=notice`와 공통 묶음(`web_batch.py`)의 상세 기록 형식을 따른다.
 
 파싱 결과는 판정 없이 표시 문구를 그대로 둔다.
 
@@ -318,7 +318,7 @@ python3.13 -B -m processing.collection.sports_batch --name sports-20261128 --ver
 | `title`·`body_lines` | 제목과, 본문을 문단·블록·상자·`br` 경계로 나눈 줄. 소스 줄바꿈은 브라우저 기본값처럼 공백으로 본다. 줄 안 공백만 하나로 줄이고 빈 줄은 뺀다. |
 | `images`·`links` | 본문 이미지의 `src`·`alt`, 링크의 `href`·글자 원문. 본문 밖 첨부 목록과 게시일은 위치를 몰라 읽지 않는다. |
 | `keyword_lines` | 제목·본문 줄 가운데 검색어가 든 줄을 그대로 옮긴 색인. 검색어(`KEYWORD_GROUPS`의 `reservation_schedule`·`priority`·`suspension`)는 공백을 무시하고 맞춘다. 넓게 고르므로 관계없는 줄도 들어온다. |
-| `review_flags` | `markup_unverified`(실제 마크업 확인 전까지 항상), `inline_image`, `image_only`, `link`, `source_newline_joined`(소스 줄바꿈을 합쳤다. 외부 CSS가 줄을 살릴 수 있어 원문과 대조한다). |
+| `review_flags` | `markup_unverified`(실제 마크업 확인 전까지 항상), `inline_image`, `image_only`, `link`, `source_newline_joined`(제목·본문의 소스 줄바꿈을 합쳤다. 외부 CSS가 줄을 살릴 수 있어 원문과 대조한다). |
 
 날짜·시간·비용은 해석하지 않는다. 예약(신청) 일정 줄은 이용·운영 일정과 합치지 않으며, 원문 한 문단·한 칸에 둘이 함께 적혀 있으면 원문 그대로 사람이 나눈다. `priority` 줄은 우선 대상 문구일 뿐 신청 자격 판정이 아니다. 비용은 읽지 않으므로 무료와 미상을 여기서 구분하지 않는다. 조사 기록에 따르면 이용 제한 세부가 이미지에만 있는 공지(`seq=111`)가 있다. 이런 공지는 `inline_image`·`image_only`로 사람 확인 대상이 되며 OCR은 하지 않는다.
 

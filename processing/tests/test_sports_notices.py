@@ -87,7 +87,7 @@ class SportsParserTest(unittest.TestCase):
             "suspension": ["3월 9일 정기 점검으로 예약 중단"],
         })
         self.assertEqual(record["links"], [{"href": "/board/download.do?id=1", "text": "안내문.hwp"}])
-        self.assertEqual(record["review_flags"], ["link", "markup_unverified"])
+        self.assertEqual(record["review_flags"], ["link", "markup_unverified", "source_newline_joined"])
 
     def test_inline_white_space_that_keeps_newlines_is_rejected(self):
         # 브라우저는 이 줄바꿈을 줄로 보이므로 합치면 예약기간과 이용기간이 섞인다.
@@ -125,8 +125,9 @@ class SportsParserTest(unittest.TestCase):
         self.assertEqual(record["review_flags"], ["markup_unverified", "source_newline_joined"])
         self.assertEqual(parsed("<p>가\r\n 나\r다</p>")["body_lines"], ["가 나 다"])
         # 태그 사이의 빈 줄바꿈은 줄을 합치지 않는다.
-        record = parsed("<p>\n가\n</p>\n<p>나</p>")
+        record = parsed("<p>\n가\n</p>\n<p>나</p>", title="\r\n제목\n")
         self.assertEqual((record["body_lines"], record["review_flags"]), (["가", "나"], ["markup_unverified"]))
+        self.assertIn("source_newline_joined", parsed(title="접수기간 3.2.\r이용기간 4.1.")["review_flags"])
 
     def test_image_only_restriction_is_flagged_for_review(self):
         record = parse_detail(detail("111", '<p><img src="/upload/limit.jpg" alt="이용 제한 안내"></p>',
@@ -242,7 +243,7 @@ class SportsBatchTest(unittest.TestCase):
         self.assertEqual(receipt["pages"][0]["source_url"], "https://reservation.anseong.go.kr/index.do?menu_id=0008")
         self.assertEqual([item["web_id"] for item in receipt["items"]], ["111", "96"])
         parsed = json.loads((directory / "parsed-96.json").read_text(encoding="utf-8"))
-        self.assertEqual((parsed["parser_version"], parsed["record"]["external_id"]), ("sports-notice-parser-v6", "96"))
+        self.assertEqual((parsed["parser_version"], parsed["record"]["external_id"]), ("sports-notice-parser-v7", "96"))
 
         assets = read_sports_batch(self.private, "run")
         self.assertEqual(list(assets), ["111", "96"])

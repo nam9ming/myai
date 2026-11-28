@@ -16,7 +16,7 @@ ROBOTS_URL = ORIGIN + "/robots.txt"
 ROBOTS_MAX_BYTES = 512 * 1024
 _LISTING_PATH = "/index.do?menu_id=0008"
 LISTING_URL = ORIGIN + _LISTING_PATH
-PARSER_VERSION = "sports-notice-parser-v6"
+PARSER_VERSION = "sports-notice-parser-v7"
 _DETAIL_QUERY = {"board_id": "notice", "cp": "/board/view.do", "menu_id": "0008", "pageIndex": "1"}
 _SEQ = re.compile(r"[1-9][0-9]{0,17}")
 _ROBOTS_LINE = re.compile(r"([A-Za-z-]+)[ \t]*:(.*)")
@@ -407,7 +407,7 @@ def parse_detail(text: str, *, seq: str) -> dict:
             flags.add("image_only")
     if parser.links:
         flags.add("link")
-    if lines != _lines(shown.replace("\r", "\n")):
+    if lines != _lines(shown.replace("\r", "\n")) or [title] != _lines("".join(parser.title).replace("\r", "\n")):
         flags.add("source_newline_joined")  # 외부 CSS가 white-space:pre-wrap 등이면 화면에서는 줄이 나뉜다.
     return {
         "external_id": seq,
