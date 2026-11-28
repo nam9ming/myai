@@ -85,6 +85,9 @@ class PinnedHTMLParser(HTMLParser):
             if match is None:
                 return end + 1
             tag = match.group(1).lower()
+            if tag == 'br':
+                # 브라우저는 `</br>`을 `<br>`로 읽어 줄을 바꾸고, Python은 종료 태그로 넘긴다. 실제 원본에 없어 받지 않는다.
+                raise self.markup_error()
         self.handle_endtag(tag)
         return end + 1
 

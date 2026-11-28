@@ -31,7 +31,7 @@ class PinnedHTMLParserTest(unittest.TestCase):
         for html in ('<!--><p>x</p>-->', '<!-- a --!>', '<!-- 끝나지 않는 주석', '<![CDATA[x]]>', '<p></p title=">">',
                      '<!DOCTYPE html PUBLIC "x>', '<?x', '<p class="a"\xa0id="b">x</p>', '<plaintext>x',
                      '<script><!--<script></script>--></script>', '<svg><style><!--</style></svg>', '<svg><template>',
-                     '<svg><foreignObject><style/></foreignObject></svg>', '<p'):
+                     '<svg><foreignObject><style/></foreignObject></svg>', '<p', '가</br>나', '가</BR >나'):
             with self.subTest(html=html), self.assertRaisesRegex(ValueError, '해석이 갈리는'):
                 _read(html)
 
