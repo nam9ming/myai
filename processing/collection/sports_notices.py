@@ -25,8 +25,7 @@ _PRODUCT = USER_AGENT.split("/")[0]  # RFC 9309 그룹은 제품 토큰으로 �
 _CRAWL_DELAY = re.compile(r"[0-9]{1,5}(?:\.[0-9]+)?")
 _VOID_TAGS = frozenset("area base br col embed hr img input link meta source track wbr".split())
 # 읽는 영역(목록의 상세 링크, 상세의 h4·div.view_cont, seq 입력)과 그 안·조상은 아래 허용 목록만 받는다. 이 호스트
-# 원본이 없어 data/private의 안성시 누리집 실제 원본(상세 234개의 제목 h4 202개·view_cont, 목록 35개의 상세 링크와
-# 각 조상)에서 쓰인 태그·속성 이름·인라인 스타일 선언만 옮겼다.
+# 원본이 없어 안성시 누리집 실제 원본(README 참고)에서 쓰인 표기만 옮겼다.
 _BODY = {"a": "href style target title", "br": "style", "div": "class data-hjsonver data-jsonlen id style", "h1": "",
          "h2": "", "h3": "", "img": "alt height src style width", "li": "", "p": "class data-pm-slice style",
          "span": "lang style", "strong": "style", "u": "", "ul": ""}
@@ -204,7 +203,7 @@ def _feed(parser: PinnedHTMLParser, text: str) -> None:
 class _Parser(PinnedHTMLParser):
     """종료 태그는 문서 어디서든 가장 안쪽의 열린 요소를 닫아야 하고, 문서 끝에 열린 요소가 없어야 한다.
 
-    이 스택으로 읽는 영역의 끝과 조상을 정한다. 실제 원본(상세 234개·목록 35개)은 모두 이 조건을 지켰다.
+    이 스택으로 읽는 영역의 끝과 조상을 정한다. 실제 원본은 모두 이 조건을 지켰다.
     """
     message = _INVALID_DETAIL
 
