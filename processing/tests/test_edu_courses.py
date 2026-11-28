@@ -38,6 +38,8 @@ _PHOTO = (f'<div class="file_slide_item"><a href="/edu/DATA/EDU/PLACE/ratio/PLAC
           f'class="file_slide_anchor" target="_blank"><img src="{_IMAGE}" alt="교육동 외관.jpg"></a></div>')
 _ATTACHMENT = (f'<div id="updateFileList"><a href="#" onclick="{_DOWNLOAD}"><span class="skip">파일 다운로드</span> '
                '강의계획서.hwp</a></div><!--<ul id="updateFileList"><li>예전 목록</li></ul>-->')
+# 재귀 한도를 넘는 중첩. RecursionError가 아니라 구조 오류(ValueError)로 거부해야 그 항목만 parse_failed가 된다.
+_DEEP = "<span>" * 1200 + "무료" + "</span>" * 1200
 _ROWS = {
     "접수기간": "2026-11-18 09:00 ~ 2026-12-18 17:00",
     "접수현황": ('\n<span>신청 <em class="em_b_black">6</em>명 / 모집인원 <em class="em_b_black">50</em>명</span>\n'
@@ -103,6 +105,7 @@ class CourseListingTest(unittest.TestCase):
             ("구조", _listing(rows=_row("1", extra=other_link))),
             ("구조", _listing(rows=_row("1").replace("eduLctreNo=1&amp;page", "eduLctreNo=2&amp;page", 1))),
             ("구조", _listing(rows=_row("01"))),
+            ("구조", _listing(rows=_row("1", extra=_DEEP))),
         ]
         for number, (message, raw) in enumerate(cases):
             with self.subTest(case=number), self.assertRaisesRegex(ValueError, message):
@@ -180,6 +183,7 @@ class CourseDetailTest(unittest.TestCase):
             ("구조", _detail().replace("<span>이전</span>", f'<span>이전</span><img src="{_IMAGE}" alt="사진">', 1)),
             ("구조", _detail().replace('class="learning_content"', 'class="learning_content blind"')),
             ("구조", _detail().replace('<div id="learning_cont"', '<div hidden id="learning_cont"')),
+            ("구조", _detail(수강료=_DEEP)),
         ]
         # 화면에 나오지 않을 수 있는 글자가 제목·접수상태·항목명·첨부 이름에 섞이면 거부한다.
         for wrap in ("<noscript>{}</noscript>", "<details>{}</details>"):
@@ -236,7 +240,7 @@ class CourseBatchTest(unittest.TestCase):
 
         parsed = self.root / "run" / "parsed-5086.json"
         original = parsed.read_bytes()
-        for changed, message in ((original.replace(b"edu-course-parser-v3", b"edu-course-parser-v2"), "파서 버전"),
+        for changed, message in ((original.replace(b"edu-course-parser-v4", b"edu-course-parser-v3"), "파서 버전"),
                                  (original.replace("선착순".encode(), "추첨".encode()), "파싱 결과")):
             parsed.chmod(0o600)
             parsed.write_bytes(changed)
@@ -248,17 +252,20 @@ class CourseBatchTest(unittest.TestCase):
             read_course_batch(self.private, "run", {"5086"})
 
     def test_failed_detail_keeps_raw_and_reason(self):
-        self.listing.return_value = _listing("5086", "1", total=1)
+        self.listing.return_value = _listing("2", "5086", "1", total=1)
         alert = b"<script>alert('x');</script>"
-        self.detail.side_effect = lambda course, **_options: alert if course == "1" else _detail(course).encode()
+        pages = {"1": alert, "2": _detail("2", 수강료=_DEEP).encode()}
+        self.detail.side_effect = lambda course, **_options: pages.get(course) or _detail(course).encode()
         summary = capture_course_batch("run", self.root)
         receipt = json.loads((self.root / "run" / "batch.json").read_text(encoding="utf-8"))
         self.assertEqual((summary["status"], summary["parsed"]), ("partial", 1))
-        self.assertEqual(receipt["items"][1]["status"], "parse_failed")
-        self.assertIn("구조", receipt["items"][1]["error"])
+        self.assertEqual([item["status"] for item in receipt["items"]], ["parse_failed", "parsed", "parse_failed"])
+        self.assertTrue(all("구조" in receipt["items"][index]["error"] for index in (0, 2)))
         self.assertEqual((self.root / "run" / "detail-1.html").read_bytes(), alert)
-        with self.assertRaisesRegex(ValueError, "파싱이 완료된"):
-            read_course_batch(self.private, "run", {"1"})
+        self.assertEqual((self.root / "run" / "detail-2.html").read_bytes(), pages["2"])
+        for course in ("1", "2"):
+            with self.subTest(course=course), self.assertRaisesRegex(ValueError, "파싱이 완료된"):
+                read_course_batch(self.private, "run", {course})
 
     def test_cli_exit_codes(self):
         self.listing.return_value = _listing("5086", total=1)

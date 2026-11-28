@@ -24,8 +24,10 @@ _ECHO = re.compile(r'qrcode\("' + re.escape(OFFICIAL_ORIGIN + _VIEW_PATH)
 _IMAGE = re.compile(re.escape(CONTEXT_PATH) + r"/common/imgView\.do\?attachId=[0-9a-f]{64}&fileSn=[0-9a-f]{32}"
                     r"&mode=ratioView")
 _MAX_ROWS = 100
+# 고른 영역 안 중첩 한도. 실제 목록·상세 28쪽은 9단이었다. 하위 트리를 재귀로 읽으므로 RecursionError 전에 거부한다.
+_MAX_DEPTH = 64
 # 공유 태그 경계 규칙(_NoticeParser)이나 아래 출력·허용 규칙이 바뀌면 올린다.
-PARSER_VERSION = "edu-course-parser-v3"
+PARSER_VERSION = "edu-course-parser-v4"
 _TEXT_FIELDS = {
     "접수기간": "application_period",
     "접수현황": "enrollment_status",
@@ -102,6 +104,8 @@ class _Page(_NoticeParser):
             raise ValueError(self.error)
         if hidden or not (self.open or self.select(tag, (values.get("class") or "").split(), values)):
             return
+        if len(self.open) >= _MAX_DEPTH:
+            raise ValueError(self.error)
         node = (tag, values, [])
         (self.open[-1][2] if self.open else self.trees).append(node)
         if tag not in _VOID_TAGS:
