@@ -107,7 +107,20 @@ class LibraryHoursParserTest(unittest.TestCase):
                             "div 안의 글자"),
             "script": (_TABLES + "<script>x()</script>", "conts 안의 script"),
             "self_closing": (_TABLES.replace("<td></td>", "<td/>"), "스스로 닫는 td"),
-            "br_outside_text": (_TABLES.replace("<h4>작은", "<br><h4>작은"), "글자 밖의 br"),
+            "br_outside_text": (_TABLES.replace("<h4>작은", "<br><h4>작은"), "conts 안의 br"),
+            # 허용 목록은 실제 원본에 쓰인 부모·자식 조합과 속성 값 전체다. 숨김 기법이 아니어도 목록 밖이면 거부한다.
+            "br_in_th": (_TABLES.replace("가 도서관", "가<br>도서관"), "th 안의 br"),
+            "p_in_conts": (_TABLES.replace("<h4>작은도서관 1개관</h4>", '<p class="guide">x</p>'), "conts 안의 p"),
+            "h4_in_div": (_TABLES.replace('<p class="guide">', '<h4>x</h4><p class="guide">'), "div 안의 h4"),
+            "class_subset": (_TABLES.replace('class="tip mT10"', 'class="tip"'), "p class 값"),
+            "td_colspan": (_TABLES.replace("<td></td></tr>", '<td colspan="1"></td></tr>'), r"속성 td\[colspan\]"),
+            # 브라우저는 표 안의 HTML 공백 밖 글자를 표 앞으로 옮겨 보여 준다.
+            "nbsp_between_rows": (_TABLES.replace("</tr>\n<tr>", "</tr>&nbsp;\n<tr>", 1), "tbody 안의 글자"),
+            "misnested_end": (_TABLES.replace("</table>\n</div>", "</div></table>", 1), "table 안에서 닫는 div"),
+            # 3.13.5는 따옴표 밖 `\xa0`를 속성 구분자로 읽어 자식 검사가, 3.14.6은 문법 검사가 거부해 사유가 갈렸다.
+            "unicode_space_self_closing": (_TABLES.replace('<div class="tbl-box">', '<div class=tbl-box\xa0/>', 1),
+                                           markup),
+            "attribute_self_closing": (_TABLES.replace("<td>열람실", "<td a=b />열람실"), r"속성 td\[a\]"),
             "unclosed_caption": (_TABLES.replace("</caption>\n", "", 1), "caption 안의 thead"),
             "unclosed_row": (_TABLES.replace("</tbody>", "<tr></tbody>", 1), "tr 안에서 닫는 tbody"),
             "comment": (_TABLES.replace("<h4>작은", "<!-- 주석 --><h4>작은"), "선언·처리 지시문·주석"),
@@ -135,6 +148,7 @@ class LibraryHoursParserTest(unittest.TestCase):
         fixtures = {name: (page(body), message) for name, (body, message) in cases.items()}
         fixtures.update({
             "title": (page(title="공지사항 | 안성시 도서관"), "페이지가 아닌 응답"),
+            "title_attribute": (page().replace("<title>", '<title lang="ko">'), "title 속성"),
             "outside_comment": (page(outside="<!-- a --!> -->"), markup),
             # 본문 밖의 NUL 태그 이름을 3.14.6만 태그로 받아 수집 상태가 버전마다 갈렸다.
             "outside_nul_tag": (page(outside="<a\x00b>"), "NUL 문자"),

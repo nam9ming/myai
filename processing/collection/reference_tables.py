@@ -32,24 +32,28 @@ _TITLE = "이용시간 및 정기휴관일"
 _INVALID = "도서관 이용시간 페이지 HTML 구조가 올바르지 않습니다"
 _INVALID_ARCHIVE = "완료된 도서관 이용시간 수집 기록을 확인할 수 없습니다."
 
-# div#conts 안에서 허용하는 부모별 자식 요소. 2026-11-28 실제 페이지에 쓰인 것만 받고 나머지는 형식 변경으로 본다.
+# 허용 목록은 2026-11-28 보관 실제 원본 4개(해시가 같아 내용은 1종)의 div#conts에 쓰인 부모별 자식 요소와 속성 값뿐이다.
+# 인라인 style은 한 번도 없어 받지 않는다. 숨김·배치 기법인지 가리지 않고 목록 밖 표기는 모두 형식 변경으로 거부한다.
 _CHILDREN = {
-    "conts": {"h4", "div", "p"},
-    "div": {"h4", "div", "p", "table"},
+    "conts": {"h4", "div"},
+    "div": {"div", "p", "table"},
     "table": {"caption", "thead", "tbody"},
     "thead": {"tr"},
     "tbody": {"tr"},
     "tr": {"th", "td"},
+    "td": {"br"},
 }
 _TEXT_TAGS = {"h4", "p", "caption", "th", "td"}
-# 속성 이름별 허용 값. None은 아래 형식 검사만 한다. 숨김 class·style은 받지 않는다.
+# 속성 이름별 허용 값(class는 값 전체). None은 병합 수다. 실제 값은 2·3이고 1~99 밖은 받지 않으며 격자 검사가 표 안으로 묶는다.
 _ATTRS = {
     "div": {"class": {"tbl-respon", "tbl-box"}},
-    "p": {"class": {"guide", "tip", "mT10"}},
-    "table": {"class": {"tbl", "taC"}},
+    "p": {"class": {"guide", "tip mT10"}},
+    "table": {"class": {"tbl taC"}},
     "th": {"scope": {"col", "row"}, "rowspan": None, "colspan": None},
-    "td": {"rowspan": None, "colspan": None},
+    "td": {"rowspan": None},
 }
+# 요소 사이에 둘 수 있는 HTML 공백. `\xa0`·`\u3000` 등은 글자로 보이고, 표 안에서는 브라우저가 표 앞으로 옮긴다.
+_SPACE = "\t\n\f\r "
 _SPAN = re.compile(r"[1-9][0-9]?")
 
 
@@ -86,12 +90,9 @@ class _PageParser(PinnedHTMLParser):
         for name, value in attrs:
             if name not in allowed:
                 self.fail(f"허용하지 않은 속성 {tag}[{name[:40]}]")
-            if name in ("rowspan", "colspan"):
+            if allowed[name] is None:
                 if value is None or _SPAN.fullmatch(value) is None:
                     self.fail(f"{tag} {name} 값")
-            elif name == "class":
-                if not value or not set(value.split()) <= allowed[name]:
-                    self.fail(f"허용하지 않은 {tag} {name} 값")
             elif value not in allowed[name]:
                 self.fail(f"허용하지 않은 {tag} {name} 값")
 
@@ -102,6 +103,8 @@ class _PageParser(PinnedHTMLParser):
             if tag == "head":
                 self.in_head = True
             elif tag == "title" and self.in_head:
+                if attrs:
+                    self.fail("title 속성")
                 self.title = []
             elif tag == "div" and values.get("id") == "conts":
                 if self.conts_seen or sorted(name for name, _ in attrs) != ["class", "id"] or values["class"] != "conts":
@@ -109,14 +112,12 @@ class _PageParser(PinnedHTMLParser):
                 self.conts_seen = True
                 self.stack = ["conts"]
             return
-        if tag == "br":
-            if attrs or self.text is None:
-                self.fail("글자 밖의 br")
-            self.text.append("\n")
-            return
         if tag not in _CHILDREN.get(self.stack[-1], ()):
             self.fail(f"{self.stack[-1]} 안의 {tag[:40]}")
         self._check_attrs(tag, attrs)
+        if tag == "br":
+            self.text.append("\n")
+            return
         self.stack.append(tag)
         if tag in _TEXT_TAGS:
             self.text = []
@@ -134,9 +135,11 @@ class _PageParser(PinnedHTMLParser):
                          "colspan": int(values.get("colspan") or 1)}
 
     def handle_startendtag(self, tag, attrs):
-        if self.stack is not None and tag != "br":
-            self.fail(f"스스로 닫는 {tag[:40]}")
+        inside = self.stack is not None
+        # 기반 클래스의 시작 태그 문법 검사를 먼저 거쳐야 Python 3.13·3.14가 같은 사유로 거부한다.
         super().handle_startendtag(tag, attrs)
+        if inside and tag != "br":
+            self.fail(f"스스로 닫는 {tag[:40]}")
 
     def parse_endtag(self, i):
         if self.stack is not None and re.match(r"</[a-zA-Z]", self.rawdata[i:i + 3]) is None:
@@ -159,6 +162,7 @@ class _PageParser(PinnedHTMLParser):
                 self.in_head = False
             return
         top = self.stack[-1]
+        # 종료 태그는 가장 안쪽 열린 요소만 닫는다(보관 원본 4개 모두 만족). 브라우저의 암묵적 닫기·재배치는 따라 하지 않는다.
         if tag != ("div" if top == "conts" else top):
             self.fail(f"{top} 안에서 닫는 {tag[:40]}")
         self.stack.pop()
@@ -202,7 +206,7 @@ class _PageParser(PinnedHTMLParser):
             if "\n" in data or "\r" in data:
                 self.fail("글자 안의 원본 줄바꿈")
             self.text.append(data)
-        elif data.strip():
+        elif data.strip(_SPACE):
             self.fail(f"{self.stack[-1]} 안의 글자")
 
     def _reject_in_body(self, *_):
