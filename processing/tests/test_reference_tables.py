@@ -310,7 +310,7 @@ class ReferenceCaptureTest(unittest.TestCase):
         (self.root / "file").chmod(0o600)
         with self.assertRaisesRegex(ValueError, "만들 수 없습니다"):
             capture_reference("library-hours", "x", self.root / "file")
-        for mode in (0o500, 0o600):
+        for mode in (0o500, 0o600, 0o300):
             self.section.chmod(mode)
             with self.subTest(mode=oct(mode)), self.assertRaisesRegex(ValueError, "쓸 수 있어야"):
                 capture_reference("library-hours", "x", self.section)

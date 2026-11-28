@@ -323,7 +323,7 @@ def capture_reference(page: str, name: str, root: Path, *, previous: str | None 
         raise ValueError("수집 디렉터리를 만들 수 없습니다.") from None
     info = root.lstat()
     if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) & 0o077
-            or not os.access(root, os.W_OK | os.X_OK)):
+            or not os.access(root, os.R_OK | os.W_OK | os.X_OK)):  # bundle_directory가 읽기로 연다
         raise ValueError("수집 디렉터리는 실행 사용자만 접근하고 쓸 수 있어야 합니다.")
     if (root / name).exists() or (root / name).is_symlink():
         raise ValueError("이미 사용 중인 수집 이름입니다.")
