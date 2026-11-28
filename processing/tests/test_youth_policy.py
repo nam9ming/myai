@@ -113,6 +113,9 @@ class YouthPolicyParserTest(unittest.TestCase):
             (listing(card("1")).replace(b"<!--  -->", b"<!-->"), 1, "목록 페이지에 브라우저와 해석이 갈리는"),
             (listing(card("1")).replace(b"<html>", b"<html><script><!--<script></script>--></script>"), 1,
              "목록 페이지에 브라우저와 해석이 갈리는"),
+            # 원문 텍스트 요소는 문자 참조를 풀지 않거나 브라우저 화면에 나오지 않아 카드 표시 문구와 달라진다.
+            (listing(card("1").replace("지원 1<", "지원 1<textarea>&lt;B</textarea><")), 1, "구조"),
+            (listing(card("1").replace("지원 1<", "지원 1<iframe>숨김</iframe><")), 1, "구조"),
         ):
             with self.subTest(message=message, page=page), self.assertRaisesRegex(ValueError, message):
                 parse_youth_listing(raw, page=page)

@@ -3,7 +3,7 @@
 import re
 from urllib.parse import urlencode
 
-from .html_tokens import PinnedHTMLParser
+from .html_tokens import RAW_TEXT_TAGS, PinnedHTMLParser
 from .libraries import _MARKUP_ERROR, _VOID_TAGS, _NoticeParser, _notice_record
 from .official_web import OFFICIAL_ORIGIN, _fetch
 from .road_works import _period
@@ -98,7 +98,8 @@ class _ListingParser(PinnedHTMLParser):
             return
         if not self.in_form:
             return
-        if len(set(names)) != len(names):
+        # 공용 파서가 원문 텍스트로 읽는 요소는 문자 참조(textarea)·화면 표시(title·iframe 등)가 브라우저와 달라 받지 않는다.
+        if len(set(names)) != len(names) or (tag in RAW_TEXT_TAGS and tag not in _IGNORED_TAGS):
             self.fail()
         classes = (values.get("class") or "").split()
         parent = self.stack[-1] if self.stack else ("form", [], None)
