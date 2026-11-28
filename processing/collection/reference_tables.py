@@ -197,8 +197,6 @@ class _PageParser(PinnedHTMLParser):
             self.title.append(data)
         if self.stack is None:
             return
-        if "\x00" in data:
-            self.fail("NUL 문자")
         if self.text is not None:
             # 원본 줄바꿈은 화면에서 공백이 되므로, 남기면 `br`에서 온 줄바꿈과 구별할 수 없다.
             if "\n" in data or "\r" in data:
@@ -242,6 +240,9 @@ def parse_library_hours(text: str) -> dict:
     """
     if not isinstance(text, str):
         raise ValueError(f"{_INVALID}.")
+    if "\x00" in text:
+        # 태그 이름 안의 NUL을 3.13.5는 글자로, 3.14.6은 태그 이름으로 읽어 결과가 갈리므로 문서 어디서든 거부한다.
+        raise ValueError(f"{_INVALID} (NUL 문자).")
     parser = _PageParser()
     try:
         parser.feed(text)

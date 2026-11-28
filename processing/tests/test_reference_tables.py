@@ -124,6 +124,8 @@ class LibraryHoursParserTest(unittest.TestCase):
             "cdata": (_TABLES.replace("열람실", "열<![CDATA[x]>실"), markup),
             "unclosed_comment": (_TABLES.replace("열람실", "열람실<!-- 임시 ->"), markup),
             "nul": (_TABLES.replace("열람실", "열람\x00실"), "NUL 문자"),
+            # 3.14.6은 태그 이름 안의 NUL을 태그로, 3.13.5는 글자로 읽어 거부 문구가 갈렸다.
+            "nul_tag": (_TABLES.replace("열람실", "열<a\x00b>람실"), "NUL 문자"),
             # 화면에서 공백이 되는 원본 줄바꿈은 `br`에서 온 줄바꿈과 구별할 수 없다.
             "raw_newline": (_TABLES.replace("<br />", "\n"), "글자 안의 원본 줄바꿈"),
             "raw_cr": (_TABLES.replace("열람실", "열람\r실"), "글자 안의 원본 줄바꿈"),
@@ -134,6 +136,8 @@ class LibraryHoursParserTest(unittest.TestCase):
         fixtures.update({
             "title": (page(title="공지사항 | 안성시 도서관"), "페이지가 아닌 응답"),
             "outside_comment": (page(outside="<!-- a --!> -->"), markup),
+            # 본문 밖의 NUL 태그 이름을 3.14.6만 태그로 받아 수집 상태가 버전마다 갈렸다.
+            "outside_nul_tag": (page(outside="<a\x00b>"), "NUL 문자"),
             # 브라우저처럼 `<script/>`는 닫히지 않고 원문 텍스트를 시작하므로 뒤의 본문 영역이 스크립트 글자가 된다.
             "self_closing_script": (page(outside='<script src="a.js" />'), "없거나 닫히지 않음"),
         })
