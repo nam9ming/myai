@@ -105,9 +105,13 @@ class LibraryHoursParserTest(unittest.TestCase):
             "script": (_TABLES + "<script>x()</script>", "conts 안의 script"),
             "self_closing": (_TABLES.replace("<td></td>", "<td/>"), "스스로 닫는 td"),
             "br_outside_text": (_TABLES.replace("<h4>작은", "<br><h4>작은"), "글자 밖의 br"),
-            "unclosed_caption": (_TABLES.replace("</caption>", "", 1), "caption 안의 thead"),
+            "unclosed_caption": (_TABLES.replace("</caption>\n", "", 1), "caption 안의 thead"),
             "unclosed_row": (_TABLES.replace("</tbody>", "<tr></tbody>", 1), "tr 안에서 닫는 tbody"),
             "nul": (_TABLES.replace("열람실", "열람\x00실"), "NUL 문자"),
+            # 화면에서 공백이 되는 원본 줄바꿈은 `br`에서 온 줄바꿈과 구별할 수 없다.
+            "raw_newline": (_TABLES.replace("<br />", "\n"), "글자 안의 원본 줄바꿈"),
+            "raw_cr": (_TABLES.replace("열람실", "열람\r실"), "글자 안의 원본 줄바꿈"),
+            "newline_reference": (_TABLES.replace("열람실", "열람&#10;실"), "글자 안의 원본 줄바꿈"),
             "no_table": ("<h4>표 없음</h4>", "표가 없습니다"),
         }
         fixtures = {name: (page(body), message) for name, (body, message) in cases.items()}

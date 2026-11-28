@@ -22,7 +22,7 @@ REFERENCE_SECTION = "collection-reference-tables"
 REFERENCE_ROOT = CAPTURE_ROOT.with_name(REFERENCE_SECTION)
 SCHEMA = "citizen-reference-table-capture-v1"
 RECORD_SCHEMA = "citizen-reference-table-v1"
-PARSER_VERSION = "library-hours-parser-v1"
+PARSER_VERSION = "library-hours-parser-v2"
 PAGES = ("library-hours",)
 _PATH = "/library/contents.do?mId=0501040000"
 SOURCE_URL = OFFICIAL_ORIGIN + _PATH
@@ -182,6 +182,9 @@ class _PageParser(HTMLParser):
         if "\x00" in data:
             self.fail("NUL 문자")
         if self.text is not None:
+            # 원본 줄바꿈은 화면에서 공백이 되므로, 남기면 `br`에서 온 줄바꿈과 구별할 수 없다.
+            if "\n" in data or "\r" in data:
+                self.fail("글자 안의 원본 줄바꿈")
             self.text.append(data)
         elif data.strip():
             self.fail(f"{self.stack[-1]} 안의 글자")
@@ -214,7 +217,10 @@ def _check_grid(parser: _PageParser, rows: list[list[dict]], width: int) -> None
 
 
 def parse_library_hours(text: str) -> dict:
-    """제목·문단·표 칸 글자를 원문 그대로(`br`만 줄바꿈으로) 남긴다. 요일·시간·휴관일을 해석하지 않는다."""
+    """제목·문단·표 칸 글자를 원문 그대로(`br`만 줄바꿈으로) 남긴다. 글자 안의 원본 줄바꿈은 거부한다.
+
+    요일·시간·휴관일을 해석하지 않는다.
+    """
     if not isinstance(text, str):
         raise ValueError(f"{_INVALID}.")
     parser = _PageParser()
