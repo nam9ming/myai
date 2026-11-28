@@ -168,9 +168,9 @@ class GosiParserTest(unittest.TestCase):
                           "제2026-5호", "제2026-6호"])
 
     def test_detail_treats_gyeonggi_prefixed_anseong_number_as_same(self):
-        # `경기도 안성시 고시`는 `안성시 고시`와 같은 주체라 자기 번호로 빠지고, 같은 번호는 처음 적힌 원문 하나만 남는다.
+        # `경기도 (및) 안성시 고시`는 `안성시 고시`와 같은 주체라 자기 번호로 빠지고, 같은 번호는 처음 적힌 원문 하나만 남는다.
         body = ("경기도 안성시 고시 제2026-343호, 안성시 고시 제2026-1호 및 경기도 안성시 고시 제2026-1호,"
-                " 경기도 고시 제2026-1호")
+                " 경기도 고시 제2026-1호, 경기도 및 안성시 고시 제2026-343호, 경기도와 안성시 고시 제2026-343호")
         record = parse_gosi_detail(detail(body=body), notice_id="75365", listing=row())
         self.assertEqual(record["referenced_notice_numbers"], ["안성시 고시 제2026-1호", "경기도 고시 제2026-1호"])
         # 한계: 붙여 쓴 낱말이 주체 이름인지 조사인지 가리지 못해 `안성시에서 공고`는 다른 값으로 남는다(README).

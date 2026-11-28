@@ -39,8 +39,9 @@ _MEDIA_LIMIT = 40
 
 
 def _notice_key(number: str) -> str:
-    # 공백·괄호를 지우고, `경기도 안성시 …`는 `안성시 …`와 같은 주체로 본다. `경기도 고시`처럼 도 자체 발행은 그대로 둔다.
-    return re.sub(r"^경기도(?=안성시)", "", re.sub(r"[\s()]", "", number))
+    # 공백·괄호를 지우고, `경기도 안성시 …`·`경기도 및 안성시 …`는 `안성시 …`와 같은 주체로 본다.
+    # `경기도 고시`처럼 도 자체 발행은 그대로 둔다.
+    return re.sub(r"^경기도[가-힣]*?(?=안성시)", "", re.sub(r"[\s()]", "", number))
 
 
 def _text(parts: list[str]) -> str:
