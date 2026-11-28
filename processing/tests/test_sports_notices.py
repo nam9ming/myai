@@ -1,0 +1,203 @@
+import contextlib
+import hashlib
+import io
+import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
+import unittest
+from unittest.mock import patch
+
+from processing.collection import sports_batch
+from processing.collection.official_web import SourceHTTPError
+from processing.collection.sports_batch import capture_sports_batch, read_sports_batch
+from processing.collection.sports_notices import detail_url, parse_detail, parse_listing, robots_rules
+
+# 실제 HTML을 받지 못해 만든 합성 원본이다. 상세 링크 형식만 조사 기록의 실제 주소(seq=96)를 따른다.
+_LINK = "/index.do?board_id=notice&amp;cp=%2Fboard%2Fview.do&amp;menu_id=0008&amp;pageIndex=1&amp;seq={}"
+ROBOTS = b"User-agent: *\nDisallow: /admin/\n"
+
+
+def listing(*seqs, extra=""):
+    rows = "".join(f'<tr><td><a href="{_LINK.format(seq)}">공지 {seq}</a></td></tr>' for seq in seqs)
+    return (f'<!DOCTYPE html><html><body><a href="/index.do?menu_id=0008&amp;pageIndex=2">2</a>'
+            f'<a href="javascript:void(0)">맨 위</a><table>{rows}</table>{extra}</body></html>').encode()
+
+
+def detail(seq, body="<p>예약 일정 : 3월 2일(월) 09:00 예약 오픈</p>", title="체육관 예약 안내", head=""):
+    return (f'<!DOCTYPE html><html><head><script>var h4 = "<h4>x</h4>";</script></head><body>{head}'
+            f'<form id="viewForm"><input type="hidden" name="seq" value="{seq}"></form>'
+            f'<h4>{title}</h4><div class="view_cont">{body}</div></body></html>')
+
+
+class SportsParserTest(unittest.TestCase):
+    def test_listing_reads_detail_links_in_order(self):
+        absolute = "https://reservation.anseong.go.kr/index.do?board_id=notice&cp=/board/view.do&menu_id=0008&pageIndex=1&seq=7"
+        raw = listing("111", "96", extra=f'<a href="{absolute}">x</a><template><a href="{_LINK.format(5)}">숨김</a></template>'
+                      '<a href="https://example.com/index.do?seq=3">외부</a><a href="http://[x/index.do?seq=4">깨짐</a>')
+        self.assertEqual(parse_listing(raw), ["111", "96", "7"])
+
+    def test_listing_rejects_unexpected_shapes(self):
+        cases = {
+            "형식": listing("1", extra='<a href="/index.do?board_id=notice&seq=2">x</a>'),
+            "같은 공지": listing("1", "1"),
+            "찾지 못했": listing(),
+            "UTF-8": "<a>공지</a>".encode("cp949"),
+        }
+        for message, raw in cases.items():
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                parse_listing(raw)
+        with self.assertRaisesRegex(ValueError, "형식"):
+            parse_listing(listing("1").replace(b"pageIndex=1", b"pageIndex=2"))
+
+    def test_detail_keeps_display_text_and_keyword_lines_verbatim(self):
+        body = ("<p>예약 일정 : 3월 2일(월) 09:00</p><p>관내 거주자 <b>우선</b>&nbsp;배정</p>"
+                "<div>3월 9일 정기 점검으로 예약 중단<br>이용 시간 06:00~22:00</div>"
+                '<p><a href="/board/download.do?id=1">안내문.hwp</a></p>')
+        record = parse_detail(detail("96", body, title="<span>2026년</span> 상반기 예약 안내"), seq="96")
+        self.assertEqual(record["official_url"],
+                         "https://reservation.anseong.go.kr/index.do?board_id=notice&cp=%2Fboard%2Fview.do"
+                         "&menu_id=0008&pageIndex=1&seq=96")
+        self.assertEqual(record["title"], "2026년 상반기 예약 안내")
+        self.assertEqual(record["body_lines"], ["예약 일정 : 3월 2일(월) 09:00", "관내 거주자 우선 배정",
+                                                "3월 9일 정기 점검으로 예약 중단", "이용 시간 06:00~22:00", "안내문.hwp"])
+        self.assertEqual(record["keyword_lines"], {
+            "reservation_schedule": ["예약 일정 : 3월 2일(월) 09:00"],
+            "priority": ["관내 거주자 우선 배정"],
+            "suspension": ["3월 9일 정기 점검으로 예약 중단"],
+        })
+        self.assertEqual(record["links"], [{"href": "/board/download.do?id=1", "text": "안내문.hwp"}])
+        self.assertEqual(record["review_flags"], ["link", "markup_unverified"])
+
+    def test_image_only_restriction_is_flagged_for_review(self):
+        record = parse_detail(detail("111", '<p><img src="/upload/limit.jpg" alt="이용 제한 안내"></p>',
+                                     title="체육관 이용 제한 안내"), seq="111")
+        self.assertEqual(record["body_lines"], [])
+        self.assertEqual(record["images"], [{"src": "/upload/limit.jpg", "alt": "이용 제한 안내"}])
+        self.assertEqual(record["keyword_lines"]["suspension"], ["체육관 이용 제한 안내"])
+        self.assertEqual(record["review_flags"], ["image_only", "inline_image", "markup_unverified"])
+
+    def test_detail_rejects_unverifiable_structure(self):
+        for message, text in (
+            ("일치하지", detail("95")),
+            ("제목", detail("96", head="<h4>메뉴</h4>")),
+            ("본문 영역", detail("96", head='<div class="view_cont">x</div>')),
+            ("글자와 이미지", detail("96", body="<p> </p>")),
+            ("허용하지 않는", detail("96", body="<iframe src=x></iframe>")),
+            ("허용하지 않는", detail("96", body='<p style="display: none">숨김</p>')),
+            ("허용하지 않는", detail("96", body="<img src=a src=b>")),
+            ("구조", detail("96", body="<p><b>x</p></b>")),
+        ):
+            with self.subTest(text=text[-80:]), self.assertRaisesRegex(ValueError, message):
+                parse_detail(text, seq="96")
+        with self.assertRaisesRegex(ValueError, "일치하지"):
+            parse_detail(detail("96", head='<input name="seq" value="5">'), seq="96")
+        # template 안의 seq·제목은 화면에 없으므로 세지 않는다.
+        hidden = '<template><h4>숨김</h4><input name="seq" value="5"></template>'
+        self.assertEqual(parse_detail(detail("96", head=hidden), seq="96")["title"], "체육관 예약 안내")
+
+    def test_robots_rules_need_plain_rule_lines(self):
+        rules = robots_rules(b"User-agent: *\nDisallow: /index.do?board_id=\n")
+        self.assertFalse(rules.can_fetch("yeogi-it/official-source-capture", detail_url("1")))
+        for raw in (b"<html><h1>Request Blocked</h1></html>", "규칙".encode("cp949")):
+            with self.subTest(raw=raw), self.assertRaises(ValueError):
+                robots_rules(raw)
+
+
+class SportsBatchTest(unittest.TestCase):
+    def setUp(self):
+        self.private = Path(self.enterContext(TemporaryDirectory())).resolve()
+        self.root = self.private / sports_batch.SPORTS_SECTION
+        self.enterContext(patch("processing.collection.sports_batch.sleep"))
+        self.robots = self.enterContext(patch("processing.collection.sports_batch.fetch_robots", return_value=ROBOTS))
+        self.listing = self.enterContext(patch("processing.collection.sports_batch.fetch_listing"))
+        self.detail = self.enterContext(patch("processing.collection.sports_batch.fetch_detail"))
+        self.detail.side_effect = lambda seq, **_options: detail(seq).encode()
+
+    def capture(self, name="run", **limits):
+        summary = capture_sports_batch(name, self.root, **limits)
+        receipt = json.loads((self.root / name / "batch.json").read_text(encoding="utf-8"))
+        return summary, receipt, self.root / name
+
+    def test_capture_keeps_raw_and_records_then_rereads_archive(self):
+        self.listing.return_value = listing("111", "96")
+        summary, receipt, directory = self.capture()
+        self.assertEqual(summary, {"batch_id": "run", "status": "complete", "discovery_status": "first_page_only",
+                                   "selected": 2, "parsed": 2})
+        self.assertEqual((receipt["schema_version"], receipt["board"], receipt["robots"]["status"]),
+                         ("citizen-sports-notice-batch-v1", "notice", "allowed"))
+        self.assertEqual((directory / "robots.txt").read_bytes(), ROBOTS)
+        self.assertEqual(receipt["pages"][0]["sha256"], hashlib.sha256(listing("111", "96")).hexdigest())
+        self.assertEqual(receipt["pages"][0]["source_url"], "https://reservation.anseong.go.kr/index.do?menu_id=0008")
+        self.assertEqual([item["web_id"] for item in receipt["items"]], ["111", "96"])
+        parsed = json.loads((directory / "parsed-96.json").read_text(encoding="utf-8"))
+        self.assertEqual((parsed["parser_version"], parsed["record"]["external_id"]), ("sports-notice-parser-v1", "96"))
+
+        assets = read_sports_batch(self.private, "run")
+        self.assertEqual(list(assets), ["111", "96"])
+        self.assertEqual(assets["96"]["raw_asset_path"], "collection-sports-notices/run/detail-96.html")
+        self.assertEqual(assets["96"]["record"], parsed["record"])
+
+        changed = dict(parsed, record={**parsed["record"], "title": "바뀐 제목"})
+        (directory / "parsed-96.json").write_text(json.dumps(changed, ensure_ascii=False), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "파싱 결과가 원본과 다릅니다"):
+            read_sports_batch(self.private, "run")
+        (directory / "detail-96.html").write_bytes(detail("96", title="다른 제목").encode())
+        with self.assertRaisesRegex(ValueError, "해시"):
+            read_sports_batch(self.private, "run")
+
+    def test_unconfirmed_robots_stops_before_page_requests(self):
+        for name, side_effect, status in (
+            ("blocked", SourceHTTPError(400, "체육시설 robots.txt"), "fetch_failed"),
+            ("html", [b"<html>Request Blocked</html>"], "parse_failed"),
+            ("denied", [b"User-agent: *\nDisallow: /index.do\n"], "disallowed"),
+        ):
+            with self.subTest(name=name):
+                self.robots.side_effect = side_effect
+                summary, receipt, _ = self.capture(name)
+                self.assertEqual((summary["status"], summary["discovery_status"], summary["selected"]),
+                                 ("partial", "robots_not_allowed", 0))
+                self.assertEqual((receipt["robots"]["status"], receipt["pages"]), (status, []))
+                self.assertEqual(read_sports_batch(self.private, name), {})
+        self.assertIn("HTTP 응답 오류(400)", json.loads((self.root / "blocked" / "batch.json").read_text())["robots"]["error"])
+        self.listing.assert_not_called()
+        self.detail.assert_not_called()
+
+    def test_detail_failures_robots_rules_and_limits(self):
+        self.robots.return_value = b"User-agent: *\nDisallow: /index.do?board_id=notice&cp=%2Fboard%2Fview.do&menu_id=0008&pageIndex=1&seq=2\n"
+        self.listing.return_value = listing("1", "2", "3", "4")
+        self.detail.side_effect = [detail("99").encode(), SourceHTTPError(429)]
+        summary, receipt, directory = self.capture(max_items=3)
+        self.assertEqual((summary["status"], summary["discovery_status"], summary["parsed"]), ("partial", "item_limit", 0))
+        self.assertEqual([item["status"] for item in receipt["items"]], ["parse_failed", "not_attempted", "fetch_failed"])
+        self.assertIn("robots.txt", receipt["items"][1]["error"])
+        self.assertEqual((directory / "detail-1.html").read_bytes(), detail("99").encode())
+        self.assertEqual(receipt["stop_http_status"], 429)
+        self.assertEqual([call.args for call in self.detail.call_args_list], [("1",), ("3",)])
+        self.assertEqual(read_sports_batch(self.private, "run"), {})
+
+    def test_listing_failure_keeps_original(self):
+        self.listing.return_value = b"<html><a href='javascript:fnView(96)'>x</a></html>"
+        summary, receipt, directory = self.capture()
+        self.assertEqual((summary["discovery_status"], receipt["pages"][0]["status"]), ("failed", "parse_failed"))
+        self.assertTrue((directory / "list-1.html").exists())
+        self.detail.assert_not_called()
+
+    def test_cli_exit_codes(self):
+        self.listing.return_value = listing("5")
+        runs = ((["--name", "cli"], 0, {"batch_id": "cli", "status": "complete"}),
+                (["--name", "cli", "--verify"], 0, {"batch_id": "cli", "verified": ["5"]}),
+                (["--name", "none", "--verify"], 1, None), (["--name", "cli"], 1, None))
+        with patch.object(sports_batch, "SPORTS_ROOT", self.root):
+            for argv, code, output in runs:
+                with (self.subTest(argv=argv), patch("sys.argv", ["sports_batch", *argv]),
+                      contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO())):
+                    self.assertEqual(sports_batch.main(), code)
+                    if output:
+                        self.assertLessEqual(output.items(), json.loads(out.getvalue()).items())
+        self.robots.side_effect = SourceHTTPError(400, "체육시설 robots.txt")
+        with (patch.object(sports_batch, "SPORTS_ROOT", self.root), patch("sys.argv", ["x", "--name", "blocked"]),
+              contextlib.redirect_stdout(io.StringIO())):
+            self.assertEqual(sports_batch.main(), 2)
+
+if __name__ == "__main__":
+    unittest.main()

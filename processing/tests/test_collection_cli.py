@@ -27,6 +27,8 @@ CASES = {
                                           ["capture_youth_batch", "read_youth_batch"]),
     "processing.collection.arthall_batch": (["arthall_batch", "capture", "--year", "x", "--month", "1", "--name", "x"],
                                             ["capture_arthall_batch", "read_arthall_batch"]),
+    "processing.collection.sports_batch": (["sports_batch", "--name", "x", "--max-items", "x"],
+                                           ["capture_sports_batch", "read_sports_batch"]),
 }
 
 
