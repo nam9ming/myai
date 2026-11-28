@@ -33,7 +33,6 @@ _TABLES = """
 </div>
 <p class="tip mT10">토&middot;일 합성 안내</p>
 </div>
-<!-- 주석은 읽지 않는다 -->
 <h4>작은도서관 1개관</h4>
 <div class="tbl-respon"><div class="tbl-box">
 <table class="tbl taC"><caption>합성 작은도서관 표</caption>
@@ -53,7 +52,7 @@ _TABLES = """
 def page(body=_TABLES, *, title="이용시간 및 정기휴관일 | 이용안내 | 안성시 도서관", outside=""):
     return f"""<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>{title}</title>
 <script>var marker = "<div id='conts' class='conts'>";</script></head>
-<body><div id="tit_wrap"><h3>이용시간 및 정기휴관일</h3></div>{outside}
+<body><!-- 본문 영역 밖의 주석은 읽지 않는다 --><div id="tit_wrap"><h3>이용시간 및 정기휴관일</h3></div>{outside}
 <div class="sub"><div id="conts" class="conts">{body}</div></div>
 <svg><title>아이콘</title></svg></body></html>"""
 
@@ -110,6 +109,12 @@ class LibraryHoursParserTest(unittest.TestCase):
             "br_outside_text": (_TABLES.replace("<h4>작은", "<br><h4>작은"), "글자 밖의 br"),
             "unclosed_caption": (_TABLES.replace("</caption>\n", "", 1), "caption 안의 thead"),
             "unclosed_row": (_TABLES.replace("</tbody>", "<tr></tbody>", 1), "tr 안에서 닫는 tbody"),
+            # 3.13.5는 주석을 첫 `-->`까지 읽어 `--!>` 뒤의 행·글자를 오류 없이 빼고, 3.14.6은 `--!>`에서 끝낸다.
+            "comment": (_TABLES.replace("<h4>작은", "<!-- 주석 --><h4>작은"), "선언·처리 지시문·주석"),
+            "comment_hides_row": (_TABLES.replace('<tr><th scope="row">나', '<!-- a --!><tr><th scope="row">나')
+                                  .replace("<td></td></tr>", "<td></td></tr><!-- b -->"), "선언·처리 지시문·주석"),
+            "comment_in_cell": (_TABLES.replace("열람실", "열<!-- x --!>람-->실"), "선언·처리 지시문·주석"),
+            "bogus_comment": (_TABLES.replace("<h4>작은", "<!x><h4>작은"), "선언·처리 지시문·주석"),
             "nul": (_TABLES.replace("열람실", "열람\x00실"), "NUL 문자"),
             # 화면에서 공백이 되는 원본 줄바꿈은 `br`에서 온 줄바꿈과 구별할 수 없다.
             "raw_newline": (_TABLES.replace("<br />", "\n"), "글자 안의 원본 줄바꿈"),

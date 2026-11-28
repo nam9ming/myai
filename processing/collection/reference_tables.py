@@ -211,12 +211,12 @@ class _PageParser(HTMLParser):
             self.fail("제목 안의 마크업")
 
     def _reject_in_body(self, *_):
+        # 3.13.5는 주석을 첫 `-->`까지 읽어 `--!>` 뒤의 행·글자를 오류 없이 빼므로 본문 영역의 주석도 거부한다.
         self._reject_in_title()
         if self.stack is not None:
-            self.fail("본문 영역의 선언·처리 지시문")
+            self.fail("본문 영역의 선언·처리 지시문·주석")
 
-    handle_decl = handle_pi = unknown_decl = _reject_in_body
-    handle_comment = _reject_in_title
+    handle_decl = handle_pi = unknown_decl = handle_comment = _reject_in_body
 
 
 def _check_grid(parser: _PageParser, rows: list[list[dict]], width: int) -> None:
