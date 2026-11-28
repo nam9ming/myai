@@ -180,11 +180,13 @@ class LibraryProgramParserTest(unittest.TestCase):
             "attachment text": detail("1", *replace("첨부파일", "파일 있음")),
             "attachment link": detail("1", *replace("첨부파일", '<a href="/x.hwp">x.hwp</a>')),
             "attachment script": detail("1", *replace("첨부파일", '<script src="/other.js"></script>')),
-            # 브라우저는 script의 `/>`를 무시하므로 뒤의 `자료없음`과 다음 행이 화면에 나오지 않는다.
+            # 브라우저처럼 script의 `/>`를 무시하면 뒤의 `자료없음`부터 문서 끝까지 스크립트로 남는다.
             "self-closing script": detail("1", *replace("첨부파일", '<script src="/dwr/engine.js"/>자료없음')),
             # 브라우저에는 `10,000원없음.`으로 보이는데 HTMLParser는 비용을 주석으로 삼킨다.
             "abrupt comment": detail("1", *replace("재료비", "<!-->10,000원<!-- b -->없음.")),
             "bang comment": detail("1", *replace("재료비", "<!-- a --!>10,000원<!-- b -->없음.")),
+            # 빈 요소가 아닌 span의 `/>`는 브라우저처럼 무시되어 칸이 끝날 때까지 닫히지 않는다.
+            "self-closing span": detail("1", *replace("장소", "<span/>아양")),
             "odd cells": detail("1", head=("구분", "아양도서관", "행사구분")),
             "caption": detail("1").replace("문화강좌 신청확인", "문화강좌 목록"),
             "label tag": detail("1").replace("<th>장소</th>", "<th><span>장소</span></th>"),
@@ -195,6 +197,23 @@ class LibraryProgramParserTest(unittest.TestCase):
         for name, text in cases.items():
             with self.subTest(name=name), self.assertRaises(ValueError):
                 parse_program_detail(text, "1")
+
+    def test_markup_borders_follow_browser_on_every_python(self):
+        # 브라우저는 `<![CDATA[`를 첫 `>`에서 끝나는 가짜 주석으로 읽어 `10,000원]]>없음.`을 보인다.
+        cdata = detail("1", *replace("재료비", "<![CDATA[>10,000원]]>없음."))
+        # 브라우저에는 `접수중`만 보이는데 3.13.5는 종료 태그를 첫 `>`에서 끊어 `마감">`을 상태에 붙인다.
+        end_tag = listing(row("1").replace(">접수중</span>", '>접수중</span title=">마감">'))
+        for name, parse in (("cdata", lambda: parse_program_detail(cdata, "1")),
+                            ("end tag", lambda: parse_program_listing(end_tag, page=1))):
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, "해석이 갈리는"):
+                parse()
+        # 3.13.5는 `-- >`에서 주석을 닫아 숨은 `10,000원 -->`을 재료비에 넣었다. 브라우저처럼 `-->`까지 주석이다.
+        record = parse_program_detail(detail("1", *replace("재료비", "<!-- a -- >10,000원 -->없음.")), "1")
+        self.assertEqual(record["fields"]["material_cost"], "없음.")
+        # `</ script>`는 스크립트를 끝내지 않으므로 `자료없음`은 화면에 없고 첨부 유무를 확정하지 않는다.
+        record = parse_program_detail(detail("1", *replace("첨부파일", (
+            '<script src="/dwr/engine.js"></ script>자료없음<script src="/dwr/util.js"></script>'))), "1")
+        self.assertEqual((record["attachments"], record["unknown"]["attachments"]), (None, "empty"))
 
 
 class LibraryProgramBatchTest(unittest.TestCase):
@@ -219,7 +238,7 @@ class LibraryProgramBatchTest(unittest.TestCase):
         self.assertEqual([item["web_id"] for item in receipt["items"]], ["9", "7", "8"])
         parsed = json.loads((directory / "parsed-8.json").read_text(encoding="utf-8"))
         self.assertEqual((parsed["schema_version"], parsed["parser_version"]),
-                         ("citizen-library-program-v1", "library-program-parser-v1"))
+                         ("citizen-library-program-v1", "library-program-parser-v2"))
         self.assertEqual(parsed["sha256"], hashlib.sha256((directory / "detail-8.html").read_bytes()).hexdigest())
         self.assertEqual((parsed["record"]["list_page"], parsed["record"]["listing"]["application_status"]), (2, "접수완료"))
         self.assertEqual(parsed["record"]["external_id"], "8")

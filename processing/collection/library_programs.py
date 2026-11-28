@@ -1,13 +1,13 @@
 """안성시 도서관 행사신청 목록과 상세의 공개 항목을 표시 문구 그대로 읽는다."""
 
-from html.parser import HTMLParser
 import re
 from urllib.parse import urlencode
 
+from .html_tokens import PinnedHTMLParser
 from .official_web import OFFICIAL_ORIGIN, _fetch
 
 
-PARSER_VERSION = "library-program-parser-v1"
+PARSER_VERSION = "library-program-parser-v2"
 SOURCE_LABEL = "도서관 행사신청"
 PROGRAM_ID = re.compile(r"[1-9][0-9]{0,17}")
 _MENU = "0202020000"
@@ -54,6 +54,7 @@ _DETAIL_FIELDS = {
 _OPTIONAL = {"진행자", "재료비", "준비물", "유의사항"}
 _INVALID_LISTING = "도서관 행사신청 목록 HTML 구조가 올바르지 않습니다."
 _INVALID_DETAIL = "도서관 행사신청 상세 HTML 구조가 올바르지 않습니다."
+_MARKUP_ERROR = "도서관 행사신청 HTML에 브라우저와 해석이 갈리는 태그·주석·스크립트 표기가 있습니다."
 
 
 def program_listing_path(page: int) -> str:
@@ -90,11 +91,14 @@ def _clean(parts: list[str]) -> str:
     return "\n".join(" ".join(line.split()) for line in lines).strip("\n")
 
 
-class _PageParser(HTMLParser):
-    """class가 `table_class`인 표 하나의 칸과 목록 폼·페이지 이동·신청 버튼만 모은다."""
+class _PageParser(PinnedHTMLParser):
+    """class가 `table_class`인 표 하나의 칸과 목록 폼·페이지 이동·신청 버튼만 모은다.
+
+    주석·원문 텍스트·종료 태그 경계와 빈 요소가 아닌 태그의 `/>` 처리는 공용 기반의 브라우저 규칙을 따른다.
+    """
 
     def __init__(self, table_class: str, error: str):
-        super().__init__(convert_charrefs=True)
+        super().__init__()
         self.table_class, self.error = table_class, error
         self.ignored = 0
         self.in_form = False
@@ -117,7 +121,11 @@ class _PageParser(HTMLParser):
     def fail(self):
         raise ValueError(self.error)
 
+    def markup_error(self):
+        return ValueError(_MARKUP_ERROR)
+
     def handle_starttag(self, tag, attrs):
+        super().handle_starttag(tag, attrs)
         values = dict(attrs)
         # 같은 속성이 반복되면 브라우저(첫 값)와 dict(마지막 값)의 해석이 갈린다. 칸 안 script src도 같다.
         repeated = len(values) != len(attrs)
@@ -182,14 +190,6 @@ class _PageParser(HTMLParser):
         if tag not in _VOID_TAGS:
             self.stack.append(tag)
 
-    def handle_startendtag(self, tag, attrs):
-        # 브라우저는 script 등의 `/>`를 무시해 뒤 글자를 숨긴다. 실제 표본에는 없었다.
-        if tag in _IGNORED_TAGS:
-            self.fail()
-        self.handle_starttag(tag, attrs)
-        if tag not in _VOID_TAGS:
-            self.handle_endtag(tag)
-
     def handle_endtag(self, tag):
         if self.ignored:
             self.ignored -= tag in _IGNORED_TAGS
@@ -228,6 +228,7 @@ class _PageParser(HTMLParser):
             self.stack = None
 
     def handle_data(self, data):
+        super().handle_data(data)
         if self.ignored:
             return
         if self.cell is not None:
@@ -240,8 +241,7 @@ class _PageParser(HTMLParser):
             self.fail()
 
     def finish(self, text: str):
-        # `<!-->`·`<!--->`·`--!>` 주석은 HTMLParser가 브라우저와 다르게 끊는다(버전마다도 다르다). 실제 표본에는 없었다.
-        if not isinstance(text, str) or "\x00" in text or re.search(r"<!---?>|--!>", text):
+        if not isinstance(text, str) or "\x00" in text:
             self.fail()
         try:
             self.feed(text)
