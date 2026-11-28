@@ -124,6 +124,8 @@ class CourseListingTest(unittest.TestCase):
                                        .replace("</td><td>무료", "</dialog></td><td>무료"))),
             ("목록에 화면 표시", _listing("1").replace(b"</tbody>", b"</tbody>" + _row("7").encode())),
             ("구조", _listing("1").replace(b"<b>12</b>", b"<b>12</b></img>")),
+            # `</p>`가 닫은 `b`를 브라우저가 p.page_num 안에 hidden째로 다시 만든다.
+            ("구조", _listing("1").replace(b'<div class="bod_head">', b'<p><b hidden></p><div class="bod_head">')),
         ]
         for number, (message, raw) in enumerate(cases):
             with self.subTest(case=number), self.assertRaisesRegex(ValueError, message):
@@ -156,6 +158,9 @@ class CourseDetailTest(unittest.TestCase):
              "url": f"{_ORIGIN}/edu/cmm/fms/FileDown.do?atchFileId={'c' * 64}&fileSn={'d' * 32}"},
         ])
         self.assertEqual(record["review_flags"], ["attachment:course_materials", "image:venue_photos", "missing:notes"])
+        # 영역 밖 서식 요소도 안쪽 요소까지 차례대로 닫혔으면 받는다.
+        menu = '<header><a href="/edu"><span>홈</span><div><input></div><b>배움</b></a>'
+        self.assertEqual(parse_course_detail(_detail().replace("<header>", menu), course_id="5086"), record)
 
     def test_free_and_blank_fees_are_kept_apart(self):
         free = parse_course_detail(_detail("1", 수강료="\n\t무료\n"), course_id="1")
@@ -208,6 +213,12 @@ class CourseDetailTest(unittest.TestCase):
             ("화면 표시", _detail().replace('<div class="bod_write">', '<dialog class="bod_write">')
              .replace('</div><div class="btn_wrap', '</dialog><div class="btn_wrap')),
             ("화면 표시", _detail(교육장='<span id="x">시험교육장</span>')),
+            # 영역 밖에서 암묵적으로 닫힌 서식 요소는 영역 안 글자·태그 앞에 같은 속성으로 다시 만들어진다. 형제 `<a>`는
+            # 그 요소를 목록에서 빼므로 제목 줄만 숨는다. object 안의 `</b>`는 무시되어 b가 목록에 남는다.
+            ("구조", _detail().replace("<body>", "<body><p><a hidden></p>")
+             .replace('</div><div class="bod_write">', '</div><a></a><div class="bod_write">')),
+            ("구조", _detail().replace("<body>", '<body><p><font style="display:none"></p>')),
+            ("구조", _detail().replace("<body>", "<body><p><b hidden><object></b></object></p>")),
         ]
         # 화면에 나오지 않을 수 있는 글자가 제목·접수상태·항목명·첨부 이름에 섞이면 거부한다.
         for wrap in ("<noscript>{}</noscript>", "<details>{}</details>"):

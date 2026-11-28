@@ -28,7 +28,7 @@ _MAX_ROWS = 100
 # 고른 영역 안 중첩 한도. 실제 목록 6쪽·상세 28쪽은 최대 9단이었다. 하위 트리를 재귀로 읽으므로 RecursionError 전에 거부한다.
 _MAX_DEPTH = 64
 # 공유 태그 경계 규칙(PinnedHTMLParser)이나 아래 출력·허용 규칙이 바뀌면 올린다.
-PARSER_VERSION = "edu-course-parser-v8"
+PARSER_VERSION = "edu-course-parser-v9"
 _TEXT_FIELDS = {
     "접수기간": "application_period",
     "접수현황": "enrollment_status",
@@ -46,12 +46,15 @@ _MEDIA_FIELDS = {"교육장 사진": "venue_photos", "강의계획서 및 이미
 _TEXT_TAGS = {"br", "span", "em", "a"}
 # 안쪽이 화면에 나오지 않는 요소.
 _HIDDEN_TAGS = {"script", "style", "template"}
+# 브라우저가 암묵적으로 닫힌 뒤 다음 글자·태그 앞에 같은 속성으로 다시 만드는 서식 요소(active formatting elements).
+_FORMATTING = frozenset("a b big code em font i nobr s small strike strong tt u".split())
 # 제목 줄의 span class. bod_btn은 로그인 안내·신청 단추라 읽지 않는다.
 _TITLE_PARTS = {"bod_state_type": "state", "bod_subject": "subject", "bod_btn": None}
 # 읽는 영역(상세는 제목 줄·항목 묶음, 목록은 p.page_num·목록 표) 안은 2026-11-28 실제 원본(상세 28쪽, 목록 6쪽)에 있던
 # 태그 경로(영역 루트부터 태그 이름을 /로 이은 것)와 그 경로의 속성 이름, 인라인 스타일 값, class 값만 받는다. 그 밖의 태그
 # (noscript·dialog·details 등)·속성(hidden 등)·스타일과 이 사이트의 화면 숨김 class(blind 등)는 거부한다.
-# skip은 첨부 링크의 `파일 다운로드` 안내에서만 받고 읽지 않는다. 영역 밖 조상의 숨김·스타일시트 숨김은 확인하지 않는다.
+# skip은 첨부 링크의 `파일 다운로드` 안내에서만 받고 읽지 않는다. 영역 밖 서식 요소가 영역 안에 다시 만들어지는 경우는
+# _Page가 거부한다. 영역 밖 조상·형제와 스타일시트·스크립트가 건 숨김은 확인하지 않는다(README 한계).
 _TAGS = {
     "div": "class", "div/span": "class", "div/dl": "", "div/dl/dt": "", "div/dl/dd": "", "div/dl/dd/br": "",
     "div/dl/dd/a": "class href", "div/dl/dd/span": "class style", "div/dl/dd/span/em": "class",
@@ -118,6 +121,8 @@ class _Page(PinnedHTMLParser):
         # 열린 숨김 요소. script·style 안은 원문 텍스트라 태그가 없고, 브라우저처럼 맞는 종료 태그에서만 닫는다.
         self.hidden: list[str] = []
         self.scripts: list[str] = []
+        # 영역 밖에서 연 서식 요소와 그 뒤에 연 요소. 종료 태그가 맨 끝 요소를 닫을 때만 빼고, 어긋나면 남긴다.
+        self.formatting: list[str] = []
 
     def markup_error(self) -> ValueError:
         return ValueError(f"{_LABEL} 페이지에 브라우저와 해석이 갈리는 태그·주석·스크립트 표기가 있습니다.")
@@ -135,8 +140,16 @@ class _Page(PinnedHTMLParser):
         values = dict(attrs)
         if not hidden and len(values) != len(attrs):
             raise ValueError(self.error)
-        if hidden or not (self.open or self.select(tag, (values.get("class") or "").split(), values)):
+        if hidden:
             return
+        if not self.open:
+            if not self.select(tag, (values.get("class") or "").split(), values):
+                if tag not in _VOID_TAGS and (self.formatting or tag in _FORMATTING):
+                    self.formatting.append(tag)
+                return
+            # 남은 서식 요소는 브라우저가 영역 안에 다시 만들어 일부를 숨길 수 있다. 실제 원본 34쪽은 영역 시작 때 비어 있었다.
+            if self.formatting:
+                raise ValueError(self.error)
         if len(self.open) >= _MAX_DEPTH:
             raise ValueError(self.error)
         node = (tag, values, [])
@@ -147,7 +160,11 @@ class _Page(PinnedHTMLParser):
     def handle_endtag(self, tag):
         if self.hidden and self.hidden[-1] == tag:
             self.hidden.pop()
-        if self.hidden or not self.open:
+        if self.hidden:
+            return
+        if not self.open:
+            if self.formatting[-1:] == [tag]:
+                self.formatting.pop()
             return
         # 영역 안의 종료 태그는 가장 안쪽 열린 요소를 닫아야 한다. 실제 원본에 없던 `</img>` 같은 종료 태그도 거부한다.
         if self.open[-1][0] != tag:
