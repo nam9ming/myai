@@ -85,8 +85,8 @@ class LibraryHoursParserTest(unittest.TestCase):
         self.assertEqual(blocks[5]["head"][0][1], cell("th", "이용시간", scope="col", colspan=2))
         self.assertEqual(len(content_sha256(record)), 64)
         # 제목 앞에 줄(CRLF 포함)이 있어도, 문자 참조가 있어도 읽혀야 한다.
-        moved = page(title="이용시간 및 정기휴관일 | 이용&middot;안내 | 안성시 도서관").replace("<head>", "<head>\n\r\n")
-        self.assertEqual(parse_library_hours(moved)["page_title"], "이용시간 및 정기휴관일 | 이용·안내 | 안성시 도서관")
+        moved = page(title="이용시간 및 정기휴관일 | 이용&middot;안내&#xB7; | 안성시 도서관").replace("<head>", "<head>\n\r\n")
+        self.assertEqual(parse_library_hours(moved)["page_title"], "이용시간 및 정기휴관일 | 이용·안내· | 안성시 도서관")
 
     def test_rejects_format_changes(self):
         grid = "표의 칸 수가 머리글과 다름"
@@ -143,11 +143,15 @@ class LibraryHoursParserTest(unittest.TestCase):
             "raw_newline": (_TABLES.replace("<br />", "\n"), "글자 안의 원본 줄바꿈"),
             "raw_cr": (_TABLES.replace("열람실", "열람\r실"), "글자 안의 원본 줄바꿈"),
             "newline_reference": (_TABLES.replace("열람실", "열람&#10;실"), "글자 안의 원본 줄바꿈"),
+            # html.unescape는 이 참조를 지우고 브라우저는 남긴다. 받으면 rowspan이 2가 되고 칸 글자·class 값이 달라진다.
+            "dropped_span_reference": (_TABLES.replace('<td rowspan="2">매주', '<td rowspan="&#1;2">매주'), "지워지는"),
+            "dropped_cell_reference": (_TABLES.replace("열람실", "열&#x7F;실"), "지워지는 숫자 문자 참조"),
             "no_table": ("<h4>표 없음</h4>", "표가 없습니다"),
         }
         fixtures = {name: (page(body), message) for name, (body, message) in cases.items()}
         fixtures.update({
             "title": (page(title="공지사항 | 안성시 도서관"), "페이지가 아닌 응답"),
+            "dropped_title_reference": (page(title="이용시간 및 정기휴관일 | 이용&#xFFFE;안내 | 안성시 도서관"), "지워지는"),
             "title_attribute": (page().replace("<title>", '<title lang="ko">'), "title 속성"),
             "outside_comment": (page(outside="<!-- a --!> -->"), markup),
             # 본문 밖의 NUL 태그 이름을 3.14.6만 태그로 받아 수집 상태가 버전마다 갈렸다.

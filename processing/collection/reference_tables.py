@@ -247,6 +247,9 @@ def parse_library_hours(text: str) -> dict:
     if "\x00" in text:
         # 태그 이름 안의 NUL을 3.13.5는 글자로, 3.14.6은 태그 이름으로 읽어 결과가 갈리므로 문서 어디서든 거부한다.
         raise ValueError(f"{_INVALID} (NUL 문자).")
+    if any(html.unescape(ref) == "" for ref in re.findall(r"&#(?:[xX][0-9a-fA-F]+|[0-9]+);?", text)):
+        # html.unescape는 C0 제어·U+007F·비문자 참조를 지우고 브라우저는 남겨 속성 값·글자가 달라진다(실제 원본 4개에는 숫자 참조가 없다).
+        raise ValueError(f"{_INVALID} (브라우저와 다르게 지워지는 숫자 문자 참조).")
     parser = _PageParser()
     try:
         parser.feed(text)
