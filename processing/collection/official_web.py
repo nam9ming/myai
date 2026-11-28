@@ -1,4 +1,4 @@
-"""안성시 공식 행사·도서관·도로 공사현황·시청·안성배움e·읍면동 공지의 공개 목록과 상세를 요청한다."""
+"""안성시 공식 행사·도서관·도로 공사현황·시청·안성배움e·읍면동·문화도시 안성 공지의 공개 목록과 상세를 요청한다."""
 
 from contextlib import closing
 from datetime import date
@@ -133,6 +133,8 @@ BOARDS = MappingProxyType({
     **{f"town-{slug}": Board(f"/csc/{slug}/bbs", "0500000000", f"{name} 공지", f"town_{slug}_notice",
                              check_list_form=True)
        for slug, name in _TOWNS},
+    # 문화도시 안성 상세 경로는 다른 ptIdx 글(예: 축제포털 200586)도 같은 viewForm으로 열어 주므로 소속은 목록 원본으로만 확인한다.
+    "ccas": Board("/ccas/bbs", "0501000000", "문화도시 안성 공지", "ccas_notice", pt_idx="1363", check_list_form=True),
 })
 _NOTICE_ID = _PROJECT_ID
 

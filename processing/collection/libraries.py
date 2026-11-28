@@ -584,11 +584,12 @@ def parse_library_notice(text: str, *, notice_id: str) -> dict:
 # 이력(이전 공유 이름 board-notice-parser): v1 시작, v2 시청 viewForm 필수, 안성배움e 추가.
 # v3: 본문 영역(div.bod_view 포함)은 허용 목록의 태그·속성·인라인 스타일만 받고, 문서 전체의 태그·주석·
 #     원문 텍스트 경계를 브라우저 규칙으로 고정해 해석이 갈리는 표기를 거부한다.
-# 읍면동 게시판은 v3 규칙에서 v1로 시작한다. 한 곳만 올릴 때는 아래 펼침 뒤에 그 키를 다시 적는다.
+# 읍면동·문화도시 안성 게시판은 v3 규칙에서 v1로 시작한다. 읍면동 한 곳만 올릴 때는 아래 펼침 뒤에 그 키를 다시 적는다.
 BOARD_PARSER_VERSIONS = MappingProxyType({
     'city': 'city-notice-parser-v3',
     'edu': 'edu-notice-parser-v3',
     **{key: f'{key}-notice-parser-v1' for key in BOARDS if key.startswith('town-')},
+    'ccas': 'ccas-notice-parser-v1',
 })
 
 
