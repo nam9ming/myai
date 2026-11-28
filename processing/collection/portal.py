@@ -24,7 +24,8 @@ from .portal_transport import fetch_portal_page, portal_endpoint, validate_servi
 PORTAL_ROOT = CAPTURE_ROOT.with_name(PORTAL_SECTION)
 PAGE_SIZE = 500
 MAX_PAGES = 20
-SCHEMA = "citizen-portal-snapshot-v1"
+# v1은 문서 기준 response 감싸기·대문자 도서관 열, v2는 2026-11-29 실제 응답 구조다. v1 기록은 다시 읽지 않는다.
+SCHEMA = "citizen-portal-snapshot-v2"
 SERVICE_KEY_ENV = "DATA_GO_KR_SERVICE_KEY"
 
 
@@ -55,7 +56,7 @@ def ordered_json(value):
 
 def read_page(output: bytearray, category: str, raw: bytes, page: int, page_size: int,
               previous_total: int | None, seen_pages: set[bytes]) -> tuple[int, int]:
-    total, rows = parse_page(raw, page, page_size)
+    total, rows = parse_page(category, raw, page, page_size)
     if previous_total is not None and total != previous_total:
         raise ValueError("포털 API 조회 중 전체 건수가 달라졌습니다.")
     if total > MAX_PAGES * page_size:
