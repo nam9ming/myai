@@ -185,6 +185,13 @@ class YouthPolicyParserTest(unittest.TestCase):
             (detail(viewer=VIEWER.replace("다음보기", "신청 안내")), "대표 이미지 영역"),
             (detail(viewer=VIEWER.replace("/portal/js/unit/cardNews/view.js", "/x.js")), "대표 이미지 영역"),
             (detail(viewer=VIEWER + VIEWER), "대표 이미지 영역"),
+            # 중복 class는 브라우저가 첫 값을 써 틀이 아니라 본문이 되고, hidden·style은 이미지를 숨길 수 있다.
+            (detail(viewer=VIEWER.replace('<div class="photo_viewer', '<div class="x" class="photo_viewer')),
+             "대표 이미지 영역"),
+            (detail(viewer=VIEWER.replace('mB20"', 'mB20" hidden')), "대표 이미지 영역"),
+            (detail(viewer=VIEWER.replace('mB20"', 'mB20" style="display:none"')), "대표 이미지 영역"),
+            (detail(viewer=VIEWER.replace("<figure>", "<figure hidden>")), "대표 이미지 영역"),
+            (detail(viewer=VIEWER.replace("<figure>", '<figure style="display:none">')), "대표 이미지 영역"),
             # 대표 이미지 틀도 공용 토큰 검사(스크립트 이중 이스케이프)를 거친다.
             (detail(viewer=VIEWER.replace("init_thumbnail_view('.photo_viewer');", "<!--<script></script>-->")),
              "해석이 갈리는"),

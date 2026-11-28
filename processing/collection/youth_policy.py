@@ -241,12 +241,12 @@ class _PolicyParser(_NoticeParser):
                 and tag == "div" and "photo_viewer" in (values.get("class") or "").split()):
             # 대표 이미지 틀은 공지 본문 허용 목록 대신 아래 틀 검사를 받으므로 태그 경계 검사만 거친다.
             PinnedHTMLParser.handle_starttag(self, tag, attrs)
-            if self.viewer is not None:
-                self._viewer_start(tag, names, values)
-            elif self.viewer_seen or "".join(self.parts["description"]).strip():
-                raise ValueError(_INVALID_VIEWER)
-            else:
-                self.viewer, self.viewer_seen = ["div"], True
+            if self.viewer is None:
+                if self.viewer_seen or "".join(self.parts["description"]).strip():
+                    raise ValueError(_INVALID_VIEWER)
+                self.viewer, self.viewer_seen = [], True
+            # 여는 div도 같은 검사를 받는다. 중복 class면 브라우저는 첫 값을 써 틀이 아닌 본문으로 보인다.
+            self._viewer_start(tag, names, values)
             return
         super().handle_starttag(tag, attrs)
         # 최상위 form·input은 공지 파서가 태그 깊이·숨김 깊이를 바꾸지 않으므로 호출 뒤에 봐도 같다.
@@ -269,7 +269,7 @@ class _PolicyParser(_NoticeParser):
 
     def _viewer_start(self, tag, names, values):
         source = values.get("src") or ""
-        if (tag not in _VIEWER_TAGS or len(set(names)) != len(names)
+        if (tag not in _VIEWER_TAGS or len(set(names)) != len(names) or "hidden" in values or "style" in values
                 or (tag == "script" and names and (names != ["src"] or source not in _VIEWER_SCRIPTS))
                 or (tag == "img" and not _VIEWER_IMAGE.fullmatch(source))):
             raise ValueError(_INVALID_VIEWER)
