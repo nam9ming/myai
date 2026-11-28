@@ -137,6 +137,17 @@ python3.13 -B -m processing.collection.batch culture \
 
 `living`으로 도서관 표준 API도 수집할 수 있다. 전국 응답을 페이지당 500건씩 최대 20페이지, 응답당 8 MiB까지 받는다. 응답 원본·해시·키를 뺀 요청 주소·수신 시각은 `data/private/collection-portal/<name>/`에 보관한다. 모든 페이지가 확인되어야 기존 안성시 필터를 적용할 수 있는 비교용 `portal.csv`를 만든다. 종료 0은 완료, 2는 실패 기록 보관, 1은 설정 또는 저장 실패다. `--portal-snapshot`은 원본에서 CSV를 다시 만들어 보관본과 대조한 뒤 목록을 수집한다. 수동 CSV는 `--portal-csv`로 계속 받는다.
 
+처음 구현은 문서만 보고 `response` 아래 `header`·`body`, 목록 `items`, 대문자 도서관 열(`LBRRY_NM` 등)을 가정했다. 2026-11-29 승인된 키로 받은 첫 실제 응답(문화축제 1페이지, 전체 1,372건, 도서관 1페이지, 전체 3,635건)은 이 가정과 달라 둘 다 `포털 API 응답 구조가 올바르지 않습니다.`로 실패했다. 지금 파서는 그 두 응답에서 확인한 구조만 받는다(수집 기록 `citizen-portal-snapshot-v2`, 문서 기준 v1 기록은 다시 읽지 않음).
+
+- 최상위는 `response` 없이 `header`·`body` 두 키다. `header`는 정확히 `{"resultCode": "00", "resultMsg": "NORMAL SERVICE."}`이다.
+- `body`는 `items`·`numOfRows`·`pageNo`·`totalCount` 네 키이고 세 수는 JSON 정수다. 숫자 문자열은 받지 않는다.
+- `items`는 `{"item": [행 500개]}`이다. 행 값은 모두 문자열이고 빈 값은 `""`이며 `null`·숫자는 없었다.
+- 문화축제 행 열 18개는 문서와 같다: 기존 비교 열 11개(`fstvlNm`·`opar`·`fstvlStartDate`·`fstvlEndDate`·`fstvlCo`·`auspcInsttNm`·`homepageUrl`·`rdnmadr`·`lnmadr`·`latitude`·`longitude`)와 `mnnstNm`·`suprtInsttNm`·`phoneNumber`·`relateInfo`·`referenceDate`·`insttCode`·`insttNm`.
+- 도서관 행 열 28개는 camelCase다. 비교 열 13개는 `lbrryNm`·`ctprvnNm`·`signguNm`·`closeDay`·`weekdayOperOpenHhmm`·`weekdayOperColseHhmm`·`satOperOperOpenHhmm`·`satOperCloseHhmm`·`holidayOperOpenHhmm`·`holidayCloseOpenHhmm`·`rdnmadr`·`operInstitutionNm`·`homepageUrl`이고, 그 밖에 `lbrrySe`·`seatCo`·`bookCo`·`pblictnCo`·`noneBookCo`·`lonCo`·`lonDaycnt`·`phoneNumber`·`plotAr`·`buldAr`·`latitude`·`longitude`·`referenceDate`·`insttCode`·`insttNm`이 있다. 안성시 판단은 그대로 `ctprvnNm`(시도명)이 `경기도`이고 `signguNm`(시군구명)이 `안성시`인 행이다.
+- 같은 1페이지를 다시 파싱하면 문화축제는 500행 중 안성시 1행(`안성맞춤 남사당 바우덕이축제`), 도서관은 500행 중 0행이다. 나머지 페이지는 아직 받지 않았다.
+
+이 밖의 구조는 추정하지 않고 거부한다. 최상위·`header`·`body`·`items`에 키가 더 있거나 빠진 경우, 행 열 이름이 위 목록과 하나라도 다른 경우, 행 값이 문자열이 아니거나 NUL을 담은 경우가 그렇다. 빈 페이지와 1행 페이지는 실제로 보지 못했다. XML을 JSON으로 바꾸는 API는 0행을 `""`로, 1행을 목록 없는 객체로 보내는 경우가 있다고 알려져 있으나 이 API에서는 확인하지 않았다. 그래서 전체 0건이나 마지막 페이지 뒤처럼 기대 행이 0인 페이지는 `items` 모양과 관계없이 실패로 남긴다. `items.item`이 목록이 아닌 페이지(단일 객체 포함)도 실패다. 지금 전체 건수로는 마지막 페이지가 372행·135행이라 두 경우 모두 나오지 않는다. 전체 건수가 바뀌어 마지막 페이지가 1행이 되고 이 실패가 나오면, 원본을 보고 형식을 확인한 뒤 코드·시험·이 문서를 함께 고친다. 2페이지 이후에서 다른 열이나 `null`이 나와도 같은 방식으로 처리한다.
+
 ### 공공데이터포털 파일데이터 API 수집 (교육장·도로 공사)
 
 파일데이터를 API로 제공하는 `api.odcloud.kr`에서 두 자료를 받는다. 키는 위 표준 API와 같은 `DATA_GO_KR_SERVICE_KEY`(디코딩된 키)에서만 읽고 실행 인자·원본 파일·수집 기록에 남기지 않는다. 응답이 키를 그대로·URL 인코딩·JSON 이스케이프 형태로 되돌려 보내면 저장하기 전에 거부한다.

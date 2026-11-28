@@ -9,15 +9,13 @@ from unittest.mock import patch
 from processing.collection import batch, portal
 from processing.collection.d03 import prepare
 from processing.collection.d03_sources import capture_assets
+from processing.tests.test_portal_format import envelope, record
 
 
 def page(number, total, *names):
-    rows = [{"fstvlNm": name, "rdnmadr": "경기도 " + name.split()[0] + " 합성로 1"}
+    rows = [record("culture", fstvlNm=name, rdnmadr="경기도 " + name.split()[0] + " 합성로 1")
             for name in names]
-    return json.dumps({"response": {
-        "header": {"resultCode": "00"},
-        "body": {"pageNo": number, "numOfRows": 2, "totalCount": total, "items": rows},
-    }}, ensure_ascii=False).encode()
+    return json.dumps(envelope({"item": rows}, page=number, total=total), ensure_ascii=False).encode()
 
 
 class PortalCollectionTest(unittest.TestCase):
@@ -60,7 +58,7 @@ class PortalCollectionTest(unittest.TestCase):
         first = page(1, 4, "안성시 첫째", "안성시 둘째")
         second = first.replace(b'"pageNo": 1', b'"pageNo": 2')
         reversed_rows = json.loads(second)
-        items = reversed_rows["response"]["body"]["items"]
+        items = reversed_rows["body"]["items"]["item"]
         items[:] = [dict(reversed(row.items())) for row in items]
         self.fetch.side_effect = [first, json.dumps(reversed_rows).encode()]
         self.assertEqual(self.collect()["status"], "failed")
@@ -82,6 +80,10 @@ class PortalCollectionTest(unittest.TestCase):
                 asset.write_bytes(initial)
         receipt_file = self.capture / "portal.json"
         receipt = json.loads(receipt_file.read_bytes())
+        # 문서 기준 v1 기록은 실제 응답 구조로 다시 읽지 않는다.
+        receipt_file.write_text(json.dumps({**receipt, "schema_version": "citizen-portal-snapshot-v1"}))
+        with self.assertRaisesRegex(ValueError, "완료된"):
+            portal.read_portal_snapshot(self.private, "run")
         receipt["responses"][0]["fetched_at"] = "2026-02-30T12:00:00Z"
         receipt_file.write_text(json.dumps(receipt))
         with self.assertRaisesRegex(ValueError, "수신 시각"):
