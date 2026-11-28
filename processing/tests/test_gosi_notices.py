@@ -106,6 +106,9 @@ class GosiParserTest(unittest.TestCase):
         rows = _row("1").replace('<td class="gosi_dept">', '<td class="gosi_dept"/>')
         decoy = '<body><textarea><form id="listForm" action="/x"></form></textarea>'.encode()
         self.assertEqual(parse_gosi_listing(listing(rows=rows).replace(b"<body>", decoy), page=1), (1, [row("1")]))
+        # 브라우저는 `</br>`도 `<br>`처럼 줄을 바꾸므로 주체와 번호 사이 띄어쓰기를 지우지 않는다.
+        rows = _row("1", number="안성시 고시</br>제2026-343호")
+        self.assertEqual(parse_gosi_listing(listing(rows=rows), page=1), (1, [row("1")]))
         for markup in ("<!-->", "</b title='>'>", "<![CDATA[x]]>", '<b class="a"\xa0id="b">'):
             with self.subTest(markup=markup), self.assertRaisesRegex(ValueError, "고시·공고 목록 HTML에 브라우저와 해석이"):
                 parse_gosi_listing(listing("1").replace(b"<tbody>", f"<tbody>{markup}".encode()), page=1)
