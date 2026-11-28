@@ -1,14 +1,14 @@
 """안성맞춤아트홀 공연·전시 전체일정의 월별 목록과 상세 공개 항목을 읽는다."""
 
 from datetime import datetime
-from html.parser import HTMLParser
 import re
 from urllib.parse import urlencode
 
+from .html_tokens import PinnedHTMLParser
 from .official_web import OFFICIAL_ORIGIN, _fetch
-from .road_works import _BREAK_TAGS, _TEXT_TAGS, _VOID_TAGS, _period, _text
+from .road_works import _BREAK_TAGS, _TEXT_TAGS, _period, _text
 
-PARSER_VERSION = "arthall-concert-parser-v1"
+PARSER_VERSION = "arthall-concert-parser-v2"
 _MENU = "0202010100"
 _LIST_ACTION = f"/arthall/concert/list.do?scCategory=&mId={_MENU}"
 _SOURCE = "안성맞춤아트홀"
@@ -23,10 +23,6 @@ _NOT_FOUND = "존재하지 않는 공연/전시입니다."
 _SECTION_TAGS = _TEXT_TAGS | {"div", "img"}
 _INVALID_LISTING = "안성맞춤아트홀 일정 목록 HTML 구조가 올바르지 않습니다."
 _INVALID_DETAIL = "안성맞춤아트홀 공연·전시 상세 HTML 구조가 올바르지 않습니다."
-# 브라우저가 안을 마크업으로 읽지 않는 원문 요소. 3.13은 script·style만, 3.14는 나머지도 원문으로 읽는다.
-_RAW_TEXT = ("script", "style", "xmp", "iframe", "noembed", "noframes", "textarea", "title")
-# 버전마다 끝이 다른 끝 태그: 따옴표·`=` 포함, 원문 요소 이름 뒤가 `>`가 아님, `</` 뒤 공백.
-_ODD_END = re.compile(r"</\s|</[A-Za-z][^>]*[\"'=]|</(?!(?:{0})>)(?:{0})\b".format("|".join(_RAW_TEXT)), re.I)
 _FIELDS = {
     "장르": "genre", "기간": "period", "시간": "time", "관람시간": "running_time", "장소": "venue",
     "관람연령": "age_rating", "입장권": "admission", "티켓 오픈 일시": "ticket_open", "문의처": "contact",
@@ -63,22 +59,24 @@ def fetch_detail(concert_id: str, *, limit: int) -> bytes:
     return _fetch("GET", _detail_path(concert_id), None, limit, source=f"{_SOURCE} 상세")
 
 
-class _Parser(HTMLParser):
+class _Parser(PinnedHTMLParser):
     """정해진 영역(같은 이름 태그의 깊이로 끝을 찾는다) 안만 읽고, 영역 안 글자 모음(capture)을 공통으로 처리한다."""
 
     REGIONS: dict = {}
-    CDATA_CONTENT_ELEMENTS = _RAW_TEXT
 
     def __init__(self, error: str):
-        super().__init__(convert_charrefs=True)
+        super().__init__()
         self.error, self.region, self.depth, self.counts, self.scripts = error, None, 0, {}, []
         self.capture = None  # [끝 태그, 깊이, 조각, 허용 태그, 완료 함수]
 
+    def markup_error(self) -> ValueError:
+        return ValueError(self.error)
+
     def fail(self):
-        raise ValueError(self.error)
+        raise self.markup_error()
 
     def run(self, text: str):
-        if not isinstance(text, str) or "\x00" in text or _ODD_END.search(text):
+        if not isinstance(text, str) or "\x00" in text:
             self.fail()
         try:
             self.feed(text)
@@ -89,37 +87,11 @@ class _Parser(HTMLParser):
             self.fail()
         return self
 
-    def parse_comment(self, i, report=True):
-        # 주석은 브라우저처럼 첫 `-->`에서 끝낸다(3.13.5는 `--\s*>`, 3.14는 `--!?>`에서 닫았다).
-        # 해석이 갈리는 `<!-->`·`<!--->`·`--!>`와 닫히지 않은 주석은 거부한다.
-        end = self.rawdata.find("-->", i + 4)
-        if end < 0 or self.rawdata.startswith((">", "->"), i + 4) or "--!>" in self.rawdata[i + 4:end]:
-            self.fail()
-        return end + 3
-
-    def parse_html_declaration(self, i):
-        # 실제 문서의 `<!DOCTYPE html>`만 받는다. CDATA·가짜 주석·따옴표 든 선언은 버전마다 읽는 범위가 다르다.
-        end = self.rawdata.find(">", i + 2)
-        if end < 0 or re.fullmatch(r"<!doctype html", self.rawdata[i:end], re.I) is None:
-            self.fail()
-        return end + 1
-
-    def parse_pi(self, i):
-        # 실제 문서에 없고, 닫히지 않은 `<?`는 Python 버전마다 읽는 범위가 다르다.
-        self.fail()
-
     def start_capture(self, tag, allowed, done):
         self.capture = [tag, 1, [], allowed, done]
 
-    def handle_startendtag(self, tag, attrs):
-        # 브라우저는 void가 아닌 `<title/>` 등을 열어 둬 뒤 영역이 그 안에 든다.
-        if tag not in _VOID_TAGS:
-            self.fail()
-        self.handle_starttag(tag, attrs)
-
     def handle_starttag(self, tag, attrs):
-        if tag == "plaintext":  # 3.14만 문서 끝까지 원문으로 읽는다.
-            self.fail()
+        super().handle_starttag(tag, attrs)
         values = dict(attrs)
         classes = (values.get("class") or "").split()
         if self.capture is not None:
@@ -162,10 +134,8 @@ class _Parser(HTMLParser):
                 self.region = None
 
     def handle_data(self, data):
+        super().handle_data(data)
         if self.cdata_elem == "script":
-            # 브라우저는 `<!--<script>` 뒤 첫 `</script>`에서 script를 끝내지 않는다.
-            if "<!--" in data:
-                self.fail()
             self.scripts.append(data)
         elif self.capture is not None:
             self.capture_data(data)
@@ -175,20 +145,11 @@ class _Parser(HTMLParser):
     def capture_data(self, data):
         self.capture[2].append(data)
 
-    def capture_start(self, tag, values, classes):
+    def _skip(self, *_args):
         pass
 
-    def capture_end(self, tag):
-        pass
-
-    def region_open(self, kind, values):
-        pass
-
-    def region_data(self, data):
-        pass
-
-    def outside_start(self, tag, values, classes):
-        pass
+    # 하위 파서가 필요한 것만 재정의한다.
+    capture_start = capture_end = region_open = region_data = outside_start = _skip
 
 
 def _has(name):

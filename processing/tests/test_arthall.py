@@ -55,11 +55,12 @@ _SECTIONS = """<div id="tap_wrapper1" class="mT30 tap_wrapper" style="display: n
 
 
 def detail(concert_id="3809", *, init_id=None, goods="26014378", title="합성 공연 <테오팀 & 듀오>", fields=_FIELDS,
-           buttons=True, tabs=_TABS, sections=_SECTIONS, action=_ACTION, category='<span class="category_program">기획</span>'):
+           buttons=True, tabs=_TABS, sections=_SECTIONS, action=_ACTION, category='<span class="category_program">기획</span>',
+           head='<div id="layer_popup1" style="display:none;"></div>'):
     rows = "".join(f'<li><span class="title">{label}</span><span class="sub">{value}</span></li>' for label, value in fields)
     booking = ('<div class="ticket_btns"><p class="ticketbooking"><a href="javascript:void(0);" '
                'onclick="module.booking(); return false;">예매하기</a></p></div>') if buttons else ""
-    return f"""<!DOCTYPE html><html><body><div id="layer_popup1" style="display:none;"></div>
+    return f"""<!DOCTYPE html><html><body>{head}
     <form id="cancel" name="cancel" action="{action}" method="post"><input name="page" type="hidden" value="1"/></form>
     <div class="con_list"><div class="m_title taC">{category}<h4>{title}</h4></div>
       <div class="conInfo_img"><img src="/common/imgView.do?attachId=p&amp;fileSn=q&width=550&mode=ratio" alt="포스터 <x>">
@@ -80,6 +81,10 @@ class ArthallListingTest(unittest.TestCase):
         self.assertEqual(parse_listing(listing("5"), year=2026, month=12, page=1), (1, ["5"]))
         self.assertEqual(parse_listing(listing(month=6), year=2026, month=6, page=1), (1, []))
         self.assertEqual(listing_path(2026, 6, 2), "/arthall/concert/list.do?mId=0202010100&year=2026&month=6&page=2")
+        # `</ div>`·`</div\xa0>`는 브라우저처럼 영역을 닫지 않는다(3.13.5만 `</div>`로 읽었다).
+        for odd in (b"</ div>", b"</\ndiv>", "</div\xa0>".encode()):
+            self.assertEqual(parse_listing(listing("1").replace(b'"fR">', b'"fR">' + odd), year=2026, month=12, page=1),
+                             (1, ["1"]))
 
     def test_rejects_mismatch_and_format_changes(self):
         cases = {
@@ -93,9 +98,8 @@ class ArthallListingTest(unittest.TestCase):
             "쪽 번호 없음": (listing("1", total=2).replace(b'class="bod_page"', b'class="paging"'), {}),
             "다른 목록": (listing("1", action="/arthall/other/list.do"), {}),
         }
-        # `</ div>`는 3.13만 끝 태그로 읽는다. 남는 `</div>`가 영역을 닫아도 뒤 공연·쪽 번호·항목은 보인다.
-        for old, new in ((b'"fR">', b'"fR"></ div>'), (b'"fR">', b'"fR"></\ndiv>'), (b"</div></li>", b"</div></div></li>")):
-            cases[new.decode()] = (listing("11", "12").replace(old, new, 1), {})
+        # 남는 `</div>`가 영역을 닫아도 뒤 공연·쪽 번호·항목은 보인다.
+        cases["남는 끝 태그"] = (listing("11", "12").replace(b"</div></li>", b"</div></div></li>", 1), {})
         cases["쪽 번호 밖"] = (listing("1", pager='<span>1</span></div><a onclick="goPage(2); return false;">2</a>'), {})
         for name, (raw, override) in cases.items():
             with self.subTest(name), self.assertRaises(ValueError):
@@ -154,10 +158,17 @@ class ArthallDetailTest(unittest.TestCase):
     def test_raw_text_elements_hide_markup_on_every_version(self):
         # 원문 요소 안의 영역 표기는 3.13에서도 마크업으로 읽지 않는다.
         base = parse_detail(detail(), concert_id="3809")
-        for tag in ("xmp", "iframe", "noembed", "noframes", "textarea", "title"):
-            text = detail().replace('<div class="cleB"></div>', f'<{tag}><div class="conInfo_list"><h4>가짜</h4></div></{tag}>')
+        for tag in ("xmp", "iframe", "noembed", "noframes", "noscript", "textarea", "title"):
+            text = detail(head=f'<{tag}><div class="conInfo_list"><h4>가짜</h4></div></{tag}>')
             with self.subTest(tag):
                 self.assertEqual(parse_detail(text, concert_id="3809"), base)
+
+    def test_reads_tag_borders_like_browsers(self):
+        # 브라우저처럼 `</ div>`·`</div\xa0>`는 div를 닫지 않고 void가 아닌 `<div/>`는 열어 둔다(3.13.5는 달리 읽었다).
+        for markup, text in (("1</ div>2", "12"), ("1</\ndiv>2", "12"), ("1</div\xa0>2", "12"), ("<div/>1</div>2", "1 2"),
+                             ("<!x>1<?x>", "1")):
+            with self.subTest(markup):
+                self.assertEqual(parse_detail(_body(f"<div>{markup}</div>"), concert_id="3809")["sections"][0]["text"], text)
 
     def test_rejects_unconfirmed_pages(self):
         cases = {
@@ -173,25 +184,24 @@ class ArthallDetailTest(unittest.TestCase):
             "안내 안 태그": _body('<p class="p_notice">모바일<div>본문1</div></div>'
                                  '<div id="tap_wrapper2" class="tap_wrapper"><div>본문2</div>'),
             "안내 밖 닫힘": _body('<div><p class="p_notice">모바일</div>본문</p>'),
-            # 브라우저는 void가 아닌 `<div/>`를 영역 밖에서도 열어 둔다.
-            "스스로 닫은 태그": _body("<div/>본문1</div>본문2"),
             "스스로 닫은 영역": detail(tabs="", sections='<div id="tap_wrapper1" class="tap_wrapper"/>본문'),
-            # 원문 요소의 끝 위치가 Python 버전마다 다르다.
-            "원문 끝 태그": detail().replace("</script>", "</script/>"),
-            "plaintext": detail().replace('<div class="cleB"></div>', "<plaintext>"),
-            # 브라우저는 뒤 탭·본문까지 script 글자로 읽는다.
-            "script 주석": detail().replace('<div class="cleB"></div>', "<script><!--<script>\n</script>"),
+            "plaintext": detail(head="<plaintext>"),
+            # 브라우저는 뒤 영역까지 script 글자로 읽는다.
+            "script 주석": detail(head="<script><!--<script>\n</script>"),
             "항목 밖": detail().replace("</h4><ul>", "</h4></div><ul>"),
             "예매 밖": detail().replace("<!-- 기존 noimage -->", "</div>"),
         }
-        for markup in ("<!-- a --!>보이는글<!-- b -->", "<!-->보이는글<!-- b -->", "<!--->보이는글<!-- b -->", "<!-- 끝없음",
-                       "<![CDATA[x]]>보이는글", "<!x>", '<!DOCTYPE html PUBLIC "x>">', "<?x>", 'a</div x=">">b',
-                       "본문1</ div>본문2", "본문1</\ndiv>본문2"):
+        # 공용 파서의 거부 규칙 전체는 test_html_tokens가 본다.
+        for markup in ("<!-- a --!>보이는글<!-- b -->", "<!-- 끝없음", "<![CDATA[x]]>보이는글", 'a</div x=">">b',
+                       # 3.13.5는 따옴표 밖 `\xa0`와 `==`를 속성 구분자로 읽어 3.14·브라우저와 속성이 달랐다.
+                       '<span class="a"\xa0id="b">x</span>', "<span title==x>x</span>"):
             cases[markup] = _body(f"<div>{markup}</div>")
-        for tag in ("script", "title", "span"):
-            cases[f"<{tag}/>"] = detail().replace('<div class="cleB"></div>', f"<{tag}/>")
+        for tag in ("script", "title"):
+            # 브라우저는 `/>`를 무시하고 뒤 영역까지 원문 텍스트로 읽는다.
+            cases[f"<{tag}/>"] = detail(head=f"<{tag}/>")
         for name, text in cases.items():
-            with self.subTest(name), self.assertRaises(ValueError):
+            # 공용 파서가 거부해도 이 모듈의 오류 문구를 남긴다.
+            with self.subTest(name), self.assertRaisesRegex(ValueError, "^안성맞춤아트홀"):
                 parse_detail(text, concert_id="3809")
         missing = "<html><head><script>alert('존재하지 않는 공연/전시입니다.'); history.back(-1);</script></head></html>"
         with self.assertRaisesRegex(ValueError, "존재하지 않는"):
