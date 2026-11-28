@@ -143,6 +143,10 @@ class CourseDetailTest(unittest.TestCase):
         self.assertNotIn("missing:fee", free["review_flags"])
         self.assertIn("missing:fee", blank["review_flags"])
 
+    def test_end_br_breaks_line_like_browser(self):
+        record = parse_course_detail(_detail(교육시간="화/14:00 ~ 16:00</br>목/14:00 ~ 16:00"), course_id="5086")
+        self.assertEqual(record["fields"]["course_schedule"], "화/14:00 ~ 16:00\n목/14:00 ~ 16:00")
+
     def test_sessions_with_the_same_title_stay_distinct(self):
         first = parse_course_detail(_detail("5085", 교육기간="2026-12-12 ~ 2026-12-12"), course_id="5085")
         second = parse_course_detail(_detail("5086"), course_id="5086")
@@ -163,6 +167,13 @@ class CourseDetailTest(unittest.TestCase):
             ("구조", "<script>alert('잘못된 접근입니다.');</script>"),
             ("화면 표시", _detail(교육장="<span hidden>숨은 교육장</span>")),
             ("화면 표시", _detail(수강료='<span style="display:none">무료</span>')),
+            ("화면 표시", _detail(수강료='<span class="blind">유료 </span>무료')),
+            ("화면 표시", _detail(수강료='<a href="#" onclick="x()"><span class="skip">유료 </span>무료</a>')),
+            ("화면 표시", _detail(title='<span class="blind">[취소] </span>강좌')),
+            ("화면 표시", _detail().replace("<dl>", '<dl class="blind">', 1)),
+            ("구조", _detail().replace('<div class="bod_write">', '<div class="bod_write">※ 유료로 변경되었습니다.')),
+            ("구조", _detail().replace("<dt>수강료</dt>", "<dt>수강료</dt>(재료비 별도)")),
+            ("구조", _detail().replace('<div class="bod_title">', '<div class="bod_title">[숨김접두]')),
             ("강좌명", _detail(title="")),
             ("해석이 갈리는", _detail(강좌소개="<!--->숨김-->")),
         ]
@@ -215,7 +226,7 @@ class CourseBatchTest(unittest.TestCase):
 
         parsed = self.root / "run" / "parsed-5086.json"
         original = parsed.read_bytes()
-        for changed, message in ((original.replace(b"edu-course-parser-v1", b"edu-course-parser-v0"), "파서 버전"),
+        for changed, message in ((original.replace(b"edu-course-parser-v2", b"edu-course-parser-v1"), "파서 버전"),
                                  (original.replace("선착순".encode(), "추첨".encode()), "파싱 결과")):
             parsed.chmod(0o600)
             parsed.write_bytes(changed)

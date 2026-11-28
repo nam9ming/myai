@@ -25,7 +25,7 @@ _IMAGE = re.compile(re.escape(CONTEXT_PATH) + r"/common/imgView\.do\?attachId=[0
                     r"&mode=ratioView")
 _MAX_ROWS = 100
 # 공유 태그 경계 규칙(_NoticeParser)이나 아래 출력·허용 규칙이 바뀌면 올린다.
-PARSER_VERSION = "edu-course-parser-v1"
+PARSER_VERSION = "edu-course-parser-v2"
 _TEXT_FIELDS = {
     "접수기간": "application_period",
     "접수현황": "enrollment_status",
@@ -43,9 +43,13 @@ _MEDIA_FIELDS = {"교육장 사진": "venue_photos", "강의계획서 및 이미
 _TEXT_TAGS = {"br", "span", "em", "a"}
 # 제목 줄의 span class. bod_btn은 로그인 안내·신청 단추라 읽지 않는다.
 _TITLE_PARTS = {"bod_state_type": "state", "bod_subject": "subject", "bod_btn": None}
-# 2026-11-28 실제 상세 28쪽의 제목 줄·항목 칸에 있던 속성만 받는다. hidden 같은 숨김 속성·다른 인라인 스타일은 거부한다.
+# 2026-11-28 실제 상세 28쪽의 제목 줄·항목 칸에 있던 속성·class만 받는다. hidden 같은 숨김 속성·다른 인라인 스타일과
+# 이 사이트의 화면 숨김 class(blind 등)는 거부한다. skip은 첨부 링크의 `파일 다운로드` 안내에서만 받고 읽지 않는다.
 _ATTRS = frozenset("alt class href id onclick src target title type".split())
 _STYLES = {"vertical-align:middle"}
+_CLASSES = frozenset("bod_title bod_write bod_state_type bod_subject bod_btn em_b_black mL5 mR5 mL20 mR10 updateFileList"
+                     " file_slide file_slide_list file_slide_item file_slide_anchor file_slide_control file_slide_prev"
+                     " file_slide_next".split())
 
 
 def _course_id(value: object) -> str:
@@ -105,6 +109,8 @@ class _Page(_NoticeParser):
 
     def handle_endtag(self, tag):
         super().handle_endtag(tag)
+        if tag == "br" and self.open and not self.hidden_depth:
+            self.open[-1][2].append(("br", {}, []))  # 브라우저는 `</br>`를 `<br>`로 읽는다.
         if self.hidden_depth or not self.open or tag in _VOID_TAGS:
             return
         if self.open[-1][0] != tag:
@@ -130,6 +136,13 @@ def _read(text: str, select, error: str) -> _Page:
 
 def _elements(node: tuple) -> list[tuple]:
     return [child for child in node[2] if isinstance(child, tuple)]
+
+
+def _children(node: tuple) -> list[tuple]:
+    """요소 밖에 놓인 글자는 화면에 보이지만 읽을 칸이 없으므로 형식 변경으로 본다."""
+    if any(isinstance(child, str) and child.strip() for child in node[2]):
+        raise ValueError(_INVALID_DETAIL)
+    return _elements(node)
 
 
 def _descendants(node: tuple):
@@ -209,7 +222,7 @@ def parse_course_listing(raw: bytes, *, page: int) -> tuple[int, list[str]]:
     return total, ids
 
 
-def _media(node: tuple, field: str, items: list[dict]) -> None:
+def _media(node: tuple, field: str, items: list[dict], hints: set[int]) -> None:
     """교육장 사진·강의계획서 칸의 그림과 첨부 이름을 원래 순서로 모은다. 그 밖의 글자·태그는 형식 변경으로 본다."""
     for child in node[2]:
         if isinstance(child, str):
@@ -225,21 +238,22 @@ def _media(node: tuple, field: str, items: list[dict]) -> None:
                           "url": OFFICIAL_ORIGIN + source if _IMAGE.fullmatch(source) else None})
         elif tag == "a" and "onclick" in values:
             match = _DOWNLOAD.fullmatch(values["onclick"] or "")
-            # `파일 다운로드` 안내(span.skip)를 뺀 파일 이름
-            visible = (tag, values, [part for part in child[2]
-                                     if not (isinstance(part, tuple) and "skip" in _classes(part))])
+            # `파일 다운로드` 안내(span.skip)를 뺀 파일 이름. 뺀 요소만 skip class 검사를 통과한다.
+            hidden = [part for part in child[2] if isinstance(part, tuple) and "skip" in _classes(part)]
+            hints.update(map(id, hidden))
+            visible = (tag, values, [part for part in child[2] if part not in hidden])
             items.append({"field": field, "kind": "attachment", "label": _value(visible),
                           "url": f"{OFFICIAL_ORIGIN}{CONTEXT_PATH}/cmm/fms/FileDown.do?atchFileId={match[1]}"
                                  f"&fileSn={match[2]}" if match else None})
         elif tag in ("div", "a"):
-            _media(child, field, items)
+            _media(child, field, items, hints)
         else:
             raise ValueError(_INVALID_DETAIL)
 
 
 def _title(node: tuple) -> tuple[str | None, str]:
     found: dict[str, str | None] = {}
-    for child in _elements(node):
+    for child in _children(node):
         kind = _TITLE_PARTS.get(child[1].get("class") or "", "unknown") if child[0] == "span" else "unknown"
         if kind == "unknown" or kind in found:
             raise ValueError(_INVALID_DETAIL)
@@ -265,16 +279,14 @@ def parse_course_detail(text: str, *, course_id: str) -> dict:
               for name in ("bod_title", "bod_write")}
     if any(len(found) != 1 for found in blocks.values()):
         raise ValueError(_INVALID_DETAIL)
-    for node in (block for found in blocks.values() for block in (found[0], *_descendants(found[0]))):
-        if any(name not in _ATTRS and not (name == "style" and value in _STYLES) for name, value in node[1].items()):
-            raise ValueError(f"{_LABEL} 상세에 화면 표시를 확정할 수 없는 속성이 있습니다.")
     state, title = _title(blocks["bod_title"][0])
 
     fields = {"reception_status": state, **dict.fromkeys(_TEXT_FIELDS.values())}
     media: list[dict] = []
+    hints: set[int] = set()
     seen = set()
-    for row in _elements(blocks["bod_write"][0]):
-        cells = _elements(row)
+    for row in _children(blocks["bod_write"][0]):
+        cells = _children(row)
         if row[0] != "dl" or [cell[0] for cell in cells] != ["dt", "dd"]:
             raise ValueError(_INVALID_DETAIL)
         label, value = _value(cells[0]) or "", cells[1]
@@ -284,13 +296,18 @@ def parse_course_detail(text: str, *, course_id: str) -> dict:
             raise ValueError(f"{_LABEL} 상세의 항목이 중복되었습니다.")
         seen.add(label)
         if label in _MEDIA_FIELDS:
-            _media(value, _MEDIA_FIELDS[label], media)
+            _media(value, _MEDIA_FIELDS[label], media, hints)
         elif any(tag[0] not in _TEXT_TAGS for tag in _descendants(value)):
             raise ValueError(f"{_LABEL} 상세의 {label} 칸 형식이 바뀌었습니다.")
         else:
             fields[_TEXT_FIELDS[label]] = _value(value)
     if len(seen) != len(_TEXT_FIELDS) + len(_MEDIA_FIELDS):
         raise ValueError(f"{_LABEL} 상세에 빠진 항목이 있습니다.")
+    for node in (block for found in blocks.values() for block in (found[0], *_descendants(found[0]))):
+        if (any(name not in _ATTRS and not (name == "style" and value in _STYLES) for name, value in node[1].items())
+                or any(token not in _CLASSES and not (token == "skip" and id(node) in hints)
+                       for token in _classes(node))):
+            raise ValueError(f"{_LABEL} 상세에 화면 표시를 확정할 수 없는 속성이 있습니다.")
 
     flags = {f"missing:{key}" for key, value in fields.items() if value is None}
     flags.update(f"{item['kind']}:{item['field']}" for item in media)
