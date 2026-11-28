@@ -148,7 +148,7 @@ class _Parser(HTMLParser):
                 self.region, self.depth, self.kind = root, 1, kind
                 self.region_open(kind, values)
                 return
-        self.outside_start(tag, values)
+        self.outside_start(tag, values, classes)
 
     def handle_endtag(self, tag):
         if self.capture is not None:
@@ -193,7 +193,7 @@ class _Parser(HTMLParser):
     def region_data(self, data):
         pass
 
-    def outside_start(self, tag, values):
+    def outside_start(self, tag, values, classes):
         pass
 
 
@@ -215,7 +215,10 @@ class _ListingParser(_Parser):
         self.current = []
         self.links = []
 
-    def outside_start(self, tag, values):
+    def outside_start(self, tag, values, classes):
+        # 남는 끝 태그로 영역이 일찍 닫히면 뒤 공연·쪽 번호가 영역 밖에 남아 오류 없이 빠진다.
+        if re.search(r"go_view|goPage", values.get("onclick") or "") or "con_listInfo" in classes:
+            self.fail()
         if tag == "form" and values.get("id") == "listForm":
             if self.in_form:
                 self.fail()
@@ -322,7 +325,10 @@ class _DetailParser(_Parser):
         self.section = None
         self.notice = False
 
-    def outside_start(self, tag, values):
+    def outside_start(self, tag, values, classes):
+        # 남는 끝 태그로 영역이 일찍 닫히면 뒤 항목·예매 버튼이 영역 밖에 남아 오류 없이 빠진다.
+        if tag == "span" and {"title", "sub"} & set(classes) or "ticket_btns" in classes:
+            self.fail()
         if tag == "form" and values.get("id") == "cancel":
             self.actions.append(values.get("action"))
 

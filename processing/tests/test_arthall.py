@@ -93,6 +93,10 @@ class ArthallListingTest(unittest.TestCase):
         # `</` 뒤 공백은 3.13만 끝 태그로 읽어 뒤 공연이 빠진다(3.14와 브라우저는 주석으로 본다).
         for end in (b"</ div>", b"</\ndiv>"):
             cases[end.decode()] = (listing("11", "12").replace(b'<div class="fR">', b'<div class="fR">' + end, 1), {})
+        # 남는 `</div>`가 영역을 일찍 닫아도 뒤 공연·쪽 번호는 화면에 그대로 보인다.
+        cases["남는 끝 태그"] = (listing("11", "12").replace(b"</div></li></ul>", b"</div></div></li></ul>", 1), {})
+        cases["쪽 번호 밖"] = (listing("1", pager='<span>1</span></div><a href="#" onclick="goPage(2); return false;">2</a>'),
+                            {})
         for name, (raw, override) in cases.items():
             with self.subTest(name), self.assertRaises(ValueError):
                 parse_listing(raw, **{"year": 2026, "month": 12, "page": 1, **override})
@@ -180,6 +184,10 @@ class ArthallDetailTest(unittest.TestCase):
             # 브라우저에서는 첫 `</script>` 뒤 본문도 script 글자라 보이지 않는다.
             "script 주석": detail(tabs="", sections='<script><!--<script>\n</script><div id="tap_wrapper1" '
                                   'class="tap_wrapper">가짜 본문</div></script>-->'),
+            # 남는 `</div>`로 영역이 일찍 닫혀도 뒤 항목·예매 버튼은 화면에 보인다.
+            "항목 영역 밖": detail(fields=_FIELDS + (("출연", "합성 출연진"),)).replace(
+                '<li><span class="title">출연', '</div><li><span class="title">출연'),
+            "예매 영역 밖": detail().replace('<div class="ticket_btns">', '</div><div class="ticket_btns">'),
         }
         for markup in ("<!-- a --!>보이는글<!-- b -->", "<!-->보이는글<!-- b -->", "<!--->보이는글<!-- b -->", "<!-- 끝없음",
                        "<![CDATA[x]]>보이는글", "<!x>", '<!DOCTYPE html PUBLIC "x>">', "<?x>", 'a</div x=">">b',
