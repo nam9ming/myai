@@ -183,6 +183,9 @@ class _PageParser(HTMLParser):
             self.stack.append(tag)
 
     def handle_startendtag(self, tag, attrs):
+        # 브라우저는 script 등의 `/>`를 무시해 뒤 글자를 숨긴다. 실제 표본에는 없었다.
+        if tag in _IGNORED_TAGS:
+            self.fail()
         self.handle_starttag(tag, attrs)
         if tag not in _VOID_TAGS:
             self.handle_endtag(tag)
@@ -237,7 +240,8 @@ class _PageParser(HTMLParser):
             self.fail()
 
     def finish(self, text: str):
-        if not isinstance(text, str) or "\x00" in text:
+        # `<!-->`·`<!--->`·`--!>` 주석은 HTMLParser가 브라우저와 다르게 끊는다(버전마다도 다르다). 실제 표본에는 없었다.
+        if not isinstance(text, str) or "\x00" in text or re.search(r"<!---?>|--!>", text):
             self.fail()
         try:
             self.feed(text)

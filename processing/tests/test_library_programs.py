@@ -123,6 +123,8 @@ class LibraryProgramParserTest(unittest.TestCase):
             "cell box_page": listing(row("1").replace(
                 status, '>접수중</span><div class="box_page"><span style="display:none">마감</span></div>')),
             "stray text": listing(row("1") + "x"),
+            # 브라우저에는 `접수중마감`으로 보이지만 HTMLParser는 `<!-->`를 빈 주석으로 끊지 않는다.
+            "abrupt comment": listing(row("1").replace(status, ">접수중</span><!-->마감<!-- x -->")),
             "nul": listing(row("1")).replace(b"</html>", b"\x00</html>"),
         }
         for name, raw in cases.items():
@@ -178,6 +180,11 @@ class LibraryProgramParserTest(unittest.TestCase):
             "attachment text": detail("1", *replace("첨부파일", "파일 있음")),
             "attachment link": detail("1", *replace("첨부파일", '<a href="/x.hwp">x.hwp</a>')),
             "attachment script": detail("1", *replace("첨부파일", '<script src="/other.js"></script>')),
+            # 브라우저는 script의 `/>`를 무시하므로 뒤의 `자료없음`과 다음 행이 화면에 나오지 않는다.
+            "self-closing script": detail("1", *replace("첨부파일", '<script src="/dwr/engine.js"/>자료없음')),
+            # 브라우저에는 `10,000원없음.`으로 보이는데 HTMLParser는 비용을 주석으로 삼킨다.
+            "abrupt comment": detail("1", *replace("재료비", "<!-->10,000원<!-- b -->없음.")),
+            "bang comment": detail("1", *replace("재료비", "<!-- a --!>10,000원<!-- b -->없음.")),
             "odd cells": detail("1", head=("구분", "아양도서관", "행사구분")),
             "caption": detail("1").replace("문화강좌 신청확인", "문화강좌 목록"),
             "label tag": detail("1").replace("<th>장소</th>", "<th><span>장소</span></th>"),
