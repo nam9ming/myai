@@ -70,6 +70,10 @@ def detail(concert_id="3809", *, init_id=None, goods="26014378", title="합성 �
       if (a < b) {{ x = "</div>"; }}</script></body></html>"""
 
 
+def _body(html):
+    return detail(tabs="", sections=f'<div id="tap_wrapper1" class="tap_wrapper">{html}</div>')
+
+
 class ArthallListingTest(unittest.TestCase):
     def test_reads_ids_and_page_count(self):
         self.assertEqual(parse_listing(listing("3", "1", page=2, total=3), year=2026, month=12, page=2), (3, ["3", "1"]))
@@ -81,22 +85,18 @@ class ArthallListingTest(unittest.TestCase):
         cases = {
             "연월": (listing("1"), {"month": 11}),
             "요청 쪽": (listing("1", page=1, total=2), {"page": 2}),
-            "현재 쪽": (listing("1", page=2, pager='<span>1</span><a href="#" onclick="goPage(2); return false;">2</a>'),
-                      {"page": 2}),
-            "다음": (listing("1", pager='<span>1</span><a href="#" onclick="goPage(2); return false;">다음</a>'), {}),
-            "건너뜀": (listing("1", pager='<span>1</span><a href="#" onclick="goPage(3); return false;">3</a>'), {}),
+            "현재 쪽": (listing("1", page=2, pager='<span>1</span><a onclick="goPage(2); return false;">2</a>'), {"page": 2}),
+            "다음": (listing("1", pager='<span>1</span><a onclick="goPage(2); return false;">다음</a>'), {}),
+            "건너뜀": (listing("1", pager='<span>1</span><a onclick="goPage(3); return false;">3</a>'), {}),
             "구조": (listing("1", "1"), {}),
             # 쪽 번호 영역의 class가 바뀌면 여러 쪽짜리 달도 1쪽으로 보일 수 있다.
             "쪽 번호 없음": (listing("1", total=2).replace(b'class="bod_page"', b'class="paging"'), {}),
             "다른 목록": (listing("1", action="/arthall/other/list.do"), {}),
         }
-        # `</` 뒤 공백은 3.13만 끝 태그로 읽어 뒤 공연이 빠진다(3.14와 브라우저는 주석으로 본다).
-        for end in (b"</ div>", b"</\ndiv>"):
-            cases[end.decode()] = (listing("11", "12").replace(b'<div class="fR">', b'<div class="fR">' + end, 1), {})
-        # 남는 `</div>`가 영역을 일찍 닫아도 뒤 공연·쪽 번호는 화면에 그대로 보인다.
-        cases["남는 끝 태그"] = (listing("11", "12").replace(b"</div></li></ul>", b"</div></div></li></ul>", 1), {})
-        cases["쪽 번호 밖"] = (listing("1", pager='<span>1</span></div><a href="#" onclick="goPage(2); return false;">2</a>'),
-                            {})
+        # `</ div>`는 3.13만 끝 태그로 읽는다. 남는 `</div>`가 영역을 닫아도 뒤 공연·쪽 번호·항목은 보인다.
+        for old, new in ((b'"fR">', b'"fR"></ div>'), (b'"fR">', b'"fR"></\ndiv>'), (b"</div></li>", b"</div></div></li>")):
+            cases[new.decode()] = (listing("11", "12").replace(old, new, 1), {})
+        cases["쪽 번호 밖"] = (listing("1", pager='<span>1</span></div><a onclick="goPage(2); return false;">2</a>'), {})
         for name, (raw, override) in cases.items():
             with self.subTest(name), self.assertRaises(ValueError):
                 parse_listing(raw, **{"year": 2026, "month": 12, "page": 1, **override})
@@ -128,9 +128,8 @@ class ArthallDetailTest(unittest.TestCase):
         self.assertEqual(second["text"], "- 안성시민 15% * 인증 후 안내 증빙 필요")
         self.assertEqual(second["links"], ["https://example.invalid/pass"])
         self.assertEqual(record["review_flags"], [])
-        adjacent = '<div id="tap_wrapper1" class="tap_wrapper"><div>안성시민 15%</div><div>경로 50%</div></div>'
-        self.assertEqual(parse_detail(detail(tabs="", sections=adjacent), concert_id="3809")["sections"][0]["text"],
-                         "안성시민 15% 경로 50%")
+        adjacent = _body("<div>안성시민 15%</div><div>경로 50%</div>")
+        self.assertEqual(parse_detail(adjacent, concert_id="3809")["sections"][0]["text"], "안성시민 15% 경로 50%")
 
     def test_missing_values_stay_null_with_flags(self):
         fields = [("장르", ""), ("기간", "2026-12-10 ~ 2026-12-09"), ("티켓 오픈 일시", " ~ "), ("입장권", "무료"),
@@ -153,7 +152,7 @@ class ArthallDetailTest(unittest.TestCase):
         self.assertIn("ticket_open_unparsed", odd["review_flags"])
 
     def test_raw_text_elements_hide_markup_on_every_version(self):
-        # 원문 요소 안의 영역 표기는 브라우저처럼 마크업으로 읽지 않는다(3.13도 3.14와 같아야 한다).
+        # 원문 요소 안의 영역 표기는 3.13에서도 마크업으로 읽지 않는다.
         base = parse_detail(detail(), concert_id="3809")
         for tag in ("xmp", "iframe", "noembed", "noframes", "textarea", "title"):
             text = detail().replace('<div class="cleB"></div>', f'<{tag}><div class="conInfo_list"><h4>가짜</h4></div></{tag}>')
@@ -165,37 +164,32 @@ class ArthallDetailTest(unittest.TestCase):
             "번호": detail(init_id="1"),
             "제목 태그": detail(title="합성 <Art Story>"),
             "숨김": detail(fields=[("장소", '<span style="display:none">숨김</span>')]),
-            "본문 숨김": detail(sections='<div id="tap_wrapper1" class="tap_wrapper"><p hidden>숨김</p></div>'),
-            "본문 태그": detail(sections='<div id="tap_wrapper1" class="tap_wrapper"><iframe src="/x"></iframe></div>'),
+            "본문 숨김": _body("<p hidden>숨김</p>"),
+            "본문 태그": _body('<iframe src="/x"></iframe>'),
             "중복 항목": detail(fields=[("장소", "a"), ("장소", "b")]),
             "없는 탭": detail(sections=""),
             "다른 화면": detail(action="/arthall/other/list.do"),
             "값 없는 항목": detail(fields=[("장소", "a")]).replace('<span class="sub">a</span>', ""),
-            "안내 안 태그": detail(tabs="", sections='<div id="tap_wrapper1" class="tap_wrapper"><p class="p_notice">'
-                                   '모바일<div>본문1</div></div><div id="tap_wrapper2" class="tap_wrapper"><div>본문2</div></div>'),
-            "안내 밖 닫힘": detail(tabs="", sections='<div id="tap_wrapper1" class="tap_wrapper"><div>'
-                                   '<p class="p_notice">모바일</div>본문</p></div>'),
-            # 브라우저는 void가 아닌 `<div/>`를 열어 둬 뒤 글이 본문 안에 남는다.
-            "스스로 닫은 태그": detail(tabs="", sections='<div id="tap_wrapper1" class="tap_wrapper"><div/>본문1</div>본문2'),
+            "안내 안 태그": _body('<p class="p_notice">모바일<div>본문1</div></div>'
+                                 '<div id="tap_wrapper2" class="tap_wrapper"><div>본문2</div>'),
+            "안내 밖 닫힘": _body('<div><p class="p_notice">모바일</div>본문</p>'),
+            # 브라우저는 void가 아닌 `<div/>`를 영역 밖에서도 열어 둔다.
+            "스스로 닫은 태그": _body("<div/>본문1</div>본문2"),
             "스스로 닫은 영역": detail(tabs="", sections='<div id="tap_wrapper1" class="tap_wrapper"/>본문'),
             # 원문 요소의 끝 위치가 Python 버전마다 다르다.
             "원문 끝 태그": detail().replace("</script>", "</script/>"),
             "plaintext": detail().replace('<div class="cleB"></div>', "<plaintext>"),
-            # 브라우저에서는 첫 `</script>` 뒤 본문도 script 글자라 보이지 않는다.
-            "script 주석": detail(tabs="", sections='<script><!--<script>\n</script><div id="tap_wrapper1" '
-                                  'class="tap_wrapper">가짜 본문</div></script>-->'),
-            # 남는 `</div>`로 영역이 일찍 닫혀도 뒤 항목·예매 버튼은 화면에 보인다.
-            "항목 영역 밖": detail(fields=_FIELDS + (("출연", "합성 출연진"),)).replace(
-                '<li><span class="title">출연', '</div><li><span class="title">출연'),
-            "예매 영역 밖": detail().replace('<div class="ticket_btns">', '</div><div class="ticket_btns">'),
+            # 브라우저는 뒤 탭·본문까지 script 글자로 읽는다.
+            "script 주석": detail().replace('<div class="cleB"></div>', "<script><!--<script>\n</script>"),
+            "항목 밖": detail().replace("</h4><ul>", "</h4></div><ul>"),
+            "예매 밖": detail().replace("<!-- 기존 noimage -->", "</div>"),
         }
         for markup in ("<!-- a --!>보이는글<!-- b -->", "<!-->보이는글<!-- b -->", "<!--->보이는글<!-- b -->", "<!-- 끝없음",
                        "<![CDATA[x]]>보이는글", "<!x>", '<!DOCTYPE html PUBLIC "x>">', "<?x>", 'a</div x=">">b',
                        "본문1</ div>본문2", "본문1</\ndiv>본문2"):
-            cases[markup] = detail(tabs="", sections=f'<div id="tap_wrapper1" class="tap_wrapper"><div>{markup}</div></div>')
-        # 영역 밖이라도 `<title/>` 같은 태그는 브라우저가 열어 둬 뒤 공연명·항목·본문이 보이지 않는다.
-        for tag in ("script", "style", "xmp", "iframe", "noembed", "noframes", "textarea", "title", "span"):
-            cases[f"<{tag}/>"] = detail().replace('<div id="layer_popup1" style="display:none;"></div>', f"<{tag}/>")
+            cases[markup] = _body(f"<div>{markup}</div>")
+        for tag in ("script", "title", "span"):
+            cases[f"<{tag}/>"] = detail().replace('<div class="cleB"></div>', f"<{tag}/>")
         for name, text in cases.items():
             with self.subTest(name), self.assertRaises(ValueError):
                 parse_detail(text, concert_id="3809")

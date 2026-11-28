@@ -25,8 +25,7 @@ _INVALID_LISTING = "안성맞춤아트홀 일정 목록 HTML 구조가 올바르
 _INVALID_DETAIL = "안성맞춤아트홀 공연·전시 상세 HTML 구조가 올바르지 않습니다."
 # 브라우저가 안을 마크업으로 읽지 않는 원문 요소. 3.13은 script·style만, 3.14는 나머지도 원문으로 읽는다.
 _RAW_TEXT = ("script", "style", "xmp", "iframe", "noembed", "noframes", "textarea", "title")
-# 따옴표·`=` 든 끝 태그와 `</title >`처럼 이름 바로 뒤가 `>`가 아닌 원문 요소 끝 태그는 버전마다 끝 위치가 다르다.
-# `</ div>`·`</\ndiv>`처럼 `</` 바로 뒤가 공백이면 3.13은 끝 태그로, 3.14와 브라우저는 주석으로 읽는다.
+# 버전마다 끝이 다른 끝 태그: 따옴표·`=` 포함, 원문 요소 이름 뒤가 `>`가 아님, `</` 뒤 공백.
 _ODD_END = re.compile(r"</\s|</[A-Za-z][^>]*[\"'=]|</(?!(?:{0})>)(?:{0})\b".format("|".join(_RAW_TEXT)), re.I)
 _FIELDS = {
     "장르": "genre", "기간": "period", "시간": "time", "관람시간": "running_time", "장소": "venue",
@@ -72,12 +71,8 @@ class _Parser(HTMLParser):
 
     def __init__(self, error: str):
         super().__init__(convert_charrefs=True)
-        self.error = error
-        self.region = None
-        self.depth = 0
+        self.error, self.region, self.depth, self.counts, self.scripts = error, None, 0, {}, []
         self.capture = None  # [끝 태그, 깊이, 조각, 허용 태그, 완료 함수]
-        self.counts = {}
-        self.scripts = []
 
     def fail(self):
         raise ValueError(self.error)
@@ -95,8 +90,8 @@ class _Parser(HTMLParser):
         return self
 
     def parse_comment(self, i, report=True):
-        # 주석 끝을 브라우저처럼 첫 `-->`로 고정한다(3.13.5는 `--\s*>`, 3.14는 `--!?>`에서 닫아 결과가 갈렸다).
-        # 해석이 갈리는 `<!-->`·`<!--->`·`--!>`와 닫히지 않은 주석(문서를 한 번에 넣으므로 문서 끝까지)은 거부한다.
+        # 주석은 브라우저처럼 첫 `-->`에서 끝낸다(3.13.5는 `--\s*>`, 3.14는 `--!?>`에서 닫았다).
+        # 해석이 갈리는 `<!-->`·`<!--->`·`--!>`와 닫히지 않은 주석은 거부한다.
         end = self.rawdata.find("-->", i + 4)
         if end < 0 or self.rawdata.startswith((">", "->"), i + 4) or "--!>" in self.rawdata[i + 4:end]:
             self.fail()
@@ -117,8 +112,7 @@ class _Parser(HTMLParser):
         self.capture = [tag, 1, [], allowed, done]
 
     def handle_startendtag(self, tag, attrs):
-        # 브라우저는 void가 아닌 `<div/>`·`<title/>`의 `/`를 무시해 열어 둔다(원문 요소면 다음 끝 태그까지 글자).
-        # 영역 밖이어도 뒤 영역이 화면에서 사라질 수 있다. 실제 원본에는 void가 아닌 self-closing 태그가 없다.
+        # 브라우저는 void가 아닌 `<title/>` 등을 열어 둬 뒤 영역이 그 안에 든다.
         if tag not in _VOID_TAGS:
             self.fail()
         self.handle_starttag(tag, attrs)
@@ -169,7 +163,7 @@ class _Parser(HTMLParser):
 
     def handle_data(self, data):
         if self.cdata_elem == "script":
-            # 브라우저는 `<!--<script>` 뒤 첫 `</script>`에서 script를 끝내지 않는다. 실제 원본 script에는 `<!--`가 없다.
+            # 브라우저는 `<!--<script>` 뒤 첫 `</script>`에서 script를 끝내지 않는다.
             if "<!--" in data:
                 self.fail()
             self.scripts.append(data)
@@ -206,17 +200,11 @@ class _ListingParser(_Parser):
 
     def __init__(self):
         super().__init__(_INVALID_LISTING)
-        self.in_form = False
-        self.actions = []
-        self.hidden = {}
-        self.ids = []
-        self.infos = 0
-        self.text = []
-        self.current = []
-        self.links = []
+        self.in_form, self.hidden, self.infos = False, {}, 0
+        self.actions, self.ids, self.text, self.current, self.links = [], [], [], [], []
 
     def outside_start(self, tag, values, classes):
-        # 남는 끝 태그로 영역이 일찍 닫히면 뒤 공연·쪽 번호가 영역 밖에 남아 오류 없이 빠진다.
+        # 남는 끝 태그로 영역이 일찍 닫혀 뒤 공연·쪽 번호가 밖에 있다.
         if re.search(r"go_view|goPage", values.get("onclick") or "") or "con_listInfo" in classes:
             self.fail()
         if tag == "form" and values.get("id") == "listForm":
@@ -312,21 +300,11 @@ class _DetailParser(_Parser):
 
     def __init__(self):
         super().__init__(_INVALID_DETAIL)
-        self.actions = []
-        self.posters = []
-        self.buttons = []
-        self.in_buttons = 0
-        self.categories = []
-        self.titles = []
-        self.pairs = []
-        self.label = None
-        self.tabs = []
-        self.sections = {}
-        self.section = None
-        self.notice = False
+        self.actions, self.posters, self.buttons, self.categories, self.titles, self.pairs = [], [], [], [], [], []
+        self.tabs, self.sections, self.in_buttons, self.label, self.section, self.notice = [], {}, 0, None, None, False
 
     def outside_start(self, tag, values, classes):
-        # 남는 끝 태그로 영역이 일찍 닫히면 뒤 항목·예매 버튼이 영역 밖에 남아 오류 없이 빠진다.
+        # 남는 끝 태그로 영역이 일찍 닫혀 뒤 항목·예매 버튼이 밖에 있다.
         if tag == "span" and {"title", "sub"} & set(classes) or "ticket_btns" in classes:
             self.fail()
         if tag == "form" and values.get("id") == "cancel":
