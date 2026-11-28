@@ -4,6 +4,7 @@ import io
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import time
 import unittest
 from unittest.mock import patch
 
@@ -179,6 +180,13 @@ class LibraryHoursParserTest(unittest.TestCase):
         for name, (fixture, message) in fixtures.items():
             with self.subTest(name=name), self.assertRaisesRegex(ValueError, message):
                 parse_library_hours(fixture)
+
+    def test_long_title_is_rejected_quickly(self):
+        # 가운데 구간 공백 검사를 정규식(`\S`)에 두면 되추적이 O(n²)이라 이 제목에 수 초가 걸렸다.
+        started = time.monotonic()
+        with self.assertRaisesRegex(ValueError, "아닌 응답"):
+            parse_library_hours(page(title="이용시간 및 정기휴관일 | " + "a " * 20000))
+        self.assertLess(time.monotonic() - started, 1)
 
 
 class ReferenceCaptureTest(unittest.TestCase):
