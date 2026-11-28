@@ -281,8 +281,9 @@ def parse_program_listing(raw: bytes, *, page: int) -> tuple[int, list[tuple[str
 
     head = [cells for section, cells in parser.rows if section == "thead"]
     body = [cells for section, cells in parser.rows if section == "tbody"]
+    # 실제 목록 9쪽의 머리글 칸에는 안쪽 태그가 없었다. 숨긴 span 등이 섞이면 글자만 맞아도 형식 변경으로 본다.
     if (len(head) != 1 or [cell["text"] for cell in head[0]] != _HEADERS
-            or any(cell["tag"] != "th" for cell in head[0]) or not body):
+            or any(cell["tag"] != "th" or cell["tags"] for cell in head[0]) or not body):
         raise ValueError(_INVALID_LISTING)
     rows = []
     for cells in body:

@@ -105,6 +105,8 @@ class LibraryProgramParserTest(unittest.TestCase):
             "current page": listing(row("1"), current=2),
             "beyond total": listing(row("1"), page=4, total=3),
             "headers": listing(row("1"), headers=_HEADERS[:-1] + ("상태",)),
+            "hidden header": listing(row("1"), headers=('<span hidden>도서관</span>',) + _HEADERS[1:]),
+            "header tag": listing(row("1"), headers=('<span>도서관</span>',) + _HEADERS[1:]),
             "no end": listing(row("1"), end=""),
             "no rows": listing(),
             "extra cell": listing(row("1", extra="<td>x</td>")),
