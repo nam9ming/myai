@@ -66,7 +66,7 @@ def detail(concert_id="3809", *, init_id=None, goods="26014378", title="합성 �
       <div class="conInfo_img"><img src="/common/imgView.do?attachId=p&amp;fileSn=q&width=550&mode=ratio" alt="포스터 <x>">
         <!-- 기존 noimage -->{booking}<p class="ticketing">새로고침 <span class="red">금지</span></p></div>
       <div class="conInfo_list">{category}<h4 class="sph4 pT10">{title}</h4><ul>{rows}</ul></div></div>
-    <div class="cleB"></div>{tabs}{sections}
+    <div class="cleB"></div>{tabs}{sections}<div class="btnboxR"><a href="#" onclick="history.back(); return false;">목록</a></div>
     <script>$(function () {{ module.init('{init_id or concert_id}', '', '{goods}', '', '', ''); }});
       if (a < b) {{ x = "</div>"; }}</script></body></html>"""
 
@@ -190,6 +190,12 @@ class ArthallDetailTest(unittest.TestCase):
             "script 주석": detail(head="<script><!--<script>\n</script>"),
             "항목 밖": detail().replace("</h4><ul>", "</h4></div><ul>"),
             "예매 밖": detail().replace("<!-- 기존 noimage -->", "</div>"),
+            # 남는 `</div>`가 영역을 일찍 닫으면 뒤 버튼·포스터·본문이 표시 없이 버려진다.
+            "버튼 밖 링크": detail().replace('<div class="ticket_btns">', '<div class="ticket_btns"></div><div>'),
+            "포스터 밖": detail(buttons=False).replace('<div class="conInfo_img">', '<div class="conInfo_img"></div>'),
+            "본문 밖 글자": _body("<div>본문1</div></div>본문2"),
+            "본문 밖 태그": _body('<div>본문1</div></div><img src="/x.png">'),
+            "영역 사이 글자": detail().replace('<div class="cleB"></div>', '<div class="cleB"></div>보이는글'),
         }
         # 공용 파서의 거부 규칙 전체는 test_html_tokens가 본다.
         for markup in ("<!-- a --!>보이는글<!-- b -->", "<!-- 끝없음", "<![CDATA[x]]>보이는글", 'a</div x=">">b',

@@ -141,6 +141,8 @@ class _Parser(PinnedHTMLParser):
             self.capture_data(data)
         elif self.region is not None:
             self.region_data(data)
+        else:
+            self.outside_data(data)
 
     def capture_data(self, data):
         self.capture[2].append(data)
@@ -149,7 +151,7 @@ class _Parser(PinnedHTMLParser):
         pass
 
     # 하위 파서가 필요한 것만 재정의한다.
-    capture_start = capture_end = region_open = region_data = outside_start = _skip
+    capture_start = capture_end = region_open = region_data = outside_start = outside_data = _skip
 
 
 def _has(name):
@@ -263,15 +265,24 @@ class _DetailParser(_Parser):
         super().__init__(_INVALID_DETAIL)
         self.actions, self.posters, self.buttons, self.categories, self.titles, self.pairs = [], [], [], [], [], []
         self.tabs, self.sections, self.in_buttons, self.label, self.section, self.notice = [], {}, 0, None, None, False
+        self.between = False
 
     def outside_start(self, tag, values, classes):
-        # 남는 끝 태그로 영역이 일찍 닫혀 뒤 항목·예매 버튼이 밖에 있다.
-        if tag == "span" and {"title", "sub"} & set(classes) or "ticket_btns" in classes:
-            self.fail()
         if tag == "form" and values.get("id") == "cancel":
             self.actions.append(values.get("action"))
+        # 실제 13건은 포스터 영역부터 목록 버튼까지 영역 사이에 빈 div.cleB뿐이었다. 남는 끝 태그로 영역이 일찍 닫혀
+        # 뒤 내용이 여기 나오면 표시 없이 버려지므로 거부한다.
+        elif self.between and "btnboxR" in classes:
+            self.between = False
+        elif self.between and (tag != "div" or classes != ["cleB"]):
+            self.fail()
+
+    def outside_data(self, data):
+        if self.between and data.strip():
+            self.fail()
 
     def region_open(self, kind, values):
+        self.between = True
         if kind == "section":
             match = re.fullmatch(r"tap_wrapper([1-9][0-9]?)", values.get("id") or "")
             if match is None or match[1] in self.sections:
@@ -293,7 +304,7 @@ class _DetailParser(_Parser):
                 self.in_buttons = self.depth
             elif tag == "a" and self.in_buttons:
                 self.start_capture("a", (), self.buttons.append)
-            elif tag not in ("div", "p", "span", "a"):
+            elif tag not in ("div", "p", "span"):  # 버튼 밖 a는 버튼 영역이 일찍 닫힌 것이다.
                 self.fail()
         elif self.kind == "tabs":
             if tag == "a":
