@@ -101,6 +101,7 @@ class ArthallListingTest(unittest.TestCase):
         # 남는 `</div>`가 영역을 닫아도 뒤 공연·쪽 번호·항목은 보인다.
         cases["남는 끝 태그"] = (listing("11", "12").replace(b"</div></li>", b"</div></div></li>", 1), {})
         cases["쪽 번호 밖"] = (listing("1", pager='<span>1</span></div><a onclick="goPage(2); return false;">2</a>'), {})
+        cases["중복 onclick"] = (listing("1").replace(b'onclick="go', b'onclick="x" onclick="go'), {})
         for name, (raw, override) in cases.items():
             with self.subTest(name), self.assertRaises(ValueError):
                 parse_listing(raw, **{"year": 2026, "month": 12, "page": 1, **override})
@@ -196,6 +197,8 @@ class ArthallDetailTest(unittest.TestCase):
             "본문 밖 글자": _body("<div>본문1</div></div>본문2"),
             "본문 밖 태그": _body('<div>본문1</div></div><img src="/x.png">'),
             "영역 사이 글자": detail().replace('<div class="cleB"></div>', '<div class="cleB"></div>보이는글'),
+            "중복 숨김": _body('<p style="display:none" style>숨김</p>'),
+            "중복 src": detail().replace("<img", '<img src="/b.png"'),
         }
         # 공용 파서의 거부 규칙 전체는 test_html_tokens가 본다.
         for markup in ("<!-- a --!>보이는글<!-- b -->", "<!-- 끝없음", "<![CDATA[x]]>보이는글", 'a</div x=">">b',

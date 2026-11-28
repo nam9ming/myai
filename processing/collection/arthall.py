@@ -93,6 +93,8 @@ class _Parser(PinnedHTMLParser):
     def handle_starttag(self, tag, attrs):
         super().handle_starttag(tag, attrs)
         values = dict(attrs)
+        if len(values) < len(attrs):  # 브라우저는 같은 이름 속성의 첫 값을 쓴다.
+            self.fail()
         classes = (values.get("class") or "").split()
         if self.capture is not None:
             end, _, parts, allowed, _ = self.capture
