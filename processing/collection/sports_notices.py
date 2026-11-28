@@ -150,7 +150,11 @@ class _LinkParser(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.hidden = 0
-        self.hrefs: list[str] = []
+        # 숨긴 요소(hidden·display:none·visibility:hidden·중복 속성)의 태그 이름과 같은 이름이 열린 수.
+        # shortcut: 같은 이름 태그 수로만 닫으므로 브라우저가 무시하는 잘못된 닫는 태그는 놓친다, 실제 목록을 받으면 다시 본다.
+        self.veil: str | None = None
+        self.depth = 0
+        self.hrefs: list[tuple[str, bool]] = []
 
     def handle_startendtag(self, tag, attrs):
         self.handle_starttag(tag, attrs)  # 브라우저처럼 `<template/>`도 여는 태그로 본다.
@@ -158,16 +162,28 @@ class _LinkParser(HTMLParser):
     def handle_starttag(self, tag, attrs):
         if tag in _HIDDEN_TAGS:
             self.hidden += 1
-        elif tag == "a" and not self.hidden:
-            if [name for name, _ in attrs].count("href") > 1:
+            return
+        if self.hidden:
+            return
+        names = [name for name, _ in attrs]
+        values = dict(attrs)
+        if tag == self.veil:
+            self.depth += 1
+        elif self.veil is None and tag not in _VOID_TAGS and not _shown(names, values):
+            self.veil, self.depth = tag, 1
+        if tag == "a":
+            if names.count("href") > 1:
                 raise ValueError("체육시설 공지 목록 링크의 href가 중복되었습니다.")
-            href = dict(attrs).get("href")
-            if href:
-                self.hrefs.append(href)
+            if values.get("href"):
+                self.hrefs.append((values["href"], self.veil is not None))
 
     def handle_endtag(self, tag):
         if tag in _HIDDEN_TAGS and self.hidden:
             self.hidden -= 1
+        elif tag == self.veil and not self.hidden:
+            self.depth -= 1
+            if not self.depth:
+                self.veil = None
 
 
 def _listed_seq(href: str) -> str | None:
@@ -190,7 +206,10 @@ def _listed_seq(href: str) -> str | None:
 
 
 def parse_listing(raw: bytes) -> list[str]:
-    """목록 1쪽의 공지 번호를 문서 순서대로 돌려준다. 고정 글·전체 페이지 수는 표시 형식을 몰라 읽지 않는다."""
+    """목록 1쪽의 공지 번호를 문서 순서대로 돌려준다. 고정 글·전체 페이지 수는 표시 형식을 몰라 읽지 않는다.
+
+    화면에 없는 공지를 요청하지 않도록 숨긴 요소 안의 상세 링크는 형식 오류로 본다. template·noscript 안은 세지 않는다.
+    """
     try:
         text = raw.decode("utf-8-sig")
     except (AttributeError, UnicodeDecodeError):
@@ -198,8 +217,10 @@ def parse_listing(raw: bytes) -> list[str]:
     parser = _LinkParser()
     _feed(parser, text, "체육시설 공지 목록 HTML 구조가 올바르지 않습니다.")
     ids: list[str] = []
-    for href in parser.hrefs:
+    for href, concealed in parser.hrefs:
         seq = _listed_seq(href)
+        if seq and concealed:
+            raise ValueError("체육시설 공지 목록의 상세 링크가 숨긴 요소나 속성이 중복된 요소 안에 있습니다.")
         if seq in ids:
             raise ValueError("체육시설 공지 목록에 같은 공지 번호가 있습니다.")
         if seq:

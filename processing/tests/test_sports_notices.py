@@ -32,7 +32,8 @@ def detail(seq, body="<p>예약 일정 : 3월 2일(월) 09:00 예약 오픈</p>"
 class SportsParserTest(unittest.TestCase):
     def test_listing_reads_detail_links_in_order(self):
         absolute = "https://reservation.anseong.go.kr/index.do?board_id=notice&cp=/board/view.do&menu_id=0008&pageIndex=1&seq=7"
-        raw = listing("111", "96", extra=f'<a href="{absolute}">x</a><template><a href="{_LINK.format(5)}">숨김</a></template>'
+        raw = listing("111", "96", extra='<div hidden><div><a href="/index.do?menu_id=0001">메뉴</a></div></div><br hidden>'
+                      f'<a href="{absolute}">x</a><template><a href="{_LINK.format(5)}">숨김</a></template>'
                       '<a href="https://example.com/index.do?seq=3">외부</a><a href="http://[x/index.do?seq=4">깨짐</a>')
         self.assertEqual(parse_listing(raw), ["111", "96", "7"])
 
@@ -48,6 +49,12 @@ class SportsParserTest(unittest.TestCase):
                 parse_listing(raw)
         with self.assertRaisesRegex(ValueError, "형식"):
             parse_listing(listing("1").replace(b"pageIndex=1", b"pageIndex=2"))
+        # 화면에 없는 공지를 요청하고 complete로 남기지 않는다.
+        for extra in (f'<div style="display: none"><div></div><a href="{_LINK.format(2)}">x</a></div>',
+                      f'<p style="visibility:hidden"><a href="{_LINK.format(2)}">x</a></p>',
+                      f'<a hidden href="{_LINK.format(2)}">x</a>'):
+            with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, "숨긴"):
+                parse_listing(listing("1", extra=extra))
 
     def test_detail_keeps_display_text_and_keyword_lines_verbatim(self):
         body = ("<p>예약 일정 : 3월 2일(월) 09:00</p><p>관내 거주자 <b>우선</b>&nbsp;배정</p>"
