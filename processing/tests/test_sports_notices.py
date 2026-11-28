@@ -199,6 +199,7 @@ class SportsParserTest(unittest.TestCase):
             (b"User-agent: *\nDisallow: /index.do?board_id=notice&cp=/board\n", True),
             (b"User-agent: yeogi\nDisallow:\n\nUser-agent: *\nDisallow: /index.do?b\n", True),
             (b"User-agent: YEOGI-IT/1.0\nDisallow: /index.do?b\n\nUser-agent: *\nDisallow:\n", True),
+            (b"User-agent: *\nCrawl-delay: 5\nUser-agent: badbot\nDisallow: /\n", False),
         ):
             with self.subTest(raw=raw):
                 rules = robots_rules(raw)

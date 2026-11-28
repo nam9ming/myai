@@ -125,7 +125,8 @@ def robots_rules(raw: bytes) -> dict:
             raise ValueError("체육시설 robots.txt에 규칙이 아닌 줄이 있어 허용 여부를 확정할 수 없습니다.")
         key, value = match[1].lower(), match[2].strip()
         if key == "user-agent":
-            if not groups or groups[-1][1]:  # 규칙 뒤에 나온 user-agent 줄은 새 그룹을 연다.
+            # Allow·Disallow 뒤에 나온 user-agent 줄만 새 그룹을 연다. Crawl-delay는 RFC 9309의 규칙이 아니다.
+            if not groups or any(k != "crawl-delay" for k, _ in groups[-1][1]):
                 groups.append((set(), []))
             groups[-1][0].add(value.split("/", 1)[0].strip().lower())
         elif key in ("allow", "disallow", "crawl-delay") and groups:
