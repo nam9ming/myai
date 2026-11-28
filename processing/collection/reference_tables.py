@@ -4,8 +4,10 @@ from datetime import UTC, datetime
 import hashlib
 from html.parser import HTMLParser
 import json
+import os
 from pathlib import Path
 import re
+import stat
 import sys
 
 from .__main__ import decode_input
@@ -276,6 +278,13 @@ def capture_reference(page: str, name: str, root: Path, *, previous: str | None 
         if previous == name:
             raise ValueError("비교할 이전 수집은 이번 수집과 이름이 달라야 합니다.")
         _, earlier = read_reference_capture(root, previous)
+    # 받은 원본을 버리지 않도록 저장할 수 없는 경우는 요청 전에 거부한다. 묶음은 요청이 성공한 뒤에 만든다.
+    if root.resolve() != root:
+        raise ValueError("수집 디렉터리에 심볼릭 링크를 사용할 수 없습니다.")
+    if root.exists() and (root.stat().st_uid != os.geteuid() or stat.S_IMODE(root.stat().st_mode) & 0o077):
+        raise ValueError("수집 디렉터리는 실행 사용자만 접근할 수 있어야 합니다.")
+    if (root / name).exists() or (root / name).is_symlink():
+        raise ValueError("이미 사용 중인 수집 이름입니다.")
     raw = fetch_page()
     fetched_at = datetime.now(UTC).isoformat()
     digest = hashlib.sha256(raw).hexdigest()

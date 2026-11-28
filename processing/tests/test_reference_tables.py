@@ -221,23 +221,30 @@ class ReferenceCaptureTest(unittest.TestCase):
 
     def test_rejects_inputs_before_requests(self):
         capture_reference("library-hours", "first", self.section)
+        (self.section / "dangling").symlink_to(self.root / "nowhere")
+        (self.root / "link").symlink_to(self.section)
         self.fetch.reset_mock()
         for args, message in {
             ("library-hours", "../x", None): "수집 이름",
             ("garbage", "x", None): "지원하지 않는 기준표",
             ("library-hours", "x", "missing"): "안전하게 읽을 수 없습니다",
             ("library-hours", "first", "first"): "이름이 달라야",
+            ("library-hours", "first", None): "이미 사용 중인",
+            ("library-hours", "dangling", None): "이미 사용 중인",
         }.items():
             with self.subTest(args=args), self.assertRaisesRegex(ValueError, message):
                 capture_reference(args[0], args[1], self.section, previous=args[2])
+        with self.assertRaisesRegex(ValueError, "심볼릭 링크"):
+            capture_reference("library-hours", "x", self.root / "link")
+        self.section.chmod(0o755)
+        with self.assertRaisesRegex(ValueError, "실행 사용자만"):
+            capture_reference("library-hours", "x", self.section)
+        self.section.chmod(0o700)
         self.fetch.assert_not_called()
         self.fetch.side_effect = ValueError("도서관 이용시간 응답을 받지 못했습니다.")
         with self.assertRaisesRegex(ValueError, "받지 못했습니다"):
             capture_reference("library-hours", "offline", self.section)
         self.assertFalse((self.section / "offline").exists())
-        with self.assertRaisesRegex(ValueError, "이미 사용 중인"):
-            self.fetch.side_effect = None
-            capture_reference("library-hours", "first", self.section)
 
     @patch("processing.collection.official_web.HTTPSConnection")
     def test_fetch_sends_bodyless_get_to_fixed_host(self, connect):

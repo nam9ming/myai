@@ -448,7 +448,7 @@ python3.13 -B -m processing.collection.reference_tables library-hours --name lib
   --previous library-hours-20261128
 ```
 
-`data/private/collection-reference-tables/<name>/`에 원본 `page.html`, 파싱 결과 `parsed.json`(`library-hours-parser-v1`), 마지막으로 `capture.json`을 쓴다. 종료 코드는 0 파싱 완료, 2 원본과 실패 사유(`parse_error`)만 남긴 형식 변경, 1 인자·요청·보관 오류다. 요청이 실패하면 원본이 없으므로 묶음을 만들지 않고 사유만 출력한다.
+`data/private/collection-reference-tables/<name>/`에 원본 `page.html`, 파싱 결과 `parsed.json`(`library-hours-parser-v1`), 마지막으로 `capture.json`을 쓴다. 종료 코드는 0 파싱 완료, 2 원본과 실패 사유(`parse_error`)만 남긴 형식 변경, 1 인자·요청·보관 오류다. 이미 있는 이름이거나 수집 디렉터리가 심볼릭 링크 또는 실행 사용자 전용이 아니면 받은 원본을 버리지 않도록 요청 전에 종료 1로 거부한다. 요청이 실패하면 원본이 없으므로 묶음을 만들지 않고 사유만 출력한다.
 
 - 파싱: 유일한 `div#conts` 안의 `h4` 제목·`p` 문단(`class` 포함)·표를 문서 순서대로 `blocks`에 남긴다. 표는 `caption`·`thead`·`tbody`가 하나씩 이 순서로 있어야 하고, 칸은 `tag`(`th`·`td`)·`scope`·`rowspan`·`colspan`·`text`로 둔다. 칸 글자는 문자 참조만 풀고(`&middot;`→`·`) `br`을 줄바꿈으로 바꿀 뿐 앞뒤 공백과 빈 칸도 고치지 않는다. 병합 칸은 펼치지 않고, 펼쳤을 때 모든 행이 머리글 너비를 빈틈없이 채우는지만 확인한다. 요일·시간·휴관일·동절기/하절기를 해석하거나 날짜로 바꾸지 않는다.
 - 형식 검사: `head`의 제목이 `이용시간 및 정기휴관일 | … | 안성시 도서관`이어야 한다. 본문 영역에는 2026-11-28 실제 페이지에 쓰인 요소(`h4`·`div`·`p`·`table`·`caption`·`thead`·`tbody`·`tr`·`th`·`td`·`br`)와 속성(`class`의 `tbl-respon`·`tbl-box`·`guide`·`tip`·`mT10`·`tbl`·`taC`, `th`의 `scope`, 1~99의 `rowspan`·`colspan`)만 받는다. `style`·숨김 class·인라인 태그·스크립트·선언·처리 지시문이 나오거나 칸 수가 맞지 않으면 형식 변경으로 본다. 주석은 읽지 않는다.
