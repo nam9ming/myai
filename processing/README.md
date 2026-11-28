@@ -295,34 +295,23 @@ python3.13 -B -m processing.collection.arthall_batch verify --name arthall-2026-
 
 ### 직영 공공체육시설 예약 누리집 공지 수집 (실제 페이지 미수집)
 
-생활정보 분야의 예약 일정·우선 대상·중단 안내는 안성시 직영 공공체육시설 예약 누리집 [공지 목록](https://reservation.anseong.go.kr/index.do?menu_id=0008)에서 받는다(공지 번호 `seq`). **robots.txt를 확인하지 못해 실제 목록·상세는 받지 않았고, 수집기와 시험은 합성 원본으로만 만들었다.** 2026-11-27·28 `robots.txt`는 이 User-Agent(`yeogi-it/official-source-capture`)에 HTTP 400(`Request Blocked`)을 돌려줬다.
+예약 일정·우선 대상·중단 안내는 체육시설 예약 누리집 [공지 목록](https://reservation.anseong.go.kr/index.do?menu_id=0008)에서 받는다. **2026-11-27·28 robots.txt가 이 User-Agent(`yeogi-it/official-source-capture`)에 HTTP 400을 돌려줘 실제 목록·상세는 받지 않았고, 시험은 합성 원본뿐이다.**
 
 ```sh
 python3.13 -B -m processing.collection.sports_batch --name sports-20261128 --max-items 20
 python3.13 -B -m processing.collection.sports_batch --name sports-20261128 --verify
 ```
 
-- 요청 순서: robots.txt(HTTP 200·UTF-8 규칙 줄)가 허용하는 목록 1쪽과 상세만 받는다. 4xx, 규칙 아닌 줄(HTML 차단 화면), User-agent 없음, 경로 아닌 Allow·Disallow 값, 주석 밖 SP·HTAB 아닌 공백, 토큰 뒤에 글자가 붙은 User-agent, `Disalow` 같은 오타는 판단 불가로 목록·상세 없이 `discovery_status=robots_not_allowed`·종료 2다. RFC 9309(가장 긴 일치, `*`·`$`, 그룹 병합, 제품 토큰 `yeogi-it`)대로 읽고, 퍼센트 인코딩을 푼 주소가 막혀도 막힌 것으로 본다. 적용 그룹 `Crawl-delay`가 1.5초보다 길면 그 간격을 쓰고, 못 읽으면 멈춘다.
-- 요청 조건: 호스트 고정, 리디렉션 미추종, 요청 하나씩 1.5초 간격, 크기 한도 robots.txt 512 KiB·목록 2 MiB·상세 8 MiB, 상세 `--max-items` 1~80건(기본 20). 상세에서 HTTP 400·401·403·429·503을 받으면 남은 상세를 `not_attempted`로 남긴다(400 중단은 이 수집기 전용).
-- 목록: 페이지 수·고정 글 표시를 몰라 1쪽만 읽는다(`first_page_only`). `complete`는 1쪽에서 고른 상세를 모두 파싱했다는 뜻뿐이다. 상세 링크는 실제 주소 `index.do?board_id=notice&cp=%2Fboard%2Fview.do&menu_id=0008&pageIndex=1&seq=…`와 인자 다섯 개가 같은 `href`만 읽는다(`%2F` 인코딩·상대·절대 무관). `seq` 형식이 다르거나 번호가 겹치거나 상세 링크가 없거나, 링크와 그 안·조상에 허용 목록(`_LINK`·`_LINK_TEXT`·`_ANCESTORS`, 조상 `style`은 선언 없이) 밖 표기가 있으면 목록 실패다.
-- 상세 마크업은 가정이다. `input[name=seq]`가 하나이고 값이 요청과 같아야 하며, 제목은 유일한 `<h4>`(속성·안의 태그 없음), 본문은 유일한 `div.view_cont`에서 읽는다. 제목·본문과 그 조상(목록과 같다), 본문 태그·속성(`_BODY`)·인라인 스타일(`_STYLE`)에 허용 목록 밖 표기가 있으면 형식 변경이다. 표·`pre`·`normal` 밖의 `white-space`, 브라우저가 시작 태그로 열린 요소를 닫는 표기(`p` 안의 블록, `ul` 밖 `li`, 제목 안 제목, `a` 안 `a`)도 거부한다. 줄 나누는 태그와 `inline !important` 아닌 `display` 상자는 앞뒤를 끊어 화면 한 줄이 여러 줄이 될 수 있다.
-- 허용 목록은 이 호스트 원본이 없어 `data/private`의 안성시 누리집 실제 원본(상세 234개, 그중 제목 `h4` 202개, 목록 35개)에서 쓰인 표기만 옮겼다. 종료 태그가 가장 안쪽의 열린 요소를 닫지 않거나 끝에 열린 요소가 남는 문서와 `frameset`, 문서 어디서든 강제 줄바꿈 문자(U+000B·U+000C·U+0085·U+2028·U+2029), Python만 공백으로 접는 U+001C~U+001F와 그 숫자 참조(`&#133;` 제외)는 거부한다.
-- 확인하지 않는 것: 영역·조상 밖 요소의 영향(덮는 형제 요소, 스크립트), 스타일시트의 class·id·속성 선택자나 글꼴 숨김(`class="blind"` 등), 조상에서 시작 태그가 닫는 요소(`td` 안 `td` 등, 조상이 줄 뿐), 허용 값끼리의 조합(같은 글자·배경색, 작은 글자, `height`·`overflow:hidden` 잘림 등), `img` 크기, 빈 링크 글자.
+- robots.txt(HTTP 200·UTF-8)가 허용하는 목록 1쪽과 상세만 받는다. RFC 9309(가장 긴 일치, `*`·`$`, 그룹 병합, 제품 토큰 `yeogi-it`, 비예약 글자 인코딩만 풀기)대로 읽고, `*`·`$` 밖을 모두 푼 주소가 막혀도 막힌 것으로 본다. 규칙 아닌 줄·값, SP·HTAB 아닌 공백, 토큰 뒤 글자, `Disalow` 같은 오타, 못 읽는 `Crawl-delay`는 판단 불가로 멈춘다(`robots_not_allowed`, 종료 2). `Crawl-delay`가 1.5초보다 길면 그 간격을 쓴다.
+- 호스트 고정, 리디렉션 미추종, 1.5초 간격, 크기 한도 robots.txt 512 KiB·목록 2 MiB·상세 8 MiB, 상세 `--max-items` 1~80건(기본 20). 상세 HTTP 400(이 수집기만)·401·403·429·503이면 남은 상세는 `not_attempted`다.
+- `complete`는 목록 1쪽(`first_page_only`)에서 고른 상세를 다 파싱했다는 뜻뿐이다. 인자 다섯 개가 실제 상세 주소(`board_id=notice&cp=%2Fboard%2Fview.do&menu_id=0008&pageIndex=1&seq=…`)와 같은 `href`만 읽는다.
+- 상세 마크업은 가정이다. `input[name=seq]` 하나가 요청과 같고 제목은 유일한 `<h4>`, 본문은 유일한 `div.view_cont`여야 한다. 허용 목록(`_BODY`·`_STYLE`·`_ANCESTORS` 등)은 `data/private`의 안성시 누리집 실제 원본(상세 234개·목록 35개)에서 본 표기만 옮겼다. 표·`pre`·`normal` 밖 `white-space`, 브라우저가 시작 태그로 닫는 표기, 어긋난 중첩, `frameset`, 강제 줄바꿈 문자와 U+001C~U+001F도 거부한다.
 
-`data/private/collection-sports-notices/<name>/`에 `robots.txt`·`list-1.html`·`detail-<seq>.html`·`parsed-<seq>.json`(파서 `sports-notice-parser-v7`)을 쓰고 마지막에 `batch.json`을 쓴다. 종료 코드는 0 완료, 2 robots 미허용·한도 도달·일부 실패, 1 입력·보관·재검증 오류다. `--verify`는 요청 없이 상태와 무관하게 모든 원본 해시를 보고, 원본에서 다시 낸 robots·목록·상세 상태·건수·번호·파싱 결과를 대조한다(parsed 기록은 파서 버전부터 본다). **D03 연결은 후속이다.** `batch.json`은 `board=notice`와 공통 묶음(`web_batch.py`)의 상세 기록 형식을 따른다.
+`data/private/collection-sports-notices/<name>/`에 `robots.txt`·`list-1.html`·`detail-<seq>.html`·`parsed-<seq>.json`(`sports-notice-parser-v7`)을 쓰고 마지막에 `batch.json`을 쓴다. 종료 코드는 0 완료, 2 robots 미허용·한도·일부 실패, 1 입력·보관·재검증 오류다. `--verify`는 요청 없이 모든 원본 해시와, 원본에서 다시 낸 상태·건수·번호·파싱 결과(파서 버전 먼저)·중단 상태를 대조하고 `not_attempted`는 중단 뒤나 robots가 막은 주소만 받는다. **D03 연결은 후속이다.**
 
-파싱 결과는 판정 없이 표시 문구를 그대로 둔다.
+파싱 결과는 표시 문구 그대로다: `title`, 문단·블록·`display` 상자·`br` 경계로 나눈 `body_lines`(화면 한 줄이 나뉠 수 있다), 본문 `images`(`src`·`alt`)·`links`(`href`·글자), `KEYWORD_GROUPS` 검색어가 든 줄 `keyword_lines`(관계없는 줄 포함), `review_flags`(늘 `markup_unverified`, `inline_image`, `image_only`, `link`, 소스 줄바꿈을 합친 `source_newline_joined`). 날짜·비용·자격은 해석하지 않고, 예약·이용 일정이 한 줄이거나 세부가 이미지뿐이면(`seq=111`) 사람이 본다.
 
-| 필드 | 내용 |
-| --- | --- |
-| `title`·`body_lines` | 제목과, 본문을 문단·블록·상자·`br` 경계로 나눈 줄. 소스 줄바꿈은 공백으로 보고, 줄 안 공백을 하나로 줄이며 빈 줄은 뺀다. |
-| `images`·`links` | 본문 이미지의 `src`·`alt`, 링크의 `href`·글자 원문. 본문 밖 첨부 목록과 게시일은 위치를 몰라 읽지 않는다. |
-| `keyword_lines` | 제목·본문 줄 가운데 `KEYWORD_GROUPS` 검색어(`reservation_schedule`·`priority`·`suspension`, 공백 무시)가 든 줄을 그대로 옮긴 색인. 관계없는 줄도 들어온다. |
-| `review_flags` | `markup_unverified`(실제 마크업 확인 전까지 항상), `inline_image`, `image_only`, `link`, `source_newline_joined`(소스 줄바꿈을 합쳤다. 외부 CSS가 줄을 살릴 수 있어 원문과 대조한다). |
-
-날짜·시간·비용은 해석하지 않는다. 예약(신청) 일정 줄은 이용·운영 일정과 합치지 않으며, 한 문단·한 칸에 둘이 함께 있으면 사람이 나눈다. `priority` 줄은 우선 대상 문구일 뿐 자격 판정이 아니다. 무료와 미상도 구분하지 않는다. 조사 기록상 이용 제한 세부가 이미지에만 있는 공지(`seq=111`)는 `inline_image`·`image_only`로 사람 확인 대상이 되고 OCR은 하지 않는다.
-
-확인하지 않은 것: 실제 목록·상세 마크업과 인코딩, 목록의 페이지·고정 글 표시, 이 User-Agent 차단이 목록·상세에도 걸리는지, 게시물별 공공누리 표시. 실제 수집 전에 robots.txt를 다시 확인하고, 받은 원본으로 가정을 고친 뒤 파서 버전을 올린다.
+확인하지 않은 것: 실제 마크업·인코딩, 페이지·고정 글 표시, 목록·상세 차단 여부, 공공누리 표시, 영역 밖 요소·스크립트, 스타일시트 선택자·글꼴 숨김, 허용 값끼리의 조합(같은 글자·배경색 등), `img` 크기, 빈 링크 글자. 실제 수집 전에 robots.txt를 다시 보고, 원본으로 가정을 고쳐 파서 버전을 올린다.
 
 ### 지자체복지서비스 OpenAPI 목록·상세 수집
 

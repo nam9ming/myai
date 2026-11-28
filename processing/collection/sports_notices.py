@@ -1,7 +1,4 @@
-"""안성시 직영 공공체육시설 예약 누리집 공지의 robots.txt·목록·상세를 요청하고 읽는다.
-
-robots.txt가 HTTP 400이라 실제 목록·상세는 받지 않았다. 상세 주소 형식만 조사 기록에서 옮겼고 마크업은 가정이다.
-"""
+"""안성시 직영 공공체육시설 예약 누리집 공지의 robots.txt·목록·상세를 요청하고 읽는다. 마크업은 가정이다(README)."""
 
 import re
 import string
@@ -22,7 +19,7 @@ _DETAIL_QUERY = {"board_id": "notice", "cp": "/board/view.do", "menu_id": "0008"
 _SEQ = re.compile(r"[1-9][0-9]{0,17}")
 _ROBOTS_LINE = re.compile(r"([A-Za-z-]+)[ \t]*:((?:[ \t]|\S)*)")
 _PRODUCT = USER_AGENT.split("/")[0]  # RFC 9309 그룹은 제품 토큰으로 고른다.
-# 다섯 자리를 넘는 값은 sleep 한도를 넘을 수 있어 읽지 않는다.
+# 다섯 자리를 넘으면 sleep 한도를 넘을 수 있다.
 _CRAWL_DELAY = re.compile(r"[0-9]{1,5}(?:\.[0-9]+)?")
 _VOID_TAGS = frozenset("area base br col embed hr img input link meta source track wbr".split())
 # 읽는 영역과 그 안·조상은 실제 원본에서 본 표기만 받는다(README).
@@ -125,7 +122,7 @@ def robots_rules(raw: bytes) -> dict:
             raise ValueError("체육시설 robots.txt에 규칙이 아닌 줄이 있어 허용 여부를 확정할 수 없습니다.")
         key, value = match[1].lower(), match[2].strip()
         if key == "user-agent":
-            # `yeogi-it, x`·`* all`처럼 토큰 뒤에 글자가 붙은 값은 허용 쪽으로 판정되므로 멈춘다.
+            # `yeogi-it, x`·`* all`은 허용 쪽으로 잘못 판정된다.
             token = re.match(r"\*|[A-Za-z_-]*", value)[0].lower()
             if token in ("*", _PRODUCT) and value.split("/", 1)[0].strip().lower() != token:
                 raise ValueError("체육시설 robots.txt의 User-agent 값을 확정할 수 없습니다.")
@@ -136,7 +133,7 @@ def robots_rules(raw: bytes) -> dict:
         elif key in ("allow", "disallow", "crawl-delay") and groups:
             groups[-1][1].append((key, value))
         elif groups and re.match(r"allow|dis|diasl", key):
-            # `Disalow`·`Dissallow` 같은 오타를 모르는 줄로 건너뛰면 막힌 주소를 허용하게 된다.
+            # 오타(`Disalow` 등)를 건너뛰면 막힌 주소를 허용한다.
             raise ValueError("체육시설 robots.txt에 확정할 수 없는 Allow·Disallow 줄이 있습니다.")
     if any(lines) and not groups:
         raise ValueError("체육시설 robots.txt에 User-agent 줄이 없어 허용 여부를 확정할 수 없습니다.")
@@ -281,7 +278,7 @@ class _LinkParser(_Parser):
 
 
 def _listed_seq(href: str) -> str | None:
-    """이 호스트 `index.do`의 seq 링크면 번호를 돌려준다. seq가 있는데 공지 상세 형식이 아니면 형식 변경으로 본다."""
+    """이 호스트 `index.do`의 seq 링크 번호. 상세 형식이 아닌 seq 링크는 형식 변경이다."""
     try:
         parts = urlsplit(href.strip())
     except ValueError:  # 깨진 주소(IPv6 호스트 등)는 이 호스트의 공지 링크가 아니다.
@@ -300,7 +297,7 @@ def _listed_seq(href: str) -> str | None:
 
 
 def parse_listing(raw: bytes) -> list[str]:
-    """목록 1쪽의 공지 번호를 문서 순서대로 돌려준다. 링크와 그 안·조상의 허용 목록 밖 표기는 숨김일 수 있어 거부한다."""
+    """목록 1쪽의 공지 번호(문서 순서). 링크와 그 안·조상의 허용 목록 밖 표기는 숨김일 수 있어 거부한다."""
     try:
         text = raw.decode("utf-8-sig")
     except (AttributeError, UnicodeDecodeError):

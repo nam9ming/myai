@@ -26,7 +26,7 @@ BATCH_SCHEMA = "citizen-sports-notice-batch-v1"
 RECORD_SCHEMA = "citizen-sports-notice-v1"
 BOARD = "notice"
 _ROBOTS_BLOCKED = "robots.txt가 이 상세 주소를 허용하지 않습니다."
-# 이 호스트의 차단 화면은 HTTP 400이다. 공통 중단 상태(web_batch)는 두고 여기서만 멈춘다.
+# 이 호스트의 차단 화면은 HTTP 400이라 여기서만 멈춘다.
 _WAF_BLOCKED = str(SourceHTTPError(400, "체육시설 공지 상세"))
 
 

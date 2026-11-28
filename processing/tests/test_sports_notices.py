@@ -12,7 +12,7 @@ from processing.collection.official_web import SourceHTTPError
 from processing.collection.sports_batch import capture_sports_batch, read_sports_batch
 from processing.collection.sports_notices import LISTING_URL, allowed, detail_url, parse_detail, parse_listing, robots_rules
 
-# 합성 원본이다. 상세 링크 형식만 조사 기록의 실제 주소(seq=96)를 따른다.
+# 합성 원본. 링크 형식만 실제 주소(seq=96)를 따른다.
 _LINK = "/index.do?board_id=notice&amp;cp=%2Fboard%2Fview.do&amp;menu_id=0008&amp;pageIndex=1&amp;seq={}"
 ROBOTS = b"User-agent: *\nDisallow: /admin/\n"
 
@@ -61,7 +61,7 @@ class SportsParserTest(unittest.TestCase):
                       *(f'<{tag}>{link}</{tag}>' for tag in "details dialog object template ul".split())):
             with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, "허용 목록 밖"):
                 parse_listing(listing("1", extra=extra))
-        # 경계가 갈리는 중첩, 뒤에 나온 body 속성, 켈빈 기호(U+212A) 태그 이름도 거부한다.
+        # 어긋난 중첩, 뒤 body 속성, 켈빈 기호(U+212A) 태그.
         for extra in ("<div><span></div></span>", f"<div hidden><table><tr><td></div>{link}", "<div>", "<body hidden>",
                       "<frameset></frameset>", f"<lin\u212a hidden>{link}", f"<ak hidden>x</a\u212a>{link}"):
             with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, "목록 HTML 구조"):
@@ -84,7 +84,6 @@ class SportsParserTest(unittest.TestCase):
         self.assertEqual(record["review_flags"], ["link", "markup_unverified", "source_newline_joined"])
 
     def test_newline_keeping_white_space_is_rejected(self):
-        # 브라우저는 이 줄바꿈을 줄로 보인다.
         text = "예약기간: 3.2.~3.6.\n이용기간: 4.1.~6.30."
         for style in ("white-space: pre", "white-space:pre-wrap", "WHITE-SPACE: PRE-LINE", "white-space: break-spaces",
                       "white-space: normal !important", "white-space-collapse: preserve-breaks"):
@@ -94,7 +93,7 @@ class SportsParserTest(unittest.TestCase):
                      detail("96", '<pre><span style="white-space: normal">가\n나</span></pre>')):
             with self.subTest(text=text[-90:]), self.assertRaisesRegex(ValueError, "허용하지 않는"):
                 parse_detail(text, seq="96")
-        # 실제 공지 원본에서 본 white-space 값은 normal뿐이다.
+        # 실제 원본의 white-space는 normal뿐이다.
         self.assertEqual(parsed('<p style="white-space: normal">가</p><br style="white-space: normal">나')["body_lines"], ["가", "나"])
 
     def test_boxes_break_lines_and_unseen_layout_is_rejected(self):
@@ -104,19 +103,18 @@ class SportsParserTest(unittest.TestCase):
                       "diſplay:block"):
             with self.subTest(style=style), self.assertRaisesRegex(ValueError, "허용하지 않는"):
                 parsed(f'<p>예약기간: 3.2.<span style="{style}">이용기간: 4.1.</span></p>')
-        # 상자는 내용·너비와 무관하게 앞뒤를 끊고 inline !important는 붙인다.
+        # inline !important만 줄을 잇는다.
         body = ('<p>예약기간: 3.2.<span style="display: inline-block">이용기간: 4.1.~6.30. 매주 월요일 휴관</span>'
                 '<span style="DISPLAY:block">다</span><span style="display: inline !important; float: none">라</span>'
                 '<strong style="font-variant-position: inherit; mso-text-raise: 0pt">마</strong></p>')
         self.assertEqual(parsed(body)["body_lines"], ["예약기간: 3.2.", "이용기간: 4.1.~6.30. 매주 월요일 휴관", "다", "라마"])
 
     def test_joined_source_newlines_are_flagged(self):
-        # 외부 CSS의 white-space는 알 수 없어 합친 줄을 사람이 대조한다.
         record = parsed("<p>예약기간: 3.2.~3.6.\n이용기간: 4.1.~6.30.</p>")
         self.assertEqual(record["body_lines"], ["예약기간: 3.2.~3.6. 이용기간: 4.1.~6.30."])
         self.assertEqual(record["review_flags"], ["markup_unverified", "source_newline_joined"])
         self.assertEqual(parsed("<p>가\r\n 나\r다</p>")["body_lines"], ["가 나 다"])
-        # 태그 사이의 빈 줄바꿈은 줄을 합치지 않는다.
+        # 태그 사이 줄바꿈은 합치지 않는다.
         record = parsed("<p>\n가\n</p>\n<p>나</p>", title="\r\n제목\n")
         self.assertEqual((record["body_lines"], record["review_flags"]), (["가", "나"], ["markup_unverified"]))
         self.assertIn("source_newline_joined", parsed(title="접수기간 3.2.\r이용기간 4.1.")["review_flags"])
@@ -124,9 +122,8 @@ class SportsParserTest(unittest.TestCase):
     def test_image_only_restriction_is_flagged(self):
         record = parse_detail(detail("111", '<p><img src="/upload/limit.jpg" alt="이용 제한 안내"></p>',
                                      title="체육관 이용 제한 안내"), seq="111")
-        self.assertEqual(record["body_lines"], [])
-        self.assertEqual(record["images"], [{"src": "/upload/limit.jpg", "alt": "이용 제한 안내"}])
-        self.assertEqual(record["keyword_lines"]["suspension"], ["체육관 이용 제한 안내"])
+        self.assertEqual((record["body_lines"], record["images"], record["keyword_lines"]["suspension"]),
+                         ([], [{"src": "/upload/limit.jpg", "alt": "이용 제한 안내"}], ["체육관 이용 제한 안내"]))
         self.assertEqual(record["review_flags"], ["image_only", "inline_image", "markup_unverified"])
 
     def test_detail_rejects_unverifiable_structure(self):
@@ -140,9 +137,7 @@ class SportsParserTest(unittest.TestCase):
                 "<iframe src=x></iframe>", '<p style="display: none">숨김</p>', "<img src=a src=b>",
                 '<p style="display/**/:none">숨김</p>', '<p style="mso-a{}display:none">숨김</p>',
                 "<table><tr><td>x</td></tr></table>", "<pre>x</pre>", "<p popover>x</p>", "<object><p>x</p></object>",
-                # 브라우저는 시작 태그로 앞 요소를 닫는다.
                 "<p>가<div>나</div></p>", "<ul><li><div><li>가</li></div></li></ul>", "<h1><h2>가</h2></h1>")),
-            # 실제 제목 h4 안에는 태그가 없었다. 강제 줄바꿈 문자는 줄을 합친다.
             *(("구조", {"title": title}) for title in ("<span>2026년</span> 안내", "예약<br>안내", "<b popover>x</b>안내", "예약\u2029안내", "예약\x1c일정")),
             *(("구조", {"body": f"<p>가{c}나</p>"})
               for c in ("\u2028", "&#x2028;", "&#8233;", "\x85", "\x0b", "&#11;", "&#xC;", "\x1c", "\x1f", "&#28;", "&#x1F;")),
@@ -171,16 +166,13 @@ class SportsParserTest(unittest.TestCase):
     def test_robots_rules_need_plain_rule_lines(self):
         rules = robots_rules(b"User-agent: *\nDisallow: /index.do?board_id=\n")
         self.assertFalse(allowed(rules, detail_url("1")))
-        # 빈 파일, 다른 그룹의 이상한 값, 주석 속 공백 문자는 판단을 막지 않는다.
         for raw in (b"# empty\n\n", b"User-agent: other\nDisallow: x\n\nUser-agent: *\nDisallow: /admin/\n",
                     "# 안내\u3000\x85\nUser-agent: *\nDisallow: /admin/\n".encode()):
             self.assertTrue(allowed(robots_rules(raw), detail_url("1")))
         for raw in (b"<html><h1>Request Blocked</h1></html>", "규칙".encode("cp949"),
                     b"User-agent: *\nCrawl-delay: soon\n", b"Error: Request Blocked\n",
                     b"User-agent: *\nDisallow: index.do\n", b"User-agent: yeogi-it\nAllow: https://x/\n",
-                    # RFC 9309의 공백은 SP·HTAB뿐이다.
                     *(f"User-agent: *\nDisallow: /index\nAllow: /index.do{c}\n".encode() for c in "\xa0\u3000\x85\x1c\u2028"),
-                    # 토큰 뒤에 글자가 붙은 User-agent와 Disallow 오타는 허용 쪽으로 판정되므로 멈춘다.
                     b"User-agent: yeogi-it, otherbot\nDisallow: /\n", b"User-agent: yeogi-it;\nDisallow: /\n",
                     b"User-agent: * all\nDisallow: /\n", b"User-agent: *\nDisalow: /\n",
                     b"User-agent: *\nDissallow: /\n", b"User-agent: *\nDisallowed: /index.do\n"):
@@ -188,7 +180,7 @@ class SportsParserTest(unittest.TestCase):
                 robots_rules(raw)
 
     def test_robots_follow_rfc_9309_on_every_python(self):
-        # 표준 robotparser가 3.13·3.14에서 허용하던 경우 등이다.
+        # 표준 robotparser가 허용하던 경우 등.
         for raw, listing_allowed in (
             (b"User-agent: *\nAllow: /\nDisallow: /index.do\n", False),
             (b"User-agent: *\nDisallow: /x\n\nUser-agent: *\nDisallow: /index.do\n", False),
@@ -247,8 +239,9 @@ class SportsBatchTest(unittest.TestCase):
         self.assertEqual((receipt["schema_version"], receipt["board"], receipt["robots"]["status"]),
                          ("citizen-sports-notice-batch-v1", "notice", "allowed"))
         self.assertEqual((directory / "robots.txt").read_bytes(), ROBOTS)
-        self.assertEqual(receipt["pages"][0]["sha256"], hashlib.sha256(listing("111", "96")).hexdigest())
-        self.assertEqual(receipt["pages"][0]["source_url"], "https://reservation.anseong.go.kr/index.do?menu_id=0008")
+        page = receipt["pages"][0]
+        self.assertEqual((page["sha256"], page["source_url"]), (hashlib.sha256(listing("111", "96")).hexdigest(),
+                                                                "https://reservation.anseong.go.kr/index.do?menu_id=0008"))
         self.assertEqual([item["web_id"] for item in receipt["items"]], ["111", "96"])
         parsed = json.loads((directory / "parsed-96.json").read_text(encoding="utf-8"))
         self.assertEqual((parsed["parser_version"], parsed["record"]["external_id"]), ("sports-notice-parser-v7", "96"))
@@ -264,7 +257,7 @@ class SportsBatchTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "파싱 결과가 원본과 다릅니다"):
             read_sports_batch(self.private, "run")
         first = directory / "parsed-111.json"
-        kept = first.read_bytes()  # 예전 버전 기록의 원본을 지금 파서가 거부해도 버전 오류다.
+        kept = first.read_bytes()  # 지금 파서가 거부해도 버전 오류다.
         first.write_text(json.dumps(dict(json.loads(kept), parser_version="v6")), encoding="utf-8")
         with patch.object(sports_batch, "parse_detail", side_effect=ValueError), self.assertRaisesRegex(ValueError, "다른 파서"):
             read_sports_batch(self.private, "run")
@@ -300,10 +293,10 @@ class SportsBatchTest(unittest.TestCase):
         self.detail.side_effect = [detail("99").encode(), SourceHTTPError(429, "체육시설 공지 상세")]
         summary, receipt, directory = self.capture(max_items=3)
         self.assertEqual((summary["status"], summary["discovery_status"], summary["parsed"]), ("partial", "item_limit", 0))
-        self.assertEqual([item["status"] for item in receipt["items"]], ["parse_failed", "not_attempted", "fetch_failed"])
+        self.assertEqual(([item["status"] for item in receipt["items"]], receipt["stop_http_status"]),
+                         (["parse_failed", "not_attempted", "fetch_failed"], 429))
         self.assertIn("robots.txt", receipt["items"][1]["error"])
         self.assertEqual((directory / "detail-1.html").read_bytes(), detail("99").encode())
-        self.assertEqual(receipt["stop_http_status"], 429)
         self.assertEqual([call.args for call in self.detail.call_args_list], [("1",), ("3",)])
         self.assertEqual(read_sports_batch(self.private, "run"), {})
         for filename in ("robots.txt", "list-1.html", "detail-1.html"):
@@ -321,8 +314,7 @@ class SportsBatchTest(unittest.TestCase):
         self.detail.side_effect = SourceHTTPError(400, "체육시설 공지 상세")
         _, receipt, _ = self.capture()
         self.assertEqual([item["status"] for item in receipt["items"]], ["fetch_failed", "not_attempted", "not_attempted"])
-        self.assertEqual(receipt["stop_http_status"], 400)
-        self.assertEqual(self.detail.call_count, 1)
+        self.assertEqual((receipt["stop_http_status"], self.detail.call_count), (400, 1))
         self.assertEqual([call.args for call in self.sleep.call_args_list], [(30.0,), (30.0,)])
         failed, *rest = receipt["items"]
         for change in ({"stop_http_status": 429}, {"items": [{**failed, "error": "x"}, *rest], "stop_http_status": None}):
@@ -343,9 +335,10 @@ class SportsBatchTest(unittest.TestCase):
 
     def test_cli_exit_codes(self):
         self.listing.return_value = listing("5")
+        self.robots.side_effect = [ROBOTS, SourceHTTPError(400, "체육시설 robots.txt")]
         runs = ((["--name", "cli"], 0, {"batch_id": "cli", "status": "complete"}),
                 (["--name", "cli", "--verify"], 0, {"batch_id": "cli", "verified": ["5"]}),
-                (["--name", "none", "--verify"], 1, None), (["--name", "cli"], 1, None))
+                (["--name", "none", "--verify"], 1, None), (["--name", "cli"], 1, None), (["--name", "blocked"], 2, None))
         with patch.object(sports_batch, "SPORTS_ROOT", self.root):
             for argv, code, output in runs:
                 with (self.subTest(argv=argv), patch("sys.argv", ["sports_batch", *argv]),
@@ -353,10 +346,6 @@ class SportsBatchTest(unittest.TestCase):
                     self.assertEqual(sports_batch.main(), code)
                     if output:
                         self.assertLessEqual(output.items(), json.loads(out.getvalue()).items())
-        self.robots.side_effect = SourceHTTPError(400, "체육시설 robots.txt")
-        with (patch.object(sports_batch, "SPORTS_ROOT", self.root), patch("sys.argv", ["x", "--name", "blocked"]),
-              contextlib.redirect_stdout(io.StringIO())):
-            self.assertEqual(sports_batch.main(), 2)
 
 if __name__ == "__main__":
     unittest.main()
