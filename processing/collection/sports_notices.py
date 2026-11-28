@@ -115,9 +115,13 @@ def robots_rules(raw: bytes) -> dict:
     표준 라이브러리 robotparser는 판(3.13·3.14)마다 최장 일치·와일드카드·그룹 병합·제품 토큰 비교가 달라 쓰지 않는다.
     """
     try:
-        lines = [line.split("#", 1)[0].strip() for line in raw.decode("utf-8-sig").splitlines()]
+        text = raw.decode("utf-8-sig")
     except UnicodeDecodeError:
         raise ValueError("체육시설 robots.txt를 UTF-8로 읽을 수 없습니다.") from None
+    # RFC 9309의 줄 끝은 CR·LF, 공백은 SP·HTAB뿐이다. 주석 밖의 다른 공백 문자는 값을 바꿀 수 있어 멈춘다.
+    lines = [line.split("#", 1)[0].strip(" \t") for line in re.split(r"\r\n?|\n", text)]
+    if re.search(r"[^\S \t]", "".join(lines)):
+        raise ValueError("체육시설 robots.txt에 SP·HTAB 밖의 공백 문자가 있어 허용 여부를 확정할 수 없습니다.")
     groups: list[tuple[set[str], list[tuple[str, str]]]] = []
     for line in filter(None, lines):
         match = _ROBOTS_LINE.fullmatch(line)

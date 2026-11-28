@@ -180,11 +180,14 @@ class SportsParserTest(unittest.TestCase):
         rules = robots_rules(b"User-agent: *\nDisallow: /index.do?board_id=\n")
         self.assertFalse(allowed(rules, detail_url("1")))
         # 빈 파일과, 적용되지 않는 그룹의 이상한 값은 판단을 막지 않는다.
-        for raw in (b"# empty\n\n", b"User-agent: other\nDisallow: x\n\nUser-agent: *\nDisallow: /admin/\n"):
+        for raw in (b"# empty\n\n", b"User-agent: other\nDisallow: x\n\nUser-agent: *\nDisallow: /admin/\n",
+                    "# 안내\u3000\x85\nUser-agent: *\nDisallow: /admin/\n".encode()):
             self.assertTrue(allowed(robots_rules(raw), detail_url("1")))
         for raw in (b"<html><h1>Request Blocked</h1></html>", "규칙".encode("cp949"),
                     b"User-agent: *\nCrawl-delay: soon\n", b"Error: Request Blocked\n",
-                    b"User-agent: *\nDisallow: index.do\n", b"User-agent: yeogi-it\nAllow: https://x/\n"):
+                    b"User-agent: *\nDisallow: index.do\n", b"User-agent: yeogi-it\nAllow: https://x/\n",
+                    # RFC 9309에서 끝의 U+00A0 등은 값이라 이 Allow는 목록과 맞지 않는데 strip()은 허용으로 넓혔다.
+                    *(f"User-agent: *\nDisallow: /index\nAllow: /index.do{c}\n".encode() for c in "\xa0\u3000\x85\x1c\u2028")):
             with self.subTest(raw=raw), self.assertRaises(ValueError):
                 robots_rules(raw)
 
@@ -200,6 +203,7 @@ class SportsParserTest(unittest.TestCase):
             (b"User-agent: yeogi\nDisallow:\n\nUser-agent: *\nDisallow: /index.do?b\n", True),
             (b"User-agent: YEOGI-IT/1.0\nDisallow: /index.do?b\n\nUser-agent: *\nDisallow:\n", True),
             (b"User-agent: *\nCrawl-delay: 5\nUser-agent: badbot\nDisallow: /\n", False),
+            (b"User-agent: *\r\nDisallow: /index.do\rAllow: /\n", False),
         ):
             with self.subTest(raw=raw):
                 rules = robots_rules(raw)
