@@ -1,10 +1,10 @@
 """안성청년포털 청년정책 목록 카드와 상세의 공개 항목을 표시 문구 그대로 읽는다."""
 
-from html.parser import HTMLParser
 import re
 from urllib.parse import urlencode
 
-from .libraries import _MARKUP_ERROR, _STRICT_START_TAG, _VOID_TAGS, _NoticeParser, _notice_record
+from .html_tokens import PinnedHTMLParser
+from .libraries import _MARKUP_ERROR, _VOID_TAGS, _NoticeParser, _notice_record
 from .official_web import OFFICIAL_ORIGIN, _fetch
 from .road_works import _period
 
@@ -61,14 +61,11 @@ def _text(parts: list[str]) -> str:
     return " ".join("".join(parts).split())
 
 
-class _ListingParser(HTMLParser):
-    """`form#list` 안의 숨은 입력·페이지 표시·정책 카드만 읽는다. 카드 안 다른 위치의 글자는 형식 변경으로 본다.
-
-    shortcut: 목록은 다른 게시판 목록처럼 기본 HTMLParser로 읽는다. 브라우저와 해석이 갈리는 표기 검사는 상세에만 있다.
-    """
+class _ListingParser(PinnedHTMLParser):
+    """`form#list` 안의 숨은 입력·페이지 표시·정책 카드만 읽는다. 카드 안 다른 위치의 글자는 형식 변경으로 본다."""
 
     def __init__(self):
-        super().__init__(convert_charrefs=True)
+        super().__init__()
         self.ignored = 0
         self.form_seen = self.in_form = False
         self.stack: list[tuple[str, list[str], list[str] | None]] = []
@@ -80,7 +77,11 @@ class _ListingParser(HTMLParser):
     def fail(self):
         raise ValueError(_INVALID_LISTING)
 
+    def markup_error(self):
+        return ValueError(_MARKUP_ERROR.format("청년정책 목록"))
+
     def handle_starttag(self, tag, attrs):
+        super().handle_starttag(tag, attrs)
         if tag in _IGNORED_TAGS:
             self.ignored += 1
         if self.ignored:
@@ -180,6 +181,7 @@ class _ListingParser(HTMLParser):
         })
 
     def handle_data(self, data):
+        super().handle_data(data)
         if self.ignored or not self.in_form:
             return
         slot = next((entry[2] for entry in reversed(self.stack) if entry[2] is not None), None)
@@ -229,14 +231,22 @@ class _PolicyParser(_NoticeParser):
         self.images: list[str] = []
 
     def handle_starttag(self, tag, attrs):
-        self.tag_reported = True
-        if tag == "plaintext" or not _STRICT_START_TAG.fullmatch(self.get_starttag_text() or ""):
-            raise ValueError(_MARKUP_ERROR.format(self.label))
         names = [name for name, _ in attrs]
         values = dict(attrs)
-        if self.viewer is not None:
-            self._viewer_start(tag, names, values)
+        if self.viewer is not None or (
+                self.section == "description" and len(self.tags) == self.section_depth and not self.hidden_depth
+                and tag == "div" and "photo_viewer" in (values.get("class") or "").split()):
+            # 대표 이미지 틀은 공지 본문 허용 목록 대신 아래 틀 검사를 받으므로 태그 경계 검사만 거친다.
+            PinnedHTMLParser.handle_starttag(self, tag, attrs)
+            if self.viewer is not None:
+                self._viewer_start(tag, names, values)
+            elif self.viewer_seen or "".join(self.parts["description"]).strip():
+                raise ValueError(_INVALID_VIEWER)
+            else:
+                self.viewer, self.viewer_seen = ["div"], True
             return
+        super().handle_starttag(tag, attrs)
+        # 최상위 form·input은 공지 파서가 태그 깊이·숨김 깊이를 바꾸지 않으므로 호출 뒤에 봐도 같다.
         if not self.tags and not self.hidden_depth:
             if tag == "form" and values.get("id") == "list":
                 if names.count("id") != 1 or names.count("action") != 1:
@@ -249,13 +259,6 @@ class _PolicyParser(_NoticeParser):
                     self.notice_ids.add(values["value"])
                 else:
                     self.categories.append(values["value"])
-        if (self.section == "description" and len(self.tags) == self.section_depth and not self.hidden_depth
-                and tag == "div" and "photo_viewer" in (values.get("class") or "").split()):
-            if self.viewer_seen or "".join(self.parts["description"]).strip():
-                raise ValueError(_INVALID_VIEWER)
-            self.viewer, self.viewer_seen = ["div"], True
-            return
-        super().handle_starttag(tag, attrs)
         if self.section is None and not self.hidden_depth and self.tags == ["div", "div", "ul", "li"]:
             self.section, self.section_depth = f"info{len(self.info)}", 4
             self.parts[self.section] = []
@@ -287,7 +290,9 @@ class _PolicyParser(_NoticeParser):
     def handle_data(self, data):
         if self.viewer is None:
             super().handle_data(data)
-        elif data.strip() not in _VIEWER_TEXT:
+            return
+        PinnedHTMLParser.handle_data(self, data)
+        if data.strip() not in _VIEWER_TEXT:
             raise ValueError(_INVALID_VIEWER)
 
 

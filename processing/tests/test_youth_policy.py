@@ -108,6 +108,11 @@ class YouthPolicyParserTest(unittest.TestCase):
                 '</span><span class="tit info">제목<span>x</span></span>')), 1, "구조"),
             (listing(), 1, "구조"),
             (b"\xff", 1, "구조"),
+            # 목록도 공용 토큰 경계로 읽는다. 브라우저는 빈 요소가 아닌 `<div/>`를 닫지 않아 뒤 카드 구조가 어긋난다.
+            (listing(card("1", extra='<div class="note"/>')), 1, "구조"),
+            (listing(card("1")).replace(b"<!--  -->", b"<!-->"), 1, "목록 페이지에 브라우저와 해석이 갈리는"),
+            (listing(card("1")).replace(b"<html>", b"<html><script><!--<script></script>--></script>"), 1,
+             "목록 페이지에 브라우저와 해석이 갈리는"),
         ):
             with self.subTest(message=message, page=page), self.assertRaisesRegex(ValueError, message):
                 parse_youth_listing(raw, page=page)
@@ -172,6 +177,9 @@ class YouthPolicyParserTest(unittest.TestCase):
             (detail(viewer=VIEWER.replace("다음보기", "신청 안내")), "대표 이미지 영역"),
             (detail(viewer=VIEWER.replace("/portal/js/unit/cardNews/view.js", "/x.js")), "대표 이미지 영역"),
             (detail(viewer=VIEWER + VIEWER), "대표 이미지 영역"),
+            # 대표 이미지 틀도 공용 토큰 검사(스크립트 이중 이스케이프)를 거친다.
+            (detail(viewer=VIEWER.replace("init_thumbnail_view('.photo_viewer');", "<!--<script></script>-->")),
+             "해석이 갈리는"),
             (detail(info=INFO + "<li><span>담당자</span> : 합성</li>"), "알 수 없거나 중복된 항목"),
             (detail(info=INFO + "<li><span>작성자</span> : 합성</li>"), "알 수 없거나 중복된 항목"),
             (detail(body=""), "본문 텍스트가 없습니다"),
