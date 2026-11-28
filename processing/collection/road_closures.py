@@ -177,7 +177,8 @@ def select_items(page: int, items: list[dict], matched: list, review: list) -> N
         fields, place = item["fields"], {"page": page, "position": position}
         if found := _mentions(fields, SECTION_FIELDS, _ANSEONG):
             matched.append({**place, "match": {name: fields[name] for name in found}, "record": item})
-        elif all(fields[name] is None for name in SECTION_FIELDS):
+        elif fields["icNm"] is None:
+            # 항목표만으로는 useRotnm(차단노선구간)이 노선명인지 구간인지 알 수 없다. icNm이 비면 구간 근거가 없을 수 있다.
             review.append({**place, "reason": "blank_section", "mentions": _mentions(fields, FIELDS, "안성"),
                            "record": item})
         elif found := _mentions(fields, SECTION_FIELDS, "안성"):
