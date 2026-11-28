@@ -165,8 +165,9 @@ def parse_incidents(raw: bytes) -> dict:
     if code not in (OK_CODE, EMPTY_CODE):
         raise ValueError(f"{LABEL} 결과 코드가 정상이 아닙니다({_label(code or '없음')}: {_label(message or '')}).")
     items = _children(parts["msgbody"][0], (ITEM,), repeat=ITEM)[ITEM] if parts["msgbody"] else []
-    if code == EMPTY_CODE and items:
-        raise ValueError(f"{LABEL} 응답이 결과 없음(4)인데 돌발 항목이 있습니다.")
+    # 결과 없음은 건수가 없거나 0이고 항목도 없을 때만 받는다. 건수와 항목이 어긋나면 어느 쪽도 믿지 않는다.
+    if code == EMPTY_CODE and (items or count not in (None, "0")):
+        raise ValueError(f"{LABEL} 응답이 결과 없음(4)인데 돌발 항목이나 0이 아닌 itemcount가 있습니다.")
     if code == OK_CODE and (count is None or re.fullmatch(r"[0-9]{1,9}", count) is None or int(count) != len(items)):
         raise ValueError(f"{LABEL} 응답의 결과 데이터 개수(itemcount)가 돌발 항목 수와 맞지 않습니다.")
     return {"result_code": code, "result_message": message, "item_count": count,

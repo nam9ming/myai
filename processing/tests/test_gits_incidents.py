@@ -79,8 +79,12 @@ class GitsParseTest(unittest.TestCase):
     def test_no_result_code_is_an_empty_snapshot(self):
         record = parse_incidents(incidents_xml(code="4", message="결과가 존재하지 않습니다.", count="0", body=""))
         self.assertEqual((record["result_code"], record["items"]), ("4", []))
-        with self.assertRaisesRegex(ValueError, "결과 없음"):
-            parse_incidents(incidents_xml(item_xml(), code="4"))
+        no_count = incidents_xml(code="4", count="0", body="").replace(b"<itemcount>0</itemcount>", b"")
+        self.assertEqual(parse_incidents(no_count)["item_count"], None)
+        for raw in (incidents_xml(item_xml(), code="4"), incidents_xml(code="4", count="3", body="<msgbody/>"),
+                    incidents_xml(code="4", count="", body=""), incidents_xml(code="4", count="00", body="")):
+            with self.subTest(raw=raw), self.assertRaisesRegex(ValueError, "결과 없음"):
+                parse_incidents(raw)
 
     def test_undocumented_leaf_is_kept_verbatim(self):
         item = parse_incidents(incidents_xml(item_xml(extra="<newfield> 원문 </newfield>")))["items"][0]
