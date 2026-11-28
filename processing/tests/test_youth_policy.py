@@ -218,6 +218,9 @@ class YouthPolicyParserTest(unittest.TestCase):
             *((detail(viewer=VIEWER.replace(old, new)), "대표 이미지 영역") for old, new in (
                 (f"{_IMG}'", f"{_IMG}&width=500&heigth=500'"), (f'{_IMG}" alt', f'{_IMG}&width=500&heigth=500" alt'),
                 ("&width=500&heigth=500", ""))),
+            # 큰 보기·썸네일이 원본 주소에 없는 이미지를 보이면 화면과 기록이 달라진다.
+            *((detail(viewer=VIEWER.replace(old, old.replace("a" * 64, "c" * 64))), "대표 이미지 영역")
+              for old in (f"{_IMG}&", f'{_IMG}" alt')),
             (detail().replace('"bod_view"', '"bod_view" title="x"'), "숨김"),
             (detail(body='<span style="font-size:4px">작게</span>'), "숨김"),
             (detail(body="<ul><li>가<li>나</li></ul>"), "숨김"),

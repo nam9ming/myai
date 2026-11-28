@@ -261,6 +261,7 @@ class _PolicyParser(_NoticeParser):
         self.viewer: list[str] | None = None
         self.viewer_seen = False
         self.images: list[str] = []
+        self.shown: set[str] = set()
 
     def handle_starttag(self, tag, attrs):
         names = [name for name, _ in attrs]
@@ -314,6 +315,8 @@ class _PolicyParser(_NoticeParser):
             raise ValueError(_INVALID_VIEWER)
         if pair == "li>button":
             self.images.append(OFFICIAL_ORIGIN + origin)
+        if tag == "img":
+            self.shown.add(OFFICIAL_ORIGIN + source.removesuffix("&width=500&heigth=500"))
         if tag not in _VOID_TAGS:
             self.viewer.append(tag)
 
@@ -327,7 +330,8 @@ class _PolicyParser(_NoticeParser):
             if self.viewer[-1] != tag:
                 raise ValueError(_INVALID_VIEWER)
             self.viewer.pop()
-            if not self.viewer and not self.images:  # 틀이 있으면 화면에 대표 이미지가 보이므로 원본 주소가 빠지면 안 된다.
+            # 틀이 있으면 화면에 대표 이미지가 보이므로 원본 주소가 빠지면 안 된다. 보이는 이미지(꼬리 제외)도 원본 주소여야 한다.
+            if not self.viewer and not (self.images and self.shown <= set(self.images)):
                 raise ValueError(_INVALID_VIEWER)
             self.viewer = self.viewer or None
 
