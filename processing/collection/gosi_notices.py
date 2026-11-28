@@ -257,6 +257,7 @@ class _GosiParser(_NoticeParser):
         self.attachments: list[dict] = []
         self.downloads: list[tuple[str, str, str] | None] = []
         self.anchor = None
+        self.file_section_seen = False
 
     def handle_starttag(self, tag, attrs):
         names = [name for name, _ in attrs]
@@ -266,7 +267,13 @@ class _GosiParser(_NoticeParser):
                 raise ValueError(f"{LABEL} 상세 폼의 HTML 속성이 중복되었습니다.")
             self.detail_actions.append(values["action"])
         info_item = not self.hidden_depth and self.tags == ["div", "div", "ul"] and tag == "li"
+        opened = self.attachment_open
         super().handle_starttag(tag, attrs)
+        if self.attachment_open and not opened:
+            # 첨부가 없는 글도 템플릿은 빈 `dl.view_file`을 출력한다(없는 번호 화면에서 확인). 영역의 유무로 형식 변경을 가린다.
+            if self.file_section_seen:
+                raise ValueError(f"{LABEL} 첨부 영역이 중복되었습니다.")
+            self.file_section_seen = True
         if self.hidden_depth or not self.tags:
             return
         if info_item and self.section is None:
@@ -343,6 +350,11 @@ def parse_gosi_detail(text: str, *, notice_id: str, listing: dict) -> dict:
         raise ValueError(f"{LABEL} 본문 영역을 확인할 수 없습니다.")
     if parser.detail_actions != [_DETAIL_ACTION]:
         raise ValueError(f"{LABEL} HTML의 게시판이 요청과 일치하지 않습니다.")
+    # 없는 번호 화면에도 빈 본문·첨부 영역이 있다. 영역이 아예 없으면 '본문·첨부 없음'이 아니라 형식 변경이다.
+    if "description" not in parser.parts:
+        raise ValueError(f"{LABEL} 본문 영역(view_cont)이 없습니다. 형식이 바뀌었습니다.")
+    if not parser.file_section_seen:
+        raise ValueError(f"{LABEL} 첨부 영역(view_file)이 없습니다. 형식이 바뀌었습니다.")
     title = _text(parser.parts.get("title", []))
     if not title:
         # 없는 번호도 HTTP 200과 빈 제목·항목의 같은 화면을 돌려준다.

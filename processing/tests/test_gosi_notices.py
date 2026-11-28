@@ -153,10 +153,16 @@ class GosiParserTest(unittest.TestCase):
             "바로 보기 정보": (detail(links=_links("75365", (_FILE,)).replace("_1.hwpx','/nt", "_9.hwpx','/nt")), row()),
             "숨김": (detail(body='<div style="display:none">숨은 마감</div>'), row()),
             "해석이 갈리는": (detail(body="<!--> 마감"), row()),
+            "view_cont": (detail(body="접수기간 2026.12.01~12.05").replace('"view_cont"', '"view_content"'), row()),
+            "view_file": (detail().replace('"view_file"', '"view_files"'), row()),
+            "첨부 영역이 중복": (detail().replace("</dl>", '</dl><dl class="view_file"><dd></dd></dl>'), row()),
         }
         for message, (text, listed) in cases.items():
             with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
                 parse_gosi_detail(text, notice_id="75365", listing=listed)
+        moved = detail().replace('<dl class="view_file">', '<div><dl class="view_file">').replace("</dl>", "</dl></div>")
+        with self.assertRaisesRegex(ValueError, "view_file"):
+            parse_gosi_detail(moved, notice_id="75365", listing=row())
         with self.assertRaisesRegex(ValueError, "18자리"):
             gosi_detail_url("0")
 
