@@ -29,6 +29,7 @@ CASES = {
                                             ["capture_arthall_batch", "read_arthall_batch"]),
     "processing.collection.sports_batch": (["sports_batch", "--name", "x", "--max-items", "x"],
                                            ["capture_sports_batch", "read_sports_batch"]),
+    "processing.collection.reference_tables": (["reference_tables", "garbage", "--name", "x"], ["capture_reference"]),
 }
 
 
