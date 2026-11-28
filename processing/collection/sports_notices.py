@@ -5,10 +5,10 @@
 가정이다. 실제 응답이 다르면 원본과 실패 사유를 남기고 멈춘다.
 """
 
-from html.parser import HTMLParser
 import re
 from urllib.parse import parse_qsl, unquote, urlencode, urlsplit
 
+from .html_tokens import PinnedHTMLParser
 from .official_web import _fetch
 
 HOST = "reservation.anseong.go.kr"
@@ -18,14 +18,15 @@ ROBOTS_URL = ORIGIN + "/robots.txt"
 ROBOTS_MAX_BYTES = 512 * 1024
 _LISTING_PATH = "/index.do?menu_id=0008"
 LISTING_URL = ORIGIN + _LISTING_PATH
-PARSER_VERSION = "sports-notice-parser-v4"
+PARSER_VERSION = "sports-notice-parser-v5"
 _DETAIL_QUERY = {"board_id": "notice", "cp": "/board/view.do", "menu_id": "0008", "pageIndex": "1"}
 _SEQ = re.compile(r"[1-9][0-9]{0,17}")
 _ROBOTS_LINE = re.compile(r"([A-Za-z-]+)[ \t]*:(.*)")
 _PRODUCT = USER_AGENT.split("/")[0]  # RFC 9309 그룹은 제품 토큰으로 고른다.
 # 다섯 자리를 넘는 값은 sleep 한도를 넘을 수 있어 읽지 않는다.
 _CRAWL_DELAY = re.compile(r"[0-9]{1,5}(?:\.[0-9]+)?")
-_HIDDEN_TAGS = ("template", "noscript")
+# noscript 등 원문 텍스트 요소 안은 공용 파서가 태그로 읽지 않는다.
+_HIDDEN_TAGS = ("template",)
 _VOID_TAGS = frozenset("area base br col embed hr img input link meta source track wbr".split())
 _BREAK_TAGS = frozenset("br p div li tr td th h1 h2 h3 h4 h5 h6 table ul ol dl dt dd blockquote caption center hr pre".split())
 _BODY_TAGS = _BREAK_TAGS | frozenset("a b strong em i u s span font sub sup small mark img tbody thead tfoot col "
@@ -36,6 +37,7 @@ _WHITE_SPACE = re.compile(r"white-space(?:-collapse)?\s*:\s*([^;]*)", re.I)
 # 소스 줄바꿈을 공백으로 보이는 값만 받는다. 안성시 누리집 실제 공지 원본에 이 값들이 붙어 온다.
 _COLLAPSE = frozenset(("normal", "nowrap", "collapse"))
 _INVALID_DETAIL = "체육시설 공지 상세 HTML 구조가 예상과 다릅니다."
+_INVALID_LISTING = "체육시설 공지 목록 HTML 구조가 올바르지 않습니다."
 # 원문 줄을 고르는 검색어(공백 무시). 줄을 해석하지 않고 옮기는 색인이며, 고르지 못한 줄도 body_lines에 남는다.
 KEYWORD_GROUPS = {
     "reservation_schedule": ("예약일정", "예약기간", "예약일시", "예약접수", "예약개시", "예약오픈", "예약시작",
@@ -139,19 +141,19 @@ def allowed(rules: dict, url: str) -> bool:
     return _verdict(rules["rules"], path) and _verdict(decoded, unquote(path))
 
 
-def _feed(parser: HTMLParser, text: str, message: str) -> None:
+def _feed(parser: PinnedHTMLParser, text: str) -> None:
     if "\x00" in text:
-        raise ValueError(message)
+        raise parser.markup_error()
     try:
         parser.feed(text)
         parser.close()
     except AssertionError:
-        raise ValueError(message) from None
+        raise parser.markup_error() from None
 
 
-class _LinkParser(HTMLParser):
+class _LinkParser(PinnedHTMLParser):
     def __init__(self):
-        super().__init__(convert_charrefs=True)
+        super().__init__()
         self.hidden = 0
         # 숨긴 요소(hidden·display:none·visibility:hidden·중복 속성)의 태그 이름과 같은 이름이 열린 수.
         # shortcut: 같은 이름 태그 수로만 닫으므로 브라우저가 무시하는 잘못된 닫는 태그는 놓친다, 실제 목록을 받으면 다시 본다.
@@ -159,10 +161,11 @@ class _LinkParser(HTMLParser):
         self.depth = 0
         self.hrefs: list[tuple[str, bool]] = []
 
-    def handle_startendtag(self, tag, attrs):
-        self.handle_starttag(tag, attrs)  # 브라우저처럼 `<template/>`도 여는 태그로 본다.
+    def markup_error(self):
+        return ValueError(_INVALID_LISTING)
 
     def handle_starttag(self, tag, attrs):
+        super().handle_starttag(tag, attrs)
         if tag in _HIDDEN_TAGS:
             self.hidden += 1
             return
@@ -218,7 +221,7 @@ def parse_listing(raw: bytes) -> list[str]:
     except (AttributeError, UnicodeDecodeError):
         raise ValueError("체육시설 공지 목록은 UTF-8이어야 합니다.") from None
     parser = _LinkParser()
-    _feed(parser, text, "체육시설 공지 목록 HTML 구조가 올바르지 않습니다.")
+    _feed(parser, text)
     ids: list[str] = []
     for href, concealed in parser.hrefs:
         seq = _listed_seq(href)
@@ -239,9 +242,9 @@ def _shown(names, values) -> bool:
             and not _HIDDEN_STYLE.search(values.get("style") or ""))
 
 
-class _DetailParser(HTMLParser):
+class _DetailParser(PinnedHTMLParser):
     def __init__(self):
-        super().__init__(convert_charrefs=True)
+        super().__init__()
         self.hidden = 0
         self.seqs: list[str | None] = []
         self.titles: list[str] = []
@@ -254,11 +257,11 @@ class _DetailParser(HTMLParser):
         self.links: list[dict] = []
         self.link: dict | None = None
 
-    def handle_startendtag(self, tag, attrs):
-        # HTML에서 빈 요소가 아닌 태그의 `/>`는 무시되므로 시작 태그로만 읽는다.
-        self.handle_starttag(tag, attrs)
+    def markup_error(self):
+        return ValueError(_INVALID_DETAIL)
 
     def handle_starttag(self, tag, attrs):
+        super().handle_starttag(tag, attrs)
         names = [name for name, _ in attrs]
         values = dict(attrs)
         if self.body is not None:
@@ -330,6 +333,7 @@ class _DetailParser(HTMLParser):
             self.hidden -= 1
 
     def handle_data(self, data):
+        super().handle_data(data)
         if self.body is not None:
             # 브라우저는 pre 밖의 소스 줄바꿈을 공백으로 보인다. 줄 경계는 문단·칸·br과 pre 안 줄바꿈만 만든다.
             # 외부 CSS가 줄바꿈을 살릴 수 있어 pre 밖 줄바꿈은 `\r`로 남겨 parse_detail이 합친 사실을 표시한다.
@@ -349,7 +353,7 @@ def parse_detail(text: str, *, seq: str) -> dict:
     """제목·본문 줄·이미지·링크를 표시 문구 그대로 보관한다. 일정·자격·비용·중단 여부는 판정하지 않는다."""
     url = detail_url(seq)
     parser = _DetailParser()
-    _feed(parser, text, _INVALID_DETAIL)
+    _feed(parser, text)
     if parser.body is not None or parser.title is not None or parser.hidden:
         raise ValueError(_INVALID_DETAIL)
     if parser.seqs != [seq]:

@@ -43,6 +43,7 @@ class SportsParserTest(unittest.TestCase):
             "같은 공지": listing("1", "1"),
             "찾지 못했": listing(),
             "UTF-8": "<a>공지</a>".encode("cp949"),
+            "목록 HTML 구조": listing("1", extra='<p class="a"\xa0id="b">x</p>'),
         }
         for message, raw in cases.items():
             with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
@@ -132,6 +133,7 @@ class SportsParserTest(unittest.TestCase):
             ("허용하지 않는", detail("96", body="<iframe src=x></iframe>")),
             ("허용하지 않는", detail("96", body='<p style="display: none">숨김</p>')),
             ("허용하지 않는", detail("96", body="<img src=a src=b>")),
+            ("상세 HTML 구조", detail("96", head="<!--><h4>숨김</h4>-->")),
             ("구조", detail("96", title='<span style="display:none">숨김</span>예약 안내')),
             ("구조", detail("96", title="<b hidden>숨김</b>예약 안내")),
             ("구조", detail("96", title="<i class=a class=b>x</i>예약 안내")),
@@ -206,7 +208,7 @@ class SportsBatchTest(unittest.TestCase):
         self.assertEqual(receipt["pages"][0]["source_url"], "https://reservation.anseong.go.kr/index.do?menu_id=0008")
         self.assertEqual([item["web_id"] for item in receipt["items"]], ["111", "96"])
         parsed = json.loads((directory / "parsed-96.json").read_text(encoding="utf-8"))
-        self.assertEqual((parsed["parser_version"], parsed["record"]["external_id"]), ("sports-notice-parser-v4", "96"))
+        self.assertEqual((parsed["parser_version"], parsed["record"]["external_id"]), ("sports-notice-parser-v5", "96"))
 
         assets = read_sports_batch(self.private, "run")
         self.assertEqual(list(assets), ["111", "96"])
