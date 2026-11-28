@@ -188,6 +188,14 @@ def _allowed(rules: dict, tag: str, attrs) -> list | None:
     return pairs if all(name in _STYLE and _STYLE[name].fullmatch(value) for name, value in pairs) else None
 
 
+def _marks(tag: str, attrs) -> set | None:
+    """허용 조상이면 `태그`·`태그#id`·`태그.class` 표기 집합을, 아니면 None을 돌려준다."""
+    if _allowed(_ANCESTORS, tag, attrs) is None:
+        return None
+    values = dict(attrs)
+    return {tag, f"{tag}#{values.get('id')}", *(f"{tag}.{name}" for name in (values.get("class") or "").split())}
+
+
 def _feed(parser: PinnedHTMLParser, text: str) -> None:
     if _UNREAD.search(text):
         raise parser.markup_error()
@@ -209,7 +217,7 @@ class _Parser(PinnedHTMLParser):
 
     def __init__(self):
         super().__init__()
-        # (태그, 읽는 영역, 플래그). 플래그는 영역 밖에서는 조상 허용 여부, 본문에서는 줄을 끊는지다.
+        # (태그, 읽는 영역, 플래그). 플래그는 영역 밖에서는 허용 조상의 `_marks`(아니면 None), 본문에서는 줄을 끊는지다.
         self.stack: list[tuple[str, str | None, bool]] = []
         self.form = None  # 브라우저의 form 요소 포인터
 
@@ -233,6 +241,11 @@ class _Parser(PinnedHTMLParser):
             if self.stack[index][0] in _SCOPE or self.stack[index][0] in extra:
                 return None
         return None
+
+    def _under(self, *path) -> bool:
+        """스택 끝 요소들이 차례로 `path`의 표기를 가진 허용 조상인지."""
+        tail = self.stack[-len(path):]
+        return len(tail) == len(path) and all(mark in (entry[2] or ()) for entry, mark in zip(tail, path))
 
     def handle_starttag(self, tag, attrs):
         super().handle_starttag(tag, attrs)
@@ -312,8 +325,11 @@ class _LinkParser(_Parser):
             raise ValueError("체육시설 공지 목록 링크의 href가 중복되었습니다.")
         seq = _listed_seq(values["href"]) if tag == "a" and values.get("href") else None
         if not seq:
-            return None, _allowed(_ANCESTORS, tag, attrs) is not None
+            return None, _marks(tag, attrs)
         self.enter(_LINK, tag, attrs, _CONCEALED)
+        # 팝업·배너 등 이 목록 밖 링크는 1쪽 공지인지 모른다.
+        if "subject" not in (values.get("class") or "").split() or not self._under("form#gnBoardVOL", "ul.bbsList", "li"):
+            raise self.markup_error()
         if seq in self.ids:
             raise ValueError("체육시설 공지 목록에 같은 공지 번호가 있습니다.")
         self.ids.append(seq)
@@ -327,7 +343,7 @@ def _listed_seq(href: str) -> str | None:
     except ValueError:  # 깨진 주소(IPv6 호스트 등)는 이 호스트의 공지 링크가 아니다.
         return None
     if (parts.scheme not in ("", "http", "https") or parts.netloc not in ("", HOST)
-            or parts.path not in ("index.do", "/index.do", "./index.do")):
+            or parts.path.split(";")[0] not in ("index.do", "/index.do", "./index.do")):  # `;jsessionid` 포함
         return None
     seq = dict(parse_qsl(parts.query, keep_blank_values=True)).get("seq")
     if seq is None:
@@ -382,8 +398,10 @@ class _DetailParser(_Parser):
         elif tag == "div" and "conts" in classes:
             self.bodies += 1
             self.enter(_BODY, tag, attrs, _INVALID_BODY)
+            if not self._under("td.conts"):
+                raise self.markup_error()
             return "body", self._body_start(tag, values)
-        return None, _allowed(_ANCESTORS, tag, attrs) is not None
+        return None, _marks(tag, attrs)
 
     def _body_start(self, tag, values) -> bool:
         if tag in _BREAK_TAGS:

@@ -48,9 +48,9 @@ def parsed(*args, **options):
 class SportsParserTest(unittest.TestCase):
     def test_listing_reads_detail_links_in_order(self):
         raw = listing("111", "96", extra='<div hidden><div><a href="/index.do?menu_id=0001">메뉴</a></div></div><br hidden>'
-                      f'<div id="more"><a href="{_LINK.format(7)}">x</a></div><div><span></div></span>'
+                      '<div><span></div></span>'
                       '<a href="https://example.com/index.do?seq=3">외부</a><a href="http://[x/index.do?seq=4">깨짐</a>')
-        self.assertEqual(parse_listing(raw), ["111", "96", "7"])
+        self.assertEqual(parse_listing(raw), ["111", "96"])
 
     def test_listing_rejects_unexpected_shapes(self):
         cases = {
@@ -61,6 +61,7 @@ class SportsParserTest(unittest.TestCase):
             "UTF-8": "<a>공지</a>".encode("cp949"),
             "목록 HTML 구조": listing("1", extra='<p class="a"\xa0id="b">x</p>'),
             "링크 형식": listing("1").replace(b"pageIndex=1", b"pageIndex=2"),
+            "링크 형식이": listing("1", extra=f'<a href="{_LINK.format(7).replace("x.do", "x.do;jsessionid=A")}">x</a>'),
         }
         for message, raw in cases.items():
             with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
@@ -68,7 +69,7 @@ class SportsParserTest(unittest.TestCase):
         link = f'<a href="{_LINK.format(2)}">x</a>'
         for extra in (f'<div style="display: none"><div></div>{link}</div>', f'<p>{link}</p>', f"<details open>{link}</details>",
                       link.replace("<a", "<a hidden"), link.replace("<a", "<a popover"), f'<div popover>{link}</div>',
-                      f'<div style="display/**/:none">{link}</div>', link.replace("x<", "<i>x</i><"),
+                      f'<div style="display/**/:none">{link}</div>',
                       f'<div style="height: 50px">{link}</div>', f'<ul><li style="display:none;">{link}</li></ul>',
                       # 남는 `</li>`는 범위 밖이라 버려지고 링크는 숨긴 li 안에 남는다. `</div>`도 칸을 넘어 닫지 못한다.
                       f'<ul><li hidden><ul><li></li></li></ul>{link}</li></ul>',
@@ -79,10 +80,16 @@ class SportsParserTest(unittest.TestCase):
         # 브라우저가 서식 요소를 다시 열거나 요소를 닫고 옮길 표기, 닫히지 않은 요소, 뒤 body 속성, 켈빈 기호(U+212A) 태그.
         for extra in ("<div><b></div></b>", "<b><i></b></i>", "<p><div></div></p>", "<div><li></li></div>",
                       '<a href="#"><a href="#">x</a></a>', f"<table><tr><td>{link}</td></tr></table>", "<template></template>",
-                      link.replace("</a>", "</br></a>"), "<div>", "<body hidden>", "<frameset></frameset>",
+                      "<div>", "<body hidden>", "<frameset></frameset>",
                       f"<lin\u212a hidden>{link}", f"<ak hidden>x</a\u212a>{link}"):
             with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, "목록 HTML 구조"):
                 parse_listing(listing("1", extra=extra))
+        # `form#gnBoardVOL > ul.bbsList > li > a.subject` 밖 링크(팝업 등)도 거부한다.
+        for message, old, new in (("허용 목록 밖", b"</em>", b"</em><i>x</i>"), ("구조", b"</a>", b"</br></a>"),
+                                  *(("구조", old, b"x") for old in (b"subject", b"bbsList", b"gnBoardVOL", b"<li>")),
+                                  ("구조", b"</form>", f'</form><div id="popup">{link}</div>'.encode())):
+            with self.subTest(new=new), self.assertRaisesRegex(ValueError, message):
+                parse_listing(listing("1").replace(old, new))
 
     def test_detail_keeps_display_text_verbatim(self):
         body = ('<p>예약 일정 : 3월 2일(월) 09:00</p><p>관내 거주자 <span style="font-weight: bolder;">우선</span>&nbsp;배정</p>'
@@ -149,7 +156,7 @@ class SportsParserTest(unittest.TestCase):
         for message, options in (
             ("일치하지", {"head": '<input name="seq" value="5">'}),
             ("제목", {"head": '<h3 class="bbsTitle">메뉴</h3>'}),
-            ("본문 영역", {"head": '<div class="conts">x</div>'}),
+            ("본문 영역", {"body": '가</div><div class="conts">나'}), ("구조", {"head": '<div class="conts">x</div>'}),
             ("글자와 이미지", {"body": "<p> </p>"}),
             ("상세 HTML 구조", {"head": "<!--><h4>숨김</h4>-->"}),
             *(("허용하지 않는", {"body": body}) for body in (
@@ -173,7 +180,7 @@ class SportsParserTest(unittest.TestCase):
             parse_detail(detail("95"), seq="96")
         page = detail("96")
         for text in (page.replace('value="96"', 'value="96" value="95"'), page.replace('type="hidden"', 'type="hidden" x'),
-                     page.replace('<h3 class="bbsTitle">', '<h3 class="bbsTitle" id="t">')):
+                     page.replace('<h3 class="bbsTitle">', '<h3 class="bbsTitle" id="t">'), page.replace('4" class="conts', '4" class="c')):
             with self.subTest(text=text), self.assertRaisesRegex(ValueError, "구조"):
                 parse_detail(text, seq="96")
         for wrapper in ("<div hidden>", '<div style="display:none">', "<details>", "<div popover>", "<template>",
@@ -308,6 +315,9 @@ class SportsBatchTest(unittest.TestCase):
                     self.rejects(name, "batch.json", {**receipt, **change})
                 if status != "fetch_failed":
                     self.rejects(name, "robots.txt")
+                else:  # 원본 없는 기록은 주소·키까지 맞아야 한다.
+                    for change in ({"source_url": "x"}, {"http_status": None}, {"sha256": "0" * 64}):
+                        self.rejects(name, "batch.json", {**receipt, "robots": {**receipt["robots"], **change}})
         self.assertIn("HTTP 응답 오류(429)", json.loads((self.root / "throttled" / "batch.json").read_text())["robots"]["error"])
         self.listing.assert_not_called()
         self.detail.assert_not_called()
@@ -330,7 +340,9 @@ class SportsBatchTest(unittest.TestCase):
         for change in ({**robots, "http_status": 400}, {**robots, "http_status": "404"}, {**robots, "http_status": 404.0},
                        {**robots, "status": "fetch_failed"}, {**robots, "error": "x"}, {"source_url": robots["source_url"],
                        "status": "unavailable", "error": robots["error"]}, {**robots, "file": "robots.txt"},
-                       {**robots, "http_status": 429, "error": str(SourceHTTPError(429, "체육시설 robots.txt"))}):
+                       {**robots, "http_status": 429, "error": str(SourceHTTPError(429, "체육시설 robots.txt"))},
+                       {**robots, "source_url": "https://evil.example/robots.txt"}, {**robots, "sha256": "0" * 64},
+                       {**robots, "fetched_at": "x"}):
             self.rejects("r404", "batch.json", {**receipt, "robots": change})
 
     def test_detail_failures_robots_rules_and_limits(self):

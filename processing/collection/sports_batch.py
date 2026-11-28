@@ -177,7 +177,9 @@ def read_sports_batch(private_root: Path, name: str) -> dict[str, dict]:
             page = _attempt(parse_listing, _raw(directory, pages[0], "list-1.html", LISTING_URL, LIST_MAX_BYTES))
             listed = page[1] or []
             discovery = "item_limit" if len(listed) > limit else "first_page_only" if listed else "failed"
-        if (robots.get("status") != state or len(pages) != go
+        keys = {"source_url", "status", "error"} | ({"http_status"} if code is not None else set())
+        if (robots.get("status") != state or len(pages) != go or robots.get("source_url") != ROBOTS_URL
+                or "file" not in robots and set(robots) != keys
                 or (type(robots.get("http_status")), robots.get("http_status")) != (type(code), code)
                 or (pages and (pages[0].get("status"), pages[0].get("web_ids")) != page)
                 or [row.get("web_id") for row in items] != listed[:limit]):
