@@ -192,7 +192,8 @@ class ArthallBatchTest(unittest.TestCase):
         self.assertEqual(receipt["items"][0]["source_url"], detail_url("9"))
         parsed = json.loads((directory / "parsed-9.json").read_text(encoding="utf-8"))
         self.assertEqual(parsed["parser_version"], PARSER_VERSION)
-        records = read_arthall_batch(self.root.parent, "run")
+        receipt, records = read_arthall_batch(self.root.parent, "run")
+        self.assertEqual(receipt["status"], "complete")
         self.assertEqual(list(records), ["9", "7", "8"])
         self.assertEqual(records["9"], parsed["record"])
 
@@ -208,7 +209,11 @@ class ArthallBatchTest(unittest.TestCase):
         tamper(directory / "parsed-8.json", "클래식".encode(), "무용".encode())
         tamper(directory / "parsed-8.json", PARSER_VERSION.encode(), b"arthall-concert-parser-v0")
         tamper(directory / "batch.json", b'"month": 12', b'"month": 11')
-        self.assertEqual(len(read_arthall_batch(self.root.parent, "run")), 3)
+        # 목록에 있는 공연을 지우고 건수를 맞춘 완료 기록도 거부한다.
+        dropped = {**receipt, "items": [row for row in receipt["items"] if row["web_id"] != "7"], "selected": 2, "parsed": 2}
+        original = (directory / "batch.json").read_bytes()
+        tamper(directory / "batch.json", original, json.dumps(dropped).encode())
+        self.assertEqual(len(read_arthall_batch(self.root.parent, "run")[1]), 3)
 
     def test_failures_keep_raw_and_partial_reads(self):
         self.listing.return_value = listing("1", "2", "3")
@@ -219,7 +224,7 @@ class ArthallBatchTest(unittest.TestCase):
         self.assertEqual([item["status"] for item in receipt["items"]], ["parse_failed", "fetch_failed", "fetch_failed"])
         self.assertIn("번호가 요청과 일치하지 않습니다", receipt["items"][0]["error"])
         self.assertEqual(receipt["stop_http_status"], 429)
-        self.assertEqual(read_arthall_batch(self.root.parent, "part"), {})
+        self.assertEqual(read_arthall_batch(self.root.parent, "part")[1], {})
 
     def test_cli_capture_and_verify(self):
         self.listing.return_value = listing("5")
@@ -230,6 +235,14 @@ class ArthallBatchTest(unittest.TestCase):
                 with patch("sys.argv", ["arthall_batch", *argv]), contextlib.redirect_stdout(io.StringIO()) as out:
                     self.assertEqual(arthall_batch.main(), 0)
                 self.assertEqual(json.loads(out.getvalue())["status"], expected)
+            self.assertEqual(json.loads(out.getvalue())["batch_status"], "complete")
+            # 일부 실패 묶음은 검증을 통과해도 원래 상태와 함께 종료 코드 2를 돌려준다.
+            self.detail.side_effect = ValueError("합성 수신 실패")
+            for argv in (["capture", "--year", "2026", "--month", "12", "--name", "part"], ["verify", "--name", "part"]):
+                with patch("sys.argv", ["arthall_batch", *argv]), contextlib.redirect_stdout(io.StringIO()) as out:
+                    self.assertEqual(arthall_batch.main(), 2)
+            self.assertEqual(json.loads(out.getvalue()), {"batch_id": "part", "status": "verified",
+                                                          "batch_status": "partial", "selected": 1, "parsed": 0})
             with patch("sys.argv", ["arthall_batch", "verify", "--name", "none"]), \
                     contextlib.redirect_stderr(io.StringIO()) as error:
                 self.assertEqual(arthall_batch.main(), 1)

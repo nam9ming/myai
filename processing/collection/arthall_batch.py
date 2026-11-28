@@ -60,8 +60,8 @@ def _checked(directory: int, entry: object, filename: str, url: str, limit: int)
     return raw
 
 
-def read_arthall_batch(private_root: Path, name: str) -> dict[str, dict]:
-    """보관한 목록·상세 원본의 해시와 현재 파서 결과를 기록과 대조하고, 파싱된 공연 기록을 번호별로 돌려준다."""
+def read_arthall_batch(private_root: Path, name: str) -> tuple[dict, dict[str, dict]]:
+    """보관한 목록·상세 원본의 해시와 현재 파서 결과를 기록과 대조하고, 수집 기록과 파싱된 공연 기록(번호별)을 돌려준다."""
     validate_name(name)
     with open_archive(private_root, Path(ARTHALL_SECTION) / name) as directory:
         receipt = read_receipt(directory, "batch.json")
@@ -71,7 +71,7 @@ def read_arthall_batch(private_root: Path, name: str) -> dict[str, dict]:
                 or not isinstance(pages, list) or not isinstance(items, list)):
             raise ValueError("아트홀 수집 기록의 규격·이름·상태가 맞지 않습니다.")
         listing_path(year, month, 1)
-        listed = set()
+        listed = []
         for entry in pages:
             if not isinstance(entry, dict):
                 raise ValueError("아트홀 수집 기록의 목록 페이지가 맞지 않습니다.")
@@ -83,7 +83,7 @@ def read_arthall_batch(private_root: Path, name: str) -> dict[str, dict]:
             if [*parse_listing(raw, year=year, month=month, page=page)] != [entry.get("reported_pages"),
                                                                             entry.get("web_ids")]:
                 raise ValueError("아트홀 목록 파싱 결과가 원본과 다릅니다.")
-            listed.update(entry["web_ids"])
+            listed.extend(entry["web_ids"])
         records, seen = {}, set()
         for row in items:
             key = row.get("web_id") if isinstance(row, dict) else None
@@ -106,9 +106,11 @@ def read_arthall_batch(private_root: Path, name: str) -> dict[str, dict]:
                 raise ValueError("아트홀 파싱 결과가 원본과 다릅니다.")
             records[key] = record
         if ((receipt.get("selected"), receipt.get("parsed")) != (len(items), len(records))
-                or (receipt["status"] == "complete" and len(records) != len(items))):
+                or (receipt["status"] == "complete"
+                    and (len(records) != len(items) or [row["web_id"] for row in items] != listed))):
+            # 완료 묶음은 목록 원본의 공연을 순서대로 빠짐없이 담아야 한다.
             raise ValueError("아트홀 수집 기록의 공연 건수가 맞지 않습니다.")
-        return records
+        return receipt, records
 
 
 def main() -> int:
@@ -130,8 +132,9 @@ def main() -> int:
                                             start_page=args.start_page, max_pages=args.max_pages,
                                             max_items=args.max_items)
         else:
-            records = read_arthall_batch(ARTHALL_ROOT.parent, args.name)
-            summary = {"batch_id": args.name, "status": "verified", "parsed": len(records)}
+            receipt, records = read_arthall_batch(ARTHALL_ROOT.parent, args.name)
+            summary = {"batch_id": args.name, "status": "verified", "batch_status": receipt["status"],
+                       "selected": receipt["selected"], "parsed": len(records)}
     except ValueError as error:
         print(f"아트홀 일정 수집 실패: {error}", file=sys.stderr)
         return 1
@@ -139,7 +142,8 @@ def main() -> int:
         print("아트홀 일정 원본 또는 완료 기록을 저장·확인할 수 없습니다.", file=sys.stderr)
         return 1
     print(json.dumps(summary, ensure_ascii=False))
-    return 0 if summary["status"] in ("complete", "verified") else 2
+    # 검증을 통과해도 일부 실패·한도 도달 묶음이면 수집과 같은 종료 코드 2다.
+    return 0 if summary.get("batch_status", summary["status"]) == "complete" else 2
 
 
 if __name__ == "__main__":

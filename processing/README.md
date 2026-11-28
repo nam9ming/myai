@@ -369,7 +369,7 @@ python3.13 -B -m processing.collection.arthall_batch capture --year 2026 --month
 python3.13 -B -m processing.collection.arthall_batch verify --name arthall-2026-12
 ```
 
-`data/private/collection-arthall/<name>/`에 목록·상세 HTML 원본, `parsed-<번호>.json`(`arthall-concert-parser-v1`), 마지막으로 `batch.json`을 쓴다. 종료 코드는 0 완료(`verify`는 검증 통과), 2 한도 도달·일부 실패, 1 입력·보관·검증 오류다. `verify`는 요청 없이 목록·상세 원본의 해시, 목록에서 찾은 번호, 현재 파서의 결과를 기록과 대조한다. 다른 파서 버전의 기록은 다시 수집하라는 오류로 거부한다.
+`data/private/collection-arthall/<name>/`에 목록·상세 HTML 원본, `parsed-<번호>.json`(`arthall-concert-parser-v1`), 마지막으로 `batch.json`을 쓴다. 종료 코드는 0 완료, 2 한도 도달·일부 실패, 1 입력·보관·검증 오류다. `verify`는 요청 없이 목록·상세 원본의 해시, 목록에서 찾은 번호, 현재 파서의 결과를 기록과 대조하고, 완료 묶음은 목록 원본의 공연을 순서대로 빠짐없이 담았는지도 본다. 검증을 통과하면 원래 상태(`batch_status`)·선택 건수와 함께 출력하고, 일부 실패 묶음은 종료 코드 2를 돌려준다. 다른 파서 버전의 기록은 다시 수집하라는 오류로 거부한다.
 
 - 목록: `form#listForm`의 주소, 숨은 `year`·`month`(`06`처럼 두 자리로 돌려준다)·`rangeType`(빈 값)·`page`가 요청과 같아야 한다. 공연 번호는 `go_view('…')` 버튼에서만 읽는다. 쪽 번호 영역은 현재 쪽 하나와 1부터 빠짐없는 쪽 링크만 받고, 다음·끝 버튼이 생기면 형식 변경으로 본다. 결과가 없는 달은 `검색된 전체일정이 없습니다.` 한 줄과 쪽 번호 영역 없음으로 확인했다.
 - 상세: 목록 복귀 `form#cancel` 주소와 예매 스크립트 `module.init('<번호>', …)`의 번호가 요청과 같아야 한다. 존재하지 않는 번호도 HTTP 200으로 `존재하지 않는 공연/전시입니다.` 알림만 담은 213바이트 화면을 돌려주며, 이 경우 그 사유로 실패를 남긴다.
