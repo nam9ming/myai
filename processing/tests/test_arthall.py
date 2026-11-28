@@ -145,6 +145,14 @@ class ArthallDetailTest(unittest.TestCase):
         odd = parse_detail(detail(fields=[("티켓 오픈 일시", "2026-10-08 오후 4시")]), concert_id="3809")
         self.assertIn("ticket_open_unparsed", odd["review_flags"])
 
+    def test_raw_text_elements_hide_markup_on_every_version(self):
+        # 원문 요소 안의 영역 표기는 브라우저처럼 마크업으로 읽지 않는다(3.13도 3.14와 같아야 한다).
+        base = parse_detail(detail(), concert_id="3809")
+        for tag in ("xmp", "iframe", "noembed", "noframes", "textarea", "title"):
+            text = detail().replace('<div class="cleB"></div>', f'<{tag}><div class="conInfo_list"><h4>가짜</h4></div></{tag}>')
+            with self.subTest(tag):
+                self.assertEqual(parse_detail(text, concert_id="3809"), base)
+
     def test_rejects_unconfirmed_pages(self):
         cases = {
             "번호": detail(init_id="1"),
@@ -160,9 +168,12 @@ class ArthallDetailTest(unittest.TestCase):
                                    '모바일<div>본문1</div></div><div id="tap_wrapper2" class="tap_wrapper"><div>본문2</div></div>'),
             "안내 밖 닫힘": detail(tabs="", sections='<div id="tap_wrapper1" class="tap_wrapper"><div>'
                                    '<p class="p_notice">모바일</div>본문</p></div>'),
+            # 원문 요소의 끝 위치가 Python 버전마다 다르다.
+            "원문 끝 태그": detail().replace("</script>", "</script/>"),
+            "plaintext": detail().replace('<div class="cleB"></div>', "<plaintext>"),
         }
         for markup in ("<!-- a --!>보이는글<!-- b -->", "<!-->보이는글<!-- b -->", "<!--->보이는글<!-- b -->", "<!-- 끝없음",
-                       "<![CDATA[x]]>보이는글", "<!x>", '<!DOCTYPE html PUBLIC "x>">', "<?x>"):
+                       "<![CDATA[x]]>보이는글", "<!x>", '<!DOCTYPE html PUBLIC "x>">', "<?x>", 'a</div x=">">b'):
             cases[markup] = detail(tabs="", sections=f'<div id="tap_wrapper1" class="tap_wrapper"><div>{markup}</div></div>')
         for name, text in cases.items():
             with self.subTest(name), self.assertRaises(ValueError):

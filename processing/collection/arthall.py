@@ -23,6 +23,10 @@ _NOT_FOUND = "존재하지 않는 공연/전시입니다."
 _SECTION_TAGS = _TEXT_TAGS | {"div", "img"}
 _INVALID_LISTING = "안성맞춤아트홀 일정 목록 HTML 구조가 올바르지 않습니다."
 _INVALID_DETAIL = "안성맞춤아트홀 공연·전시 상세 HTML 구조가 올바르지 않습니다."
+# 브라우저가 안을 마크업으로 읽지 않는 원문 요소. 3.13은 script·style만, 3.14는 나머지도 원문으로 읽는다.
+_RAW_TEXT = ("script", "style", "xmp", "iframe", "noembed", "noframes", "textarea", "title")
+# 따옴표·`=` 든 끝 태그와 `</title >`·`</ title>`처럼 이름 바로 뒤가 `>`가 아닌 원문 요소 끝 태그는 버전마다 끝 위치가 다르다.
+_ODD_END = re.compile(r"</[A-Za-z][^>]*[\"'=]|</(?!(?:{0})>)\s*(?:{0})\b".format("|".join(_RAW_TEXT)), re.I)
 _FIELDS = {
     "장르": "genre", "기간": "period", "시간": "time", "관람시간": "running_time", "장소": "venue",
     "관람연령": "age_rating", "입장권": "admission", "티켓 오픈 일시": "ticket_open", "문의처": "contact",
@@ -63,6 +67,7 @@ class _Parser(HTMLParser):
     """정해진 영역(같은 이름 태그의 깊이로 끝을 찾는다) 안만 읽고, 영역 안 글자 모음(capture)을 공통으로 처리한다."""
 
     REGIONS: dict = {}
+    CDATA_CONTENT_ELEMENTS = _RAW_TEXT
 
     def __init__(self, error: str):
         super().__init__(convert_charrefs=True)
@@ -77,7 +82,7 @@ class _Parser(HTMLParser):
         raise ValueError(self.error)
 
     def run(self, text: str):
-        if not isinstance(text, str) or "\x00" in text:
+        if not isinstance(text, str) or "\x00" in text or _ODD_END.search(text):
             self.fail()
         try:
             self.feed(text)
@@ -116,6 +121,8 @@ class _Parser(HTMLParser):
             self.handle_endtag(tag)
 
     def handle_starttag(self, tag, attrs):
+        if tag == "plaintext":  # 3.14만 문서 끝까지 원문으로 읽는다.
+            self.fail()
         values = dict(attrs)
         classes = (values.get("class") or "").split()
         if self.capture is not None:
