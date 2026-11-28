@@ -100,6 +100,16 @@ class GosiParserTest(unittest.TestCase):
             with self.subTest(rows=rows), self.assertRaisesRegex(ValueError, "구조"):
                 parse_gosi_listing(listing(rows=rows), page=1)
 
+    def test_listing_reads_tag_borders_like_a_browser(self):
+        # 빈 요소가 아닌 태그의 `/>`는 무시되고(칸이 열린 채 글을 담는다), textarea 안의 글은 태그가 아니다.
+        # 3.13.5 표준 파서는 textarea 안의 가짜 listForm을 폼으로 읽었다.
+        rows = _row("1").replace('<td class="gosi_dept">', '<td class="gosi_dept"/>')
+        decoy = '<body><textarea><form id="listForm" action="/x"></form></textarea>'.encode()
+        self.assertEqual(parse_gosi_listing(listing(rows=rows).replace(b"<body>", decoy), page=1), (1, [row("1")]))
+        for markup in ("<!-->", "</b title='>'>", "<![CDATA[x]]>", '<b class="a"\xa0id="b">'):
+            with self.subTest(markup=markup), self.assertRaisesRegex(ValueError, "고시·공고 목록 HTML에 브라우저와 해석이"):
+                parse_gosi_listing(listing("1").replace(b"<tbody>", f"<tbody>{markup}".encode()), page=1)
+
     def test_detail_keeps_text_and_attachment_candidates(self):
         files = (_FILE, ("포스터.JPG", "포스터_1.jpg", "/p"), ("조서.xlsx", "조서_2.xlsx", "/p"),
                  ("A&B.hwp", "A&B_3.hwp", "/p"))
@@ -177,6 +187,8 @@ class GosiParserTest(unittest.TestCase):
             "바로 보기 정보": (detail(links=_links("75365", (_FILE,)).replace("_1.hwpx','/nt", "_9.hwpx','/nt")), row()),
             "숨김": (detail(body='<div style="display:none">숨은 마감</div>'), row()),
             "해석이 갈리는": (detail(body="<!--> 마감"), row()),
+            # 태그 경계 검사가 상세 폼 검사보다 먼저다.
+            "해석이 갈리는 태그": (detail().replace('id="detailForm"', 'id="detailForm" action="/x" title=a`b'), row()),
             "view_cont": (detail(body="접수기간 2026.12.01~12.05").replace('"view_cont"', '"view_content"'), row()),
             "view_file": (detail().replace('"view_file"', '"view_files"'), row()),
             "첨부 영역이 중복": (detail().replace("</dl>", '</dl><dl class="view_file"><dd></dd></dl>'), row()),

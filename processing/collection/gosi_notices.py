@@ -1,15 +1,15 @@
 """안성시 고시·공고 게시판(새올 고시공고)의 공개 목록과 상세를 요청하고 표시 문구를 읽는다."""
 
 from datetime import date
-from html.parser import HTMLParser
 import re
 from urllib.parse import quote, urlencode
 
+from .html_tokens import PinnedHTMLParser
 from .libraries import _ATTACHMENT_FORMATS, _NoticeParser
 from .official_web import OFFICIAL_ORIGIN, _fetch
 
 LABEL = "고시·공고"
-PARSER_VERSION = "gosi-notice-parser-v1"
+PARSER_VERSION = "gosi-notice-parser-v2"
 _MENU = "0501040000"
 # 고시/공고 구분. 같은 화면의 입법예고·입찰공고는 다른 값을 쓴다.
 _SE_CODE = "01"
@@ -71,11 +71,11 @@ def fetch_gosi_detail(notice_id: str, *, limit: int) -> bytes:
     return _fetch("GET", _detail_path(notice_id), None, limit)
 
 
-class _ListingParser(HTMLParser):
+class _ListingParser(PinnedHTMLParser):
     """요청 주소를 되돌려 주는 유일한 `form#listForm` 안의 목록 표만 읽는다."""
 
     def __init__(self, page: int):
-        super().__init__(convert_charrefs=True)
+        super().__init__()
         self.action = gosi_listing_path(page)
         self.link = re.compile(rf"javascript:boardView\('{page}', '([1-9][0-9]{{0,17}})'\);return false;")
         self.ignored = 0
@@ -93,7 +93,11 @@ class _ListingParser(HTMLParser):
     def fail(self):
         raise ValueError(_INVALID_LISTING)
 
+    def markup_error(self):
+        return ValueError(f"{LABEL} 목록 HTML에 브라우저와 해석이 갈리는 태그·주석·스크립트 표기가 있습니다.")
+
     def handle_starttag(self, tag, attrs):
+        super().handle_starttag(tag, attrs)
         if tag in _IGNORED_TAGS:
             self.ignored += 1
         if self.ignored:
@@ -162,12 +166,8 @@ class _ListingParser(HTMLParser):
         elif current not in ("thead", "th"):
             self.fail()
 
-    def handle_startendtag(self, tag, attrs):
-        self.handle_starttag(tag, attrs)
-        if self.table and self.table[-1] == tag:
-            self.handle_endtag(tag)
-
     def handle_data(self, data):
+        super().handle_data(data)
         if self.ignored or not self.in_form:
             return
         for parts in (self.total, self.caption, self.cell):
@@ -269,23 +269,22 @@ class _GosiParser(_NoticeParser):
         self.file_section_seen = False
 
     def handle_starttag(self, tag, attrs):
+        # 상위 파서가 태그를 넣은 뒤의 상태로 판단한다. 최상위 form은 쌓이지 않고, 첨부 영역은 `bod_view` 바로 아래 dl이다.
+        super().handle_starttag(tag, attrs)
         names = [name for name, _ in attrs]
         values = dict(attrs)
         if not self.tags and not self.hidden_depth and tag == "form" and values.get("id") == "detailForm":
             if names.count("id") != 1 or names.count("action") != 1:
                 raise ValueError(f"{LABEL} 상세 폼의 HTML 속성이 중복되었습니다.")
             self.detail_actions.append(values["action"])
-        info_item = not self.hidden_depth and self.tags == ["div", "div", "ul"] and tag == "li"
-        opened = self.attachment_open
-        super().handle_starttag(tag, attrs)
-        if self.attachment_open and not opened:
+        if self.hidden_depth or not self.tags:
+            return
+        if tag == "dl" and self.attachment_open and len(self.tags) == 2:
             # 첨부가 없는 글도 템플릿은 빈 `dl.view_file`을 출력한다(없는 번호 화면에서 확인). 영역의 유무로 형식 변경을 가린다.
             if self.file_section_seen:
                 raise ValueError(f"{LABEL} 첨부 영역이 중복되었습니다.")
             self.file_section_seen = True
-        if self.hidden_depth or not self.tags:
-            return
-        if info_item and self.section is None:
+        if tag == "li" and self.tags == ["div", "div", "ul", "li"] and self.section is None:
             classes = (values.get("class") or "").split()
             for name, section in (("view_write", "notice_number"), ("view_hit", "department")):
                 if name in classes:
