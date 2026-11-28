@@ -12,10 +12,13 @@
 import re
 from html.parser import HTMLParser
 
+# 태그·속성 이름은 ASCII 글자만 받는다. Python은 이름을 유니코드로 소문자화해 켈빈 기호(U+212A)를 `k`로 바꾸지만 브라우저는
+# ASCII 대문자만 바꿔 `<linK hidden>`을 빈 요소 link가 아닌 알 수 없는 요소로 읽는다(뒤 내용이 숨는다). 실제 원본 563쪽은 모두 ASCII였다.
+_NAME = r'[!#-&(-.0-;?-_a-~]'  # 공백·따옴표·`/`·`<`·`=`·`>`·백틱을 뺀 인쇄 가능한 ASCII
 # 따옴표 밖의 유니코드 공백(\xa0 등)은 Python 3.13.5만 속성 구분자로 읽어 받지 않는다(속성 사이 공백은 따옴표 뒤에서만 생략 가능).
 STRICT_START_TAG = re.compile(
-    r'<[a-zA-Z][^\s/>]*'
-    r'(?:(?:[\t\n\f\r ]+|(?<=["\']))[^\s"\'<>/=`]+'
+    r'<[a-zA-Z]' + _NAME + r'*'
+    r'(?:(?:[\t\n\f\r ]+|(?<=["\']))' + _NAME + r'+'
     r'(?:[\t\n\f\r ]*=[\t\n\f\r ]*(?:"[^"]*"|\'[^\']*\'|[^\s"\'=<>`/]+(?=[\t\n\f\r >])))?)*'
     r'[\t\n\f\r ]*/?>')
 # svg·math 안(외부 콘텐츠)에서는 브라우저가 style·title 등을 원문 텍스트로 읽지 않는다.
@@ -84,6 +87,9 @@ class PinnedHTMLParser(HTMLParser):
             match = re.match(r'</([a-zA-Z][^\t\n\f\r />]*)', rawdata[i:end])
             if match is None:
                 return end + 1
+            if not re.fullmatch(r'[a-zA-Z]' + _NAME + r'*', match.group(1)):
+                # 시작 태그와 같은 이유로 이름은 ASCII만 받는다(`</linK>`, `</div\xa0>`).
+                raise self.markup_error()
             tag = match.group(1).lower()
             if tag == 'br':
                 # 브라우저는 `</br>`을 `<br>`로 읽어 줄을 바꾸고, Python은 종료 태그로 넘긴다. 실제 원본에 없어 받지 않는다.
