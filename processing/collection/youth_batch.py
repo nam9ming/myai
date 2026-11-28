@@ -22,6 +22,7 @@ YOUTH_ROOT = CAPTURE_ROOT.with_name(YOUTH_SECTION)
 BATCH_SCHEMA = "citizen-youth-policy-batch-v1"
 RECORD_SCHEMA = "citizen-youth-policy-v1"
 _INVALID_ARCHIVE = "청년정책 수집 기록이 원본과 맞지 않습니다."
+_NOW_PARSES = "실패로 기록된 청년정책 원본이 이제 읽힙니다. 다시 수집해 주세요."
 
 
 def _add_cards(cards: dict[str, dict], found: list[dict]) -> list[str]:
@@ -83,18 +84,31 @@ def read_youth_batch(private_root: Path, name: str) -> dict[str, dict]:
                 or not isinstance(pages, list) or not isinstance(items, list)):
             raise ValueError("청년정책 수집 기록의 규격·이름·상태가 맞지 않습니다.")
         cards: dict[str, dict] = {}
+        last_total = None
         for entry in pages:
-            if not isinstance(entry, dict):
+            # 실패 원본도 해시를 대조하고 다시 파싱한다.
+            if not isinstance(entry, dict) or entry.get("status") not in ("parsed", "parse_failed", "fetch_failed"):
                 raise ValueError(_INVALID_ARCHIVE)
-            if entry.get("status") != "parsed":
+            if entry["status"] == "fetch_failed":
                 continue
             page = entry.get("page")
             if type(page) is not int or page < 1:
                 raise ValueError(_INVALID_ARCHIVE)
             raw = _raw(directory, entry, f"list-{page}.html", OFFICIAL_ORIGIN + YOUTH_LISTING_PATH, LIST_MAX_BYTES)
-            total, found = parse_youth_listing(raw, page=page)
+            try:
+                total, found = parse_youth_listing(raw, page=page)
+            except ValueError:
+                if entry["status"] == "parsed":
+                    raise
+                continue
+            if entry["status"] == "parse_failed":
+                # 페이지 수 변경·번호 중복 실패는 수집 때와 같이 판정한다.
+                if last_total in (None, total) and cards.keys().isdisjoint(card["policy_id"] for card in found):
+                    raise ValueError(_NOW_PARSES)
+                continue
             if entry.get("reported_pages") != total or entry.get("web_ids") != _add_cards(cards, found):
                 raise ValueError(_INVALID_ARCHIVE)
+            last_total = total
         records, seen = {}, set()
         for item in items:
             policy_id = item.get("web_id") if isinstance(item, dict) else None
@@ -103,10 +117,16 @@ def read_youth_batch(private_root: Path, name: str) -> dict[str, dict]:
                     or item.get("status") not in ("parsed", "parse_failed", "fetch_failed", "not_attempted")):
                 raise ValueError(_INVALID_ARCHIVE)
             seen.add(policy_id)
-            if item["status"] != "parsed":
+            if item["status"] in ("fetch_failed", "not_attempted"):
                 continue
             url = youth_detail_url(policy_id)
             raw = _raw(directory, item, f"detail-{policy_id}.html", url, DETAIL_MAX_BYTES)
+            if item["status"] == "parse_failed":
+                try:
+                    parse_youth_detail(decode_input(raw, "")[0], policy_id=policy_id, card=cards[policy_id])
+                except ValueError:
+                    continue
+                raise ValueError(_NOW_PARSES)
             text, digest = decode_input(raw, "청년정책 상세")
             if item.get("parsed_file") != f"parsed-{policy_id}.json":
                 raise ValueError(_INVALID_ARCHIVE)

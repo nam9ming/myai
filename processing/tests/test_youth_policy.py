@@ -96,11 +96,11 @@ class YouthPolicyParserTest(unittest.TestCase):
             (listing(card("1"), card("1")), 1, "같은 정책 번호"),
             (listing(card("1", label="접수기간")), 1, "구조"),
             (listing(card("1", extra="<span>추가 안내</span>")), 1, "구조"),
-            # span이 아닌 .info·p가 아닌 .page_num은 IndexError·TypeError가 아니라 형식 오류여야 한다.
+            # span이 아닌 .info·p가 아닌 .page_num은 예외 대신 형식 오류다.
             (listing(card("1").replace('<span class="info"><strong>신청기간', '<em class="info"><strong>신청기간')),
              1, "구조"),
             (listing(card("1")).replace(b"<fieldset", b'<span class="page_num"></span><fieldset'), 1, "구조"),
-            # tit·info가 함께 붙은 span은 항목으로 세어 IndexError나 앞 항목 빈 값 채우기 없이 거부한다.
+            # tit·info가 함께 붙은 span은 항목으로 세어 거부한다.
             (listing(card("1").replace('<span class="tit">합성 청년 월세 지원 1</span>',
                                        '<span class="tit info"><strong>x</strong></span>')), 1, "구조"),
             (listing(card("1").replace('<span class="tit">합성 청년 월세 지원 1</span>', "").replace(
@@ -108,17 +108,17 @@ class YouthPolicyParserTest(unittest.TestCase):
                 '</span><span class="tit info">제목<span>x</span></span>')), 1, "구조"),
             (listing(), 1, "구조"),
             (b"\xff", 1, "구조"),
-            # 목록도 공용 토큰 경계로 읽는다. 브라우저는 빈 요소가 아닌 `<span/>`을 닫지 않아 뒤 카드 구조가 어긋난다.
+            # 브라우저는 빈 요소가 아닌 `<span/>`을 닫지 않아 뒤 카드 구조가 어긋난다.
             (listing(card("1", extra='<span class="note"/>')), 1, "구조"),
             (listing(card("1")).replace(b"<!--  -->", b"<!-->"), 1, "목록 페이지에 브라우저와 해석이 갈리는"),
             (listing(card("1")).replace(b"<html>", b"<html><script><!--<script></script>--></script>"), 1,
              "목록 페이지에 브라우저와 해석이 갈리는"),
-            # 원문 텍스트 요소는 문자 참조를 풀지 않거나 브라우저 화면에 나오지 않아 카드 표시 문구와 달라진다.
+            # 원문 텍스트 요소는 카드 표시 문구와 달라진다.
             (listing(card("1").replace("지원 1<", "지원 1<textarea>&lt;B</textarea><")), 1, "구조"),
             (listing(card("1").replace("지원 1<", "지원 1<iframe>숨김</iframe><")), 1, "구조"),
             # 브라우저는 template 안의 짝 없는 `</style>`을 무시해 뒤 목록 폼 전부를 숨긴다.
             (listing(card("1")).replace(b"<body>", b"<body><template></style><style></template></style>"), 1, "구조"),
-            # 실제 목록 5쪽에 없던 속성·태그·부모 짝(숨김 속성, 카드 안 style·script, a 안 a, p 안 div)은 거부한다.
+            # 표본에 없던 속성·태그·부모 짝은 거부한다.
             *((listing(card("1").replace(old, new, 1)), 1, "구조") for old, new in (
                 ('"info">', '"info" hidden>'), ('"info">', '"info" style="display:none">'),
                 ('"info">', '"info" popover>'), ("<li>", "<li hidden>"), ("지원 1<", "지원 1<style>.cont{}</style><"),
@@ -148,7 +148,7 @@ class YouthPolicyParserTest(unittest.TestCase):
         self.assertEqual((record["category_id"], record["review_flags"]), ("2", ["application_period_unconfirmed"]))
 
     def test_detail_flags_status_word_or_placeholder_method(self):
-        # 실제 874·875(`모집마감`)·877(`.`)처럼 카드 기간이 사업 기간과 같고 신청방법이 방법이 아닌 경우.
+        # 실제 874·875(`모집마감`)·877(`.`)처럼 신청방법이 방법이 아닌 경우.
         for listed_method, detail_method in (("모집마감", "모집마감"), (".", "."), ("온라인 신청", "접수 종료"),
                                              ("온라인 신청", "조기마감"), ("온라인 신청", "(마감)"),
                                              ("온라인 신청", "신청 (마감)"), ("온라인 신청", "접수 조기마감"),
@@ -192,33 +192,33 @@ class YouthPolicyParserTest(unittest.TestCase):
             (detail(viewer=VIEWER.replace("다음보기", "신청 안내")), "대표 이미지 영역"),
             (detail(viewer=VIEWER.replace("/portal/js/unit/cardNews/view.js", "/x.js")), "대표 이미지 영역"),
             (detail(viewer=VIEWER + VIEWER), "대표 이미지 영역"),
-            # 중복 class는 브라우저가 첫 값을 써 틀이 아니라 본문이 되고, hidden·style은 이미지를 숨길 수 있다.
+            # 중복 class는 틀이 아닌 본문이 되고, hidden·style은 이미지를 숨긴다.
             (detail(viewer=VIEWER.replace('<div class="photo_viewer', '<div class="x" class="photo_viewer')),
              "대표 이미지 영역"),
             (detail(viewer=VIEWER.replace('mB20"', 'mB20" hidden')), "대표 이미지 영역"),
             (detail(viewer=VIEWER.replace('mB20"', 'mB20" style="display:none"')), "대표 이미지 영역"),
             (detail(viewer=VIEWER.replace("<figure>", "<figure hidden>")), "대표 이미지 영역"),
             (detail(viewer=VIEWER.replace("<figure>", '<figure style="display:none">')), "대표 이미지 영역"),
-            # 대표 이미지 틀도 공용 토큰 검사(스크립트 이중 이스케이프)를 거친다.
+            # 대표 이미지 틀도 공용 토큰 검사를 거친다.
             (detail(viewer=VIEWER.replace("init_thumbnail_view('.photo_viewer');", "<!--<script></script>-->")),
              "해석이 갈리는"),
             (detail(info=INFO + "<li><span>담당자</span> : 합성</li>"), "알 수 없거나 중복된 항목"),
             (detail(info=INFO + "<li><span>작성자</span> : 합성</li>"), "알 수 없거나 중복된 항목"),
             (detail(body=""), "본문 텍스트가 없습니다"),
             (detail(body='<p style="display:none">숨김</p>'), "숨김"),
-            # 실제 상세 24쪽에 없던 속성·부모 짝과 생략한 종료 태그는 공지 허용 목록이 받더라도 거부한다.
+            # 표본에 없던 속성·부모 짝과 생략한 종료 태그는 거부한다.
             (detail(viewer=VIEWER.replace("<figure>", "<figure popover>")), "대표 이미지 영역"),
-            # 원본 주소는 슬라이드 li 바로 아래 원본 보기 버튼에서만 읽는다. 이전 버튼의 주소는 화면에 없다.
+            # 원본 주소는 슬라이드 li 바로 아래 원본 보기 버튼에서만 읽는다.
             (detail(viewer=VIEWER.replace('class="prev"', f'class="prev" data-origin="{_IMG}"')), "대표 이미지 영역"),
             (detail(viewer=VIEWER.replace("fn_view_original(this);", "x();")), "대표 이미지 영역"),
-            # 원본 보기 버튼에 data-origin이 없거나 슬라이드가 없으면 화면의 대표 이미지가 기록에서 빠진다.
+            # data-origin이나 슬라이드가 없으면 대표 이미지가 기록에서 빠진다.
             (detail(viewer=VIEWER.replace(f"data-origin='{_IMG}' ", "")), "대표 이미지 영역"),
             (detail(viewer=VIEWER[:VIEWER.index("<li ")] + VIEWER[VIEWER.index("</li>") + 5:]), "대표 이미지 영역"),
-            # 줄인 보기 꼬리는 큰 보기 figure>img에만 받는다. 원본(data-origin)·썸네일 주소에 붙거나 큰 보기에 없으면 거부한다.
+            # 줄인 보기 꼬리는 큰 보기 figure>img에만 받는다.
             *((detail(viewer=VIEWER.replace(old, new)), "대표 이미지 영역") for old, new in (
                 (f"{_IMG}'", f"{_IMG}&width=500&heigth=500'"), (f'{_IMG}" alt', f'{_IMG}&width=500&heigth=500" alt'),
                 ("&width=500&heigth=500", ""))),
-            # 큰 보기·썸네일이 원본 주소에 없는 이미지를 보이면 화면과 기록이 달라진다.
+            # 큰 보기·썸네일 이미지는 원본 주소여야 한다.
             *((detail(viewer=VIEWER.replace(old, old.replace("a" * 64, "c" * 64))), "대표 이미지 영역")
               for old in (f"{_IMG}&", f'{_IMG}" alt')),
             (detail().replace('"bod_view"', '"bod_view" title="x"'), "숨김"),
@@ -306,6 +306,34 @@ class YouthBatchTest(unittest.TestCase):
             path.write_text(json.dumps(receipt), encoding="utf-8")
             with self.subTest(value=value), self.assertRaises(ValueError):
                 read_youth_batch(self.private, "partial")
+
+    def test_failed_raws_keep_hash_check_and_reparse(self):
+        # 2쪽은 전체 페이지 수가 바뀐 실패라 지금 읽혀도 실패다.
+        self.listing.side_effect = lambda page, **_: listing(card(str(10 - page)), page=page, total=page + 1)
+        self.detail.side_effect = lambda *_, **__: b"\xff"
+        capture_youth_batch("failed", self.root)
+        path = self.root / "failed" / "batch.json"
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+        for entry, good in ((receipt["pages"][1], listing(card("8"), page=2, total=2)),
+                            (receipt["items"][0], detail("9").encode())):
+            self.assertEqual((entry["status"], read_youth_batch(self.private, "failed")), ("parse_failed", {}))
+            raw = self.root / "failed" / entry["file"]
+            kept = raw.read_bytes(), entry["sha256"]
+            with self.subTest(file=entry["file"]):
+                raw.write_bytes(good)
+                with self.assertRaisesRegex(ValueError, "원본 해시"):
+                    read_youth_batch(self.private, "failed")
+                entry["sha256"] = hashlib.sha256(good).hexdigest()
+                path.write_text(json.dumps(receipt), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "다시 수집"):
+                    read_youth_batch(self.private, "failed")
+                raw.unlink()
+                with self.assertRaisesRegex(ValueError, "안전하게 읽을 수 없습니다"):
+                    read_youth_batch(self.private, "failed")
+            raw.write_bytes(kept[0])
+            raw.chmod(0o600)
+            entry["sha256"] = kept[1]
+            path.write_text(json.dumps(receipt), encoding="utf-8")
 
 
 if __name__ == "__main__":
