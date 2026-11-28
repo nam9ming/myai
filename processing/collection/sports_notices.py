@@ -16,33 +16,62 @@ ROBOTS_URL = ORIGIN + "/robots.txt"
 ROBOTS_MAX_BYTES = 512 * 1024
 _LISTING_PATH = "/index.do?menu_id=0008"
 LISTING_URL = ORIGIN + _LISTING_PATH
-PARSER_VERSION = "sports-notice-parser-v5"
+PARSER_VERSION = "sports-notice-parser-v6"
 _DETAIL_QUERY = {"board_id": "notice", "cp": "/board/view.do", "menu_id": "0008", "pageIndex": "1"}
 _SEQ = re.compile(r"[1-9][0-9]{0,17}")
 _ROBOTS_LINE = re.compile(r"([A-Za-z-]+)[ \t]*:(.*)")
 _PRODUCT = USER_AGENT.split("/")[0]  # RFC 9309 그룹은 제품 토큰으로 고른다.
 # 다섯 자리를 넘는 값은 sleep 한도를 넘을 수 있어 읽지 않는다.
 _CRAWL_DELAY = re.compile(r"[0-9]{1,5}(?:\.[0-9]+)?")
-# noscript 등 원문 텍스트 요소 안은 공용 파서가 태그로 읽지 않는다.
-_HIDDEN_TAGS = ("template",)
-# 내용이 화면에 없는 요소(details·dialog는 open이 없을 때).
-_FOLDED = frozenset("datalist audio video canvas".split())
 _VOID_TAGS = frozenset("area base br col embed hr img input link meta source track wbr".split())
-_BREAK_TAGS = frozenset("br p div li tr td th h1 h2 h3 h4 h5 h6 table ul ol dl dt dd blockquote caption center hr pre".split())
-_BODY_TAGS = _BREAK_TAGS | frozenset("a b strong em i u s span font sub sup small mark img tbody thead tfoot col "
-                                     "colgroup".split())
-_TITLE_TAGS = frozenset("b strong em i u span font".split())
-# CSS 속성 이름은 ASCII 대소문자만 같게 본다(`diſplay`는 무효 속성).
-_HIDDEN_STYLE = re.compile(r"display\s*:\s*none|visibility\s*:\s*(?:hidden|collapse)", re.I | re.A)
-# 인라인 태그가 블록·띄움·흐름 밖 상자가 되면 브라우저는 따로 줄을 보이지만 이 파서는 앞뒤 글과 붙인다.
-# font-variant-position(실제 공지에 붙어 온다)·max-width는 다른 속성이다.
-_LAYOUT = re.compile(r"(?<![\w-])(display|float|position|(?:min-)?width)\s*:\s*([^;]*)", re.I | re.A)
-_INLINE = {"display": ("inline", "inline-block"), "float": ("none",), "position": ("static", "relative")}
-_WHITE_SPACE = re.compile(r"white-space(?:-collapse)?\s*:\s*([^;]*)", re.I | re.A)
-# 소스 줄바꿈을 공백으로 보이는 값만 받는다. 안성시 누리집 실제 공지 원본에 이 값들이 붙어 온다.
-_COLLAPSE = frozenset(("normal", "nowrap", "collapse"))
+# 읽는 영역(목록의 상세 링크와 그 안, 상세의 h4·div.view_cont와 그 안, seq 입력)과 링크·h4·view_cont의 조상은 아래
+# 허용 목록만 받는다. 이 호스트의 실제 원본이 없어 data/private의 안성시 누리집 실제 원본에서 쓰인 태그·속성 이름·
+# 인라인 스타일 선언만 옮겼다. 상세 234개(본문 고유 66개)의 bod_view 제목 h4·view_cont와 조상, 목록 28개의 상세 링크
+# 행과 조상이다.
+_BODY = {"a": "href style target title", "br": "style", "div": "class data-hjsonver data-jsonlen id style", "h1": "",
+         "h2": "", "h3": "", "img": "alt height src style width", "li": "", "p": "class data-pm-slice style",
+         "span": "lang style", "strong": "style", "u": "", "ul": ""}
+_TITLE = {"h4": "class"}  # 실제 제목 h4 안에는 태그가 없었다.
+_FIELD = {"input": "id name type value"}
+_LINK = {"a": "href onclick"}
+_LINK_TEXT = {"b": "", "span": "class"}
+_ANCESTORS = {"html": "lang", "body": "class", "div": "class id style", "section": "id", "form": "action id method name",
+              "table": "class", "tbody": "", "tr": "", "td": "class"}
+_BREAK_TAGS = frozenset("br div h1 h2 h3 li p ul".split())
+_HEX = "#[0-9a-f]{6}"
+# 선언 값은 본 값만 받는다. 글자색·배경색·글꼴·테두리만 본 값의 형태(16진수 색 등)로 넓혔다.
+_STYLE = {name: re.compile("|".join(map(re.escape, values.split("|")))) for names, values in {
+    "-ms-word-break word-break": "keep-all", "-webkit-text-stroke-width word-spacing": "0px",
+    "align-items justify-content text-align": "center", "box-sizing": "border-box", "cursor": "pointer",
+    "border-radius": "0 0 10px 10px|10px|10px 10px 0 0|12px|14px|16px|18px|20px|4px|6px|8px",
+    "display": "block|flex|inline !important|inline-block", "float text-autospace text-transform": "none",
+    "font-feature-settings font-kerning font-language-override font-optical-sizing font-size-adjust font-stretch "
+    "font-variant-alternates font-variant-east-asian font-variant-emoji font-variant-numeric font-variant-position "
+    "font-variation-settings": "inherit",
+    "font-size": "14pt|15.0pt|15px|16.0pt|16.15px|16px|17.0526px|17.05px|17px|18.0pt|18pt|18px|19px|20.0pt|20px|21px|"
+                 "22px|23px|24px|26px|27px|5.0pt",
+    "font-style font-variant-caps font-variant-ligatures white-space": "normal", "font-weight": "400|bold|normal",
+    "height": "50px", "letter-spacing": "-0.3pt|-0.3px|-0.54px|-0.57px|-0.5px|-0.6pt|-0.7pt|-1.4pt|0pt|normal",
+    "line-height": "1.3|1.35|1.4|1.5|1.6|1.8|120%|140%|21px|24.23px|25.57px", "margin": "0 6px|0 auto|0px|4px 0",
+    "margin-bottom": "10px|12px|14px|16px|18px|22px|2px|4px|6px|8px", "margin-left": "29.1pt|31.4pt|31.9pt|32.8pt|auto",
+    "margin-right": "6px|8px|auto", "margin-top": "10px|2.0pt|2px|4px|6px|8px", "max-width": "720px|760px|780px|800px",
+    "opacity": "0.95", "orphans widows": "2", "overflow": "hidden",
+    "padding": "0 4px|0px|10px 12px|10px 14px|10px 16px|10px 4px|10px 4px 4px 4px|10px 6px|12px|12px 14px|12px 15px|"
+               "12px 16px|14px|14px 16px|14px 18px|16px 18px|16px 20px|18px|18px 16px|18px 20px|20px 16px|22px 16px|"
+               "24px 18px|24px 20px|26px 22px|2px 10px|2px 12px|2px 8px|3px 0|3px 14px|3px 9px|4px 0|4px 12px|"
+               "4px 14px|4px 16px|5px 0|6px 18px|8px 12px",
+    "padding-bottom": "6px|8px", "padding-left": "10px|12px|14px|4px|58px|66px|6px", "padding-top": "10px|8px",
+    "text-decoration-color text-decoration-style text-decoration-thickness": "initial",
+    "text-indent": "-29.1pt|-31.4pt|-31.9pt|-32.8pt|0px", "vertical-align": "baseline", "width": "350px",
+}.items() for name in names.split()} | {name: re.compile(shape) for names, shape in {
+    "color": f"{_HEX}|white", "background-color": rf"{_HEX}|rgba\(255, 255, 255, 0\.2\)|rgba\(0, 0, 0, 0\.15\)",
+    "font-family": r"[\w ,'-]+",
+    "border border-bottom border-left border-top": rf"[1-5]px (?:solid|dashed) {_HEX}|0px(?: currentcolor)?|none",
+}.items() for name in names.split()}
 _INVALID_DETAIL = "체육시설 공지 상세 HTML 구조가 예상과 다릅니다."
 _INVALID_LISTING = "체육시설 공지 목록 HTML 구조가 올바르지 않습니다."
+_INVALID_BODY = "체육시설 공지 본문에 허용하지 않는 태그·속성이 있습니다."
+_CONCEALED = "체육시설 공지 목록의 상세 링크나 그 조상에 허용 목록 밖 태그·속성이 있습니다."
 # 원문 줄을 고르는 검색어(공백 무시). 줄을 해석하지 않고 옮기는 색인이며, 고르지 못한 줄도 body_lines에 남는다.
 KEYWORD_GROUPS = {
     "reservation_schedule": ("예약일정", "예약기간", "예약일시", "예약접수", "예약개시", "예약오픈", "예약시작",
@@ -144,6 +173,22 @@ def allowed(rules: dict, url: str) -> bool:
     return _verdict(rules["rules"], path) and _verdict(decoded, unquote(path))
 
 
+def _allowed(rules: dict, tag: str, attrs) -> list | None:
+    """태그·속성 이름·인라인 스타일 선언이 모두 허용 목록 안이면 선언 (이름, 값) 목록을, 아니면 None을 돌려준다."""
+    names = [name for name, _ in attrs]
+    # 속성이 중복되면 브라우저는 첫 값을, 이 파서는 마지막 값을 쓴다. CSS 주석·이스케이프는 선언 경계와 이름을 바꾼다.
+    style = dict(attrs).get("style") or ""
+    if tag not in rules or len(set(names)) < len(names) or not set(names) <= set(rules[tag].split()) or (
+            "/*" in style or "\\" in style):
+        return None
+    pairs = [(name.strip().lower(), " ".join(value.lower().split()))
+             for name, _, value in (part.partition(":") for part in style.split(";") if part.strip())]
+    # 브라우저는 Word가 남기는 mso-* 속성을 해석하지 않는다.
+    if all(name.startswith("mso-") or name in _STYLE and _STYLE[name].fullmatch(value) for name, value in pairs):
+        return pairs
+    return None
+
+
 def _feed(parser: PinnedHTMLParser, text: str) -> None:
     if "\x00" in text:
         raise parser.markup_error()
@@ -152,48 +197,77 @@ def _feed(parser: PinnedHTMLParser, text: str) -> None:
         parser.close()
     except AssertionError:
         raise parser.markup_error() from None
+    if parser.stack:
+        raise parser.markup_error()
 
 
-class _LinkParser(PinnedHTMLParser):
+class _Parser(PinnedHTMLParser):
+    """종료 태그는 문서 어디서든 가장 안쪽의 열린 요소를 닫아야 하고, 문서 끝에 열린 요소가 없어야 한다.
+
+    이 스택으로 읽는 영역의 끝과 조상을 정한다. 실제 원본(상세 234개·목록 28개)은 모두 이 조건을 지켰다.
+    """
+    message = _INVALID_DETAIL
+
     def __init__(self):
         super().__init__()
-        self.hidden = 0
-        # 숨긴 요소와 같은 이름의 태그가 열린 수.
-        # shortcut: 같은 이름 태그 수로만 닫으므로 브라우저가 무시하는 잘못된 닫는 태그는 놓친다, 실제 목록을 받으면 다시 본다.
-        self.veil: str | None = None
-        self.depth = 0
-        self.hrefs: list[tuple[str, bool]] = []
+        # (태그, 읽는 영역, 플래그). 플래그는 영역 밖에서는 조상 허용 여부, 본문에서는 줄을 끊는지다.
+        self.stack: list[tuple[str, str | None, bool]] = []
 
     def markup_error(self):
-        return ValueError(_INVALID_LISTING)
+        return ValueError(self.message)
+
+    @property
+    def region(self) -> str | None:
+        return self.stack[-1][1] if self.stack else None
 
     def handle_starttag(self, tag, attrs):
         super().handle_starttag(tag, attrs)
-        if tag in _HIDDEN_TAGS:
-            self.hidden += 1
-            return
-        if self.hidden:
-            return
-        names = [name for name, _ in attrs]
-        values = dict(attrs)
-        if tag == self.veil:
-            self.depth += 1
-        elif self.veil is None and tag not in _VOID_TAGS and (
-                not _shown(names, values) or tag in _FOLDED or tag in ("details", "dialog") and "open" not in values):
-            self.veil, self.depth = tag, 1
-        if tag == "a":
-            if names.count("href") > 1:
-                raise ValueError("체육시설 공지 목록 링크의 href가 중복되었습니다.")
-            if values.get("href"):
-                self.hrefs.append((values["href"], self.veil is not None))
+        # 브라우저는 뒤에 나온 html·body 태그의 속성도 그 요소에 더하고, frameset 뒤의 본문은 보이지 않는다.
+        if tag in ("html", "body", "frameset") and _allowed(_ANCESTORS, tag, attrs) is None:
+            raise self.markup_error()
+        entry = self.start(tag, attrs, self.region)
+        if tag not in _VOID_TAGS:
+            self.stack.append((tag, *entry))
 
     def handle_endtag(self, tag):
-        if tag in _HIDDEN_TAGS and self.hidden:
-            self.hidden -= 1
-        elif tag == self.veil and not self.hidden:
-            self.depth -= 1
-            if not self.depth:
-                self.veil = None
+        if not self.stack or self.stack[-1][0] != tag:
+            raise self.markup_error()
+        self.end(*self.stack.pop())
+
+    def enter(self, rules, tag, attrs, error) -> list:
+        """읽는 영역을 여는 요소와 그 조상이 모두 허용 목록 안이어야 한다."""
+        pairs = _allowed(rules, tag, attrs)
+        if pairs is None or not all(ok for _, _, ok in self.stack):
+            raise ValueError(error)
+        return pairs
+
+    def end(self, tag, region, flag):
+        pass
+
+
+class _LinkParser(_Parser):
+    message = _INVALID_LISTING
+
+    def __init__(self):
+        super().__init__()
+        self.ids: list[str] = []
+
+    def start(self, tag, attrs, region):
+        if region:
+            if _allowed(_LINK_TEXT, tag, attrs) is None:
+                raise ValueError(_CONCEALED)
+            return region, False
+        values = dict(attrs)
+        if tag == "a" and [name for name, _ in attrs].count("href") > 1:
+            raise ValueError("체육시설 공지 목록 링크의 href가 중복되었습니다.")
+        seq = _listed_seq(values["href"]) if tag == "a" and values.get("href") else None
+        if not seq:
+            return None, _allowed(_ANCESTORS, tag, attrs) is not None
+        self.enter(_LINK, tag, attrs, _CONCEALED)
+        if seq in self.ids:
+            raise ValueError("체육시설 공지 목록에 같은 공지 번호가 있습니다.")
+        self.ids.append(seq)
+        return "link", False
 
 
 def _listed_seq(href: str) -> str | None:
@@ -218,7 +292,7 @@ def _listed_seq(href: str) -> str | None:
 def parse_listing(raw: bytes) -> list[str]:
     """목록 1쪽의 공지 번호를 문서 순서대로 돌려준다. 고정 글·전체 페이지 수는 표시 형식을 몰라 읽지 않는다.
 
-    화면에 없는 공지를 요청하지 않도록 숨긴 요소 안의 상세 링크는 형식 오류로 본다. template·noscript 안은 세지 않는다.
+    상세 링크와 그 안·조상에 허용 목록 밖 표기(숨김 속성·스타일, template 등)가 있으면 화면에 없을 수 있어 거부한다.
     """
     try:
         text = raw.decode("utf-8-sig")
@@ -226,139 +300,74 @@ def parse_listing(raw: bytes) -> list[str]:
         raise ValueError("체육시설 공지 목록은 UTF-8이어야 합니다.") from None
     parser = _LinkParser()
     _feed(parser, text)
-    ids: list[str] = []
-    for href, concealed in parser.hrefs:
-        seq = _listed_seq(href)
-        if seq and concealed:
-            raise ValueError("체육시설 공지 목록의 상세 링크가 숨긴 요소나 확인할 수 없는 요소 안에 있습니다.")
-        if seq in ids:
-            raise ValueError("체육시설 공지 목록에 같은 공지 번호가 있습니다.")
-        if seq:
-            ids.append(seq)
-    if not ids:
+    if not parser.ids:
         raise ValueError("체육시설 공지 목록에서 공지 상세 링크를 찾지 못했습니다.")
-    return ids
+    return parser.ids
 
 
-def _shown(names, values) -> bool:
-    # 속성이 중복되면 브라우저는 첫 값을, 이 파서는 마지막 값을 쓰므로 받지 않는다.
-    # CSS 주석·이스케이프(`display/**/:none`)는 스타일 검사를 비켜 가므로 받지 않는다.
-    style = values.get("style") or ""
-    return (len(set(names)) == len(names) and "hidden" not in values and "/*" not in style and "\\" not in style
-            and not _HIDDEN_STYLE.search(style))
-
-
-def _inline(values) -> bool:
-    layout = [(name.lower(), value.strip().lower()) for name, value in _LAYOUT.findall(values.get("style") or "")]
-    # 너비를 준 inline-block(width:100% 등)은 줄을 다 차지해 따로 보인다.
-    if ("display", "inline-block") in layout and any(name.endswith("width") for name, _ in layout):
-        return False
-    return all(name.endswith("width") or value in _INLINE[name] for name, value in layout)
-
-
-class _DetailParser(PinnedHTMLParser):
+class _DetailParser(_Parser):
     def __init__(self):
         super().__init__()
-        self.hidden = 0
         self.seqs: list[str | None] = []
         self.titles: list[str] = []
-        self.title: list[str] | None = None
-        self.title_tags: list[str] = []
+        self.title: list[str] = []
         self.bodies = 0
-        self.body: list[str] | None = None
         self.text: list[str] = []
         self.images: list[dict] = []
         self.links: list[dict] = []
         self.link: dict | None = None
 
-    def markup_error(self):
-        return ValueError(_INVALID_DETAIL)
-
-    def handle_starttag(self, tag, attrs):
-        super().handle_starttag(tag, attrs)
-        names = [name for name, _ in attrs]
+    def start(self, tag, attrs, region):
         values = dict(attrs)
-        if self.body is not None:
-            self._body_start(tag, names, values)
-        elif self.title is not None:
-            if tag != "br" and (tag not in _TITLE_TAGS or not _inline(values)) or not _shown(names, values):
+        if region == "title":
+            raise ValueError(_INVALID_DETAIL)
+        if region == "body":
+            pairs = _allowed(_BODY, tag, attrs)
+            if pairs is None or tag == "a" and any(entry[0] == "a" for entry in self.stack):
+                raise ValueError(_INVALID_BODY)
+            return region, self._body_start(tag, values, pairs)
+        if tag == "input" and values.get("name") == "seq":
+            if _allowed(_FIELD, tag, attrs) is None:
                 raise ValueError(_INVALID_DETAIL)
-            if tag == "br":
-                self.title.append(" ")
-            else:
-                self.title_tags.append(tag)
-        elif tag in _HIDDEN_TAGS:
-            self.hidden += 1
-        elif self.hidden:
-            return
-        elif tag == "input" and values.get("name") == "seq":
             self.seqs.append(values.get("value"))
         elif tag == "h4":
-            if not _shown(names, values):
-                raise ValueError(_INVALID_DETAIL)
+            self.enter(_TITLE, tag, attrs, _INVALID_DETAIL)
             self.title = []
+            return "title", False
         elif tag == "div" and "view_cont" in (values.get("class") or "").split():
             self.bodies += 1
-            self.body = []
-            self._body_start(tag, names, values)
+            return "body", self._body_start(tag, values, self.enter(_BODY, tag, attrs, _INVALID_BODY))
+        return None, _allowed(_ANCESTORS, tag, attrs) is not None
 
-    def _body_start(self, tag, names, values):
-        # 인라인 white-space가 줄바꿈을 살리거나(pre-wrap 등) pre 안에서 바꾸면 줄 경계를 확정할 수 없다.
-        spaces = [value.strip().lower() for value in _WHITE_SPACE.findall(values.get("style") or "")]
-        if (tag not in _BODY_TAGS or not _shown(names, values) or not _COLLAPSE.issuperset(spaces)
-                or tag not in _BREAK_TAGS and not _inline(values)
-                or spaces and (tag == "pre" or "pre" in self.body)):
-            raise ValueError("체육시설 공지 본문에 허용하지 않는 태그·속성이 있습니다.")
-        if tag in _BREAK_TAGS:
+    def _body_start(self, tag, values, pairs) -> bool:
+        # inline-block·block·flex 상자는 너비·내용과 무관하게 앞뒤를 끊는다(화면 한 줄이 여러 줄이 될 수 있다).
+        breaks = tag in _BREAK_TAGS or any(name == "display" and value != "inline !important" for name, value in pairs)
+        if breaks:
             self.text.append("\n")
         if tag == "img":
             self.images.append({"src": values.get("src"), "alt": values.get("alt")})
         if tag == "a":
-            if "a" in self.body:
-                raise ValueError(_INVALID_DETAIL)
             self.link = {"href": values["href"], "text": []} if values.get("href") else None
-        if tag not in _VOID_TAGS:
-            self.body.append(tag)
+        return breaks
 
-    def handle_endtag(self, tag):
-        if self.body is not None:
-            if tag in _VOID_TAGS:
-                if tag == "br":
-                    self.text.append("\n")
-                return
-            if self.body[-1] != tag:
-                raise ValueError(_INVALID_DETAIL)
-            self.body.pop()
-            if tag in _BREAK_TAGS:
+    def end(self, tag, region, breaks):
+        if region == "title":
+            self.titles.append(" ".join("".join(self.title).split()))
+        elif region == "body":
+            if breaks:
                 self.text.append("\n")
             if tag == "a" and self.link is not None:
                 self.links.append({"href": self.link["href"], "text": " ".join("".join(self.link["text"]).split())})
                 self.link = None
-            if not self.body:
-                self.body = None
-        elif self.title is not None:
-            if self.title_tags and self.title_tags[-1] == tag:
-                self.title_tags.pop()
-            elif not self.title_tags and tag == "h4":
-                self.titles.append(" ".join("".join(self.title).split()))
-                self.title = None
-            elif tag == "br":  # 브라우저는 `</br>`도 `<br>`로 읽는다.
-                self.title.append(" ")
-            else:
-                raise ValueError(_INVALID_DETAIL)
-        elif tag in _HIDDEN_TAGS and self.hidden:
-            self.hidden -= 1
 
     def handle_data(self, data):
         super().handle_data(data)
-        if self.body is not None:
-            # 브라우저는 pre 밖의 소스 줄바꿈을 공백으로 보인다. 줄 경계는 문단·칸·br과 pre 안 줄바꿈만 만든다.
-            # 외부 CSS가 줄바꿈을 살릴 수 있어 pre 밖 줄바꿈은 `\r`로 남겨 parse_detail이 합친 사실을 표시한다.
-            data = data.replace("\r\n", "\n").replace("\r", "\n")
-            self.text.append(data if "pre" in self.body else data.replace("\n", "\r"))
+        if self.region == "body":
+            # 브라우저는 소스 줄바꿈을 공백으로 보이지만 외부 CSS가 살릴 수 있어 `\r`로 남겨 합친 사실을 표시한다.
+            self.text.append(data.replace("\r\n", "\r").replace("\n", "\r"))
             if self.link is not None:
                 self.link["text"].append(data)
-        elif self.title is not None:
+        elif self.region == "title":
             self.title.append(data)
 
 
@@ -371,8 +380,6 @@ def parse_detail(text: str, *, seq: str) -> dict:
     url = detail_url(seq)
     parser = _DetailParser()
     _feed(parser, text)
-    if parser.body is not None or parser.title is not None or parser.hidden:
-        raise ValueError(_INVALID_DETAIL)
     if parser.seqs != [seq]:
         raise ValueError("체육시설 공지 상세의 공지 번호(seq)가 요청과 일치하지 않습니다.")
     if len(parser.titles) != 1 or not parser.titles[0]:
