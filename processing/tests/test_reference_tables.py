@@ -117,6 +117,14 @@ class LibraryHoursParserTest(unittest.TestCase):
         fixtures = {name: (page(body), message) for name, (body, message) in cases.items()}
         fixtures.update({
             "title": (page(title="공지사항 | 안성시 도서관"), "페이지가 아닌 응답"),
+        })
+        # 3.13은 title 안의 태그·주석을 마크업으로, 3.14는 원문 글자로 읽으므로 어느 버전에서든 거부한다.
+        markup = ("<b>이용안내</b>", "</b>", "<!-- x -->", "<?x>", "<!x>", "&lt;", "1 < 2")
+        fixtures.update({
+            f"title_markup_{index}": (page(title=f"이용시간 및 정기휴관일 | {text} | 안성시 도서관"), "제목 안의 마크업")
+            for index, text in enumerate(markup)
+        })
+        fixtures.update({
             "second_conts": (page(outside='<div id="conts" class="conts"></div>'), r"\(본문 영역 div#conts\)"),
             "no_conts": (page().replace('id="conts"', 'id="other"'), "없거나 닫히지 않음"),
             "unterminated": (page().rsplit("</div></div>", 1)[0], "없거나 닫히지 않음"),

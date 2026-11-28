@@ -92,6 +92,7 @@ class _PageParser(HTMLParser):
                 self.fail(f"허용하지 않은 {tag} {name} 값")
 
     def handle_starttag(self, tag, attrs):
+        self._reject_in_title()
         if self.stack is None:
             values = dict(attrs)
             if tag == "head":
@@ -134,12 +135,15 @@ class _PageParser(HTMLParser):
         self.handle_starttag(tag, attrs)
 
     def handle_endtag(self, tag):
+        if self.title is not None:
+            if tag != "title":
+                self._reject_in_title()
+            self.titles.append("".join(self.title))
+            self.title = None
+            return
         if self.stack is None:
             if tag == "head":
                 self.in_head = False
-            elif tag == "title" and self.title is not None:
-                self.titles.append("".join(self.title))
-                self.title = None
             return
         top = self.stack[-1]
         if tag != ("div" if top == "conts" else top):
@@ -176,6 +180,8 @@ class _PageParser(HTMLParser):
 
     def handle_data(self, data):
         if self.title is not None:
+            if "<" in data:
+                self._reject_in_title()
             self.title.append(data)
         if self.stack is None:
             return
@@ -189,11 +195,18 @@ class _PageParser(HTMLParser):
         elif data.strip():
             self.fail(f"{self.stack[-1]} 안의 글자")
 
+    def _reject_in_title(self, *_):
+        # 3.13은 title 안의 태그·주석을 마크업으로 읽어 글자를 빼고, 3.14는 원문 글자로 둔다. 둘 다 거부해야 버전마다 같다.
+        if self.title is not None:
+            self.fail("제목 안의 마크업")
+
     def _reject_in_body(self, *_):
+        self._reject_in_title()
         if self.stack is not None:
             self.fail("본문 영역의 선언·처리 지시문")
 
     handle_decl = handle_pi = unknown_decl = _reject_in_body
+    handle_comment = _reject_in_title
 
 
 def _check_grid(parser: _PageParser, rows: list[list[dict]], width: int) -> None:
