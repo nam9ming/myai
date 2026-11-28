@@ -85,6 +85,9 @@ class LibraryHoursParserTest(unittest.TestCase):
         ])
         self.assertEqual(blocks[5]["head"][0][1], cell("th", "이용시간", scope="col", colspan=2))
         self.assertEqual(len(content_sha256(record)), 64)
+        # 제목은 원본 위치로 다시 확인하므로 앞에 줄(CRLF 포함)이 있어도, 문자 참조가 있어도 읽혀야 한다.
+        moved = page(title="이용시간 및 정기휴관일 | 이용&middot;안내 | 안성시 도서관").replace("<head>", "<head>\n\r\n")
+        self.assertEqual(parse_library_hours(moved)["page_title"], "이용시간 및 정기휴관일 | 이용·안내 | 안성시 도서관")
 
     def test_rejects_format_changes(self):
         grid = "표의 칸 수가 머리글과 다름"
@@ -119,7 +122,8 @@ class LibraryHoursParserTest(unittest.TestCase):
             "title": (page(title="공지사항 | 안성시 도서관"), "페이지가 아닌 응답"),
         })
         # 3.13은 title 안의 태그·주석을 마크업으로, 3.14는 원문 글자로 읽으므로 어느 버전에서든 거부한다.
-        markup = ("<b>이용안내</b>", "</b>", "<!-- x -->", "<?x>", "<!x>", "&lt;", "1 < 2")
+        # `</>`는 3.13.5가 콜백 없이 건너뛰어 글자만 빠진다.
+        markup = ("<b>이용안내</b>", "</b>", "<!-- x -->", "<?x>", "<!x>", "&lt;", "1 < 2", "A</>B")
         fixtures.update({
             f"title_markup_{index}": (page(title=f"이용시간 및 정기휴관일 | {text} | 안성시 도서관"), "제목 안의 마크업")
             for index, text in enumerate(markup)

@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 import hashlib
+import html
 from html.parser import HTMLParser
 import json
 import os
@@ -55,10 +56,14 @@ _SPAN = re.compile(r"[1-9][0-9]?")
 class _PageParser(HTMLParser):
     """`head`의 제목과 유일한 `div#conts` 안의 제목·문단·표를 문서 순서대로 읽는다."""
 
-    def __init__(self):
+    def __init__(self, source: str):
         super().__init__(convert_charrefs=True)
+        # getpos()의 (줄, 열)을 원본 위치로 바꾸려고 줄 시작 위치를 둔다. HTMLParser는 LF만 줄로 센다.
+        self.line_starts = [0] + [match.end() for match in re.finditer("\n", source)]
+        self.source = source
         self.in_head = False
         self.title: list[str] | None = None
+        self.title_start = 0
         self.titles: list[str] = []
         self.stack: list[str] | None = None
         self.conts_seen = False
@@ -98,7 +103,7 @@ class _PageParser(HTMLParser):
             if tag == "head":
                 self.in_head = True
             elif tag == "title" and self.in_head:
-                self.title = []
+                self.title, self.title_start = [], self._offset() + len(self.get_starttag_text())
             elif tag == "div" and values.get("id") == "conts":
                 if self.conts_seen or sorted(name for name, _ in attrs) != ["class", "id"] or values["class"] != "conts":
                     self.fail("본문 영역 div#conts")
@@ -136,9 +141,12 @@ class _PageParser(HTMLParser):
 
     def handle_endtag(self, tag):
         if self.title is not None:
-            if tag != "title":
+            title = "".join(self.title)
+            # 3.13.5는 `</>`를 콜백 없이 건너뛰므로 콜백 대신 원본 조각을 문자 참조만 풀어 모은 제목과 비교한다.
+            source = html.unescape(self.source[self.title_start:self._offset()])
+            if tag != "title" or "<" in source or source != title:
                 self._reject_in_title()
-            self.titles.append("".join(self.title))
+            self.titles.append(title)
             self.title = None
             return
         if self.stack is None:
@@ -180,8 +188,6 @@ class _PageParser(HTMLParser):
 
     def handle_data(self, data):
         if self.title is not None:
-            if "<" in data:
-                self._reject_in_title()
             self.title.append(data)
         if self.stack is None:
             return
@@ -194,6 +200,10 @@ class _PageParser(HTMLParser):
             self.text.append(data)
         elif data.strip():
             self.fail(f"{self.stack[-1]} 안의 글자")
+
+    def _offset(self) -> int:
+        line, column = self.getpos()
+        return self.line_starts[line - 1] + column
 
     def _reject_in_title(self, *_):
         # 3.13은 title 안의 태그·주석을 마크업으로 읽어 글자를 빼고, 3.14는 원문 글자로 둔다. 둘 다 거부해야 버전마다 같다.
@@ -236,7 +246,7 @@ def parse_library_hours(text: str) -> dict:
     """
     if not isinstance(text, str):
         raise ValueError(f"{_INVALID}.")
-    parser = _PageParser()
+    parser = _PageParser(text)
     try:
         parser.feed(text)
         parser.close()
