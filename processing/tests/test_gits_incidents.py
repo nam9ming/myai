@@ -60,6 +60,11 @@ class GitsParseTest(unittest.TestCase):
                  ("안성대로", "(합성방향) 가 → 나", "location_text", ["inciplace1"]),
                  ("경부고속도로", "(안성방향) 합성IC → 합성JC", "needs_review", []),
                  ("합성로", "(안성 방면) 가 → 나", "needs_review", []),
+                 ("합성로", "(안성\u3000방향) 가 → 나", "needs_review", []),
+                 ("합성로", "(안성\n방향) 가 → 나", "needs_review", []),
+                 ("합성로", "(안성·평택방향) 가 → 나", "needs_review", []),
+                 ("합성로", "(평택·안성 방면) 가 → 나", "needs_review", []),
+                 ("합성로", "안성IC (평택방향) 가 → 나", "location_text", ["inciplace2"]),
                  # 좌표가 안성시청 부근이어도 공식 경계가 없어 판정하지 않는다.
                  ("합성로", "(합성방향) 가 → 나", "needs_review", []))
         for place1, place2, status, fields in cases:
@@ -93,6 +98,9 @@ class GitsParseTest(unittest.TestCase):
             "하위 구조": incidents_xml(item_xml(extra="<coord><x>1</x></coord>")),
             "하위 요소 밖의 글자": incidents_xml(body="<msgbody>글자<itemlist><regseq>1</regseq></itemlist></msgbody>"),
             "예시와 다른 요소가 있습니다\\(item\\)": incidents_xml(body="<msgbody><item/></msgbody>"),
+            "itemlist 요소에 예시에 없는 속성": incidents_xml(item_xml().replace("<itemlist>", '<itemlist status="cancelled">')),
+            "regseq 요소에 예시에 없는 속성": incidents_xml(item_xml().replace("<regseq>", '<regseq deleted="Y">')),
+            "headercd 요소에 예시에 없는 속성": incidents_xml().replace(b"<headercd>", b'<headercd real="6">'),
             "DOCTYPE": b'<!DOCTYPE x [<!ENTITY a "b">]><serviceresult/>',
             "UTF-8이 아닙니다": '<?xml version="1.0" encoding="EUC-KR"?><serviceresult/>'.encode(),
             "UTF-8 XML": "<serviceresult>합성</serviceresult>".encode("euc-kr"),

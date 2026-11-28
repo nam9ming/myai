@@ -45,9 +45,10 @@ HEADER_FIELDS = ("headercd", "headermsg", "itemcount")
 ITEM = "itemlist"
 ITEM_FIELDS = ("routeid", "linkid", "spotid", "regseq", "confirmdate", "startdate", "estenddate", "enddate",
                "restricttype", "incidesc", "inciplace1", "inciplace2", "coord_x", "coord_y")
-# 명세의 돌발 지점1(도로명)·지점2(방향, 구간). '안성방향'·'안성 방면'은 진행 방향이라 위치로 보지 않는다.
+# 명세의 돌발 지점1(도로명)·지점2(방향, 구간). '안성방향'·'안성 방면'과 '(안성·평택방향)'처럼
+# 방향으로 끝나는 괄호 안의 '안성'은 진행 방향이라 위치로 보지 않는다.
 PLACE_FIELDS = ("inciplace1", "inciplace2")
-_ANSEONG = re.compile(r"안성(?![ \t]*(?:방향|방면))")
+_ANSEONG = re.compile(r"안성(?!\s*(?:방향|방면)|[^()]*(?:방향|방면)\s*\))")
 NO_BOUNDARY = "위치 문구에 '안성'이 없고, 공식 안성시 경계 좌표를 확보하지 못해 좌표로 판정하지 않습니다."
 # 키 형식은 명세에 없다. 요청 주소에 그대로 넣을 수 있는 ASCII만 받는다.
 _KEY = re.compile(r"[A-Za-z0-9_+/=-]{8,256}", re.ASCII)
@@ -144,6 +145,10 @@ def anseong_relevance(fields: dict) -> dict:
 def parse_incidents(raw: bytes) -> dict:
     """결과 코드·메시지·건수와 돌발 항목을 원문 그대로 돌려준다. 시각·차로·좌표는 해석하지 않는다."""
     root = _document(raw)
+    # 예시에는 속성이 없다. 속성 값은 필드에 담기지 않고 조용히 빠지므로 형식 변경으로 거부한다.
+    attributed = next((element for element in root.iter() if element.attrib), None)
+    if attributed is not None:
+        raise ValueError(f"{LABEL} 응답의 {_label(attributed.tag)} 요소에 예시에 없는 속성이 있습니다.")
     if root.tag != "serviceresult":
         raise ValueError(f"{LABEL} 응답의 최상위 요소가 예시와 다릅니다({_label(root.tag)}).")
     parts = _children(root, ENVELOPE)
