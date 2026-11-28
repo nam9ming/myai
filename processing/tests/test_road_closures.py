@@ -100,10 +100,10 @@ class ParseTest(unittest.TestCase):
                 item(section="", name="", mtnofKorNm="안성지사"), item(section="경부선", name="-"),
                 item(section="경부선", name="없음"), item(section="경부선", name="\U00010D50"),
                 item(section="경부선", name="\ua7cb"), item(section="경부선", name="ㅡ"),
-                # 반각 채움·반각 'ㅡ'·첫가끝 채움·첫가끝 'ㅡ'·NFD '수원'은 자모뿐이라 자리표시, 다른 글자가 있으면 구간이다.
+                # 반각 채움·반각 'ㅡ'·첫가끝 채움·첫가끝 'ㅡ'·NFD '수원'·호환 채움은 자모뿐이라 자리표시다.
                 item(section="경부선", name="\uffa0"), item(section="경부선", name="\uffda"),
                 item(section="경부선", name="\u115f\u1160"), item(section="경부선", name="\u1173"),
-                item(section="경부선", name="\u1109\u116e\u110b\u116f\u11ab"), item(section="경부선", name="\uffa0수원IC")]
+                item(section="경부선", name="\u1109\u116e\u110b\u116f\u11ab"), item(section="경부선", name=" \u3164 ")]
         matched, review = [], []
         rc.select_items(3, rc.parse_page(page(rows), "0010", 1)[2], matched, review)
         self.assertEqual([(m["position"], m["match"]) for m in matched], [(1, {"useRotnm": "남안성IC~안성IC"})])
@@ -113,8 +113,9 @@ class ParseTest(unittest.TestCase):
                           (7, "blank_section", []), (8, "blank_section", []),
                           # 3.2 뒤에 생긴 문자(Garay, 3.14의 casefold가 옛 글자로 바꾸는 U+A7CB)도 파이썬 판과 관계없이 검토로 간다.
                           (9, "blank_section", []), (10, "blank_section", []), (11, "blank_section", []),
-                          *[(n, "blank_section", []) for n in range(12, 17)]])
+                          *[(n, "blank_section", []) for n in range(12, 18)]])
         self.assertEqual(review[5]["record"]["fields"]["icNm"], "-")
+        self.assertFalse(rc._no_location("\uffa0수원IC"))
         self.assertEqual(matched[0]["page"], 3)
 
     def test_markup_goes_to_review_before_matching(self):
@@ -127,6 +128,19 @@ class ParseTest(unittest.TestCase):
         self.assertEqual([(r["position"], r["reason"], r["mentions"]) for r in review],
                          [(1, "markup", ["useRotnm"]), (2, "markup", []), (3, "markup", []),
                           (4, "markup", ["useRotnm"])])
+
+    def test_invisible_characters_go_to_review_before_matching(self):
+        # 보이지 않는 문자는 일치를 만들거나(`안성`+ZWSP+`면`) 지운다(`안`+ZWSP+`성IC`). JSON `\u0000`도 같다.
+        chars = "\x00\x08\x0b\x0c\x0e\x1f\x7f\x9f\u00ad\u034f\u061c\u17b4\u17b5\u180b\u180f\u200b\u200f\u202a\u202e" \
+                "\u2060\u206f\ufe00\ufe0f\ufeff\U0001bca0\U0001bca3\U0001d173\U0001d17a\U000e0000\U000e0fff"
+        rows = [item(section="무주 안성\u200b면 부근"), item(section="안성\ufe0f면"),
+                *[item(section="경부선", name=f"안{c}성IC") for c in chars], item(section="경부선", name="\uffa0수원IC"),
+                item(section="경부선", name="평택IC", cnstnCtnt="안\u00ad성 방면"), item(blcCtnt="1차로\t차단\r\n")]
+        matched, review = [], []
+        rc.select_items(1, rc.parse_page(page(rows), "0010", 1)[2], matched, review)
+        self.assertEqual([m["position"] for m in matched], [len(rows)])
+        self.assertEqual([(r["position"], r["reason"]) for r in review], [(n, "invisible") for n in range(1, len(rows))])
+        self.assertEqual([r["mentions"] for r in review[:3]], [["useRotnm"], ["useRotnm"], []])
 
 
 class CollectTest(unittest.TestCase):

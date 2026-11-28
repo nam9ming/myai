@@ -21,7 +21,7 @@ from .capture import (
     validate_name, write_new, write_receipt,
 )
 from .cli import CollectionArguments
-from .road_closures import _no_location, has_markup
+from .road_closures import _no_location, unreadable
 
 REFERENCE_URL = "https://www.utic.go.kr/guide/utisRefTCS.do"
 APPLY_URL = "https://www.utic.go.kr/guide/newUtisDataWrite.do"
@@ -29,7 +29,7 @@ TCS_SECTION = "collection-tcs"
 TCS_ROOT = CAPTURE_ROOT.with_name(TCS_SECTION)
 SCHEMA = "citizen-tcs-import-v1"
 SELECTION_SCHEMA = "tcs-anseong-v1"
-PARSER_VERSION = "tcs-csv-parser-v3"
+PARSER_VERSION = "tcs-csv-parser-v4"
 CSV_MAX_BYTES = PORTAL_MAX_BYTES
 # 레퍼런스 예제의 열 순서. None은 항목표에 없는 열이다.
 LAYOUT = ("seq", "poliCode", "revYear", "revSeq", "poliName", "constFromDate", "constToDate", None, None,
@@ -120,14 +120,13 @@ def select_records(records: list[dict]) -> tuple[list, list]:
             match["constRoad"] = fields["constRoad"]
         if fields["poliName"] is not None and unicodedata.normalize("NFC", fields["poliName"]).strip() == "안성":
             match["poliName"] = fields["poliName"]
-        if has_markup(fields, READ_FIELDS):
-            review.append({"reason": "markup", "record": record,
+        if reason := unreadable(fields, READ_FIELDS):
+            review.append({"reason": reason, "record": record,
                            "mentions": [name for name in READ_FIELDS if _has(fields[name], "안성")]})
         elif match:
             matched.append({"match": match, "record": record})
         elif _no_location(fields["constRoad"]) and _no_location(fields["poliName"]):
-            # 위치 근거가 없어 버리면 안성 행이 조용히 빠질 수 있다.
-            # '-'·'없음' 같은 자리표시도 위치를 알려 주지 않으므로 빈 값과 같이 검토로 보낸다. 저장 값은 원문 그대로 둔다.
+            # 위치 근거가 없는(자리표시 포함) 행을 버리면 안성 행이 조용히 빠질 수 있다. 저장 값은 원문 그대로다.
             review.append({"reason": "blank_location", "record": record,
                            "mentions": [name for name in OTHER_FIELDS if _has(fields[name], "안성")]})
         elif found := [name for name in ("constRoad", "poliName") if _has(fields[name], "안성")]:

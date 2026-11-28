@@ -37,7 +37,7 @@ CLOSURE_SECTION = "collection-road-closures"
 CLOSURE_ROOT = CAPTURE_ROOT.with_name(CLOSURE_SECTION)
 SCHEMA = "citizen-road-closure-snapshot-v1"
 SELECTION_SCHEMA = "road-closure-anseong-v1"
-PARSER_VERSION = "ex-construction-parser-v3"
+PARSER_VERSION = "ex-construction-parser-v4"
 RESPONSE_MAX_BYTES = 2 * 1024 * 1024
 PAGE_SIZE = 100
 MAX_PAGES = 20
@@ -55,11 +55,16 @@ _ANSEONG = re.compile("안성(?!면)")
 _KEY = re.compile(r"[A-Za-z0-9_+/=-]{8,256}", re.ASCII)
 _ROUTE = re.compile(r"[0-9]{4}", re.ASCII)
 _ASCII_ESCAPE = re.compile(r"\\u00([0-7][0-9a-fA-F])")
-# 첫가끝(U+1100–U+11FF, 채움 U+115F·U+1160 포함)·호환(U+3131–U+318E)·반각(U+FFA0–U+FFDC) 한글 자모.
+# 첫가끝·호환·반각 한글 자모(채움 문자 포함).
 _JAMO = re.compile("[\u1100-\u11ff\u3131-\u318e\uffa0-\uffdc]")
 _LABEL = "고속도로 차단 계획 API"
-# 읽는 열의 실제 표본(TCS 레퍼런스 예제 8행, API 응답 0건)에 태그·문자 참조가 없다. 허용 목록이 비어 `<`·`&`는 모두 검토로 보낸다.
+# 실제 표본(TCS 예제 8행, API 응답 0건)에 태그·문자 참조가 없어 `<`·`&`는 모두 검토로 보낸다.
 _MARKUP = re.compile("[<&]")
+# 제어 문자(탭·줄바꿈 제외)·기본 무시 문자. 파이썬 판과 관계없게 코드값으로 고정한다.
+_INVISIBLE = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f"
+                        "\u200b-\u200f\u202a-\u202e\u2060-\u206f\u3164\ufe00-\ufe0f\ufeff\uffa0\U0001bca0-\U0001bca3"
+                        "\U0001d173-\U0001d17a\U000e0000-\U000e0fff]")
+_FILLER = re.compile("[\\s\u115f\u1160\u3164\uffa0]+")
 
 
 def validate_key(key: str) -> str:
@@ -176,33 +181,35 @@ def _mentions(fields: dict, names: tuple[str, ...], pattern: str | re.Pattern) -
 
 
 def _no_location(value: object) -> bool:
-    """위치 판정용 빈 값. 공용 `_blank`와 달리 글자 여부를 고정된 유니코드 3.2 DB로, NFC 전 원문에서 보고,
-    한글 자모·채움 문자뿐인 값도 자리표시로 본다."""
-    # isalnum·casefold는 파이썬마다 유니코드 판이 달라 같은 원본의 판정이 바뀐다. 3.2 뒤에 생긴 문자는 Cn이라 자리표시로 보고 검토로 보낸다.
-    # 줄표 대신 치는 'ㅡ'·채움 문자처럼 글자가 한글 자모뿐이면 자리표시로 본다. 자모만으로 쓴 지명은 없다.
-    # 원문을 NFC로 묶지 않고 보므로 첫가끝으로 풀어 쓴(NFD) 한글 값도 검토로 간다.
+    """위치 판정용 빈 값. 공용 `_blank`와 달리 아래 기준으로 본다."""
+    # isalnum·casefold는 파이썬 판마다 결과가 달라 3.2 DB를 쓴다. 그 뒤에 생긴 문자는 Cn이라 자리표시다.
+    # 글자가 한글 자모뿐이면('ㅡ'·채움 문자, NFC 전 원문이라 NFD 한글 포함) 자리표시다. 자모만으로 쓴 지명은 없다.
     if not isinstance(value, str):
         return value is None
     return ("".join(unicodedata.normalize("NFC", value).split()).casefold() in PLACEHOLDERS
             or not any(unicodedata.ucd_3_2_0.category(c)[0] in "LN" and not _JAMO.match(c) for c in value))
 
 
-def has_markup(fields: dict, names: tuple[str, ...]) -> bool:
-    """HTML로 보이면 태그·문자 참조로 화면 글자가 원문과 달라질 수 있어(`안<b></b>성`, `&#xC548;성`) 원문으로 판단하지 않는다."""
-    return any(isinstance(fields[name], str) and _MARKUP.search(fields[name]) for name in names)
+def unreadable(fields: dict, names: tuple[str, ...]) -> str | None:
+    """태그·문자 참조나 보이지 않는 문자로 화면 글자가 원문과 다를 수 있으면 사유를 돌려준다. 채움 문자뿐인 값은 빈 값 판단에 맡긴다."""
+    values = [fields[name] for name in names if isinstance(fields[name], str)]
+    if any(_MARKUP.search(value) for value in values):
+        return "markup"
+    if any(_INVISIBLE.search(value) and not _FILLER.fullmatch(value) for value in values):
+        return "invisible"
+    return None
 
 
 def select_items(page: int, items: list[dict], matched: list, review: list) -> None:
     """차단 구간 글자에 안성이 보이는 항목만 고른다. 판단할 수 없거나 다른 열에만 보이면 사람 검토로 넘긴다."""
     for position, item in enumerate(items, 1):
         fields, place = item["fields"], {"page": page, "position": position}
-        if has_markup(fields, FIELDS):
-            review.append({**place, "reason": "markup", "mentions": _mentions(fields, FIELDS, "안성"), "record": item})
+        if reason := unreadable(fields, FIELDS):
+            review.append({**place, "reason": reason, "mentions": _mentions(fields, FIELDS, "안성"), "record": item})
         elif found := _mentions(fields, SECTION_FIELDS, _ANSEONG):
             matched.append({**place, "match": {name: fields[name] for name in found}, "record": item})
         elif _no_location(fields["icNm"]):
-            # 항목표만으로는 useRotnm(차단노선구간)이 노선명인지 구간인지 알 수 없다. icNm이 비면 구간 근거가 없을 수 있다.
-            # '-'·'없음' 같은 자리표시도 위치를 알려 주지 않으므로 빈 값과 같이 검토로 보낸다. 저장 값은 원문 그대로 둔다.
+            # useRotnm은 노선명뿐일 수 있어 icNm이 비거나 자리표시뿐이면 구간 근거가 없다. 저장 값은 원문 그대로다.
             review.append({**place, "reason": "blank_section", "mentions": _mentions(fields, FIELDS, "안성"),
                            "record": item})
         elif found := _mentions(fields, SECTION_FIELDS, "안성"):
@@ -235,7 +242,7 @@ def _read(raw: bytes, route: str, page: int, total: int | None, list_key: str | 
         raise ValueError(f"{_LABEL}의 전체 건수가 0건이라 노선번호 오류와 차단 계획 없음을 구별할 수 없어 완료로 보지 않습니다.")
     if found > MAX_PAGES * PAGE_SIZE:
         raise ValueError(f"{_LABEL}의 전체 건수가 페이지 수집 한도를 초과했습니다.")
-    # 서버가 pageNo를 무시하거나 정렬이 흔들리면 앞 페이지 행이 다시 오고 다른 행이 빠진다. 한 응답 안의 중복은 허용한다.
+    # pageNo 무시·정렬 흔들림이면 앞 페이지 행이 다시 오고 다른 행이 빠진다. 한 응답 안 중복은 허용한다.
     fingerprints = row_fingerprints(items)
     if fingerprints & seen:
         raise ValueError(f"{_LABEL}가 앞 페이지의 행을 다시 보냈습니다. 빠진 행이 있을 수 있습니다.")
