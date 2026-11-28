@@ -24,8 +24,8 @@ _PRODUCT = USER_AGENT.split("/")[0]  # RFC 9309 그룹은 제품 토큰으로 �
 # 다섯 자리를 넘는 값은 sleep 한도를 넘을 수 있어 읽지 않는다.
 _CRAWL_DELAY = re.compile(r"[0-9]{1,5}(?:\.[0-9]+)?")
 _VOID_TAGS = frozenset("area base br col embed hr img input link meta source track wbr".split())
-# 읽는 영역(목록의 상세 링크, 상세의 h4·div.view_cont, seq 입력)과 그 안·조상은 아래 허용 목록만 받는다. 이 호스트
-# 원본이 없어 안성시 누리집 실제 원본(README 참고)에서 쓰인 표기만 옮겼다.
+# 읽는 영역(목록의 상세 링크, 상세의 h4·div.view_cont, seq 입력)과 그 안·조상은 아래 허용 목록만 받는다.
+# 안성시 누리집 실제 원본(README)에서 쓰인 표기만 옮겼다.
 _BODY = {"a": "href style target title", "br": "style", "div": "class data-hjsonver data-jsonlen id style", "h1": "",
          "h2": "", "h3": "", "img": "alt height src style width", "li": "", "p": "class data-pm-slice style",
          "span": "lang style", "strong": "style", "u": "", "ul": ""}
@@ -73,7 +73,7 @@ _INVALID_DETAIL = "체육시설 공지 상세 HTML 구조가 예상과 다릅니
 _INVALID_LISTING = "체육시설 공지 목록 HTML 구조가 올바르지 않습니다."
 _INVALID_BODY = "체육시설 공지 본문에 허용하지 않는 태그·속성이 있습니다."
 _CONCEALED = "체육시설 공지 목록의 상세 링크나 그 조상에 허용 목록 밖 태그·속성이 있습니다."
-# 원문 줄을 고르는 검색어(공백 무시). 줄을 해석하지 않고 옮기는 색인이며, 고르지 못한 줄도 body_lines에 남는다.
+# 원문 줄을 고르는 검색어(공백 무시). 줄을 해석하지 않는다.
 KEYWORD_GROUPS = {
     "reservation_schedule": ("예약일정", "예약기간", "예약일시", "예약접수", "예약개시", "예약오픈", "예약시작",
                              "접수기간", "신청기간"),
@@ -89,7 +89,7 @@ def _seq(value: str) -> str:
 
 
 def _detail_path(seq: str) -> str:
-    # urlencode는 `/`를 `%2F`로 바꾸므로 조사 기록의 실제 주소(cp=%2Fboard%2Fview.do)와 같은 문자열이 된다.
+    # urlencode는 `/`를 `%2F`로 바꿔 조사 기록의 실제 주소(cp=%2Fboard%2Fview.do)와 같아진다.
     return "/index.do?" + urlencode({**_DETAIL_QUERY, "seq": _seq(seq)})
 
 
@@ -110,9 +110,9 @@ def fetch_detail(seq: str, *, limit: int) -> bytes:
 
 
 def robots_rules(raw: bytes) -> dict:
-    """HTTP 200으로 받은 robots.txt를 RFC 9309대로 읽어 이 수집기에 적용할 규칙과 Crawl-delay를 돌려준다.
+    """HTTP 200으로 받은 robots.txt를 RFC 9309대로 읽어 적용할 규칙과 Crawl-delay를 돌려준다.
 
-    표준 라이브러리 robotparser는 판(3.13·3.14)마다 최장 일치·와일드카드·그룹 병합·제품 토큰 비교가 달라 쓰지 않는다.
+    표준 라이브러리 robotparser는 판(3.13·3.14)마다 결과가 달라 쓰지 않는다.
     """
     try:
         text = raw.decode("utf-8-sig")
@@ -204,10 +204,7 @@ def _feed(parser: PinnedHTMLParser, text: str) -> None:
 
 
 class _Parser(PinnedHTMLParser):
-    """종료 태그는 문서 어디서든 가장 안쪽의 열린 요소를 닫아야 하고, 문서 끝에 열린 요소가 없어야 한다.
-
-    이 스택으로 읽는 영역의 끝과 조상을 정한다. 실제 원본은 모두 이 조건을 지켰다.
-    """
+    """종료 태그는 문서 어디서든 가장 안쪽의 열린 요소를 닫고 문서 끝에 열린 요소가 없어야 한다. 이 스택으로 영역 끝과 조상을 정한다."""
     message = _INVALID_DETAIL
 
     def __init__(self):
@@ -294,7 +291,7 @@ def _listed_seq(href: str) -> str | None:
 def parse_listing(raw: bytes) -> list[str]:
     """목록 1쪽의 공지 번호를 문서 순서대로 돌려준다. 고정 글·전체 페이지 수는 표시 형식을 몰라 읽지 않는다.
 
-    상세 링크와 그 안·조상에 허용 목록 밖 표기(숨김 속성·스타일, template 등)가 있으면 화면에 없을 수 있어 거부한다.
+    상세 링크와 그 안·조상에 허용 목록 밖 표기가 있으면 화면에 없을 수 있어 거부한다.
     """
     try:
         text = raw.decode("utf-8-sig")
@@ -406,7 +403,7 @@ def parse_detail(text: str, *, seq: str) -> dict:
     if parser.links:
         flags.add("link")
     if lines != _lines(shown.replace("\r", "\n")) or [title] != _lines("".join(parser.title).replace("\r", "\n")):
-        flags.add("source_newline_joined")  # 외부 CSS가 white-space:pre-wrap 등이면 화면에서는 줄이 나뉜다.
+        flags.add("source_newline_joined")
     return {
         "external_id": seq,
         "official_url": url,

@@ -12,7 +12,7 @@ from processing.collection.official_web import SourceHTTPError
 from processing.collection.sports_batch import capture_sports_batch, read_sports_batch
 from processing.collection.sports_notices import LISTING_URL, allowed, detail_url, parse_detail, parse_listing, robots_rules
 
-# 실제 HTML을 받지 못해 만든 합성 원본이다. 상세 링크 형식만 조사 기록의 실제 주소(seq=96)를 따른다.
+# 합성 원본이다. 상세 링크 형식만 조사 기록의 실제 주소(seq=96)를 따른다.
 _LINK = "/index.do?board_id=notice&amp;cp=%2Fboard%2Fview.do&amp;menu_id=0008&amp;pageIndex=1&amp;seq={}"
 ROBOTS = b"User-agent: *\nDisallow: /admin/\n"
 
@@ -48,13 +48,12 @@ class SportsParserTest(unittest.TestCase):
             "찾지 못했": listing(),
             "UTF-8": "<a>공지</a>".encode("cp949"),
             "목록 HTML 구조": listing("1", extra='<p class="a"\xa0id="b">x</p>'),
+            "링크 형식": listing("1").replace(b"pageIndex=1", b"pageIndex=2"),
         }
         for message, raw in cases.items():
             with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
                 parse_listing(raw)
-        with self.assertRaisesRegex(ValueError, "형식"):
-            parse_listing(listing("1").replace(b"pageIndex=1", b"pageIndex=2"))
-        # 화면에 없는 공지를 complete로 남기지 않게 링크·안·조상은 실제 목록에서 본 표기만 받는다.
+        # 링크·안·조상은 실제 목록에서 본 표기만 받는다.
         link = f'<a href="{_LINK.format(2)}">x</a>'
         for extra in (f'<div style="display: none"><div></div>{link}</div>', f'<p>{link}</p>', f"<details open>{link}</details>",
                       link.replace("<a", "<a hidden"), link.replace("<a", "<a popover"), f'<div popover>{link}</div>',
@@ -63,8 +62,7 @@ class SportsParserTest(unittest.TestCase):
                       *(f'<{tag}>{link}</{tag}>' for tag in "details dialog object template ul".split())):
             with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, "허용 목록 밖"):
                 parse_listing(listing("1", extra=extra))
-        # 브라우저와 경계가 갈리는 중첩(td 안의 </div> 등)과 뒤에 나온 body 속성도 거부한다.
-        # 켈빈 기호(U+212A)를 Python은 k로 읽어 빈 link·닫힌 ak로, 브라우저는 열린 숨김 요소로 본다(기반 파서가 거부).
+        # 경계가 갈리는 중첩, 뒤에 나온 body 속성, 켈빈 기호(U+212A)가 든 태그 이름도 거부한다.
         for extra in ("<div><span></div></span>", f"<div hidden><table><tr><td></div>{link}", "<div>", "<body hidden>",
                       "<frameset></frameset>", f"<lin\u212a hidden>{link}", f"<ak hidden>x</a\u212a>{link}"):
             with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, "목록 HTML 구조"):
@@ -75,28 +73,24 @@ class SportsParserTest(unittest.TestCase):
                 "<div>3월 9일 정기 점검으로 예약 중단<br>이용 시간 06:00~22:00</div>"
                 '<p><a href="/board/download.do?id=1">안내문.hwp</a></p>')
         record = parsed(body, title="2026년 상반기\n 예약 안내")
-        self.assertEqual(record["official_url"],
-                         "https://reservation.anseong.go.kr/index.do?board_id=notice&cp=%2Fboard%2Fview.do"
-                         "&menu_id=0008&pageIndex=1&seq=96")
+        self.assertEqual(record["official_url"], "https://reservation.anseong.go.kr/index.do?board_id=notice"
+                         "&cp=%2Fboard%2Fview.do&menu_id=0008&pageIndex=1&seq=96")
         self.assertEqual(record["title"], "2026년 상반기 예약 안내")
-        self.assertEqual(record["body_lines"], ["예약 일정 : 3월 2일(월) 09:00", "관내 거주자 우선 배정",
-                                                "3월 9일 정기 점검으로 예약 중단", "이용 시간 06:00~22:00", "안내문.hwp"])
+        self.assertEqual(record["body_lines"], [
+            "예약 일정 : 3월 2일(월) 09:00", "관내 거주자 우선 배정", "3월 9일 정기 점검으로 예약 중단", "이용 시간 06:00~22:00", "안내문.hwp"])
         self.assertEqual(record["keyword_lines"], {
-            "reservation_schedule": ["예약 일정 : 3월 2일(월) 09:00"],
-            "priority": ["관내 거주자 우선 배정"],
-            "suspension": ["3월 9일 정기 점검으로 예약 중단"],
-        })
+            "reservation_schedule": ["예약 일정 : 3월 2일(월) 09:00"], "priority": ["관내 거주자 우선 배정"],
+            "suspension": ["3월 9일 정기 점검으로 예약 중단"]})
         self.assertEqual(record["links"], [{"href": "/board/download.do?id=1", "text": "안내문.hwp"}])
         self.assertEqual(record["review_flags"], ["link", "markup_unverified", "source_newline_joined"])
 
     def test_inline_white_space_that_keeps_newlines_is_rejected(self):
-        # 브라우저는 이 줄바꿈을 줄로 보이므로 합치면 예약기간과 이용기간이 섞인다.
+        # 브라우저는 이 줄바꿈을 줄로 보인다.
         text = "예약기간: 3.2.~3.6.\n이용기간: 4.1.~6.30."
         for style in ("white-space: pre", "white-space:pre-wrap", "WHITE-SPACE: PRE-LINE", "white-space: break-spaces",
                       "white-space: normal !important", "white-space-collapse: preserve-breaks"):
             with self.subTest(style=style), self.assertRaisesRegex(ValueError, "허용하지 않는"):
                 parsed(f'<p style="color: red; {style}">{text}</p>')
-        # view_cont 자신과 pre 안의 지정도 받지 않는다.
         for text in (detail("96", text).replace('class="view_cont"', 'class="view_cont" style="white-space:pre-wrap"'),
                      detail("96", '<pre><span style="white-space: normal">가\n나</span></pre>')):
             with self.subTest(text=text[-90:]), self.assertRaisesRegex(ValueError, "허용하지 않는"):
@@ -105,21 +99,21 @@ class SportsParserTest(unittest.TestCase):
         self.assertEqual(parsed('<p style="white-space: normal">가</p><br style="white-space: normal">나')["body_lines"], ["가", "나"])
 
     def test_boxes_break_lines_and_unseen_layout_is_rejected(self):
-        # 상자가 된 인라인 태그를 앞뒤 글과 붙이면 예약기간과 이용기간이 섞인다. 실제 원본에 없던 배치는 받지 않는다.
+        # 실제 원본에 없던 배치는 받지 않는다.
         for style in ("display:table-cell", "display: inherit", "float: left", "position: fixed", "visibility: collapse",
                       "display:inline-block;width:100%", "display:inline-block;inline-size:100%",
                       "display:inline-block;min-inline-size:100%", "display:inline-block;padding-right:100%",
                       "diſplay:block"):
             with self.subTest(style=style), self.assertRaisesRegex(ValueError, "허용하지 않는"):
                 parsed(f'<p>예약기간: 3.2.<span style="{style}">이용기간: 4.1.</span></p>')
-        # inline-block·block은 내용·너비와 무관하게 앞뒤를 끊고(과분할) inline !important는 붙인다.
+        # 상자는 내용·너비와 무관하게 앞뒤를 끊고 inline !important는 붙인다.
         body = ('<p>예약기간: 3.2.<span style="display: inline-block">이용기간: 4.1.~6.30. 매주 월요일 휴관</span>'
                 '<span style="DISPLAY:block">다</span><span style="display: inline !important; float: none">라</span>'
                 '<strong style="font-variant-position: inherit; mso-text-raise: 0pt">마</strong></p>')
         self.assertEqual(parsed(body)["body_lines"], ["예약기간: 3.2.", "이용기간: 4.1.~6.30. 매주 월요일 휴관", "다", "라마"])
 
     def test_joined_source_newlines_are_flagged_for_review(self):
-        # 외부 CSS의 white-space는 알 수 없으므로 합친 줄을 사람이 원문과 대조하게 한다.
+        # 외부 CSS의 white-space는 알 수 없어 합친 줄을 사람이 대조한다.
         record = parsed("<p>예약기간: 3.2.~3.6.\n이용기간: 4.1.~6.30.</p>")
         self.assertEqual(record["body_lines"], ["예약기간: 3.2.~3.6. 이용기간: 4.1.~6.30."])
         self.assertEqual(record["review_flags"], ["markup_unverified", "source_newline_joined"])
@@ -180,20 +174,20 @@ class SportsParserTest(unittest.TestCase):
     def test_robots_rules_need_plain_rule_lines(self):
         rules = robots_rules(b"User-agent: *\nDisallow: /index.do?board_id=\n")
         self.assertFalse(allowed(rules, detail_url("1")))
-        # 빈 파일과, 적용되지 않는 그룹의 이상한 값은 판단을 막지 않는다.
+        # 빈 파일, 다른 그룹의 이상한 값, 주석 속 공백 문자는 판단을 막지 않는다.
         for raw in (b"# empty\n\n", b"User-agent: other\nDisallow: x\n\nUser-agent: *\nDisallow: /admin/\n",
                     "# 안내\u3000\x85\nUser-agent: *\nDisallow: /admin/\n".encode()):
             self.assertTrue(allowed(robots_rules(raw), detail_url("1")))
         for raw in (b"<html><h1>Request Blocked</h1></html>", "규칙".encode("cp949"),
                     b"User-agent: *\nCrawl-delay: soon\n", b"Error: Request Blocked\n",
                     b"User-agent: *\nDisallow: index.do\n", b"User-agent: yeogi-it\nAllow: https://x/\n",
-                    # RFC 9309에서 끝의 U+00A0 등은 값이라 이 Allow는 목록과 맞지 않는데 strip()은 허용으로 넓혔다.
+                    # RFC 9309의 공백은 SP·HTAB뿐이다.
                     *(f"User-agent: *\nDisallow: /index\nAllow: /index.do{c}\n".encode() for c in "\xa0\u3000\x85\x1c\u2028")):
             with self.subTest(raw=raw), self.assertRaises(ValueError):
                 robots_rules(raw)
 
     def test_robots_follow_rfc_9309_on_every_python(self):
-        # 표준 라이브러리 robotparser가 3.13 또는 3.14에서 상세를 허용해 버리던 경우다.
+        # 표준 robotparser가 3.13 또는 3.14에서 허용하던 경우 등이다.
         for raw, listing_allowed in (
             (b"User-agent: *\nAllow: /\nDisallow: /index.do\n", False),
             (b"User-agent: *\nDisallow: /x\n\nUser-agent: *\nDisallow: /index.do\n", False),
@@ -234,8 +228,8 @@ class SportsBatchTest(unittest.TestCase):
     def test_capture_keeps_raw_and_records_then_rereads_archive(self):
         self.listing.return_value = listing("111", "96")
         summary, receipt, directory = self.capture()
-        self.assertEqual(summary, {"batch_id": "run", "status": "complete", "discovery_status": "first_page_only",
-                                   "selected": 2, "parsed": 2})
+        self.assertEqual(summary, {
+            "batch_id": "run", "status": "complete", "discovery_status": "first_page_only", "selected": 2, "parsed": 2})
         self.assertEqual((receipt["schema_version"], receipt["board"], receipt["robots"]["status"]),
                          ("citizen-sports-notice-batch-v1", "notice", "allowed"))
         self.assertEqual((directory / "robots.txt").read_bytes(), ROBOTS)
