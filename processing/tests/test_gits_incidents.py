@@ -95,6 +95,7 @@ class GitsParseTest(unittest.TestCase):
             "결과 코드가 정상이 아닙니다\\(6: 등록되지 않은 키 입니다.\\)": incidents_xml(code="6", message="등록되지 않은 키 입니다."),
             "최상위 요소가 예시와 다릅니다\\(ServiceResult\\)": incidents_xml(root="ServiceResult"),
             "itemcount": incidents_xml(item_xml(), count="2"),
+            "정상 응답에 msgbody가 없습니다": incidents_xml(count="0", body=""),
             "itemcount\\)가": incidents_xml(item_xml(), count="x"),
             "commsgheader": incidents_xml(common="<returnreasoncode>30</returnreasoncode>"),
             "regseq": incidents_xml(item_xml(regseq=" ")),

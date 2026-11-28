@@ -31,7 +31,7 @@ GITS_SECTION = "collection-gits"
 GITS_ROOT = CAPTURE_ROOT.with_name(GITS_SECTION)
 SCHEMA = "citizen-gits-incident-snapshot-v1"
 RECORD_SCHEMA = "citizen-gits-incident-v1"
-PARSER_VERSION = "gits-incident-parser-v1"
+PARSER_VERSION = "gits-incident-parser-v2"
 SERVICE_KEY_ENV = "GITS_SERVICE_KEY"
 RESPONSE_MAX_BYTES = 4 * 1024 * 1024
 RAW_FILE = "incidents.xml"
@@ -171,6 +171,9 @@ def parse_incidents(raw: bytes) -> dict:
     code, message, count = ((found[0].text or "") if found else None for found in header.values())
     if code not in (OK_CODE, EMPTY_CODE):
         raise ValueError(f"{LABEL} 결과 코드가 정상이 아닙니다({_label(code or '없음')}: {_label(message or '')}).")
+    # 정상(0) 응답은 예시처럼 msgbody가 있어야 한다. 봉투가 빠진 응답을 빈 결과로 보관하지 않는다.
+    if code == OK_CODE and not parts["msgbody"]:
+        raise ValueError(f"{LABEL} 정상 응답에 msgbody가 없습니다.")
     items = _children(parts["msgbody"][0], (ITEM,), repeat=ITEM)[ITEM] if parts["msgbody"] else []
     # 결과 없음은 건수가 없거나 0이고 항목도 없을 때만 받는다. 건수와 항목이 어긋나면 어느 쪽도 믿지 않는다.
     if code == EMPTY_CODE and (items or count not in (None, "0")):
