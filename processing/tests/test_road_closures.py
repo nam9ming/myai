@@ -133,6 +133,9 @@ class ParseTest(unittest.TestCase):
                 item(section="경부선", name="평택IC", cnstnCtnt="안\u00ad성 방면"),
                 # 채움 문자 앞 제어 문자도 빈 값이 아니라 invisible이다.
                 item(section="경부선", name="\x1c\u3164"), item(section="\x0b\u3164", name="평택IC"),
+                # str.strip이 지우는 제어 문자만 있어도 빈 값이 아니다.
+                item(section="경부선", name="\x1c"), item(section="경부선", name="\x85 "), item(section="\x0b", name="평택IC"),
+                item(section="경부선", name="평택IC", blcCtnt="\x0b"),
                 item(blcCtnt="1차로\t차단\r\n")]
         matched, review = [], []
         rc.select_items(1, rc.parse_page(page(rows), "0010", 1)[2], matched, review)

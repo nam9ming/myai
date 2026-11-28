@@ -37,7 +37,7 @@ CLOSURE_SECTION = "collection-road-closures"
 CLOSURE_ROOT = CAPTURE_ROOT.with_name(CLOSURE_SECTION)
 SCHEMA = "citizen-road-closure-snapshot-v1"
 SELECTION_SCHEMA = "road-closure-anseong-v1"
-PARSER_VERSION = "ex-construction-parser-v5"
+PARSER_VERSION = "ex-construction-parser-v6"
 RESPONSE_MAX_BYTES = 2 * 1024 * 1024
 PAGE_SIZE = 100
 MAX_PAGES = 20
@@ -164,7 +164,8 @@ def parse_page(raw: bytes, route: str, page: int) -> tuple[int, str, list[dict]]
         fields, unknown = {}, {}
         for name in FIELDS:
             value = row.get(name)
-            blank = value is None or (isinstance(value, str) and not value.strip())
+            # str.strip이 공백으로 지우는 제어 문자(U+000B·U+001C 등)만 있는 값은 빈 값이 아니라 invisible로 보낸다.
+            blank = value is None or (isinstance(value, str) and not value.strip() and not _INVISIBLE.search(value))
             fields[name] = None if blank else value
             if blank:
                 unknown[name] = "missing" if name not in row else "empty"

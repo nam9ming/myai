@@ -21,7 +21,7 @@ from .capture import (
     validate_name, write_new, write_receipt,
 )
 from .cli import CollectionArguments
-from .road_closures import _no_location, unreadable
+from .road_closures import _INVISIBLE, _no_location, unreadable
 
 REFERENCE_URL = "https://www.utic.go.kr/guide/utisRefTCS.do"
 APPLY_URL = "https://www.utic.go.kr/guide/newUtisDataWrite.do"
@@ -29,7 +29,7 @@ TCS_SECTION = "collection-tcs"
 TCS_ROOT = CAPTURE_ROOT.with_name(TCS_SECTION)
 SCHEMA = "citizen-tcs-import-v1"
 SELECTION_SCHEMA = "tcs-anseong-v1"
-PARSER_VERSION = "tcs-csv-parser-v5"
+PARSER_VERSION = "tcs-csv-parser-v6"
 CSV_MAX_BYTES = PORTAL_MAX_BYTES
 # 레퍼런스 예제의 열 순서. None은 항목표에 없는 열이다.
 LAYOUT = ("seq", "poliCode", "revYear", "revSeq", "poliName", "constFromDate", "constToDate", None, None,
@@ -75,7 +75,7 @@ def _row(columns: list[str]) -> tuple[dict | None, str | None]:
     fields, unknown = {}, {"anouncePol": "not_in_layout"}
     for name, value in zip(LAYOUT, columns):
         if name is not None:
-            fields[name] = value if value.strip() else None
+            fields[name] = value if value.strip() or _INVISIBLE.search(value) else None  # 제어 문자만 있으면 invisible
             if fields[name] is None:
                 unknown[name] = "empty"
     fields["anouncePol"] = None
