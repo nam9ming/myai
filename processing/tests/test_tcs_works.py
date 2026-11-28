@@ -113,11 +113,13 @@ class ParseTest(unittest.TestCase):
     def test_invisible_characters_in_read_columns_go_to_review(self):
         # 보이지 않는 문자가 `안성`을 가르면 조용히 빠진다. 판단에 쓰지 않는 시공사 열은 보지 않는다.
         rows = [row(1, police="안\u200b성"), row(2, road="안\u00ad성시 합성로"), row(3, control="\x01"),
-                row(4, name="안\ufe0f성 방면"), row(5, builder="안\u200b성건설"), row(6, police="", road=" \u3164 ")]
+                row(4, name="안\ufe0f성 방면"), row(5, builder="안\u200b성건설"), row(6, police="", road=" \u3164 "),
+                row(7, name="\x1f\u3164")]
         matched, review = tcs.select_records(tcs.parse_tcs_csv(csv_bytes(*rows).decode())[0])
         self.assertEqual(matched, [])
         self.assertEqual([(r["record"]["line"], r["reason"]) for r in review],
-                         [(1, "invisible"), (2, "invisible"), (3, "invisible"), (4, "invisible"), (6, "blank_location")])
+                         [(1, "invisible"), (2, "invisible"), (3, "invisible"), (4, "invisible"), (6, "blank_location"),
+                          (7, "invisible")])
 
 
 class ImportTest(unittest.TestCase):

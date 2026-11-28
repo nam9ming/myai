@@ -135,7 +135,10 @@ class ParseTest(unittest.TestCase):
                 "\u2060\u206f\ufe00\ufe0f\ufeff\U0001bca0\U0001bca3\U0001d173\U0001d17a\U000e0000\U000e0fff"
         rows = [item(section="무주 안성\u200b면 부근"), item(section="안성\ufe0f면"),
                 *[item(section="경부선", name=f"안{c}성IC") for c in chars], item(section="경부선", name="\uffa0수원IC"),
-                item(section="경부선", name="평택IC", cnstnCtnt="안\u00ad성 방면"), item(blcCtnt="1차로\t차단\r\n")]
+                item(section="경부선", name="평택IC", cnstnCtnt="안\u00ad성 방면"),
+                # 채움 문자 앞 제어 문자도 빈 값이 아니라 invisible이다.
+                item(section="경부선", name="\x1c\u3164"), item(section="\x0b\u3164", name="평택IC"),
+                item(blcCtnt="1차로\t차단\r\n")]
         matched, review = [], []
         rc.select_items(1, rc.parse_page(page(rows), "0010", 1)[2], matched, review)
         self.assertEqual([m["position"] for m in matched], [len(rows)])

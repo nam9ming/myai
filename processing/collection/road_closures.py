@@ -37,7 +37,7 @@ CLOSURE_SECTION = "collection-road-closures"
 CLOSURE_ROOT = CAPTURE_ROOT.with_name(CLOSURE_SECTION)
 SCHEMA = "citizen-road-closure-snapshot-v1"
 SELECTION_SCHEMA = "road-closure-anseong-v1"
-PARSER_VERSION = "ex-construction-parser-v4"
+PARSER_VERSION = "ex-construction-parser-v5"
 RESPONSE_MAX_BYTES = 2 * 1024 * 1024
 PAGE_SIZE = 100
 MAX_PAGES = 20
@@ -64,7 +64,8 @@ _MARKUP = re.compile("[<&]")
 _INVISIBLE = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f"
                         "\u200b-\u200f\u202a-\u202e\u2060-\u206f\u3164\ufe00-\ufe0f\ufeff\uffa0\U0001bca0-\U0001bca3"
                         "\U0001d173-\U0001d17a\U000e0000-\U000e0fff]")
-_FILLER = re.compile("[\\s\u115f\u1160\u3164\uffa0]+")
+# 공백·한글 채움 문자. `\s`는 제어 문자 U+000B·U+000C·U+001C–U+001F·U+0085도 포함해 쓰지 않는다.
+_FILLER = re.compile("[\t\n\r \xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\u115f\u1160\u3164\uffa0]+")
 
 
 def validate_key(key: str) -> str:
