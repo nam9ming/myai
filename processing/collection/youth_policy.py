@@ -303,16 +303,15 @@ class _PolicyParser(_NoticeParser):
     def _viewer_start(self, tag, names, values):
         pair = f"{self.viewer[-1]}>{tag}" if self.viewer else None
         source = values.get("src") or ""
-        # 원본 주소(data-origin)는 슬라이드 li 바로 아래, 원본 보기 onclick이 있는 버튼에서만 읽는다.
+        origin = values.get("data-origin") or ""
+        # 원본 주소(data-origin)는 슬라이드 li 바로 아래, 원본 보기 onclick이 있는 버튼에서만 읽고 그 버튼에는 꼭 있어야 한다.
         if (pair not in _VIEWER_ATTRS or not set(names) <= set(_VIEWER_ATTRS[pair].split())
                 or (tag == "script" and names and source not in _VIEWER_SCRIPTS)
                 or (tag == "img" and not _VIEWER_IMAGE.fullmatch(source))
-                or (pair == "li>button" and values.get("onclick") != "fn_view_original(this);")):
+                or (pair == "li>button" and (values.get("onclick") != "fn_view_original(this);"
+                                             or not _VIEWER_IMAGE.fullmatch(origin)))):
             raise ValueError(_INVALID_VIEWER)
-        if "data-origin" in values:
-            origin = values["data-origin"] or ""
-            if not _VIEWER_IMAGE.fullmatch(origin):
-                raise ValueError(_INVALID_VIEWER)
+        if pair == "li>button":
             self.images.append(OFFICIAL_ORIGIN + origin)
         if tag not in _VOID_TAGS:
             self.viewer.append(tag)
@@ -327,6 +326,8 @@ class _PolicyParser(_NoticeParser):
             if self.viewer[-1] != tag:
                 raise ValueError(_INVALID_VIEWER)
             self.viewer.pop()
+            if not self.viewer and not self.images:  # 틀이 있으면 화면에 대표 이미지가 보이므로 원본 주소가 빠지면 안 된다.
+                raise ValueError(_INVALID_VIEWER)
             self.viewer = self.viewer or None
 
     def handle_data(self, data):
