@@ -1,8 +1,6 @@
 """안성시 직영 공공체육시설 예약 누리집 공지의 robots.txt·목록·상세를 요청하고 읽는다.
 
-이 호스트의 robots.txt는 2026-11-27·28 모두 HTTP 400(`Request Blocked`)이어서 실제 목록·상세 HTML을 받지 않았다.
-상세 주소 형식만 조사 기록의 실제 주소에서 옮겼고, 상세 마크업(`input[name=seq]`·`h4`·`div.view_cont`)은 합성 원본의
-가정이다. 실제 응답이 다르면 원본과 실패 사유를 남기고 멈춘다.
+robots.txt가 HTTP 400이라 실제 목록·상세는 받지 않았다. 상세 주소 형식만 조사 기록에서 옮겼고 마크업은 가정이다.
 """
 
 import re
@@ -32,11 +30,13 @@ _BREAK_TAGS = frozenset("br p div li tr td th h1 h2 h3 h4 h5 h6 table ul ol dl d
 _BODY_TAGS = _BREAK_TAGS | frozenset("a b strong em i u s span font sub sup small mark img tbody thead tfoot col "
                                      "colgroup".split())
 _TITLE_TAGS = frozenset("b strong em i u span font".split())
-_HIDDEN_STYLE = re.compile(r"display\s*:\s*none|visibility\s*:\s*hidden", re.I)
-# 인라인 태그가 블록·띄움 상자가 되면 브라우저는 따로 줄을 보이는데 이 파서는 앞뒤 글자와 한 줄로 붙인다.
-_LAYOUT = re.compile(r"(display|float)\s*:\s*([^;]*)", re.I)
-_INLINE = {"display": ("inline", "inline-block"), "float": ("none",)}
-_WHITE_SPACE = re.compile(r"white-space(?:-collapse)?\s*:\s*([^;]*)", re.I)
+# CSS 속성 이름은 ASCII 대소문자만 같게 본다(`diſplay`는 무효 속성).
+_HIDDEN_STYLE = re.compile(r"display\s*:\s*none|visibility\s*:\s*(?:hidden|collapse)", re.I | re.A)
+# 인라인 태그가 블록·띄움·흐름 밖 상자가 되면 브라우저는 따로 줄을 보이지만 이 파서는 앞뒤 글과 붙인다.
+# font-variant-position(실제 공지에 붙어 온다)·max-width는 다른 속성이다.
+_LAYOUT = re.compile(r"(?<![\w-])(display|float|position|(?:min-)?width)\s*:\s*([^;]*)", re.I | re.A)
+_INLINE = {"display": ("inline", "inline-block"), "float": ("none",), "position": ("static", "relative")}
+_WHITE_SPACE = re.compile(r"white-space(?:-collapse)?\s*:\s*([^;]*)", re.I | re.A)
 # 소스 줄바꿈을 공백으로 보이는 값만 받는다. 안성시 누리집 실제 공지 원본에 이 값들이 붙어 온다.
 _COLLAPSE = frozenset(("normal", "nowrap", "collapse"))
 _INVALID_DETAIL = "체육시설 공지 상세 HTML 구조가 예상과 다릅니다."
@@ -81,8 +81,6 @@ def robots_rules(raw: bytes) -> dict:
     """HTTP 200으로 받은 robots.txt를 RFC 9309대로 읽어 이 수집기에 적용할 규칙과 Crawl-delay를 돌려준다.
 
     표준 라이브러리 robotparser는 판(3.13·3.14)마다 최장 일치·와일드카드·그룹 병합·제품 토큰 비교가 달라 쓰지 않는다.
-    규칙 줄이 아닌 내용(예: HTML 차단 화면), 내용은 있는데 User-agent 줄이 없는 응답(예: `Error: Request Blocked`),
-    적용 그룹의 경로 형식이 아닌 Allow·Disallow 값, 읽을 수 없는 Crawl-delay가 있으면 판단하지 않는다.
     """
     try:
         lines = [line.split("#", 1)[0].strip() for line in raw.decode("utf-8-sig").splitlines()]
@@ -158,7 +156,7 @@ class _LinkParser(PinnedHTMLParser):
     def __init__(self):
         super().__init__()
         self.hidden = 0
-        # 숨긴 요소(hidden·display:none·visibility:hidden·중복 속성)의 태그 이름과 같은 이름이 열린 수.
+        # 숨긴 요소와 같은 이름의 태그가 열린 수.
         # shortcut: 같은 이름 태그 수로만 닫으므로 브라우저가 무시하는 잘못된 닫는 태그는 놓친다, 실제 목록을 받으면 다시 본다.
         self.veil: str | None = None
         self.depth = 0
@@ -248,7 +246,11 @@ def _shown(names, values) -> bool:
 
 
 def _inline(values) -> bool:
-    return all(value.strip().lower() in _INLINE[name.lower()] for name, value in _LAYOUT.findall(values.get("style") or ""))
+    layout = [(name.lower(), value.strip().lower()) for name, value in _LAYOUT.findall(values.get("style") or "")]
+    # 너비를 준 inline-block(width:100% 등)은 줄을 다 차지해 따로 보인다.
+    if ("display", "inline-block") in layout and any(name.endswith("width") for name, _ in layout):
+        return False
+    return all(name.endswith("width") or value in _INLINE[name] for name, value in layout)
 
 
 class _DetailParser(PinnedHTMLParser):
@@ -337,7 +339,9 @@ class _DetailParser(PinnedHTMLParser):
             elif not self.title_tags and tag == "h4":
                 self.titles.append(" ".join("".join(self.title).split()))
                 self.title = None
-            elif tag != "br":
+            elif tag == "br":  # 브라우저는 `</br>`도 `<br>`로 읽는다.
+                self.title.append(" ")
+            else:
                 raise ValueError(_INVALID_DETAIL)
         elif tag in _HIDDEN_TAGS and self.hidden:
             self.hidden -= 1
@@ -379,7 +383,7 @@ def parse_detail(text: str, *, seq: str) -> dict:
 
     title = parser.titles[0]
     compact = [(line, "".join(line.split())) for line in (title, *lines)]
-    # 실제 마크업을 확인하기 전까지 모든 기록은 사람 확인 대상이다. 이용 제한 세부가 이미지에만 있는 공지가 있다.
+    # 실제 마크업을 확인하기 전까지 모든 기록은 사람 확인 대상이다.
     flags = {"markup_unverified"}
     if parser.images:
         flags.add("inline_image")

@@ -29,6 +29,10 @@ def detail(seq, body="<p>예약 일정 : 3월 2일(월) 09:00 예약 오픈</p>"
             f'<h4>{title}</h4><div class="view_cont">{body}</div></body></html>')
 
 
+def parsed(*args, **options):
+    return parse_detail(detail("96", *args, **options), seq="96")
+
+
 class SportsParserTest(unittest.TestCase):
     def test_listing_reads_detail_links_in_order(self):
         absolute = "https://reservation.anseong.go.kr/index.do?board_id=notice&cp=/board/view.do&menu_id=0008&pageIndex=1&seq=7"
@@ -51,11 +55,10 @@ class SportsParserTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "형식"):
             parse_listing(listing("1").replace(b"pageIndex=1", b"pageIndex=2"))
         # 화면에 없는 공지를 요청하고 complete로 남기지 않는다.
-        for extra in (f'<div style="display: none"><div></div><a href="{_LINK.format(2)}">x</a></div>',
-                      f'<p style="visibility:hidden"><a href="{_LINK.format(2)}">x</a></p>',
-                      f'<a hidden href="{_LINK.format(2)}">x</a>',
-                      f'<div style="display/**/:none"><a href="{_LINK.format(2)}">x</a></div>',
-                      f'<a style="display:\\6e one" href="{_LINK.format(2)}">x</a>'):
+        link = f'<a href="{_LINK.format(2)}">x</a>'
+        for extra in (f'<div style="display: none"><div></div>{link}</div>', f'<p style="visibility:hidden">{link}</p>',
+                      link.replace("<a", "<a hidden"), f'<div style="display/**/:none">{link}</div>',
+                      link.replace("<a", '<a style="display:\\6e one"'), f'<span style="visibility:collapse">{link}</span>'):
             with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, "숨긴"):
                 parse_listing(listing("1", extra=extra))
 
@@ -63,7 +66,8 @@ class SportsParserTest(unittest.TestCase):
         body = ("<p>예약 일정 : 3월 2일(월) 09:00</p><p>관내 거주자 <b>우선</b>&nbsp;배정</p>"
                 "<div>3월 9일 정기 점검으로 예약 중단<br>이용 시간 06:00~22:00</div>"
                 '<p><a href="/board/download.do?id=1">안내문.hwp</a></p>')
-        record = parse_detail(detail("96", body, title="<span>2026년</span> 상반기 예약 안내"), seq="96")
+        record = parsed(body, title="<span>2026년</span> 상반기 예약 안내")
+        self.assertEqual(parsed(title="예약 안내</br>이용 안내")["title"], "예약 안내 이용 안내")
         self.assertEqual(record["official_url"],
                          "https://reservation.anseong.go.kr/index.do?board_id=notice&cp=%2Fboard%2Fview.do"
                          "&menu_id=0008&pageIndex=1&seq=96")
@@ -81,51 +85,55 @@ class SportsParserTest(unittest.TestCase):
     def test_table_cells_stay_separate_lines(self):
         body = ("<table><tr><td>정원</td><td>2</td><td>30</td></tr>"
                 "<tr><th>예약기간</th><td>3.2.~3.6.</td><th>이용기간</th><td>4.1.~6.30.</td></tr></table>")
-        record = parse_detail(detail("96", body), seq="96")
+        record = parsed(body)
         self.assertEqual(record["body_lines"], ["정원", "2", "30", "예약기간", "3.2.~3.6.", "이용기간", "4.1.~6.30."])
         self.assertEqual(record["keyword_lines"]["reservation_schedule"], ["예약기간"])
 
     def test_source_newlines_split_lines_only_inside_pre(self):
         # 칸 안 소스 줄바꿈에서 줄을 나누면 마감일이 다른 줄로 떨어진다.
         body = "<table><tr><td>예약 접수 기간: 2026. 3. 2.(월)\r\n ~ 3. 6.(금)</td></tr></table><pre>가\r나\n다</pre>"
-        record = parse_detail(detail("96", body), seq="96")
+        record = parsed(body)
         self.assertEqual(record["body_lines"], ["예약 접수 기간: 2026. 3. 2.(월) ~ 3. 6.(금)", "가", "나", "다"])
         self.assertEqual(record["keyword_lines"]["reservation_schedule"], ["예약 접수 기간: 2026. 3. 2.(월) ~ 3. 6.(금)"])
 
     def test_inline_white_space_that_keeps_newlines_is_rejected(self):
-        # 브라우저는 이 줄바꿈을 줄로 보이므로 공백으로 합치면 예약기간과 이용기간이 한 줄에 섞인다.
+        # 브라우저는 이 줄바꿈을 줄로 보이므로 합치면 예약기간과 이용기간이 섞인다.
         text = "예약기간: 3.2.~3.6.\n이용기간: 4.1.~6.30."
         for style in ("white-space: pre", "white-space:pre-wrap", "WHITE-SPACE: PRE-LINE", "white-space: break-spaces",
                       "white-space: normal !important", "white-space-collapse: preserve-breaks"):
             with self.subTest(style=style), self.assertRaisesRegex(ValueError, "허용하지 않는"):
-                parse_detail(detail("96", f'<p style="color: red; {style}">{text}</p>'), seq="96")
-        wrapped = detail("96", text).replace('class="view_cont"', 'class="view_cont" style="white-space:pre-wrap"')
-        with self.assertRaisesRegex(ValueError, "허용하지 않는"):
-            parse_detail(wrapped, seq="96")
-        # pre 안에서 white-space를 바꾸면 줄바꿈이 합쳐질 수 있다.
-        with self.assertRaisesRegex(ValueError, "허용하지 않는"):
-            parse_detail(detail("96", '<pre><span style="white-space: normal">가\n나</span></pre>'), seq="96")
+                parsed(f'<p style="color: red; {style}">{text}</p>')
+        # view_cont 자신과 pre 안의 지정도 받지 않는다.
+        for text in (detail("96", text).replace('class="view_cont"', 'class="view_cont" style="white-space:pre-wrap"'),
+                     detail("96", '<pre><span style="white-space: normal">가\n나</span></pre>')):
+            with self.subTest(text=text[-90:]), self.assertRaisesRegex(ValueError, "허용하지 않는"):
+                parse_detail(text, seq="96")
         # 실제 공지 원본에 붙어 오는 접는 값은 받는다.
         body = '<p style="white-space: normal; white-space-collapse: collapse">가</p><table><tr><td style="white-space:nowrap">나</td></tr></table>'
-        self.assertEqual(parse_detail(detail("96", body), seq="96")["body_lines"], ["가", "나"])
+        self.assertEqual(parsed(body)["body_lines"], ["가", "나"])
 
     def test_inline_tags_shown_as_blocks_are_rejected(self):
-        # 브라우저는 따로 보이는 블록·띄움 상자를 한 줄로 붙이면 예약기간과 이용기간이 섞인다.
-        for style in ("DISPLAY:block", "display:table-cell", "display: inherit", "float: left"):
+        # 브라우저가 따로 보이는 상자를 한 줄로 붙이면 예약기간과 이용기간이 섞인다.
+        for style in ("DISPLAY:block", "display:table-cell", "display: inherit", "float: left", "position: fixed",
+                      "display:inline-block;width:100%", "min-width: 50%; display: inline-block",
+                      "position:absolute;top:0;left:0", "visibility: collapse"):
             with self.subTest(style=style), self.assertRaisesRegex(ValueError, "허용하지 않는"):
-                parse_detail(detail("96", f'<p>예약기간: 3.2.<span style="{style}">이용기간: 4.1.</span></p>'), seq="96")
-        with self.assertRaisesRegex(ValueError, "구조"):
-            parse_detail(detail("96", title='<b style="display:block">예약</b> 이용'), seq="96")
-        body = '<p style="float:left">가<span style="display: inline-block; float: none">나</span></p>'
-        self.assertEqual(parse_detail(detail("96", body), seq="96")["body_lines"], ["가나"])
+                parsed(f'<p>예약기간: 3.2.<span style="{style}">이용기간: 4.1.</span></p>')
+        # 실제 공지의 font-variant-position·배지 inline-block은 받는다. CSS는 `diſplay`를 무효 속성으로 버린다.
+        # 줄을 나누는 태그는 display·float와 무관하게 나눈다(README의 과분할).
+        body = ('<p style="float:left">가<span style="display: inline-block; float: none">나</span>'
+                '<span style="font-variant-position: inherit; position: relative; max-width: 9em">다</span>'
+                '<span style="diſplay:block">라</span></p><p style="display:inline">마</p>')
+        record = parsed(body, title='<b style="diſplay:inline">가</b>')
+        self.assertEqual((record["title"], record["body_lines"]), ("가", ["가나다라", "마"]))
 
     def test_joined_source_newlines_are_flagged_for_review(self):
         # 외부 CSS의 white-space는 알 수 없으므로 합친 줄을 사람이 원문과 대조하게 한다.
-        record = parse_detail(detail("96", "<p>예약기간: 3.2.~3.6.\n이용기간: 4.1.~6.30.</p>"), seq="96")
+        record = parsed("<p>예약기간: 3.2.~3.6.\n이용기간: 4.1.~6.30.</p>")
         self.assertEqual(record["body_lines"], ["예약기간: 3.2.~3.6. 이용기간: 4.1.~6.30."])
         self.assertEqual(record["review_flags"], ["markup_unverified", "source_newline_joined"])
         # 태그 사이의 빈 줄바꿈과 pre 안 줄바꿈은 줄을 합치지 않는다.
-        record = parse_detail(detail("96", "<p>\n가\n</p>\n<p>나</p><pre>다\n라</pre>"), seq="96")
+        record = parsed("<p>\n가\n</p>\n<p>나</p><pre>다\n라</pre>")
         self.assertEqual((record["body_lines"], record["review_flags"]), (["가", "나", "다", "라"], ["markup_unverified"]))
 
     def test_image_only_restriction_is_flagged_for_review(self):
@@ -137,29 +145,31 @@ class SportsParserTest(unittest.TestCase):
         self.assertEqual(record["review_flags"], ["image_only", "inline_image", "markup_unverified"])
 
     def test_detail_rejects_unverifiable_structure(self):
-        for message, text in (
-            ("일치하지", detail("95")),
-            ("제목", detail("96", head="<h4>메뉴</h4>")),
-            ("본문 영역", detail("96", head='<div class="view_cont">x</div>')),
-            ("글자와 이미지", detail("96", body="<p> </p>")),
-            ("허용하지 않는", detail("96", body="<iframe src=x></iframe>")),
-            ("허용하지 않는", detail("96", body='<p style="display: none">숨김</p>')),
-            ("허용하지 않는", detail("96", body="<img src=a src=b>")),
-            ("허용하지 않는", detail("96", body='<p style="display/**/:none">숨김</p>')),
-            ("상세 HTML 구조", detail("96", head="<!--><h4>숨김</h4>-->")),
-            ("구조", detail("96", title='<span style="display:\\6e one">숨김</span>예약 안내')),
-            ("구조", detail("96", title='<span style="display:none">숨김</span>예약 안내')),
-            ("구조", detail("96", title="<b hidden>숨김</b>예약 안내")),
-            ("구조", detail("96", title="<i class=a class=b>x</i>예약 안내")),
-            ("구조", detail("96", body="<p><b>x</p></b>")),
+        for message, options in (
+            ("일치하지", {"head": '<input name="seq" value="5">'}),
+            ("제목", {"head": "<h4>메뉴</h4>"}),
+            ("본문 영역", {"head": '<div class="view_cont">x</div>'}),
+            ("글자와 이미지", {"body": "<p> </p>"}),
+            ("허용하지 않는", {"body": "<iframe src=x></iframe>"}),
+            ("허용하지 않는", {"body": '<p style="display: none">숨김</p>'}),
+            ("허용하지 않는", {"body": "<img src=a src=b>"}),
+            ("허용하지 않는", {"body": '<p style="display/**/:none">숨김</p>'}),
+            ("상세 HTML 구조", {"head": "<!--><h4>숨김</h4>-->"}),
+            ("구조", {"title": '<span style="display:\\6e one">숨김</span>예약 안내'}),
+            ("구조", {"title": '<span style="display:none">숨김</span>예약 안내'}),
+            ("구조", {"title": "<b hidden>숨김</b>예약 안내"}),
+            ("구조", {"title": '<b style="display:block">예약</b> 이용'}),
+            ("구조", {"title": '<b style="visibility:collapse">x</b> 이용'}),
+            ("구조", {"title": "<i class=a class=b>x</i>예약 안내"}),
+            ("구조", {"body": "<p><b>x</p></b>"}),
         ):
-            with self.subTest(text=text[-80:]), self.assertRaisesRegex(ValueError, message):
-                parse_detail(text, seq="96")
+            with self.subTest(options=options), self.assertRaisesRegex(ValueError, message):
+                parsed(**options)
         with self.assertRaisesRegex(ValueError, "일치하지"):
-            parse_detail(detail("96", head='<input name="seq" value="5">'), seq="96")
+            parse_detail(detail("95"), seq="96")
         # template 안의 seq·제목은 화면에 없으므로 세지 않는다.
         hidden = '<template><h4>숨김</h4><input name="seq" value="5"></template>'
-        self.assertEqual(parse_detail(detail("96", head=hidden), seq="96")["title"], "체육관 예약 안내")
+        self.assertEqual(parsed(head=hidden)["title"], "체육관 예약 안내")
 
     def test_robots_rules_need_plain_rule_lines(self):
         rules = robots_rules(b"User-agent: *\nDisallow: /index.do?board_id=\n")
