@@ -95,25 +95,20 @@ class ParseTest(unittest.TestCase):
                     rc.parse_page(raw, "0010", 1)
 
     def test_selects_only_explicit_section_text(self):
+        # 3.2 뒤에 생긴 문자(Garay, 3.14의 casefold가 옛 글자로 바꾸는 U+A7CB)도 파이썬 판과 관계없이 검토로 간다.
+        # 반각 채움·반각 'ㅡ'·첫가끝 채움·첫가끝 'ㅡ'·NFD '수원'·호환 채움은 자모뿐이라 자리표시다.
+        names = ("-", "없음", "\U00010D50", "\ua7cb", "ㅡ", "\uffa0", "\uffda", "\u115f\u1160", "\u1173",
+                 "\u1109\u116e\u110b\u116f\u11ab", " \u3164 ")
         rows = [item(), item(section="서울TG~수원IC", name=""), item(section="", name=""),
                 item(section="안성면 부근", name="합성"), item(section="합성", name="합성", cnstnCtnt="북안성 방면 공사"),
-                item(section="", name="", mtnofKorNm="안성지사"), item(section="경부선", name="-"),
-                item(section="경부선", name="없음"), item(section="경부선", name="\U00010D50"),
-                item(section="경부선", name="\ua7cb"), item(section="경부선", name="ㅡ"),
-                # 반각 채움·반각 'ㅡ'·첫가끝 채움·첫가끝 'ㅡ'·NFD '수원'·호환 채움은 자모뿐이라 자리표시다.
-                item(section="경부선", name="\uffa0"), item(section="경부선", name="\uffda"),
-                item(section="경부선", name="\u115f\u1160"), item(section="경부선", name="\u1173"),
-                item(section="경부선", name="\u1109\u116e\u110b\u116f\u11ab"), item(section="경부선", name=" \u3164 ")]
+                item(section="", name="", mtnofKorNm="안성지사"), *[item(section="경부선", name=n) for n in names]]
         matched, review = [], []
         rc.select_items(3, rc.parse_page(page(rows), "0010", 1)[2], matched, review)
         self.assertEqual([(m["position"], m["match"]) for m in matched], [(1, {"useRotnm": "남안성IC~안성IC"})])
         self.assertEqual([(r["position"], r["reason"], r["mentions"]) for r in review],
                          [(2, "blank_section", []), (3, "blank_section", []), (4, "mention", ["useRotnm"]),
                           (5, "other_mention", ["cnstnCtnt"]), (6, "blank_section", ["mtnofKorNm"]),
-                          (7, "blank_section", []), (8, "blank_section", []),
-                          # 3.2 뒤에 생긴 문자(Garay, 3.14의 casefold가 옛 글자로 바꾸는 U+A7CB)도 파이썬 판과 관계없이 검토로 간다.
-                          (9, "blank_section", []), (10, "blank_section", []), (11, "blank_section", []),
-                          *[(n, "blank_section", []) for n in range(12, 18)]])
+                          *[(n, "blank_section", []) for n in range(7, 18)]])
         self.assertEqual(review[5]["record"]["fields"]["icNm"], "-")
         self.assertFalse(rc._no_location("\uffa0수원IC"))
         self.assertEqual(matched[0]["page"], 3)

@@ -64,7 +64,7 @@ _MARKUP = re.compile("[<&]")
 _INVISIBLE = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f"
                         "\u200b-\u200f\u202a-\u202e\u2060-\u206f\u3164\ufe00-\ufe0f\ufeff\uffa0\U0001bca0-\U0001bca3"
                         "\U0001d173-\U0001d17a\U000e0000-\U000e0fff]")
-# 공백·한글 채움 문자. `\s`는 제어 문자 U+000B·U+000C·U+001C–U+001F·U+0085도 포함해 쓰지 않는다.
+# 공백·한글 채움 문자. `\s`는 제어 문자(U+001C 등)도 포함해 쓰지 않는다.
 _FILLER = re.compile("[\t\n\r \xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\u115f\u1160\u3164\uffa0]+")
 
 
@@ -192,7 +192,7 @@ def _no_location(value: object) -> bool:
 
 
 def unreadable(fields: dict, names: tuple[str, ...]) -> str | None:
-    """태그·문자 참조나 보이지 않는 문자로 화면 글자가 원문과 다를 수 있으면 사유를 돌려준다. 채움 문자뿐인 값은 빈 값 판단에 맡긴다."""
+    """화면 글자가 원문과 다를 수 있으면 사유를 돌려준다. 채움 문자뿐인 값은 빈 값 판단에 맡긴다."""
     values = [fields[name] for name in names if isinstance(fields[name], str)]
     if any(_MARKUP.search(value) for value in values):
         return "markup"
