@@ -18,7 +18,7 @@ ROBOTS_URL = ORIGIN + "/robots.txt"
 ROBOTS_MAX_BYTES = 512 * 1024
 _LISTING_PATH = "/index.do?menu_id=0008"
 LISTING_URL = ORIGIN + _LISTING_PATH
-PARSER_VERSION = "sports-notice-parser-v2"
+PARSER_VERSION = "sports-notice-parser-v3"
 _DETAIL_QUERY = {"board_id": "notice", "cp": "/board/view.do", "menu_id": "0008", "pageIndex": "1"}
 _SEQ = re.compile(r"[1-9][0-9]{0,17}")
 _ROBOTS_LINE = re.compile(r"([A-Za-z-]+)[ \t]*:(.*)")
@@ -302,7 +302,9 @@ class _DetailParser(HTMLParser):
 
     def handle_data(self, data):
         if self.body is not None:
-            self.text.append(data)
+            # 브라우저는 pre 밖의 소스 줄바꿈을 공백으로 보인다. 줄 경계는 문단·칸·br과 pre 안 줄바꿈만 만든다.
+            data = data.replace("\r\n", "\n").replace("\r", "\n")
+            self.text.append(data if "pre" in self.body else data.replace("\n", " "))
             if self.link is not None:
                 self.link["text"].append(data)
         elif self.title is not None:

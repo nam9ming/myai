@@ -432,13 +432,13 @@ python3.13 -B -m processing.collection.sports_batch --name sports-20261128 --ver
 - 목록: 전체 페이지 수·고정 글 표시 형식을 몰라 1쪽만 읽는다. `discovery_status=first_page_only`이며, 상태 `complete`는 1쪽에서 고른 상세를 모두 파싱했다는 뜻일 뿐이다. 상세 링크는 조사 기록의 실제 주소 `index.do?board_id=notice&cp=%2Fboard%2Fview.do&menu_id=0008&pageIndex=1&seq=…`와 인자 다섯 개가 정확히 같은 `href`만 읽는다(`cp`의 `%2F` 인코딩 여부, 상대·절대 주소는 가리지 않는다). 이 호스트 `index.do` 링크에 `seq`가 있는데 형식이 다르거나, 같은 번호가 두 번 나오거나, 상세 링크가 하나도 없으면(예: 자바스크립트 링크) 목록을 실패로 남긴다.
 - 상세 마크업은 가정이다. `input[name=seq]`가 정확히 하나이고 값이 요청과 같아야 하며, 제목은 유일한 `<h4>`(인라인 태그만, 숨김·중복 속성 검사는 본문과 같다), 본문은 유일한 `div.view_cont`에서 읽는다. `template`·`noscript` 안은 세지 않는다. 본문 안에서는 문단·표·목록·인라인 태그와 `img`·`a`만 받고, `hidden`·`display:none`·`visibility:hidden`·중복 속성이나 그 밖의 태그가 나오면 형식 변경으로 본다. 실제 응답이 다르면 원본과 파싱 실패 사유를 남긴다.
 
-`data/private/collection-sports-notices/<name>/`에 `robots.txt`·`list-1.html`·`detail-<seq>.html`·`parsed-<seq>.json`(파서 `sports-notice-parser-v2`)을 쓰고 마지막에 `batch.json`을 쓴다. 종료 코드는 0 완료, 2 robots 미허용·한도 도달·일부 실패, 1 입력·보관·재검증 오류다. `--verify`는 새 요청 없이 원본 해시, robots.txt 허용, 목록 원본의 공지 번호·순서, 현재 파서로 다시 만든 파싱 결과를 대조한다. **D03 연결은 후속이다.** `batch.json`은 게시판 키 `board=notice`와 공통 묶음(`web_batch.py`)의 상세 기록 형식을 따른다.
+`data/private/collection-sports-notices/<name>/`에 `robots.txt`·`list-1.html`·`detail-<seq>.html`·`parsed-<seq>.json`(파서 `sports-notice-parser-v3`)을 쓰고 마지막에 `batch.json`을 쓴다. 종료 코드는 0 완료, 2 robots 미허용·한도 도달·일부 실패, 1 입력·보관·재검증 오류다. `--verify`는 새 요청 없이 원본 해시, robots.txt 허용, 목록 원본의 공지 번호·순서, 현재 파서로 다시 만든 파싱 결과를 대조한다. **D03 연결은 후속이다.** `batch.json`은 게시판 키 `board=notice`와 공통 묶음(`web_batch.py`)의 상세 기록 형식을 따른다.
 
 파싱 결과는 판정 없이 표시 문구를 그대로 둔다.
 
 | 필드 | 내용 |
 | --- | --- |
-| `title`·`body_lines` | 제목과, 본문을 문단·표 칸(`td`·`th`)·줄바꿈 경계로 나눈 줄. 이웃 칸 글자는 붙이지 않는다. 줄 안 공백만 하나로 줄이고 빈 줄은 뺀다. |
+| `title`·`body_lines` | 제목과, 본문을 문단·표 칸(`td`·`th`)·줄바꿈 경계로 나눈 줄. 이웃 칸 글자는 붙이지 않는다. `pre` 밖의 소스 줄바꿈은 브라우저처럼 공백으로 본다. 줄 안 공백만 하나로 줄이고 빈 줄은 뺀다. |
 | `images`·`links` | 본문 이미지의 `src`·`alt`, 링크의 `href`·글자 원문. 본문 밖 첨부 목록과 게시일은 위치를 몰라 읽지 않는다. |
 | `keyword_lines` | 제목·본문 줄 가운데 검색어가 든 줄을 그대로 옮긴 색인. 검색어는 공백을 무시하고 맞춘다. `reservation_schedule`: 예약일정·예약기간·예약일시·예약접수·예약개시·예약오픈·예약시작·접수기간·신청기간, `priority`: 우선, `suspension`: 중단·중지·제한·휴관·폐쇄. 넓게 고르므로 관계없는 줄도 들어온다. |
 | `review_flags` | `markup_unverified`(실제 마크업 확인 전까지 항상), `inline_image`, `image_only`, `link`. |

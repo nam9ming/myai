@@ -75,6 +75,13 @@ class SportsParserTest(unittest.TestCase):
         self.assertEqual(record["body_lines"], ["정원", "2", "30", "예약기간", "3.2.~3.6.", "이용기간", "4.1.~6.30."])
         self.assertEqual(record["keyword_lines"]["reservation_schedule"], ["예약기간"])
 
+    def test_source_newlines_split_lines_only_inside_pre(self):
+        # 칸 안 소스 줄바꿈에서 줄을 나누면 마감일이 다른 줄로 떨어진다.
+        body = "<table><tr><td>예약 접수 기간: 2026. 3. 2.(월)\r\n ~ 3. 6.(금)</td></tr></table><pre>가\r나\n다</pre>"
+        record = parse_detail(detail("96", body), seq="96")
+        self.assertEqual(record["body_lines"], ["예약 접수 기간: 2026. 3. 2.(월) ~ 3. 6.(금)", "가", "나", "다"])
+        self.assertEqual(record["keyword_lines"]["reservation_schedule"], ["예약 접수 기간: 2026. 3. 2.(월) ~ 3. 6.(금)"])
+
     def test_image_only_restriction_is_flagged_for_review(self):
         record = parse_detail(detail("111", '<p><img src="/upload/limit.jpg" alt="이용 제한 안내"></p>',
                                      title="체육관 이용 제한 안내"), seq="111")
@@ -162,7 +169,7 @@ class SportsBatchTest(unittest.TestCase):
         self.assertEqual(receipt["pages"][0]["source_url"], "https://reservation.anseong.go.kr/index.do?menu_id=0008")
         self.assertEqual([item["web_id"] for item in receipt["items"]], ["111", "96"])
         parsed = json.loads((directory / "parsed-96.json").read_text(encoding="utf-8"))
-        self.assertEqual((parsed["parser_version"], parsed["record"]["external_id"]), ("sports-notice-parser-v2", "96"))
+        self.assertEqual((parsed["parser_version"], parsed["record"]["external_id"]), ("sports-notice-parser-v3", "96"))
 
         assets = read_sports_batch(self.private, "run")
         self.assertEqual(list(assets), ["111", "96"])
