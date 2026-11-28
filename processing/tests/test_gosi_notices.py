@@ -12,6 +12,9 @@ from processing.collection.gosi_notices import (
     fetch_gosi_detail, fetch_gosi_listing, gosi_detail_url, parse_gosi_detail, parse_gosi_listing,
 )
 
+_HEAD = "".join(f'<th scope="col" class="{name}">{text}</th>' for name, text in (
+    ("wp20 gosi_num", "고시공고번호"), ("gosi_tit", "제목"), ("wp10 gosi_dept", "담당부서"), ("wp15 gosi_date", "등록일")))
+_LICENSE = '본 공공저작물은 공공누리 제4유형: "출처표시" + 상업적 이용 및 변경 금지 조건에 따라 이용할 수 있습니다.'
 _FILE = ("공고문[(주)합성].hwpx", "공고문[(주)합성]_ofr_ofr_X_1.hwpx", "/ntishome/file/upload/ofr/ofr/20261126")
 
 
@@ -31,7 +34,7 @@ def listing(*ids, page=1, total=1, rows=None, caption="고시/공고게시판 �
 <div class="search_box"><div class="board_page">Total 6579\tPage <span class="red"><strong>{page}</strong></span>
  / {total}</div></div>
 <div class="gosi_wrap"><table class="tableSt_list row_over"><caption>{caption}</caption>
-<thead><tr><th scope="col" class="gosi_num">고시공고번호</th><th class="gosi_tit">제목</th></tr></thead>
+<thead><tr>{_HEAD}</tr></thead>
 <tbody>{rows}</tbody></table></div>
 <div class="box_page"><a href="#" onclick="goPage(2); return false;">2</a></div>
 </form></body></html>""".encode()
@@ -67,8 +70,13 @@ var yh = {{"contextPath": ""}};
 </div>
 <dl class="view_file"><dt><span>첨부 파일</span></dt><dd>{links}</dd></dl>
 <div class="open_license clFix mB20"><a rel="license" href="https://www.kogl.or.kr/info/license.do" target="_blank"
- title="새창열기"><img src="/common/img/KOGL/new_img_opentype04.png" alt="공공누리 제4유형"></a><p>공공누리</p></div>
+ title="새창열기"><img src="/common/img/KOGL/new_img_opentype04.png" alt="공공누리 제4유형"></a><p>{_LICENSE}</p></div>
 </div></div></form></body></html>"""
+
+
+def _cut(text, start, end):
+    head, _, rest = text.partition(start)
+    return head + rest.partition(end)[2]
 
 
 def row(notice_id="75365", **changes):
@@ -117,7 +125,8 @@ class GosiParserTest(unittest.TestCase):
                          (cell, '<td class="gosi_dept" hidden>'), (cell, cell + "<span>x</span>"), ("<thead>", "<thead><br>"),
                          ("<tbody>", "<tbody><template></template>"), ("<strong>", "<strong hidden>"),
                          ("<strong>", '<strong><span class="blind">9</span>'), ("</strong>", "</strong></b>"),
-                         ("<strong>", "<strong><div>x</div>"), ('"red"', '"red" class="red"')):
+                         ("<strong>", "<strong><div>x</div>"), ('"red"', '"red" class="red"'), ("<tbody>", "<tbody>마감"),
+                         ("제목</th>", "제목 마감</th>"), ('"red">', '"red">9')):
             with self.subTest(new=new), self.assertRaisesRegex(ValueError, "구조"):
                 parse_gosi_listing(listing("1").replace(old.encode(), new.encode(), 1), page=1)
         # template 안 짝 없는 종료 태그는 브라우저가 무시해 목록이 숨은 채로 남는다.
@@ -126,16 +135,24 @@ class GosiParserTest(unittest.TestCase):
             parse_gosi_listing(hidden.replace(b"</form></body>", b"</form></template></body>"), page=1)
 
     def test_detail_accepts_only_sampled_markup_in_body(self):
-        # 공지 게시판 허용 목록이 받는 표기라도 실제 고시·공고 상세에 없던 태그·속성·class는 거부한다.
-        for body in ("<b>마감</b>", '<span style="color:red">마감</span>', '<p class="blind">마감</p>',
-                     '<div data-x="1">마감</div>', '<a href="#" href="#">x</a>', "<table><tr><td>x</td></tr></table>"):
-            with self.subTest(body=body), self.assertRaisesRegex(ValueError, "숨김"):
-                parse_gosi_detail(detail(body=body), notice_id="75365", listing=row())
-        # 종료 태그는 가장 안쪽에 열린 요소만 닫아야 하고, 시작 태그가 열린 요소를 암묵적으로 닫으면 본문 칸 밖에서도 거부한다.
-        texts = [detail(body=body) for body in ("<p>가<p>나</p>", "<ul><li>가</ul>", '<img src="/x.png" alt="x"></img>')]
-        for text in texts + [detail(title="가<h4>나</h4>")]:
-            with self.subTest(text=text), self.assertRaisesRegex(ValueError, "구조가 올바르지"):
+        # 공지 게시판 허용 목록이 받는 표기라도 실제 고시·공고 상세에 없던 자리·태그·속성·class는 거부한다.
+        # 정상 중첩 목록처럼 브라우저가 암묵적으로 닫지 않는 표기도 표본에 없으면 거부한다.
+        empty = detail(body="")
+        texts = [detail(body=body) for body in (
+            "<b>마감</b>", '<span style="color:red">마감</span>', '<p class="blind">마감</p>', '<div data-x="1">마감</div>',
+            '<a href="#" href="#">x</a>', "<table><tr><td>x</td></tr></table>", "<p>가<p>나</p>", '<img src="/x" alt="x">',
+            "<ul><li>가<ul><li>나</li></ul></li></ul>")] + [detail(title="가<h4>나</h4>")] + [
+            empty.replace("</div>\n<dl", f"</div>{extra}\n<dl") for extra in (
+                "<p>접수기간 2026.12.01~12.05</p>", '<div class="gosi_b">마감</div>', "<ul><li>지원금 50만원</li></ul>")]
+        for text in texts:
+            with self.subTest(text=text), self.assertRaisesRegex(ValueError, "숨김"):
                 parse_gosi_detail(text, notice_id="75365", listing=row())
+        # 읽는 칸 밖의 글자는 화면에 보여도 버려지므로 표본의 고정 문구만 받는다. 종료 태그는 가장 안쪽 요소만 닫아야 한다.
+        for old, new in (("</div>\n<dl", "</div>접수기간 2026.12.01~12.05\n<dl"), ("</ul>", "</ul>신청 마감 12.05"),
+                         ("첨부 파일", "첨부 파일 12.05 마감"), ("변경 금지", "변경 금지 12.05 마감"),
+                         ("</div>\n<dl", "</span></div>\n<dl"), ('alt="공공누리 제4유형">', 'alt="공공누리 제4유형"></img>')):
+            with self.subTest(new=new), self.assertRaisesRegex(ValueError, "구조가 올바르지"):
+                parse_gosi_detail(empty.replace(old, new), notice_id="75365", listing=row())
 
     def test_detail_keeps_text_and_attachment_candidates(self):
         odd = ("A&B.hwp", "A%26B.hwp", "a\\x26b.hwp", "안내%20문.hwp", "안내\t문.hwp")
@@ -167,12 +184,11 @@ class GosiParserTest(unittest.TestCase):
         self.assertEqual(record["attachments"], [])
         self.assertEqual(record["review_flags"],
                          ["missing:department", "missing:description", "registered_date_unparsed"])
-        direct = "<p><a href=\"javascript:goDownload_direct('a.hwp', '/old')\">a.hwp</a></p>"
-        record = parse_gosi_detail(detail(body='<img src="/x.png" alt="표">', links=direct), notice_id="1",
-                                   listing=row("1"))
-        self.assertEqual(record["attachments"], [{"kind": "attachment", "source_url": None, "label": "a.hwp",
-                                                  "format": "hwp"}])
-        self.assertEqual(record["review_flags"], ["attachment", "inline_image", "missing:description"])
+        direct = "<p><a href=\"javascript:goDownload_direct('a.hwp', '/old')\">a.hwp</a><a href=\"\">b.pdf</a></p>"
+        record = parse_gosi_detail(detail(body="", links=direct), notice_id="1", listing=row("1"))
+        self.assertEqual([(item["source_url"], item["label"], item["format"]) for item in record["attachments"]],
+                         [(None, "a.hwp", "hwp"), (None, "b.pdf", "pdf")])
+        self.assertEqual(record["review_flags"], ["attachment", "missing:description"])
 
     def test_detail_records_only_stated_notice_numbers(self):
         # 발행 주체마다 번호 체계가 따로라 다른 주체의 같은 번호는 남기고, 주체가 없는 번호는 주체 없이 그대로 둔다.
@@ -218,8 +234,8 @@ class GosiParserTest(unittest.TestCase):
             "해석이 갈리는 태그·주석": (detail(body="가</br>나"), row()),
             # 태그 경계 검사가 상세 폼 검사보다 먼저다.
             "해석이 갈리는 태그": (detail().replace('id="detailForm"', 'id="detailForm" action="/x" title=a`b'), row()),
-            "view_cont": (detail(body="접수기간 2026.12.01~12.05").replace('"view_cont"', '"gosi_b"'), row()),
-            "view_file": (detail().replace('"view_file"', '"gosi_b"'), row()),
+            "view_cont": (_cut(detail(), '<div class="view_cont">', "</div>\n"), row()),
+            "view_file": (_cut(detail(), '<dl class="view_file">', "</dl>"), row()),
             # template 안 짝 없는 종료 태그는 브라우저가 무시해 본문이 숨은 채로 남는다.
             "본문 영역을 확인할 수 없습니다": (detail().replace('<div class="bod_wrap">', "<template></script><div>")
                                      .replace("</div></div></form>", "</div></div></template></form>"), row()),
@@ -229,7 +245,7 @@ class GosiParserTest(unittest.TestCase):
             with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
                 parse_gosi_detail(text, notice_id="75365", listing=listed)
         moved = detail().replace('<dl class="view_file">', '<div><dl class="view_file">').replace("</dl>", "</dl></div>")
-        with self.assertRaisesRegex(ValueError, "view_file"):
+        with self.assertRaisesRegex(ValueError, "숨김"):
             parse_gosi_detail(moved, notice_id="75365", listing=row())
         with self.assertRaisesRegex(ValueError, "18자리"):
             gosi_detail_url("0")

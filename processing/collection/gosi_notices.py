@@ -5,7 +5,7 @@ import re
 from urllib.parse import quote, urlencode
 
 from .html_tokens import PinnedHTMLParser
-from .libraries import _ATTACHMENT_FORMATS, _HIDDEN_ERROR, _HIDDEN_TAGS, _NoticeParser
+from .libraries import _ATTACHMENT_FORMATS, _HIDDEN_ERROR, _HIDDEN_TAGS, _VOID_TAGS, _NoticeParser
 from .official_web import OFFICIAL_ORIGIN, _fetch
 
 LABEL = "고시·공고"
@@ -16,21 +16,57 @@ _SE_CODE = "01"
 _DETAIL_ACTION = f"/portal/saeol/gosiView.do?mId={_MENU}"
 _NOTICE_ID = re.compile(r"[1-9][0-9]{0,17}")
 _IGNORED_TAGS = {"script", "style", "template", "noscript"}
-# 읽는 영역은 2026-11-28 실제 원본에서 쓰인 태그·태그별 속성·class만 받는다. 목록은 6쪽(1·2·658쪽, 검색 2쪽, 수집 1쪽)의
-# 쪽 표시(`div.board_page`)와 목록 표, 상세는 18쪽(게시물 17건, 없는 번호 1건)의 `div.bod_view`다. 인라인 스타일은 없어 받지 않는다.
-_LABEL_ATTRS = {"div": {"class"}, "span": {"class"}, "strong": set()}
-_TABLE_ATTRS = {"table": {"class"}, "caption": set(), "thead": set(), "tbody": set(), "tr": set(),
-                "th": {"class", "scope"}, "td": {"class"}, "a": {"href", "onclick"}, "br": set()}
-_LISTING_CLASSES = set("board_page red tableSt_list row_over wp10 wp15 wp20 taL gosi_num gosi_tit gosi_dept gosi_date".split())
-_BODY_ATTRS = {"div": {"class"}, "h4": set(), "ul": set(), "li": {"class"}, "span": {"class"}, "dl": {"class"},
-               "dt": set(), "dd": set(), "p": set(), "br": set(), "img": {"alt", "src"},
-               "a": {"class", "href", "onclick", "rel", "target", "title"}}
-_BODY_CLASSES = set("bod_view view_info gosi_b view_write view_date view_hit view_cont view_file open_license clFix mB20"
-                    " bt_white_s blank".split())
-# 허용한 태그 가운데 브라우저가 시작 태그에서 열린 요소(값)를 닫는 것. 본문 영역에는 범위 경계 요소가 없어 열려 있기만 하면 닫힌다.
-_IMPLIED_CLOSE = {"div": {"p"}, "ul": {"p"}, "dl": {"p"}, "p": {"p"}, "h4": {"p", "h4"}, "li": {"li", "p"},
-                  "dt": {"dt", "dd", "p"}, "dd": {"dt", "dd", "p"}, "a": {"a"}}
-_CELL_TAGS = {"a", "br"}
+# 읽는 영역의 구조는 2026-11-28 실제 원본(목록 6쪽: 1·2·658쪽, 검색 2쪽, 수집 1쪽. 상세 27쪽: 서로 다른 18쪽,
+# 곧 게시물 17건·없는 번호 1건)에 나온 그대로만 받는다. 한 칸 들여쓰기가 중첩이고, 요소는 `태그.class[그 밖 속성 이름]`,
+# 뒤의 글자는 `*`(읽는 칸)·표본의 고정 문구·빈칸(공백만) 가운데 하나다. 자리·class 값·속성 이름이 다르거나 인라인 스타일이
+# 있으면(표본에 없었다) 거부한다. 표본 구조에는 브라우저가 시작 태그에서 요소를 암묵적으로 닫는 자리도 없다.
+_LISTING_SHAPE = """
+div.board_page *
+ span.red
+  strong *
+table.tableSt_list.row_over
+ caption *
+ thead
+  tr
+   th.wp20.gosi_num[scope] 고시공고번호
+   th.gosi_tit[scope] 제목
+   th.wp10.gosi_dept[scope] 담당부서
+   th.wp15.gosi_date[scope] 등록일
+ tbody
+  tr
+   td.gosi_num *
+    br
+   td.taL.gosi_tit
+    a[href,onclick] *
+   td.gosi_dept *
+   td.gosi_date *
+"""
+_BODY_SHAPE = """
+div.bod_view
+ h4 *
+ div.view_info.gosi_b
+  ul
+   li.view_write *
+    span *
+   li.view_date *
+    span *
+   li.view_hit *
+    span *
+ div.view_cont *
+  br
+ dl.view_file
+  dt
+   span 첨부 파일
+  dd
+   p
+    a[href] *
+    a.bt_white_s[href,onclick,target,title]
+     span.blank 바로 보기
+ div.open_license.clFix.mB20
+  a[href,rel,target,title]
+   img[alt,src]
+  p 본 공공저작물은 공공누리 제4유형: "출처표시" + 상업적 이용 및 변경 금지 조건에 따라 이용할 수 있습니다.
+"""
 _CELLS = ("gosi_num", "gosi_tit", "gosi_dept", "gosi_date")
 _TOTAL = re.compile(r"Total ([0-9]{1,18}) Page ([1-9][0-9]{0,17}) / ([1-9][0-9]{0,17})")
 _CAPTION = "고시/공고게시판 목록"
@@ -63,11 +99,31 @@ def _text(parts: list[str]) -> str:
     return " ".join("".join(parts).split())
 
 
-def _allowed(tag: str, attrs: list, allowed: dict, classes: set) -> bool:
-    # class는 브라우저처럼 ASCII 공백으로만 나눈다. 중복 속성도 표본에 없어 받지 않는다.
+def _shape(spec: str) -> dict:
+    shape, path = {}, ()
+    for line in spec.strip("\n").splitlines():
+        token, _, text = line.lstrip(" ").partition(" ")
+        element, _, names = token.rstrip("]").partition("[")
+        tag, *classes = element.split(".")
+        node = (tag, " ".join(classes) or None, tuple(names.split(",")) if names else ())
+        path = path[:len(line) - len(line.lstrip(" "))] + (node,)
+        shape[path] = text or None
+    return shape
+
+
+_LISTING_SHAPE, _BODY_SHAPE = _shape(_LISTING_SHAPE), _shape(_BODY_SHAPE)
+
+
+def _step(shape: dict, parent: tuple, tag: str, attrs: list) -> tuple | None:
+    """표본 구조에 있는 자리·class 값·속성 이름이면 새 경로를, 아니면(중복 속성 포함) None을 반환한다."""
     names = [name for name, _ in attrs]
-    return (tag in allowed and allowed[tag].issuperset(names) and len(set(names)) == len(names)
-            and (classes | {""}).issuperset(re.split(r"[\t\n\f\r ]+", dict(attrs).get("class") or "")))
+    path = parent + ((tag, dict(attrs).get("class"), tuple(sorted(set(names) - {"class"}))),)
+    return path if path in shape and len(set(names)) == len(names) else None
+
+
+def _said(rule: str | None, data: str) -> bool:
+    # 읽지 않는 자리의 글자는 화면에 보여도 버려지므로 표본의 고정 문구만 받는다.
+    return not data.strip("\t\n\f\r ") or rule == "*" or rule == " ".join(data.split())
 
 
 def gosi_listing_path(page: int) -> str:
@@ -102,16 +158,12 @@ class _ListingParser(PinnedHTMLParser):
         self.action = gosi_listing_path(page)
         self.link = re.compile(rf"javascript:boardView\('{page}', '([1-9][0-9]{{0,17}})'\);return false;")
         self.ignored: list[str] = []
-        self.in_form = self.form_seen = False
-        self.total: list[str] | None = None
-        self.total_tags: list[str] = []
+        self.in_form = self.form_seen = self.table_seen = False
+        self.paths: list[tuple] = []
+        self.parts: list[str] | None = None
         self.totals: list[str] = []
-        self.caption: list[str] | None = None
         self.captions: list[str] = []
-        self.table: list[str] = []
-        self.table_seen = False
         self.row: dict | None = None
-        self.cell: list[str] | None = None
         self.rows: list[dict] = []
 
     def fail(self):
@@ -122,121 +174,78 @@ class _ListingParser(PinnedHTMLParser):
 
     def handle_starttag(self, tag, attrs):
         super().handle_starttag(tag, attrs)
-        if self.total is not None:
-            # 쪽 표시 안은 span·strong만 받고, 종료 태그는 가장 안쪽에 열린 요소를 닫아야 한다.
-            if tag == "div" or not _allowed(tag, attrs, _LABEL_ATTRS, _LISTING_CLASSES):
-                self.fail()
-            self.total_tags.append(tag)
-            return
         values = dict(attrs)
         classes = (values.get("class") or "").split()
-        if self.table:
-            if not _allowed(tag, attrs, _TABLE_ATTRS, _LISTING_CLASSES):
-                self.fail()
-            self._table_start(tag, values, classes)
-            return
-        if tag in _IGNORED_TAGS:
-            self.ignored.append(tag)
-        if self.ignored:
-            return
-        names = [name for name, _ in attrs]
-        if tag == "form":
-            if self.in_form:
-                self.fail()
-            if values.get("id") == "listForm":
-                if (self.form_seen or names.count("id") != 1 or names.count("action") != 1
-                        or values["action"] != self.action):
-                    raise ValueError(f"{LABEL} 목록이 요청한 게시판·페이지와 일치하지 않습니다.")
-                self.in_form = self.form_seen = True
-            return
-        if not self.in_form:
-            return
-        if tag == "div" and "board_page" in classes:
-            if not _allowed(tag, attrs, _LABEL_ATTRS, _LISTING_CLASSES):
-                self.fail()
-            self.total = []
-        elif tag == "table" and "tableSt_list" in classes:
-            if self.table_seen or not _allowed(tag, attrs, _TABLE_ATTRS, _LISTING_CLASSES):
-                self.fail()
-            self.table_seen = True
-            self.table.append(tag)
-
-    def _table_start(self, tag, values, classes):
-        current = self.table[-1]
-        if self.cell is not None:
-            if tag not in _CELL_TAGS:
-                self.fail()
-            if tag == "br":
-                self.cell.append(" ")
-            else:
-                match = self.link.fullmatch(values.get("onclick") or "")
-                if match is None or self.row["cells"][-1] != "gosi_tit":
+        if not self.paths:
+            if tag in _IGNORED_TAGS:
+                self.ignored.append(tag)
+            if self.ignored:
+                return
+            names = [name for name, _ in attrs]
+            if tag == "form":
+                if self.in_form:
                     self.fail()
-                self.row["ids"].append(match[1])
-                self.table.append(tag)
-        elif tag == "caption" and current == "table":
-            self.caption = []
-            self.table.append(tag)
-        elif tag in ("thead", "tbody") and current == "table":
-            self.table.append(tag)
-        elif tag == "tr" and current in ("thead", "tbody"):
-            if current == "tbody":
-                self.row = {"cells": [], "texts": [], "ids": []}
-            self.table.append(tag)
-        elif tag in ("th", "td") and current == "tr":
-            if self.row is not None:
-                kinds = [name for name in classes if name in _CELLS]
-                if tag != "td" or len(kinds) != 1:
-                    self.fail()
-                self.row["cells"].append(kinds[0])
-                self.cell = []
-            self.table.append(tag)
-        else:
+                if values.get("id") == "listForm":
+                    if (self.form_seen or names.count("id") != 1 or names.count("action") != 1
+                            or values["action"] != self.action):
+                        raise ValueError(f"{LABEL} 목록이 요청한 게시판·페이지와 일치하지 않습니다.")
+                    self.in_form = self.form_seen = True
+                return
+            if not self.in_form or {"div": "board_page", "table": "tableSt_list"}.get(tag) not in classes:
+                return
+        # 읽는 영역은 표본 구조만 받고, 종료 태그는 가장 안쪽에 열린 요소를 닫아야 한다.
+        path = _step(_LISTING_SHAPE, self.paths[-1] if self.paths else (), tag, attrs)
+        if path is None or (tag == "table" and self.table_seen):
             self.fail()
+        if tag not in _VOID_TAGS:
+            self.paths.append(path)
+        if tag in ("div", "caption", "td"):
+            self.parts = []
+        if tag == "table":
+            self.table_seen = True
+        elif tag == "tr" and path[-2][0] == "tbody":
+            self.row = {"cells": [], "texts": [], "ids": []}
+        elif tag == "td":
+            self.row["cells"].append(classes[-1])
+        elif tag == "a":
+            match = self.link.fullmatch(values["onclick"] or "")
+            if match is None:
+                self.fail()
+            self.row["ids"].append(match[1])
+        elif tag == "br":
+            self.parts.append(" ")
 
     def handle_data(self, data):
         super().handle_data(data)
-        if self.ignored or not self.in_form:
-            return
-        for parts in (self.total, self.caption, self.cell):
-            if parts is not None:
-                parts.append(data)
+        if self.paths:
+            if not _said(_LISTING_SHAPE[self.paths[-1]], data):
+                self.fail()
+            if self.parts is not None:
+                self.parts.append(data)
 
     def handle_endtag(self, tag):
-        if self.ignored:
-            # 무시하는 요소 안의 짝 없는 종료 태그(template 안 `</style>` 등)는 브라우저가 무시하므로 깊이를 셀 수 없어 거부한다.
-            if tag in _IGNORED_TAGS and tag != self.ignored.pop():
+        if self.paths:
+            if self.paths.pop()[-1][0] != tag:
                 self.fail()
-            return
-        if not self.in_form:
-            return
-        if tag == "form":
-            if self.table or self.total is not None:
-                self.fail()
-            self.in_form = False
-        elif self.total is not None:
-            if tag != (self.total_tags[-1] if self.total_tags else "div"):
-                self.fail()
-            if self.total_tags:
-                self.total_tags.pop()
-            else:
-                self.totals.append(_text(self.total))
-                self.total = None
-        elif self.table:
-            if self.table[-1] != tag:
-                self.fail()
-            self.table.pop()
-            if tag == "caption":
-                self.captions.append(_text(self.caption))
-                self.caption = None
-            elif tag == "td" and self.cell is not None:
-                self.row["texts"].append(_text(self.cell) or None)
-                self.cell = None
+            if tag == "div":
+                self.totals.append(_text(self.parts))
+            elif tag == "caption":
+                self.captions.append(_text(self.parts))
+            elif tag == "td":
+                self.row["texts"].append(_text(self.parts) or None)
             elif tag == "tr" and self.row is not None:
                 if len(self.rows) == 100:
                     self.fail()
                 self.rows.append(self.row)
                 self.row = None
+            if tag in ("div", "caption", "td"):
+                self.parts = None
+        elif self.ignored:
+            # 무시하는 요소 안의 짝 없는 종료 태그(template 안 `</style>` 등)는 브라우저가 무시하므로 깊이를 셀 수 없어 거부한다.
+            if tag in _IGNORED_TAGS and tag != self.ignored.pop():
+                self.fail()
+        elif tag == "form":
+            self.in_form = False
 
     def finish(self, raw: bytes):
         if not isinstance(raw, bytes) or b"\x00" in raw:
@@ -246,7 +255,7 @@ class _ListingParser(PinnedHTMLParser):
             self.close()
         except (UnicodeDecodeError, AssertionError):
             self.fail()
-        if self.in_form or not self.form_seen or self.ignored or self.table or not self.table_seen:
+        if self.in_form or not self.form_seen or self.ignored or self.paths or not self.table_seen:
             self.fail()
 
 
@@ -286,7 +295,7 @@ def _download_url(arguments: tuple[str, str, str]) -> str | None:
 
 
 class _GosiParser(_NoticeParser):
-    """공지 게시판 본문 규칙에 표본 허용 목록·엄격한 중첩, 고시·공고 머리 항목과 첨부 스크립트 해석을 더한다."""
+    """공지 게시판 본문 규칙에 표본 구조·엄격한 중첩, 고시·공고 머리 항목과 첨부 스크립트 해석을 더한다."""
 
     def __init__(self, notice_id: str):
         super().__init__(label=LABEL)
@@ -296,19 +305,21 @@ class _GosiParser(_NoticeParser):
         self.downloads: list[tuple[str, str, str] | None] = []
         self.anchor = None
         self.file_section_seen = False
+        self.paths: list[tuple] = []
         self.hidden: list[str] = []
 
     def handle_starttag(self, tag, attrs):
         if not self.tags and tag in _HIDDEN_TAGS:
             self.hidden.append(tag)
-        if _IMPLIED_CLOSE.get(tag, set()).intersection(self.tags):
-            # 브라우저가 이 시작 태그에서 열린 요소를 암묵적으로 닫는다. 상위 파서는 본문 칸에서만 따라 하므로 거부한다.
-            raise ValueError(f"{LABEL} HTML 구조가 올바르지 않습니다.")
-        # 상위 파서가 태그를 넣은 뒤의 상태로 판단한다. 최상위 form은 쌓이지 않고, 첨부 영역은 `bod_view` 바로 아래 dl이다.
+        # 상위 파서가 태그를 넣은 뒤의 상태로 판단한다. 최상위 form은 쌓이지 않는다.
         super().handle_starttag(tag, attrs)
-        if self.tags and not _allowed(tag, attrs, _BODY_ATTRS, _BODY_CLASSES):
-            # 본문 영역은 상위 파서의 허용 목록보다 좁은 표본 목록만 받는다.
-            raise ValueError(_HIDDEN_ERROR.format(LABEL))
+        if self.paths or self.tags:
+            # 본문 영역은 상위 파서의 허용 목록보다 좁은 표본 구조만 받는다.
+            path = _step(_BODY_SHAPE, self.paths[-1] if self.paths else (), tag, attrs)
+            if path is None:
+                raise ValueError(_HIDDEN_ERROR.format(LABEL))
+            if len(self.tags) > len(self.paths):
+                self.paths.append(path)
         names = [name for name, _ in attrs]
         values = dict(attrs)
         if not self.tags and not self.hidden_depth and tag == "form" and values.get("id") == "detailForm":
@@ -317,58 +328,53 @@ class _GosiParser(_NoticeParser):
             self.detail_actions.append(values["action"])
         if self.hidden_depth or not self.tags:
             return
-        if tag == "dl" and self.attachment_open and len(self.tags) == 2:
+        if tag == "dl":
             # 첨부가 없는 글도 템플릿은 빈 `dl.view_file`을 출력한다(없는 번호 화면에서 확인). 영역의 유무로 형식 변경을 가린다.
             if self.file_section_seen:
                 raise ValueError(f"{LABEL} 첨부 영역이 중복되었습니다.")
             self.file_section_seen = True
-        if tag == "li" and self.tags == ["div", "div", "ul", "li"] and self.section is None:
-            classes = (values.get("class") or "").split()
+        if tag == "li" and self.section is None:
             for name, section in (("view_write", "notice_number"), ("view_hit", "department")):
-                if name in classes:
+                if values["class"] == name:
                     if section in self.parts:
                         raise ValueError(f"{LABEL} 필드가 중복되었습니다.")
                     self.section, self.section_depth, self.parts[section] = section, len(self.tags), []
-                    break
         if tag == "a" and self.attachment_open:
-            self._attachment_link(values, names)
+            self._attachment_link(values)
 
-    def _attachment_link(self, values, names):
-        if self.anchor is not None:
-            raise ValueError(f"{LABEL}의 첨부 링크가 중첩되었습니다.")
-        href, script = values.get("href") or "", values.get("onclick") or ""
-        if script.startswith("fn_egov_gosi_preview("):
-            # 바로 보기 인자는 게시물 번호와 바로 앞 첨부의 내려받기 인자를 되풀이한다. 다르면 형식 변경으로 본다.
-            match = _PREVIEW.fullmatch(script)
-            if match is None:
-                raise ValueError(f"{LABEL} 첨부 바로 보기 형식이 바뀌었습니다.")
-            if match[1] != self.notice_id:
-                raise ValueError(f"{LABEL} HTML의 번호가 요청과 일치하지 않습니다.")
-            if not self.downloads or self.downloads[-1] != match.groups()[2:]:
-                raise ValueError(f"{LABEL} 첨부 링크와 바로 보기 정보가 일치하지 않습니다.")
+    def _attachment_link(self, values):
+        self.review_flags.add("attachment")
+        if "class" not in values:
+            self.anchor = (_DOWNLOAD.fullmatch(values["href"] or ""), [])
             return
-        if not (href or script):
-            return
-        match = _DOWNLOAD.fullmatch(href) if names.count("href") == 1 and not script else None
-        self.anchor = (len(self.tags), match.groups() if match else None, [])
+        # 바로 보기 인자는 게시물 번호와 바로 앞 첨부의 내려받기 인자를 되풀이한다. 다르면 형식 변경으로 본다.
+        match = _PREVIEW.fullmatch(values["onclick"] or "")
+        if match is None:
+            raise ValueError(f"{LABEL} 첨부 바로 보기 형식이 바뀌었습니다.")
+        if match[1] != self.notice_id:
+            raise ValueError(f"{LABEL} HTML의 번호가 요청과 일치하지 않습니다.")
+        if not self.downloads or self.downloads[-1] != match.groups()[2:]:
+            raise ValueError(f"{LABEL} 첨부 링크와 바로 보기 정보가 일치하지 않습니다.")
 
     def handle_data(self, data):
         super().handle_data(data)
-        if self.anchor is not None and not self.hidden_depth:
-            self.anchor[2].append(data)
+        if self.paths and not _said(_BODY_SHAPE[self.paths[-1]], data):
+            raise ValueError(f"{LABEL} HTML 구조가 올바르지 않습니다.")
+        if self.anchor is not None:
+            self.anchor[1].append(data)
 
     def handle_endtag(self, tag):
         if not self.tags and self.hidden_depth and tag in _HIDDEN_TAGS and tag != self.hidden.pop():
             # 숨김 요소 안의 짝 없는 종료 태그(template 안 `</script>` 등)를 브라우저는 무시하는데 상위 파서는 깊이를 줄인다.
             raise ValueError(f"{LABEL} 본문 영역을 확인할 수 없습니다.")
-        depth = len(self.tags)
-        if depth and self.tags[-1] != tag:
+        if self.tags and self.tags[-1] != tag:
             # 본문 영역의 종료 태그는 가장 안쪽에 열린 요소만 닫아야 한다(빈 요소의 종료 태그 포함).
             raise ValueError(f"{LABEL} HTML 구조가 올바르지 않습니다.")
         super().handle_endtag(tag)
-        if tag != "a" or self.anchor is None or self.anchor[0] != depth:
+        del self.paths[len(self.tags):]
+        if tag != "a" or self.anchor is None:
             return
-        _, arguments, parts = self.anchor
+        match, parts = self.anchor
         self.anchor = None
         if len(self.attachments) == _MEDIA_LIMIT:
             raise ValueError(f"{LABEL}의 첨부 후보가 40개를 초과했습니다.")
@@ -376,8 +382,8 @@ class _GosiParser(_NoticeParser):
         _, dot, extension = (label or "").rpartition(".")
         extension = extension.lower()
         format_name = extension if dot and extension in _ATTACHMENT_FORMATS else None
-        self.downloads.append(arguments)
-        self.attachments.append({"kind": "attachment", "source_url": _download_url(arguments) if arguments else None,
+        self.downloads.append(match.groups() if match else None)
+        self.attachments.append({"kind": "attachment", "source_url": _download_url(match.groups()) if match else None,
                                  "label": label, "format": "jpeg" if format_name == "jpg" else format_name})
 
 
