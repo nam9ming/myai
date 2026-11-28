@@ -300,6 +300,12 @@ class YouthBatchTest(unittest.TestCase):
         self.assertEqual([item["status"] for item in receipt["items"]], ["parse_failed", "fetch_failed"])
         self.assertTrue((self.root / "partial" / "detail-9.html").exists())
         self.assertEqual(read_youth_batch(self.private, "partial"), {})
+        path = self.root / "partial" / "batch.json"
+        for value in (["9"], {"9": 1}):
+            receipt["items"][0]["web_id"] = value
+            path.write_text(json.dumps(receipt), encoding="utf-8")
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                read_youth_batch(self.private, "partial")
 
 
 if __name__ == "__main__":

@@ -98,7 +98,8 @@ def read_youth_batch(private_root: Path, name: str) -> dict[str, dict]:
         records, seen = {}, set()
         for item in items:
             policy_id = item.get("web_id") if isinstance(item, dict) else None
-            if (policy_id in seen or not isinstance(policy_id, str) or policy_id not in cards
+            # 형식 확인을 먼저 해야 손상된 목록·사전 값이 TypeError 대신 검증 실패가 된다.
+            if (not isinstance(policy_id, str) or policy_id in seen or policy_id not in cards
                     or item.get("status") not in ("parsed", "parse_failed", "fetch_failed", "not_attempted")):
                 raise ValueError(_INVALID_ARCHIVE)
             seen.add(policy_id)
