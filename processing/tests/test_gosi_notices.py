@@ -120,6 +120,10 @@ class GosiParserTest(unittest.TestCase):
                          ("<strong>", "<strong><div>x</div>"), ('"red"', '"red" class="red"')):
             with self.subTest(new=new), self.assertRaisesRegex(ValueError, "구조"):
                 parse_gosi_listing(listing("1").replace(old.encode(), new.encode(), 1), page=1)
+        # template 안 짝 없는 종료 태그는 브라우저가 무시해 목록이 숨은 채로 남는다.
+        hidden = listing("1").replace(b'<form id="listForm" name', b'<template></style><form id="listForm" name')
+        with self.assertRaisesRegex(ValueError, "목록 HTML 구조"):
+            parse_gosi_listing(hidden.replace(b"</form></body>", b"</form></template></body>"), page=1)
 
     def test_detail_accepts_only_sampled_markup_in_body(self):
         # 공지 게시판 허용 목록이 받는 표기라도 실제 고시·공고 상세에 없던 태그·속성·class는 거부한다.
@@ -215,6 +219,9 @@ class GosiParserTest(unittest.TestCase):
             "해석이 갈리는 태그": (detail().replace('id="detailForm"', 'id="detailForm" action="/x" title=a`b'), row()),
             "view_cont": (detail(body="접수기간 2026.12.01~12.05").replace('"view_cont"', '"gosi_b"'), row()),
             "view_file": (detail().replace('"view_file"', '"gosi_b"'), row()),
+            # template 안 짝 없는 종료 태그는 브라우저가 무시해 본문이 숨은 채로 남는다.
+            "본문 영역을 확인할 수 없습니다": (detail().replace('<div class="bod_wrap">', "<template></script><div>")
+                                     .replace("</div></div></form>", "</div></div></template></form>"), row()),
             "첨부 영역이 중복": (detail().replace("</dl>", '</dl><dl class="view_file"><dd></dd></dl>'), row()),
         }
         for message, (text, listed) in cases.items():

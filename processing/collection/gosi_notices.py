@@ -5,11 +5,11 @@ import re
 from urllib.parse import quote, urlencode
 
 from .html_tokens import PinnedHTMLParser
-from .libraries import _ATTACHMENT_FORMATS, _HIDDEN_ERROR, _NoticeParser
+from .libraries import _ATTACHMENT_FORMATS, _HIDDEN_ERROR, _HIDDEN_TAGS, _NoticeParser
 from .official_web import OFFICIAL_ORIGIN, _fetch
 
 LABEL = "고시·공고"
-PARSER_VERSION = "gosi-notice-parser-v2"
+PARSER_VERSION = "gosi-notice-parser-v3"
 _MENU = "0501040000"
 # 고시/공고 구분. 같은 화면의 입법예고·입찰공고는 다른 값을 쓴다.
 _SE_CODE = "01"
@@ -100,7 +100,7 @@ class _ListingParser(PinnedHTMLParser):
         super().__init__()
         self.action = gosi_listing_path(page)
         self.link = re.compile(rf"javascript:boardView\('{page}', '([1-9][0-9]{{0,17}})'\);return false;")
-        self.ignored = 0
+        self.ignored: list[str] = []
         self.in_form = self.form_seen = False
         self.total: list[str] | None = None
         self.total_tags: list[str] = []
@@ -135,7 +135,7 @@ class _ListingParser(PinnedHTMLParser):
             self._table_start(tag, values, classes)
             return
         if tag in _IGNORED_TAGS:
-            self.ignored += 1
+            self.ignored.append(tag)
         if self.ignored:
             return
         names = [name for name, _ in attrs]
@@ -203,8 +203,9 @@ class _ListingParser(PinnedHTMLParser):
 
     def handle_endtag(self, tag):
         if self.ignored:
-            if tag in _IGNORED_TAGS:
-                self.ignored -= 1
+            # 무시하는 요소 안의 짝 없는 종료 태그(template 안 `</style>` 등)는 브라우저가 무시하므로 깊이를 셀 수 없어 거부한다.
+            if tag in _IGNORED_TAGS and tag != self.ignored.pop():
+                self.fail()
             return
         if not self.in_form:
             return
@@ -297,8 +298,11 @@ class _GosiParser(_NoticeParser):
         self.downloads: list[tuple[str, str, str] | None] = []
         self.anchor = None
         self.file_section_seen = False
+        self.hidden: list[str] = []
 
     def handle_starttag(self, tag, attrs):
+        if not self.tags and tag in _HIDDEN_TAGS:
+            self.hidden.append(tag)
         if _IMPLIED_CLOSE.get(tag, set()).intersection(self.tags):
             # 브라우저가 이 시작 태그에서 열린 요소를 암묵적으로 닫는다. 상위 파서는 본문 칸에서만 따라 하므로 거부한다.
             raise ValueError(f"{LABEL} HTML 구조가 올바르지 않습니다.")
@@ -356,6 +360,9 @@ class _GosiParser(_NoticeParser):
             self.anchor[2].append(data)
 
     def handle_endtag(self, tag):
+        if not self.tags and self.hidden_depth and tag in _HIDDEN_TAGS and tag != self.hidden.pop():
+            # 숨김 요소 안의 짝 없는 종료 태그(template 안 `</script>` 등)를 브라우저는 무시하는데 상위 파서는 깊이를 줄인다.
+            raise ValueError(f"{LABEL} 본문 영역을 확인할 수 없습니다.")
         depth = len(self.tags)
         if depth and self.tags[-1] != tag:
             # 본문 영역의 종료 태그는 가장 안쪽에 열린 요소만 닫아야 한다(빈 요소의 종료 태그 포함).
