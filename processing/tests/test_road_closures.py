@@ -173,6 +173,21 @@ class CollectTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "해시"):
             rc.read_road_closure_snapshot(self.root.parent, "closures-1")
 
+    def test_selection_limit_is_checked_at_write(self):
+        # 긴 구간명이 match·record에 겹친 20페이지. 한도까지 다시 읽고 넘으면 쓰지 않는다.
+        total = rc.MAX_PAGES * rc.PAGE_SIZE
+        pages = [page([item(section="안성IC" * 50, limtPlanSeq=f"{p}-{n}") for n in range(rc.PAGE_SIZE)], page=p,
+                      total=total) for p in range(1, rc.MAX_PAGES + 1)]
+        self.collect(*pages)
+        size = len(rc.read_road_closure_snapshot(self.root.parent, "closures-1")[0])
+        with patch.object(rc, "SELECTION_MAX_BYTES", size):
+            self.collect(*pages, name="fit")
+            self.assertEqual(len(rc.read_road_closure_snapshot(self.root.parent, "fit")[0]), size)
+        with patch.object(rc, "SELECTION_MAX_BYTES", size - 1):
+            self.assertEqual(self.collect(*pages, name="over")[0]["status"], "failed")
+        self.assertIn("한도", json.loads((self.root / "over" / "closures.json").read_bytes())["error"])
+        self.assertFalse((self.root / "over" / "anseong.json").exists())
+
     def test_failure_keeps_raw_and_reason(self):
         raw = page([item()], code="LIMIT")
         result, _ = self.collect(raw)

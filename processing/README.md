@@ -616,7 +616,7 @@ GITS_SERVICE_KEY=<발급 키> python3.13 -B -m processing.collection.gits_incide
 
 공사·교통 분야의 보완 출처 두 곳을 원본·기록·안성 선택 결과로 보관한다. D03 연결은 후속이다. 2026-11-28에 공개 화면과 robots.txt를 확인했다. 공공데이터포털 robots.txt는 Googlebot 경로만 제한하고, 고속도로 공공데이터 포털은 `/bbs/`만 제한한다. 도시교통정보센터는 robots.txt가 404라 RFC 9309에 따라 제한 없음으로 봤다.
 
-**한국도로공사 공사 및 도로 차단 계획.** [공공데이터포털 15076650](https://www.data.go.kr/data/15076650/openapi.do)은 링크형 API다. 바로가기는 [제공처 상세](https://data.ex.co.kr/openapi/basicinfo/openApiInfoM?apiId=0613)로 연결된다. 인증 키는 공공데이터포털 키가 아니라 고속도로 공공데이터 포털의 인증키 발급(이메일 전송)으로 받는다. 그래서 `DATA_GO_KR_SERVICE_KEY`와 같은 방식이지만 다른 변수 `EX_OPENAPI_KEY`에서만 읽는다. **키가 없어 실제 API는 호출하지 않았고 합성 응답으로만 시험했다.**
+**한국도로공사 공사 및 도로 차단 계획.** [공공데이터포털 15076650](https://www.data.go.kr/data/15076650/openapi.do)은 링크형 API다. 바로가기는 [제공처 상세](https://data.ex.co.kr/openapi/basicinfo/openApiInfoM?apiId=0613)로 연결된다. 인증 키는 공공데이터포털이 아니라 고속도로 공공데이터 포털이 이메일로 발급하며 `EX_OPENAPI_KEY`에서만 읽는다. **키가 없어 실제 API는 호출하지 않았고 합성 응답으로만 시험했다.**
 
 ```sh
 EX_OPENAPI_KEY=<인증키> python3.13 -B -m processing.collection.road_closures --route-cd 0010 --name ex-0010-20261128
@@ -624,11 +624,11 @@ EX_OPENAPI_KEY=<인증키> python3.13 -B -m processing.collection.road_closures 
 
 - 요청: `https://data.ex.co.kr/openapi/safeDriving/construction`에 GET으로 `key`·`type=json`·`routeCd`(필수 노선번호, ASCII 숫자 4자리)·`numOfRows=100`·`pageNo`를 보낸다. 선택 인자 `cnstnStrtDates`·`cnstnEndDates`는 값 형식이 항목표에 없어 보내지 않는다. 노선번호 표는 확인하지 못했으므로 실행자가 정한다. 제공처 샘플 코드는 `0010`을 쓴다. 응답당 2 MiB, 최대 20페이지, 요청 간격 1초이며 리디렉션은 따르지 않는다.
 - 키: 요청 주소에만 붙이고 원본·기록·오류 문구에는 쓰지 않는다. 응답에 키가 원문·URL 인코딩·JSON 이스케이프·HTML 문자 참조로 있거나 `+`가 공백으로 풀린 형태로 있으면 저장 전에 거부한다. NUL이 있거나 UTF-8이 아닌 응답은 확인하기 전에 거부한다.
-- 항목: 제공처 항목표(`openApiInfoDetail`)의 출력은 18개(코드 `FIELDS`, `useRotnm`은 차단노선구간·`icNm`은 차단구간명·`blcCtnt`는 차단내용)와 봉투 `code`·`message`·`count`·`numOfRows`·`pageNo`·`pageSize`다. 설명문에는 방향·우회도로가 있지만 항목표에는 그런 이름의 항목이 없다. 그래서 방향·우회 정보를 따로 나누지 않고 구간·차단내용 원문에 둔다.
+- 항목: 제공처 항목표(`openApiInfoDetail`)의 출력은 18개(코드 `FIELDS`, `useRotnm`은 차단노선구간·`icNm`은 차단구간명·`blcCtnt`는 차단내용)와 봉투 `code`·`message`·`count`·`numOfRows`·`pageNo`·`pageSize`다. 설명문의 방향·우회도로는 항목표에 없어 나누지 않고 구간·차단내용 원문에 둔다.
 - 검증: 중복 키 없는 UTF-8 JSON 객체여야 한다. `code`는 `SUCCESS`만 성공으로 본다. 항목표에 값이 없어 같은 포털 다른 API 관례를 따랐고 미확인이다. 봉투 여섯 항목이 모두 있고 봉투 밖 키가 정확히 하나의 배열이어야 한다. 목록 키 이름은 항목표에 없어 그 이름을 `closures.json`의 `list_key`에 남긴다. `pageNo`·`numOfRows`가 요청과 같고 항목 수가 `count`로 계산한 값과 같아야 한다. 값은 문자열·정수·`null`만 받는다. 항목마다 `routeCd`가 요청과 같아야 하며, `10`과 `0010` 같은 형식 차이도 고치지 않고 실패로 남긴다.
 - 값: 원문 그대로 두고 빈 값은 `null`과 `unknown`(`missing`·`empty`)으로 남긴다. 항목표에 없는 값은 `undocumented`에 둔다. 공사 시작·종료 일자·시각은 공사·차단 일정이며 해석하지 않는다. 신청 기간이나 비용 항목은 없다.
 - 안성 판단: `rows`는 `icNm`이 자리표시가 아니고 `useRotnm` 또는 `icNm`에 `안성`이 있는 항목이다. 단, 뒤에 `면`이 붙은 `안성면`은 제외한다. 근거 열의 원문은 `match`에 둔다. `needs_review`는 항목표 열 어디든 `<`·`&`가 든 항목(`markup`)과 보이지 않는 문자가 든 항목(`invisible`, 둘 다 아래 공통 한계), `icNm`이 비었거나 `-`·`ㅡ`·`없음`·`미정` 같은 자리표시뿐인 항목(`blank_section`, 저장 값은 원문 그대로. 글자·숫자 여부는 파이썬 판과 무관하게 유니코드 3.2로 보아 그 뒤에 생긴 문자뿐인 값, 한글 자모·채움 문자뿐인 값(NFD 한글 포함)도 든다. 줄표처럼 보이는 가타카나 `ー`·한자 `一`는 잡지 못한다), 구간 열에 `안성면` 같은 표기만 있는 항목(`mention`), 본부·지사·차단내용·공사내용에만 `안성`이 있는 항목(`other_mention`)이다. 본부·지사는 관할이라 위치 근거로 쓰지 않는다. 구간이 안성시를 지나도 구간 글자에 `안성`이 없으면 고르지 않는다. `useRotnm`은 노선명뿐일 수 있어 구간 유무는 `icNm`으로 일치보다 먼저 본다.
-- 보관: `data/private/collection-road-closures/<name>/`에 `page-N.json`, 완료 후 `anseong.json`, 마지막으로 `closures.json`을 쓴다. 기록에는 키를 뺀 요청 주소·수신 시각·해시·실패 사유가 남는다. `read_road_closure_snapshot`은 원본 해시와 검증·선택을 다시 수행해 대조한다. 종료 0은 완료, 2는 실패 기록 보관, 1은 입력·키 설정·저장 오류다. `count`가 0이면 잘못된 노선번호와 차단 계획 없음을 구별할 수 없어 실패(종료 2)로 남긴다. 앞 페이지 항목이 다시 오면 빠진 항목이 있을 수 있어 실패로 남긴다.
+- 보관: `data/private/collection-road-closures/<name>/`에 `page-N.json`, 완료 후 `anseong.json`, 마지막으로 `closures.json`을 쓴다. 기록에는 키를 뺀 요청 주소·수신 시각·해시·실패 사유가 남는다. `anseong.json`이 다시 읽기 한도(40 MiB)를 넘으면 쓰지 않고 실패로 남긴다. `read_road_closure_snapshot`은 원본 해시와 검증·선택을 다시 수행해 대조한다. 종료 0은 완료, 2는 실패 기록 보관, 1은 입력·키 설정·저장 오류다. `count`가 0이면 잘못된 노선번호와 차단 계획 없음을 구별할 수 없어 실패(종료 2)로 남긴다. 앞 페이지 항목이 다시 오면 빠진 항목이 있을 수 있어 실패로 남긴다.
 
 **경찰청 도시교통정보센터 TCS 공사정보.** [TCS 레퍼런스](https://www.utic.go.kr/guide/utisRefTCS.do)는 경찰서에 신고된 공사정보를 하루 3회 갱신하는 CSV로 제공한다. 샘플 URL은 `http://www.utic.go.kr/guide/tcsOpenData.do?key=(인증키)`다. 인증키는 [개방데이터 신청](https://www.utic.go.kr/guide/newUtisDataWrite.do)에 소속·이메일·신청 IP·목적을 내고 받는다. 그래서 내려받기를 자동화하지 않고 운영자가 받은 CSV만 들여온다. 신청 화면의 준수사항은 신청 목적 외 사용 금지와 UTIC 제공 정보 표기다. 공개 전에 이 조건을 확인한다.
 

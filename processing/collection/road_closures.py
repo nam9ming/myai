@@ -41,6 +41,8 @@ PARSER_VERSION = "ex-construction-parser-v7"
 RESPONSE_MAX_BYTES = 2 * 1024 * 1024
 PAGE_SIZE = 100
 MAX_PAGES = 20
+# anseong.json을 쓰고 다시 읽는 공통 한도.
+SELECTION_MAX_BYTES = RESPONSE_MAX_BYTES * MAX_PAGES
 ENVELOPE = ("code", "message", "count", "numOfRows", "pageNo", "pageSize")
 FIELDS = ("limtPlanDates", "limtPlanSeq", "hqdrNm", "mtnofKorNm", "cnstnStrtDates", "cnstnStrtTimes",
           "cnstnEndDates", "cnstnEndTimes", "routeCd", "useRotnm", "icNm", "endBlcPntVal", "strtBlcPntVal",
@@ -224,6 +226,8 @@ def _selection(route: str, matched: list, review: list) -> tuple[bytes, dict]:
     document = {"schema_version": SELECTION_SCHEMA, "parser_version": PARSER_VERSION, "route_cd": route,
                 "rule": RULE, "rows": matched, "needs_review": review}
     raw = (json.dumps(document, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    if len(raw) > SELECTION_MAX_BYTES:
+        raise ValueError(f"안성 구간 선택 결과가 다시 읽기 한도 {SELECTION_MAX_BYTES}바이트를 넘어 저장하지 않습니다.")
     return raw, {"file": "anseong.json", "sha256": hashlib.sha256(raw).hexdigest(),
                  "rows": len(matched), "needs_review": len(review)}
 
@@ -321,7 +325,7 @@ def read_road_closure_snapshot(private_root: Path, name: str) -> tuple[bytes, di
                 or receipt.get("list_key") != list_key):
             raise ValueError("고속도로 차단 계획 수집 기록의 전체 건수가 맞지 않습니다.")
         selection, computed = _selection(route, matched, review)
-        if (read_capture_file(directory, "anseong.json", RESPONSE_MAX_BYTES * MAX_PAGES) != selection
+        if (read_capture_file(directory, "anseong.json", SELECTION_MAX_BYTES) != selection
                 or receipt.get("selection") != computed):
             raise ValueError("안성 구간 선택 결과가 응답 원본 또는 수집 기록과 다릅니다.")
         return selection, receipt
