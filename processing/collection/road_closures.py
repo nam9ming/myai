@@ -37,7 +37,7 @@ CLOSURE_SECTION = "collection-road-closures"
 CLOSURE_ROOT = CAPTURE_ROOT.with_name(CLOSURE_SECTION)
 SCHEMA = "citizen-road-closure-snapshot-v1"
 SELECTION_SCHEMA = "road-closure-anseong-v1"
-PARSER_VERSION = "ex-construction-parser-v6"
+PARSER_VERSION = "ex-construction-parser-v7"
 RESPONSE_MAX_BYTES = 2 * 1024 * 1024
 PAGE_SIZE = 100
 MAX_PAGES = 20
@@ -48,7 +48,7 @@ FIELDS = ("limtPlanDates", "limtPlanSeq", "hqdrNm", "mtnofKorNm", "cnstnStrtDate
 # 안성 판단은 차단노선구간·차단구간명만 쓴다. 본부·지사는 관할이라 위치 근거가 아니다.
 SECTION_FIELDS = ("useRotnm", "icNm")
 OTHER_FIELDS = ("hqdrNm", "mtnofKorNm", "blcCtnt", "cnstnCtnt")
-RULE = "useRotnm 또는 icNm에 '안성' 포함('안성면' 제외)"
+RULE = "icNm이 자리표시가 아니고 useRotnm 또는 icNm에 '안성' 포함('안성면' 제외)"
 # 항목표에 값이 없다. 같은 포털 다른 API의 'SUCCESS'만 성공으로 보고 다르면 거부한다(미확인).
 SUCCESS_CODES = ("SUCCESS",)
 _ANSEONG = re.compile("안성(?!면)")
@@ -208,12 +208,12 @@ def select_items(page: int, items: list[dict], matched: list, review: list) -> N
         fields, place = item["fields"], {"page": page, "position": position}
         if reason := unreadable(fields, FIELDS):
             review.append({**place, "reason": reason, "mentions": _mentions(fields, FIELDS, "안성"), "record": item})
-        elif found := _mentions(fields, SECTION_FIELDS, _ANSEONG):
-            matched.append({**place, "match": {name: fields[name] for name in found}, "record": item})
         elif _no_location(fields["icNm"]):
-            # useRotnm은 노선명뿐일 수 있어 icNm이 비거나 자리표시뿐이면 구간 근거가 없다. 저장 값은 원문 그대로다.
+            # useRotnm은 노선명뿐일 수 있어 icNm이 비거나 자리표시뿐이면 일치해도 구간 근거가 없다. 저장 값은 원문 그대로다.
             review.append({**place, "reason": "blank_section", "mentions": _mentions(fields, FIELDS, "안성"),
                            "record": item})
+        elif found := _mentions(fields, SECTION_FIELDS, _ANSEONG):
+            matched.append({**place, "match": {name: fields[name] for name in found}, "record": item})
         elif found := _mentions(fields, SECTION_FIELDS, "안성"):
             review.append({**place, "reason": "mention", "mentions": found, "record": item})
         elif found := _mentions(fields, OTHER_FIELDS, "안성"):
