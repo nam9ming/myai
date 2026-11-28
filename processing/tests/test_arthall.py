@@ -119,6 +119,9 @@ class ArthallDetailTest(unittest.TestCase):
         self.assertEqual(second["text"], "- 안성시민 15% * 인증 후 안내 증빙 필요")
         self.assertEqual(second["links"], ["https://example.invalid/pass"])
         self.assertEqual(record["review_flags"], [])
+        adjacent = '<div id="tap_wrapper1" class="tap_wrapper"><div>안성시민 15%</div><div>경로 50%</div></div>'
+        self.assertEqual(parse_detail(detail(tabs="", sections=adjacent), concert_id="3809")["sections"][0]["text"],
+                         "안성시민 15% 경로 50%")
 
     def test_missing_values_stay_null_with_flags(self):
         fields = [("장르", ""), ("기간", "2026-12-10 ~ 2026-12-09"), ("티켓 오픈 일시", " ~ "), ("입장권", "무료"),
@@ -151,7 +154,14 @@ class ArthallDetailTest(unittest.TestCase):
             "없는 탭": detail(sections=""),
             "다른 화면": detail(action="/arthall/other/list.do"),
             "값 없는 항목": detail(fields=[("장소", "a")]).replace('<span class="sub">a</span>', ""),
+            "안내 안 태그": detail(tabs="", sections='<div id="tap_wrapper1" class="tap_wrapper"><p class="p_notice">'
+                                   '모바일<div>본문1</div></div><div id="tap_wrapper2" class="tap_wrapper"><div>본문2</div></div>'),
+            "안내 밖 닫힘": detail(tabs="", sections='<div id="tap_wrapper1" class="tap_wrapper"><div>'
+                                   '<p class="p_notice">모바일</div>본문</p></div>'),
         }
+        for markup in ("<!-- a --!>보이는글<!-- b -->", "<!-->보이는글<!-- b -->", "<!--->보이는글<!-- b -->", "<!-- 끝없음",
+                       "<![CDATA[x]]>보이는글", "<!x>", '<!DOCTYPE html PUBLIC "x>">', "<?x>"):
+            cases[markup] = detail(tabs="", sections=f'<div id="tap_wrapper1" class="tap_wrapper"><div>{markup}</div></div>')
         for name, text in cases.items():
             with self.subTest(name), self.assertRaises(ValueError):
                 parse_detail(text, concert_id="3809")

@@ -88,6 +88,25 @@ class _Parser(HTMLParser):
             self.fail()
         return self
 
+    def parse_comment(self, i, report=True):
+        # 주석 끝을 브라우저처럼 첫 `-->`로 고정한다(3.13.5는 `--\s*>`, 3.14는 `--!?>`에서 닫아 결과가 갈렸다).
+        # 해석이 갈리는 `<!-->`·`<!--->`·`--!>`와 닫히지 않은 주석(문서를 한 번에 넣으므로 문서 끝까지)은 거부한다.
+        end = self.rawdata.find("-->", i + 4)
+        if end < 0 or self.rawdata.startswith((">", "->"), i + 4) or "--!>" in self.rawdata[i + 4:end]:
+            self.fail()
+        return end + 3
+
+    def parse_html_declaration(self, i):
+        # 실제 문서의 `<!DOCTYPE html>`만 받는다. CDATA·가짜 주석·따옴표 든 선언은 버전마다 읽는 범위가 다르다.
+        end = self.rawdata.find(">", i + 2)
+        if end < 0 or re.fullmatch(r"<!doctype html", self.rawdata[i:end], re.I) is None:
+            self.fail()
+        return end + 1
+
+    def parse_pi(self, i):
+        # 실제 문서에 없고, 닫히지 않은 `<?`는 Python 버전마다 읽는 범위가 다르다.
+        self.fail()
+
     def start_capture(self, tag, allowed, done):
         self.capture = [tag, 1, [], allowed, done]
 
@@ -104,7 +123,8 @@ class _Parser(HTMLParser):
             if tag not in allowed:
                 raise ValueError(f"{self.error} 허용하지 않는 태그: {tag[:20]}")
             self.capture[1] += tag == end
-            if tag in _BREAK_TAGS:
+            # div는 본문 섹션에서만 허용되고, 브라우저처럼 블록 경계에서 낱말을 띄운다.
+            if tag in _BREAK_TAGS or tag == "div":
                 parts.append(" ")
             self.capture_start(tag, values, classes)
             return
@@ -123,7 +143,7 @@ class _Parser(HTMLParser):
     def handle_endtag(self, tag):
         if self.capture is not None:
             end, _, parts, _, done = self.capture
-            if tag in _BREAK_TAGS:
+            if tag in _BREAK_TAGS or tag == "div":
                 parts.append(" ")
             self.capture_end(tag)
             if tag == end:
@@ -358,7 +378,8 @@ class _DetailParser(_Parser):
         _check_hidden(values)
         if self.section is None:
             return
-        if "tap_wrapper" in classes:
+        # 안내 문단 안 태그는 브라우저가 p를 암묵적으로 닫아 뒤 본문이 보일 수 있다. 실제 안내는 글자뿐이었다.
+        if "tap_wrapper" in classes or self.notice:
             self.fail()
         if tag == "p" and "p_notice" in classes:
             self.notice = True
@@ -368,6 +389,8 @@ class _DetailParser(_Parser):
             self.section["links"].append(values.get("href"))
 
     def capture_end(self, tag):
+        if self.notice and tag != "p":
+            self.fail()
         if tag == "p":
             self.notice = False
 
