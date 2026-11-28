@@ -53,7 +53,6 @@ class SportsParserTest(unittest.TestCase):
         for message, raw in cases.items():
             with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
                 parse_listing(raw)
-        # 링크·안·조상은 실제 목록에서 본 표기만 받는다.
         link = f'<a href="{_LINK.format(2)}">x</a>'
         for extra in (f'<div style="display: none"><div></div>{link}</div>', f'<p>{link}</p>', f"<details open>{link}</details>",
                       link.replace("<a", "<a hidden"), link.replace("<a", "<a popover"), f'<div popover>{link}</div>',
@@ -62,13 +61,13 @@ class SportsParserTest(unittest.TestCase):
                       *(f'<{tag}>{link}</{tag}>' for tag in "details dialog object template ul".split())):
             with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, "허용 목록 밖"):
                 parse_listing(listing("1", extra=extra))
-        # 경계가 갈리는 중첩, 뒤에 나온 body 속성, 켈빈 기호(U+212A)가 든 태그 이름도 거부한다.
+        # 경계가 갈리는 중첩, 뒤에 나온 body 속성, 켈빈 기호(U+212A) 태그 이름도 거부한다.
         for extra in ("<div><span></div></span>", f"<div hidden><table><tr><td></div>{link}", "<div>", "<body hidden>",
                       "<frameset></frameset>", f"<lin\u212a hidden>{link}", f"<ak hidden>x</a\u212a>{link}"):
             with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, "목록 HTML 구조"):
                 parse_listing(listing("1", extra=extra))
 
-    def test_detail_keeps_display_text_and_keyword_lines_verbatim(self):
+    def test_detail_keeps_display_text_verbatim(self):
         body = ("<p>예약 일정 : 3월 2일(월) 09:00</p><p>관내 거주자 <strong>우선</strong>&nbsp;배정</p>"
                 "<div>3월 9일 정기 점검으로 예약 중단<br>이용 시간 06:00~22:00</div>"
                 '<p><a href="/board/download.do?id=1">안내문.hwp</a></p>')
@@ -84,7 +83,7 @@ class SportsParserTest(unittest.TestCase):
         self.assertEqual(record["links"], [{"href": "/board/download.do?id=1", "text": "안내문.hwp"}])
         self.assertEqual(record["review_flags"], ["link", "markup_unverified", "source_newline_joined"])
 
-    def test_inline_white_space_that_keeps_newlines_is_rejected(self):
+    def test_newline_keeping_white_space_is_rejected(self):
         # 브라우저는 이 줄바꿈을 줄로 보인다.
         text = "예약기간: 3.2.~3.6.\n이용기간: 4.1.~6.30."
         for style in ("white-space: pre", "white-space:pre-wrap", "WHITE-SPACE: PRE-LINE", "white-space: break-spaces",
@@ -99,7 +98,6 @@ class SportsParserTest(unittest.TestCase):
         self.assertEqual(parsed('<p style="white-space: normal">가</p><br style="white-space: normal">나')["body_lines"], ["가", "나"])
 
     def test_boxes_break_lines_and_unseen_layout_is_rejected(self):
-        # 실제 원본에 없던 배치는 받지 않는다.
         for style in ("display:table-cell", "display: inherit", "float: left", "position: fixed", "visibility: collapse",
                       "display:inline-block;width:100%", "display:inline-block;inline-size:100%",
                       "display:inline-block;min-inline-size:100%", "display:inline-block;padding-right:100%",
@@ -112,7 +110,7 @@ class SportsParserTest(unittest.TestCase):
                 '<strong style="font-variant-position: inherit; mso-text-raise: 0pt">마</strong></p>')
         self.assertEqual(parsed(body)["body_lines"], ["예약기간: 3.2.", "이용기간: 4.1.~6.30. 매주 월요일 휴관", "다", "라마"])
 
-    def test_joined_source_newlines_are_flagged_for_review(self):
+    def test_joined_source_newlines_are_flagged(self):
         # 외부 CSS의 white-space는 알 수 없어 합친 줄을 사람이 대조한다.
         record = parsed("<p>예약기간: 3.2.~3.6.\n이용기간: 4.1.~6.30.</p>")
         self.assertEqual(record["body_lines"], ["예약기간: 3.2.~3.6. 이용기간: 4.1.~6.30."])
@@ -123,7 +121,7 @@ class SportsParserTest(unittest.TestCase):
         self.assertEqual((record["body_lines"], record["review_flags"]), (["가", "나"], ["markup_unverified"]))
         self.assertIn("source_newline_joined", parsed(title="접수기간 3.2.\r이용기간 4.1.")["review_flags"])
 
-    def test_image_only_restriction_is_flagged_for_review(self):
+    def test_image_only_restriction_is_flagged(self):
         record = parse_detail(detail("111", '<p><img src="/upload/limit.jpg" alt="이용 제한 안내"></p>',
                                      title="체육관 이용 제한 안내"), seq="111")
         self.assertEqual(record["body_lines"], [])
@@ -161,7 +159,6 @@ class SportsParserTest(unittest.TestCase):
                      page.replace("<h4>", '<h4 class="blind">')):
             with self.subTest(text=text), self.assertRaisesRegex(ValueError, "구조"):
                 parse_detail(text, seq="96")
-        # 제목·본문의 조상도 실제 원본에서 본 표기만 받는다.
         for wrapper in ("<div hidden>", '<div style="display:none">', "<details>", "<div popover>", "<template>",
                         '<div style="height: 50px">'):
             tag = wrapper[1:].split()[0].strip(">")
@@ -183,7 +180,7 @@ class SportsParserTest(unittest.TestCase):
                     b"User-agent: *\nDisallow: index.do\n", b"User-agent: yeogi-it\nAllow: https://x/\n",
                     # RFC 9309의 공백은 SP·HTAB뿐이다.
                     *(f"User-agent: *\nDisallow: /index\nAllow: /index.do{c}\n".encode() for c in "\xa0\u3000\x85\x1c\u2028"),
-                    # 토큰 뒤에 글자가 붙은 User-agent 값과 Disallow 오타는 허용 쪽으로 판정되므로 멈춘다.
+                    # 토큰 뒤에 글자가 붙은 User-agent와 Disallow 오타는 허용 쪽으로 판정되므로 멈춘다.
                     b"User-agent: yeogi-it, otherbot\nDisallow: /\n", b"User-agent: yeogi-it;\nDisallow: /\n",
                     b"User-agent: * all\nDisallow: /\n", b"User-agent: *\nDisalow: /\n",
                     b"User-agent: *\nDissallow: /\n", b"User-agent: *\nDisallowed: /index.do\n"):
@@ -191,7 +188,7 @@ class SportsParserTest(unittest.TestCase):
                 robots_rules(raw)
 
     def test_robots_follow_rfc_9309_on_every_python(self):
-        # 표준 robotparser가 3.13 또는 3.14에서 허용하던 경우 등이다.
+        # 표준 robotparser가 3.13·3.14에서 허용하던 경우 등이다.
         for raw, listing_allowed in (
             (b"User-agent: *\nAllow: /\nDisallow: /index.do\n", False),
             (b"User-agent: *\nDisallow: /x\n\nUser-agent: *\nDisallow: /index.do\n", False),
@@ -218,10 +215,10 @@ class SportsBatchTest(unittest.TestCase):
     def setUp(self):
         self.private = Path(self.enterContext(TemporaryDirectory())).resolve()
         self.root = self.private / sports_batch.SPORTS_SECTION
-        self.sleep = self.enterContext(patch("processing.collection.sports_batch.sleep"))
-        self.robots = self.enterContext(patch("processing.collection.sports_batch.fetch_robots", return_value=ROBOTS))
-        self.listing = self.enterContext(patch("processing.collection.sports_batch.fetch_listing"))
-        self.detail = self.enterContext(patch("processing.collection.sports_batch.fetch_detail"))
+        self.sleep = self.enterContext(patch.object(sports_batch, "sleep"))
+        self.robots = self.enterContext(patch.object(sports_batch, "fetch_robots", return_value=ROBOTS))
+        self.listing = self.enterContext(patch.object(sports_batch, "fetch_listing"))
+        self.detail = self.enterContext(patch.object(sports_batch, "fetch_detail"))
         self.detail.side_effect = lambda seq, **_options: detail(seq).encode()
 
     def capture(self, name="run", **limits):
@@ -229,7 +226,18 @@ class SportsBatchTest(unittest.TestCase):
         receipt = json.loads((self.root / name / "batch.json").read_text(encoding="utf-8"))
         return summary, receipt, self.root / name
 
-    def test_capture_keeps_raw_and_records_then_rereads_archive(self):
+    def rejects(self, name, filename, data=b"x"):
+        path = self.root / name / filename
+        original, data = path.read_bytes(), data if isinstance(data, bytes) else json.dumps(data).encode()
+        for change in (lambda: path.write_bytes(data), path.unlink):
+            change()
+            with self.assertRaises(ValueError):
+                read_sports_batch(self.private, name)
+            path.write_bytes(original)
+            path.chmod(0o600)
+            read_sports_batch(self.private, name)
+
+    def test_capture_then_verify_archive(self):
         self.listing.return_value = listing("111", "96")
         summary, receipt, directory = self.capture()
         self.assertEqual(summary, {
@@ -247,6 +255,7 @@ class SportsBatchTest(unittest.TestCase):
         self.assertEqual(list(assets), ["111", "96"])
         self.assertEqual(assets["96"]["raw_asset_path"], "collection-sports-notices/run/detail-96.html")
         self.assertEqual(assets["96"]["record"], parsed["record"])
+        self.rejects("run", "batch.json", {**receipt, "items": [], "selected": 0, "parsed": 0})
 
         changed = dict(parsed, record={**parsed["record"], "title": "바뀐 제목"})
         (directory / "parsed-96.json").write_text(json.dumps(changed, ensure_ascii=False), encoding="utf-8")
@@ -256,7 +265,7 @@ class SportsBatchTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "해시"):
             read_sports_batch(self.private, "run")
 
-    def test_unconfirmed_robots_stops_before_page_requests(self):
+    def test_unconfirmed_robots_stops_requests(self):
         for name, side_effect, status in (
             ("blocked", SourceHTTPError(400, "체육시설 robots.txt"), "fetch_failed"),
             ("html", [b"<html>Request Blocked</html>"], "parse_failed"),
@@ -269,6 +278,10 @@ class SportsBatchTest(unittest.TestCase):
                                  ("partial", "robots_not_allowed", 0))
                 self.assertEqual((receipt["robots"]["status"], receipt["pages"]), (status, []))
                 self.assertEqual(read_sports_batch(self.private, name), {})
+                for change in ({"status": "complete"}, {"robots": {**receipt["robots"], "status": "allowed"}}):
+                    self.rejects(name, "batch.json", {**receipt, **change})
+                if name != "blocked":
+                    self.rejects(name, "robots.txt")
         self.assertIn("HTTP 응답 오류(400)", json.loads((self.root / "blocked" / "batch.json").read_text())["robots"]["error"])
         self.listing.assert_not_called()
         self.detail.assert_not_called()
@@ -285,6 +298,10 @@ class SportsBatchTest(unittest.TestCase):
         self.assertEqual(receipt["stop_http_status"], 429)
         self.assertEqual([call.args for call in self.detail.call_args_list], [("1",), ("3",)])
         self.assertEqual(read_sports_batch(self.private, "run"), {})
+        for filename in ("robots.txt", "list-1.html", "detail-1.html"):
+            self.rejects("run", filename)
+        receipt["items"][0]["status"] = "fetch_failed"
+        self.rejects("run", "batch.json", receipt)
 
     def test_waf_block_and_crawl_delay(self):
         self.robots.return_value = b"User-agent: *\nCrawl-delay: 30\nDisallow: /admin/\n"
@@ -301,6 +318,9 @@ class SportsBatchTest(unittest.TestCase):
         summary, receipt, directory = self.capture()
         self.assertEqual((summary["discovery_status"], receipt["pages"][0]["status"]), ("failed", "parse_failed"))
         self.assertTrue((directory / "list-1.html").exists())
+        self.rejects("run", "list-1.html")
+        receipt["pages"][0]["status"] = "fetch_failed"
+        self.rejects("run", "batch.json", receipt)
         self.detail.assert_not_called()
 
     def test_cli_exit_codes(self):

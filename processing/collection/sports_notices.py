@@ -24,12 +24,11 @@ _PRODUCT = USER_AGENT.split("/")[0]  # RFC 9309 그룹은 제품 토큰으로 �
 # 다섯 자리를 넘는 값은 sleep 한도를 넘을 수 있어 읽지 않는다.
 _CRAWL_DELAY = re.compile(r"[0-9]{1,5}(?:\.[0-9]+)?")
 _VOID_TAGS = frozenset("area base br col embed hr img input link meta source track wbr".split())
-# 읽는 영역(목록의 상세 링크, 상세의 h4·div.view_cont, seq 입력)과 그 안·조상은 아래 허용 목록만 받는다.
-# 안성시 누리집 실제 원본(README)에서 쓰인 표기만 옮겼다.
+# 읽는 영역(상세 링크, h4·div.view_cont, seq 입력)과 그 안·조상은 실제 원본(README)에서 본 표기만 받는다.
 _BODY = {"a": "href style target title", "br": "style", "div": "class data-hjsonver data-jsonlen id style", "h1": "",
          "h2": "", "h3": "", "img": "alt height src style width", "li": "", "p": "class data-pm-slice style",
          "span": "lang style", "strong": "style", "u": "", "ul": ""}
-_TITLE = {"h4": ""}  # 실제 제목 h4에는 속성도, 안의 태그도 없었다.
+_TITLE = {"h4": ""}
 _FIELD = {"input": "id name type value"}
 _LINK = {"a": "href onclick"}
 _LINK_TEXT = {"b": "", "span": "class"}
@@ -75,7 +74,7 @@ _INVALID_DETAIL = "체육시설 공지 상세 HTML 구조가 예상과 다릅니
 _INVALID_LISTING = "체육시설 공지 목록 HTML 구조가 올바르지 않습니다."
 _INVALID_BODY = "체육시설 공지 본문에 허용하지 않는 태그·속성이 있습니다."
 _CONCEALED = "체육시설 공지 목록의 상세 링크나 그 조상에 허용 목록 밖 태그·속성이 있습니다."
-# 원문 줄을 고르는 검색어(공백 무시). 줄을 해석하지 않는다.
+# 원문 줄을 고르는 검색어(공백 무시).
 KEYWORD_GROUPS = {
     "reservation_schedule": ("예약일정", "예약기간", "예약일시", "예약접수", "예약개시", "예약오픈", "예약시작",
                              "접수기간", "신청기간"),
@@ -91,7 +90,7 @@ def _seq(value: str) -> str:
 
 
 def _detail_path(seq: str) -> str:
-    # urlencode는 `/`를 `%2F`로 바꿔 조사 기록의 실제 주소(cp=%2Fboard%2Fview.do)와 같아진다.
+    # urlencode가 `/`를 `%2F`로 바꿔 실제 주소(cp=%2Fboard%2Fview.do)와 같아진다.
     return "/index.do?" + urlencode({**_DETAIL_QUERY, "seq": _seq(seq)})
 
 
@@ -112,15 +111,12 @@ def fetch_detail(seq: str, *, limit: int) -> bytes:
 
 
 def robots_rules(raw: bytes) -> dict:
-    """HTTP 200으로 받은 robots.txt를 RFC 9309대로 읽어 적용할 규칙과 Crawl-delay를 돌려준다.
-
-    표준 라이브러리 robotparser는 판(3.13·3.14)마다 결과가 달라 쓰지 않는다.
-    """
+    """RFC 9309대로 적용할 규칙과 Crawl-delay를 읽는다. robotparser는 3.13·3.14마다 결과가 달라 쓰지 않는다."""
     try:
         text = raw.decode("utf-8-sig")
     except UnicodeDecodeError:
         raise ValueError("체육시설 robots.txt를 UTF-8로 읽을 수 없습니다.") from None
-    # RFC 9309의 줄 끝은 CR·LF, 공백은 SP·HTAB뿐이다. 주석 밖의 다른 공백 문자는 값이 갈려 규칙 줄로 받지 않는다.
+    # RFC 9309의 줄 끝은 CR·LF, 공백은 SP·HTAB뿐이다. 주석 밖 다른 공백 문자는 규칙 줄로 받지 않는다.
     lines = [line.split("#", 1)[0].strip(" \t") for line in re.split(r"\r\n?|\n", text)]
     groups: list[tuple[set[str], list[tuple[str, str]]]] = []
     for line in filter(None, lines):
@@ -129,7 +125,7 @@ def robots_rules(raw: bytes) -> dict:
             raise ValueError("체육시설 robots.txt에 규칙이 아닌 줄이 있어 허용 여부를 확정할 수 없습니다.")
         key, value = match[1].lower(), match[2].strip()
         if key == "user-agent":
-            # 제품 토큰이나 `*` 뒤에 다른 글자가 붙은 값(`yeogi-it, x`·`* all`)은 그룹이 갈려 허용 쪽으로 판정되므로 멈춘다.
+            # `yeogi-it, x`·`* all`처럼 토큰 뒤에 글자가 붙은 값은 허용 쪽으로 판정되므로 멈춘다.
             token = re.match(r"\*|[A-Za-z_-]*", value)[0].lower()
             if token in ("*", _PRODUCT) and value.split("/", 1)[0].strip().lower() != token:
                 raise ValueError("체육시설 robots.txt의 User-agent 값을 확정할 수 없습니다.")
@@ -187,7 +183,7 @@ def allowed(rules: dict, url: str) -> bool:
 
 
 def _allowed(rules: dict, tag: str, attrs) -> list | None:
-    """태그·속성 이름·인라인 스타일 선언이 모두 허용 목록 안이면 선언 (이름, 값) 목록을, 아니면 None을 돌려준다."""
+    """태그·속성·인라인 스타일이 모두 허용 목록 안이면 선언 (이름, 값) 목록을, 아니면 None을 돌려준다."""
     names = [name for name, _ in attrs]
     # 속성이 중복되면 브라우저는 첫 값을, 이 파서는 마지막 값을 쓴다. CSS 주석·이스케이프는 선언 경계와 이름을 바꾼다.
     style = dict(attrs).get("style") or ""
@@ -282,7 +278,7 @@ def _listed_seq(href: str) -> str | None:
     """이 호스트 `index.do`의 seq 링크면 번호를 돌려준다. seq가 있는데 공지 상세 형식이 아니면 형식 변경으로 본다."""
     try:
         parts = urlsplit(href.strip())
-    except ValueError:  # 주소로 읽을 수 없는 링크(예: 깨진 IPv6 호스트)는 이 호스트의 공지 링크가 아니다.
+    except ValueError:  # 깨진 주소(IPv6 호스트 등)는 이 호스트의 공지 링크가 아니다.
         return None
     if (parts.scheme not in ("", "http", "https") or parts.netloc not in ("", HOST)
             or parts.path not in ("index.do", "/index.do", "./index.do")):
@@ -298,10 +294,7 @@ def _listed_seq(href: str) -> str | None:
 
 
 def parse_listing(raw: bytes) -> list[str]:
-    """목록 1쪽의 공지 번호를 문서 순서대로 돌려준다. 고정 글·전체 페이지 수는 표시 형식을 몰라 읽지 않는다.
-
-    상세 링크와 그 안·조상에 허용 목록 밖 표기가 있으면 화면에 없을 수 있어 거부한다.
-    """
+    """목록 1쪽의 공지 번호를 문서 순서대로 돌려준다. 링크와 그 안·조상의 허용 목록 밖 표기는 숨김일 수 있어 거부한다."""
     try:
         text = raw.decode("utf-8-sig")
     except (AttributeError, UnicodeDecodeError):
@@ -403,7 +396,6 @@ def parse_detail(text: str, *, seq: str) -> dict:
 
     title = parser.titles[0]
     compact = [(line, "".join(line.split())) for line in (title, *lines)]
-    # 실제 마크업을 확인하기 전까지 모든 기록은 사람 확인 대상이다.
     flags = {"markup_unverified"}
     if parser.images:
         flags.add("inline_image")

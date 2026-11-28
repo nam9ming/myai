@@ -25,7 +25,6 @@ SPORTS_ROOT = CAPTURE_ROOT.with_name(SPORTS_SECTION)
 BATCH_SCHEMA = "citizen-sports-notice-batch-v1"
 RECORD_SCHEMA = "citizen-sports-notice-v1"
 BOARD = "notice"
-_ITEM_STATUSES = ("parsed", "parse_failed", "fetch_failed", "not_attempted")
 _ROBOTS_BLOCKED = "robots.txt가 이 상세 주소를 허용하지 않습니다."
 # 이 호스트의 차단 화면은 HTTP 400이다. 공통 중단 상태(web_batch)는 두고 여기서만 멈춘다.
 _WAF_BLOCKED = str(SourceHTTPError(400, "체육시설 공지 상세"))
@@ -41,7 +40,7 @@ SOURCE = WebSource(
     listing_method="GET",
     listing_url=lambda _page: LISTING_URL,
     fetch_listing=lambda _page: fetch_listing(limit=LIST_MAX_BYTES),
-    parse_listing=None,  # 전체 페이지 수 표시 형식을 몰라 web_batch.discover로 순회하지 않는다.
+    parse_listing=None,  # 페이지 수 표시 형식을 몰라 web_batch.discover를 쓰지 않는다.
     detail_url=detail_url,
     fetch_detail=lambda seq: fetch_detail(seq, limit=DETAIL_MAX_BYTES),
     parse_detail=lambda text, seq: parse_detail(text, seq=seq),
@@ -120,8 +119,10 @@ def capture_sports_batch(name: str, root: Path, *, max_items: int = 20) -> dict:
     return summary
 
 
-def _raw(directory: int, entry: object, filename: str, url: str, limit: int) -> bytes:
-    if not isinstance(entry, dict) or entry.get("file") != filename or entry.get("source_url") != url:
+def _raw(directory: int, entry: dict, filename: str, url: str, limit: int) -> bytes | None:
+    if "file" not in entry:
+        return None
+    if entry.get("file") != filename or entry.get("source_url") != url:
         raise ValueError("체육시설 공지 수집 기록의 파일 이름 또는 원문 주소가 맞지 않습니다.")
     capture_timestamp(entry.get("fetched_at"))
     raw = read_capture_file(directory, filename, limit)
@@ -130,52 +131,63 @@ def _raw(directory: int, entry: object, filename: str, url: str, limit: int) -> 
     return raw
 
 
+def _attempt(parse, raw: bytes | None):
+    if raw is None:
+        return "fetch_failed", None
+    try:
+        return "parsed", parse(raw)
+    except ValueError:
+        return "parse_failed", None
+
+
 def read_sports_batch(private_root: Path, name: str) -> dict[str, dict]:
-    """robots.txt·목록·상세 원본의 해시와 파싱 결과를 현재 파서로 다시 대조한다. 파일은 바꾸지 않는다."""
+    """모든 원본 해시와 원본에서 다시 낸 상태·건수·파싱 결과를 기록과 대조한다."""
     validate_name(name)
     relative = Path(SPORTS_SECTION) / name
     with open_archive(private_root, relative) as directory:
         receipt = read_receipt(directory, "batch.json")
-        items, pages, limit = receipt.get("items"), receipt.get("pages"), receipt.get("max_items")
+        robots, items, pages, limit = (receipt.get(key) for key in ("robots", "items", "pages", "max_items"))
         if (receipt.get("schema_version") != BATCH_SCHEMA or receipt.get("batch_id") != name
-                or receipt.get("board") != BOARD or receipt.get("status") not in ("complete", "partial")
+                or receipt.get("board") != BOARD or not isinstance(robots, dict)
                 or not isinstance(items, list) or not isinstance(pages, list)
+                or not all(isinstance(row, dict) for row in pages + items)
                 or type(limit) is not int or not 1 <= limit <= 80):
             raise ValueError("체육시설 공지 수집 기록의 규격·이름·상태가 맞지 않습니다.")
-        parsed_rows = [row for row in items if isinstance(row, dict) and row.get("status") == "parsed"]
-        if ((receipt.get("selected"), receipt.get("parsed")) != (len(items), len(parsed_rows))
-                or (receipt["status"] == "complete" and len(parsed_rows) != len(items))):
-            raise ValueError("체육시설 공지 수집 기록의 게시물 건수가 맞지 않습니다.")
-        if not items:
-            return {}
-        robots = receipt.get("robots")
-        rules = robots_rules(_raw(directory, robots, "robots.txt", ROBOTS_URL, ROBOTS_MAX_BYTES))
-        if (robots.get("status") != "allowed" or not allowed(rules, LISTING_URL) or len(pages) != 1
-                or not isinstance(pages[0], dict) or pages[0].get("status") != "parsed"):
-            raise ValueError("체육시설 공지 수집 기록의 robots.txt 또는 목록 기록이 맞지 않습니다.")
-        listed = parse_listing(_raw(directory, pages[0], "list-1.html", LISTING_URL, LIST_MAX_BYTES))
-        if (pages[0].get("web_ids") != listed or not all(isinstance(row, dict) for row in items)
-                or [row.get("web_id") for row in items] != listed[:limit]
-                or any(row.get("status") not in _ITEM_STATUSES or row.get("source_url") != detail_url(row["web_id"])
-                       for row in items)):
-            raise ValueError("체육시설 공지 수집 기록의 공지 번호·상태가 목록 원본과 다릅니다.")
+        state, rules = _attempt(robots_rules, _raw(directory, robots, "robots.txt", ROBOTS_URL, ROBOTS_MAX_BYTES))
+        if state == "parsed":
+            state = "allowed" if allowed(rules, LISTING_URL) else "disallowed"
+        listed, discovery, page = [], "robots_not_allowed", None
+        if state == "allowed" and len(pages) == 1:
+            page = _attempt(parse_listing, _raw(directory, pages[0], "list-1.html", LISTING_URL, LIST_MAX_BYTES))
+            listed = page[1] or []
+            discovery = "item_limit" if len(listed) > limit else "first_page_only" if listed else "failed"
+        if (robots.get("status") != state or len(pages) != (state == "allowed")
+                or (pages and (pages[0].get("status"), pages[0].get("web_ids")) != page)
+                or [row.get("web_id") for row in items] != listed[:limit]):
+            raise ValueError("체육시설 공지 robots.txt·목록 기록이 원본과 다릅니다.")
         assets = {}
-        for row in parsed_rows:
+        for row in items:
             seq = row["web_id"]
-            url = detail_url(seq)
-            if not allowed(rules, url) or row.get("parsed_file") != f"parsed-{seq}.json":
-                raise ValueError("체육시설 공지 수집 기록의 상세 기록이 맞지 않습니다.")
-            filename = f"detail-{seq}.html"
-            text, digest = decode_input(_raw(directory, row, filename, url, DETAIL_MAX_BYTES), "체육시설 공지 상세")
-            stored = read_receipt(directory, row["parsed_file"])
+            url, filename = detail_url(seq), f"detail-{seq}.html"
+            raw = _raw(directory, row, filename, url, DETAIL_MAX_BYTES)
+            state, record = _attempt(lambda data: parse_detail(decode_input(data, "체육시설 공지 상세")[0], seq=seq), raw)
+            if (row.get("source_url") != url or (raw is not None and not allowed(rules, url))
+                    or row.get("status") not in (state, "not_attempted" if raw is None else state)):
+                raise ValueError("체육시설 공지 상세 기록이 원본과 다릅니다.")
+            if record is None:
+                continue
+            stored = read_receipt(directory, row["parsed_file"]) if row.get("parsed_file") == f"parsed-{seq}.json" else {}
             if stored.get("parser_version") != PARSER_VERSION:
                 raise ValueError("다른 파서 버전으로 만든 파싱 결과입니다. 현재 버전으로 다시 수집해 주세요.")
-            record = parse_detail(text, seq=seq)
             if stored != {"schema_version": RECORD_SCHEMA, "parser_version": PARSER_VERSION,
-                          "sha256": digest, "record": record}:
+                          "sha256": row["sha256"], "record": record}:
                 raise ValueError("체육시설 공지 파싱 결과가 원본과 다릅니다.")
-            assets[seq] = {"raw_asset_path": (relative / filename).as_posix(), "raw_sha256": digest,
+            assets[seq] = {"raw_asset_path": (relative / filename).as_posix(), "raw_sha256": row["sha256"],
                            "official_url": url, "collected_at": row["fetched_at"], "record": record}
+        status = "complete" if discovery == "first_page_only" and len(assets) == len(items) else "partial"
+        if ((receipt.get("status"), receipt.get("discovery_status"), receipt.get("selected"), receipt.get("parsed"))
+                != (status, discovery, len(items), len(assets))):
+            raise ValueError("체육시설 공지 수집 기록의 상태·건수가 원본과 다릅니다.")
         return assets
 
 
