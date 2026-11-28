@@ -53,7 +53,9 @@ class SportsParserTest(unittest.TestCase):
         # 화면에 없는 공지를 요청하고 complete로 남기지 않는다.
         for extra in (f'<div style="display: none"><div></div><a href="{_LINK.format(2)}">x</a></div>',
                       f'<p style="visibility:hidden"><a href="{_LINK.format(2)}">x</a></p>',
-                      f'<a hidden href="{_LINK.format(2)}">x</a>'):
+                      f'<a hidden href="{_LINK.format(2)}">x</a>',
+                      f'<div style="display/**/:none"><a href="{_LINK.format(2)}">x</a></div>',
+                      f'<a style="display:\\6e one" href="{_LINK.format(2)}">x</a>'):
             with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, "숨긴"):
                 parse_listing(listing("1", extra=extra))
 
@@ -107,6 +109,16 @@ class SportsParserTest(unittest.TestCase):
         body = '<p style="white-space: normal; white-space-collapse: collapse">가</p><table><tr><td style="white-space:nowrap">나</td></tr></table>'
         self.assertEqual(parse_detail(detail("96", body), seq="96")["body_lines"], ["가", "나"])
 
+    def test_inline_tags_shown_as_blocks_are_rejected(self):
+        # 브라우저는 따로 보이는 블록·띄움 상자를 한 줄로 붙이면 예약기간과 이용기간이 섞인다.
+        for style in ("DISPLAY:block", "display:table-cell", "display: inherit", "float: left"):
+            with self.subTest(style=style), self.assertRaisesRegex(ValueError, "허용하지 않는"):
+                parse_detail(detail("96", f'<p>예약기간: 3.2.<span style="{style}">이용기간: 4.1.</span></p>'), seq="96")
+        with self.assertRaisesRegex(ValueError, "구조"):
+            parse_detail(detail("96", title='<b style="display:block">예약</b> 이용'), seq="96")
+        body = '<p style="float:left">가<span style="display: inline-block; float: none">나</span></p>'
+        self.assertEqual(parse_detail(detail("96", body), seq="96")["body_lines"], ["가나"])
+
     def test_joined_source_newlines_are_flagged_for_review(self):
         # 외부 CSS의 white-space는 알 수 없으므로 합친 줄을 사람이 원문과 대조하게 한다.
         record = parse_detail(detail("96", "<p>예약기간: 3.2.~3.6.\n이용기간: 4.1.~6.30.</p>"), seq="96")
@@ -133,7 +145,9 @@ class SportsParserTest(unittest.TestCase):
             ("허용하지 않는", detail("96", body="<iframe src=x></iframe>")),
             ("허용하지 않는", detail("96", body='<p style="display: none">숨김</p>')),
             ("허용하지 않는", detail("96", body="<img src=a src=b>")),
+            ("허용하지 않는", detail("96", body='<p style="display/**/:none">숨김</p>')),
             ("상세 HTML 구조", detail("96", head="<!--><h4>숨김</h4>-->")),
+            ("구조", detail("96", title='<span style="display:\\6e one">숨김</span>예약 안내')),
             ("구조", detail("96", title='<span style="display:none">숨김</span>예약 안내')),
             ("구조", detail("96", title="<b hidden>숨김</b>예약 안내")),
             ("구조", detail("96", title="<i class=a class=b>x</i>예약 안내")),

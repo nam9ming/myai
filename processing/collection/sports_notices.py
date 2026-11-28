@@ -33,6 +33,9 @@ _BODY_TAGS = _BREAK_TAGS | frozenset("a b strong em i u s span font sub sup smal
                                      "colgroup".split())
 _TITLE_TAGS = frozenset("b strong em i u span font".split())
 _HIDDEN_STYLE = re.compile(r"display\s*:\s*none|visibility\s*:\s*hidden", re.I)
+# 인라인 태그가 블록·띄움 상자가 되면 브라우저는 따로 줄을 보이는데 이 파서는 앞뒤 글자와 한 줄로 붙인다.
+_LAYOUT = re.compile(r"(display|float)\s*:\s*([^;]*)", re.I)
+_INLINE = {"display": ("inline", "inline-block"), "float": ("none",)}
 _WHITE_SPACE = re.compile(r"white-space(?:-collapse)?\s*:\s*([^;]*)", re.I)
 # 소스 줄바꿈을 공백으로 보이는 값만 받는다. 안성시 누리집 실제 공지 원본에 이 값들이 붙어 온다.
 _COLLAPSE = frozenset(("normal", "nowrap", "collapse"))
@@ -226,7 +229,7 @@ def parse_listing(raw: bytes) -> list[str]:
     for href, concealed in parser.hrefs:
         seq = _listed_seq(href)
         if seq and concealed:
-            raise ValueError("체육시설 공지 목록의 상세 링크가 숨긴 요소나 속성이 중복된 요소 안에 있습니다.")
+            raise ValueError("체육시설 공지 목록의 상세 링크가 숨긴 요소나 확인할 수 없는 요소 안에 있습니다.")
         if seq in ids:
             raise ValueError("체육시설 공지 목록에 같은 공지 번호가 있습니다.")
         if seq:
@@ -238,8 +241,14 @@ def parse_listing(raw: bytes) -> list[str]:
 
 def _shown(names, values) -> bool:
     # 속성이 중복되면 브라우저는 첫 값을, 이 파서는 마지막 값을 쓰므로 받지 않는다.
-    return (len(set(names)) == len(names) and "hidden" not in values
-            and not _HIDDEN_STYLE.search(values.get("style") or ""))
+    # CSS 주석·이스케이프(`display/**/:none`)는 스타일 검사를 비켜 가므로 받지 않는다.
+    style = values.get("style") or ""
+    return (len(set(names)) == len(names) and "hidden" not in values and "/*" not in style and "\\" not in style
+            and not _HIDDEN_STYLE.search(style))
+
+
+def _inline(values) -> bool:
+    return all(value.strip().lower() in _INLINE[name.lower()] for name, value in _LAYOUT.findall(values.get("style") or ""))
 
 
 class _DetailParser(PinnedHTMLParser):
@@ -267,7 +276,7 @@ class _DetailParser(PinnedHTMLParser):
         if self.body is not None:
             self._body_start(tag, names, values)
         elif self.title is not None:
-            if tag != "br" and tag not in _TITLE_TAGS or not _shown(names, values):
+            if tag != "br" and (tag not in _TITLE_TAGS or not _inline(values)) or not _shown(names, values):
                 raise ValueError(_INVALID_DETAIL)
             if tag == "br":
                 self.title.append(" ")
@@ -292,6 +301,7 @@ class _DetailParser(PinnedHTMLParser):
         # 인라인 white-space가 줄바꿈을 살리거나(pre-wrap 등) pre 안에서 바꾸면 줄 경계를 확정할 수 없다.
         spaces = [value.strip().lower() for value in _WHITE_SPACE.findall(values.get("style") or "")]
         if (tag not in _BODY_TAGS or not _shown(names, values) or not _COLLAPSE.issuperset(spaces)
+                or tag not in _BREAK_TAGS and not _inline(values)
                 or spaces and (tag == "pre" or "pre" in self.body)):
             raise ValueError("체육시설 공지 본문에 허용하지 않는 태그·속성이 있습니다.")
         if tag in _BREAK_TAGS:
