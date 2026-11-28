@@ -568,7 +568,7 @@ def _board_options(board: str) -> dict:
 
 
 def parse_board_media(text: str, *, board: str, notice_id: str) -> list[dict]:
-    """같은 게시판 구조를 쓰는 시청·안성배움e·읍면동 공지 상세의 이미지와 첨부 후보를 확인한다."""
+    """같은 게시판 구조를 쓰는 시청·안성배움e·읍면동·문화도시 안성 공지 상세의 이미지와 첨부 후보를 확인한다."""
     parser = _MediaParser(**_board_options(board))
     board_detail_url(board, notice_id)  # HTML을 읽기 전에 18자리 번호 한도를 확인한다.
     return _media(text, notice_id, parser)
@@ -601,7 +601,7 @@ def board_parser_version(board: str) -> str:
 
 
 def parse_board_notice(text: str, *, board: str, notice_id: str) -> dict:
-    """같은 게시판 구조를 쓰는 시청·안성배움e·읍면동 공지 상세의 본문 텍스트와 게시일만 준비한다."""
+    """같은 게시판 구조를 쓰는 시청·안성배움e·읍면동·문화도시 안성 공지 상세의 본문 텍스트와 게시일만 준비한다."""
     source = board_info(board).source
     url = board_detail_url(board, notice_id)
     return _notice_record(_NoticeParser(**_board_options(board)), text, notice_id, source, lambda: url)
