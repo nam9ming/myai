@@ -110,6 +110,29 @@ class GosiParserTest(unittest.TestCase):
             with self.subTest(markup=markup), self.assertRaisesRegex(ValueError, "고시·공고 목록 HTML에 브라우저와 해석이"):
                 parse_gosi_listing(listing("1").replace(b"<tbody>", f"<tbody>{markup}".encode()), page=1)
 
+    def test_listing_accepts_only_sampled_markup_in_read_regions(self):
+        # 읽는 영역은 실제 목록에 있던 태그·속성·class만 받고, 종료 태그는 가장 안쪽에 열린 요소를 닫아야 한다.
+        cell = '<td class="gosi_dept">'
+        for old, new in ((cell, '<td class="gosi_dept blind">'), (cell, '<td class="gosi_dept" style="color:red">'),
+                         (cell, '<td class="gosi_dept" hidden>'), (cell, cell + "<span>x</span>"), ("<thead>", "<thead><br>"),
+                         ("<tbody>", "<tbody><template></template>"), ("<strong>", "<strong hidden>"),
+                         ("<strong>", '<strong><span class="blind">9</span>'), ("</strong>", "</strong></b>"),
+                         ("<strong>", "<strong><div>x</div>"), ('"red"', '"red" class="red"')):
+            with self.subTest(new=new), self.assertRaisesRegex(ValueError, "구조"):
+                parse_gosi_listing(listing("1").replace(old.encode(), new.encode(), 1), page=1)
+
+    def test_detail_accepts_only_sampled_markup_in_body(self):
+        # 공지 게시판 허용 목록이 받는 표기라도 실제 고시·공고 상세에 없던 태그·속성·class는 거부한다.
+        for body in ("<b>마감</b>", '<span style="color:red">마감</span>', '<p class="blind">마감</p>',
+                     '<div data-x="1">마감</div>', '<a href="#" href="#">x</a>', "<table><tr><td>x</td></tr></table>"):
+            with self.subTest(body=body), self.assertRaisesRegex(ValueError, "숨김"):
+                parse_gosi_detail(detail(body=body), notice_id="75365", listing=row())
+        # 종료 태그는 가장 안쪽에 열린 요소만 닫아야 하고, 시작 태그가 열린 요소를 암묵적으로 닫으면 본문 칸 밖에서도 거부한다.
+        texts = [detail(body=body) for body in ("<p>가<p>나</p>", "<ul><li>가</ul>", '<img src="/x.png" alt="x"></img>')]
+        for text in texts + [detail(title="가<h4>나</h4>")]:
+            with self.subTest(text=text), self.assertRaisesRegex(ValueError, "구조가 올바르지"):
+                parse_gosi_detail(text, notice_id="75365", listing=row())
+
     def test_detail_keeps_text_and_attachment_candidates(self):
         files = (_FILE, ("포스터.JPG", "포스터_1.jpg", "/p"), ("조서.xlsx", "조서_2.xlsx", "/p"),
                  ("A&B.hwp", "A&B_3.hwp", "/p"))
@@ -190,8 +213,8 @@ class GosiParserTest(unittest.TestCase):
             "해석이 갈리는 태그·주석": (detail(body="가</br>나"), row()),
             # 태그 경계 검사가 상세 폼 검사보다 먼저다.
             "해석이 갈리는 태그": (detail().replace('id="detailForm"', 'id="detailForm" action="/x" title=a`b'), row()),
-            "view_cont": (detail(body="접수기간 2026.12.01~12.05").replace('"view_cont"', '"view_content"'), row()),
-            "view_file": (detail().replace('"view_file"', '"view_files"'), row()),
+            "view_cont": (detail(body="접수기간 2026.12.01~12.05").replace('"view_cont"', '"gosi_b"'), row()),
+            "view_file": (detail().replace('"view_file"', '"gosi_b"'), row()),
             "첨부 영역이 중복": (detail().replace("</dl>", '</dl><dl class="view_file"><dd></dd></dl>'), row()),
         }
         for message, (text, listed) in cases.items():

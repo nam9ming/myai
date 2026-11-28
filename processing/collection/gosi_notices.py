@@ -5,7 +5,7 @@ import re
 from urllib.parse import quote, urlencode
 
 from .html_tokens import PinnedHTMLParser
-from .libraries import _ATTACHMENT_FORMATS, _NoticeParser
+from .libraries import _ATTACHMENT_FORMATS, _HIDDEN_ERROR, _NoticeParser
 from .official_web import OFFICIAL_ORIGIN, _fetch
 
 LABEL = "고시·공고"
@@ -16,7 +16,21 @@ _SE_CODE = "01"
 _DETAIL_ACTION = f"/portal/saeol/gosiView.do?mId={_MENU}"
 _NOTICE_ID = re.compile(r"[1-9][0-9]{0,17}")
 _IGNORED_TAGS = {"script", "style", "template", "noscript"}
-_CELL_TAGS = {"a", "br", "span", "strong", "b", "em", "i", "u", "font"}
+# 읽는 영역은 2026-11-28 실제 원본에서 쓰인 태그·태그별 속성·class만 받는다. 목록은 6쪽(1·2·658쪽, 검색 2쪽, 수집 1쪽)의
+# 쪽 표시(`div.board_page`)와 목록 표, 상세는 18쪽(게시물 17건, 없는 번호 1건)의 `div.bod_view`다. 인라인 스타일은 없어 받지 않는다.
+_LABEL_ATTRS = {"div": {"class"}, "span": {"class"}, "strong": set()}
+_TABLE_ATTRS = {"table": {"class"}, "caption": set(), "thead": set(), "tbody": set(), "tr": set(),
+                "th": {"class", "scope"}, "td": {"class"}, "a": {"href", "onclick"}, "br": set()}
+_LISTING_CLASSES = set("board_page red tableSt_list row_over wp10 wp15 wp20 taL gosi_num gosi_tit gosi_dept gosi_date".split())
+_BODY_ATTRS = {"div": {"class"}, "h4": set(), "ul": set(), "li": {"class"}, "span": {"class"}, "dl": {"class"},
+               "dt": set(), "dd": set(), "p": set(), "br": set(), "img": {"alt", "src"},
+               "a": {"class", "href", "onclick", "rel", "target", "title"}}
+_BODY_CLASSES = set("bod_view view_info gosi_b view_write view_date view_hit view_cont view_file open_license clFix mB20"
+                    " bt_white_s blank".split())
+# 허용한 태그 가운데 브라우저가 시작 태그에서 열린 요소(값)를 닫는 것. 본문 영역에는 범위 경계 요소가 없어 열려 있기만 하면 닫힌다.
+_IMPLIED_CLOSE = {"div": {"p"}, "ul": {"p"}, "dl": {"p"}, "p": {"p"}, "h4": {"p", "h4"}, "li": {"li", "p"},
+                  "dt": {"dt", "dd", "p"}, "dd": {"dt", "dd", "p"}, "a": {"a"}}
+_CELL_TAGS = {"a", "br"}
 _CELLS = ("gosi_num", "gosi_tit", "gosi_dept", "gosi_date")
 _TOTAL = re.compile(r"Total ([0-9]{1,18}) Page ([1-9][0-9]{0,17}) / ([1-9][0-9]{0,17})")
 _CAPTION = "고시/공고게시판 목록"
@@ -48,6 +62,13 @@ def _text(parts: list[str]) -> str:
     return " ".join("".join(parts).split())
 
 
+def _allowed(tag: str, attrs: list, allowed: dict, classes: set) -> bool:
+    # class는 브라우저처럼 ASCII 공백으로만 나눈다. 중복 속성도 표본에 없어 받지 않는다.
+    names = [name for name, _ in attrs]
+    return (tag in allowed and allowed[tag].issuperset(names) and len(set(names)) == len(names)
+            and (classes | {""}).issuperset(re.split(r"[\t\n\f\r ]+", dict(attrs).get("class") or "")))
+
+
 def gosi_listing_path(page: int) -> str:
     if type(page) is not int or page < 1:
         raise ValueError("목록 페이지는 양의 정수여야 합니다.")
@@ -73,7 +94,7 @@ def fetch_gosi_detail(notice_id: str, *, limit: int) -> bytes:
 
 
 class _ListingParser(PinnedHTMLParser):
-    """요청 주소를 되돌려 주는 유일한 `form#listForm` 안의 목록 표만 읽는다."""
+    """요청 주소를 되돌려 주는 유일한 `form#listForm` 안의 쪽 표시와 목록 표만 읽는다."""
 
     def __init__(self, page: int):
         super().__init__()
@@ -82,6 +103,7 @@ class _ListingParser(PinnedHTMLParser):
         self.ignored = 0
         self.in_form = self.form_seen = False
         self.total: list[str] | None = None
+        self.total_tags: list[str] = []
         self.totals: list[str] = []
         self.caption: list[str] | None = None
         self.captions: list[str] = []
@@ -99,11 +121,23 @@ class _ListingParser(PinnedHTMLParser):
 
     def handle_starttag(self, tag, attrs):
         super().handle_starttag(tag, attrs)
+        if self.total is not None:
+            # 쪽 표시 안은 span·strong만 받고, 종료 태그는 가장 안쪽에 열린 요소를 닫아야 한다.
+            if tag == "div" or not _allowed(tag, attrs, _LABEL_ATTRS, _LISTING_CLASSES):
+                self.fail()
+            self.total_tags.append(tag)
+            return
+        values = dict(attrs)
+        classes = (values.get("class") or "").split()
+        if self.table:
+            if not _allowed(tag, attrs, _TABLE_ATTRS, _LISTING_CLASSES):
+                self.fail()
+            self._table_start(tag, values, classes)
+            return
         if tag in _IGNORED_TAGS:
             self.ignored += 1
         if self.ignored:
             return
-        values = dict(attrs)
         names = [name for name, _ in attrs]
         if tag == "form":
             if self.in_form:
@@ -116,34 +150,28 @@ class _ListingParser(PinnedHTMLParser):
             return
         if not self.in_form:
             return
-        classes = (values.get("class") or "").split()
         if tag == "div" and "board_page" in classes:
-            if self.total is not None or self.table:
+            if not _allowed(tag, attrs, _LABEL_ATTRS, _LISTING_CLASSES):
                 self.fail()
             self.total = []
         elif tag == "table" and "tableSt_list" in classes:
-            if self.table or self.table_seen:
+            if self.table_seen or not _allowed(tag, attrs, _TABLE_ATTRS, _LISTING_CLASSES):
                 self.fail()
             self.table_seen = True
             self.table.append(tag)
-        elif self.table:
-            self._table_start(tag, values, names, classes)
 
-    def _table_start(self, tag, values, names, classes):
+    def _table_start(self, tag, values, classes):
         current = self.table[-1]
         if self.cell is not None:
             if tag not in _CELL_TAGS:
                 self.fail()
             if tag == "br":
                 self.cell.append(" ")
-            elif tag == "a":
-                if "onclick" not in values:
-                    self.fail()
-                match = self.link.fullmatch(values["onclick"] or "")
-                if match is None or names.count("onclick") != 1 or self.row["cells"][-1] != "gosi_tit":
+            else:
+                match = self.link.fullmatch(values.get("onclick") or "")
+                if match is None or self.row["cells"][-1] != "gosi_tit":
                     self.fail()
                 self.row["ids"].append(match[1])
-            if tag != "br":
                 self.table.append(tag)
         elif tag == "caption" and current == "table":
             self.caption = []
@@ -156,15 +184,13 @@ class _ListingParser(PinnedHTMLParser):
             self.table.append(tag)
         elif tag in ("th", "td") and current == "tr":
             if self.row is not None:
-                if tag != "td" or names.count("class") != 1:
-                    self.fail()
                 kinds = [name for name in classes if name in _CELLS]
-                if len(kinds) != 1:
+                if tag != "td" or len(kinds) != 1:
                     self.fail()
                 self.row["cells"].append(kinds[0])
                 self.cell = []
             self.table.append(tag)
-        elif current not in ("thead", "th"):
+        else:
             self.fail()
 
     def handle_data(self, data):
@@ -186,9 +212,14 @@ class _ListingParser(PinnedHTMLParser):
             if self.table or self.total is not None:
                 self.fail()
             self.in_form = False
-        elif tag == "div" and self.total is not None:
-            self.totals.append(_text(self.total))
-            self.total = None
+        elif self.total is not None:
+            if tag != (self.total_tags[-1] if self.total_tags else "div"):
+                self.fail()
+            if self.total_tags:
+                self.total_tags.pop()
+            else:
+                self.totals.append(_text(self.total))
+                self.total = None
         elif self.table:
             if self.table[-1] != tag:
                 self.fail()
@@ -256,7 +287,7 @@ def _download_url(arguments: tuple[str, str, str]) -> str | None:
 
 
 class _GosiParser(_NoticeParser):
-    """도서관·게시판 공지와 같은 본문 허용 목록·태그 경계 규칙에 고시·공고 머리 항목과 첨부 스크립트 해석을 더한다."""
+    """공지 게시판 본문 규칙에 표본 허용 목록·엄격한 중첩, 고시·공고 머리 항목과 첨부 스크립트 해석을 더한다."""
 
     def __init__(self, notice_id: str):
         super().__init__(label=LABEL)
@@ -268,8 +299,14 @@ class _GosiParser(_NoticeParser):
         self.file_section_seen = False
 
     def handle_starttag(self, tag, attrs):
+        if _IMPLIED_CLOSE.get(tag, set()).intersection(self.tags):
+            # 브라우저가 이 시작 태그에서 열린 요소를 암묵적으로 닫는다. 상위 파서는 본문 칸에서만 따라 하므로 거부한다.
+            raise ValueError(f"{LABEL} HTML 구조가 올바르지 않습니다.")
         # 상위 파서가 태그를 넣은 뒤의 상태로 판단한다. 최상위 form은 쌓이지 않고, 첨부 영역은 `bod_view` 바로 아래 dl이다.
         super().handle_starttag(tag, attrs)
+        if self.tags and not _allowed(tag, attrs, _BODY_ATTRS, _BODY_CLASSES):
+            # 본문 영역은 상위 파서의 허용 목록보다 좁은 표본 목록만 받는다.
+            raise ValueError(_HIDDEN_ERROR.format(LABEL))
         names = [name for name, _ in attrs]
         values = dict(attrs)
         if not self.tags and not self.hidden_depth and tag == "form" and values.get("id") == "detailForm":
@@ -320,6 +357,9 @@ class _GosiParser(_NoticeParser):
 
     def handle_endtag(self, tag):
         depth = len(self.tags)
+        if depth and self.tags[-1] != tag:
+            # 본문 영역의 종료 태그는 가장 안쪽에 열린 요소만 닫아야 한다(빈 요소의 종료 태그 포함).
+            raise ValueError(f"{LABEL} HTML 구조가 올바르지 않습니다.")
         super().handle_endtag(tag)
         if tag != "a" or self.anchor is None or self.anchor[0] != depth:
             return
