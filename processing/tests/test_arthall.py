@@ -40,7 +40,7 @@ def listing(*ids, year=2026, month=12, page=1, total=1, action=_ACTION, pager=No
 
 _FIELDS = (
     ("장르", "클래식"), ("기간", "2026-12-09 ~ 2026-12-10"), ("시간", "19:30 "), ("관람시간", "약 100분"),
-    ("장소", "안성맞춤아트홀 <b>대공연장</b>"), ("관람연령", "초등학생 이상부터 관람가능 "),
+    ("장소", "안성맞춤아트홀<br>대공연장"), ("관람연령", "초등학생 이상부터 관람가능 "),
     ("입장권", "R석 30,000원,  S석 20,000원<br>초중고등학생 전석 1만원"), ("티켓 오픈 일시", "2026-10-08 16:00 ~ "),
     ("문의처", "안성맞춤아트홀 031-000-0000"), ("주최/주관", "안성맞춤아트홀"),
 )
@@ -50,7 +50,7 @@ _SECTIONS = """<div id="tap_wrapper1" class="mT30 tap_wrapper" style="display: n
     <p class="p_notice">모바일 사용시 이미지를 좌우로 이동하여 내용을 확인 할 수 있습니다.</p>
     <img src="/common/imgView.do?attachId=a&amp;fileSn=b&mode=originView" alt="소개"><!-- 주석 --></div></div>
   <div id="tap_wrapper2" class="mT30 tap_wrapper" style="display: none;"><div>- 안성시민 15%<br />&nbsp;* 인증 후
-    <a href="https://example.invalid/pass">안내</a></div><p><font><strong>증빙 필요</strong></font></p></strong></div>
+    <font color="#000000" style="background-color: rgb(255, 255, 0);">안내</font></div><p><font><strong>증빙 필요</strong></font></p></strong></div>
   <div id="tap_wrapper3" class="mT30 tap_wrapper" style="display: none;"><p class="p_notice">안내</p></div>"""
 
 
@@ -81,8 +81,8 @@ class ArthallListingTest(unittest.TestCase):
         self.assertEqual(parse_listing(listing("5"), year=2026, month=12, page=1), (1, ["5"]))
         self.assertEqual(parse_listing(listing(month=6), year=2026, month=6, page=1), (1, []))
         self.assertEqual(listing_path(2026, 6, 2), "/arthall/concert/list.do?mId=0202010100&year=2026&month=6&page=2")
-        # `</ div>`·`</div\xa0>`는 브라우저처럼 영역을 닫지 않는다(3.13.5만 `</div>`로 읽었다).
-        for odd in (b"</ div>", b"</\ndiv>", "</div\xa0>".encode()):
+        # `</ div>`는 브라우저처럼 영역을 닫지 않는다(3.13.5만 `</div>`로 읽었다).
+        for odd in (b"</ div>", b"</\ndiv>"):
             self.assertEqual(parse_listing(listing("1").replace(b'"fR">', b'"fR">' + odd), year=2026, month=12, page=1),
                              (1, ["1"]))
 
@@ -98,11 +98,13 @@ class ArthallListingTest(unittest.TestCase):
             "쪽 번호 없음": (listing("1", total=2).replace(b'class="bod_page"', b'class="paging"'), {}),
             "다른 목록": (listing("1", action="/arthall/other/list.do"), {}),
         }
-        # 남는 `</div>`가 영역을 닫아도 뒤 공연·쪽 번호·항목은 보인다.
         cases["남는 끝 태그"] = (listing("11", "12").replace(b"</div></li>", b"</div></div></li>", 1), {})
         cases["쪽 번호 밖"] = (listing("1", pager='<span>1</span></div><a onclick="goPage(2); return false;">2</a>'), {})
-        cases["중복 onclick"] = (listing("1").replace(b'onclick="go', b'onclick="x" onclick="go'), {})
-        cases["숨김"] = (listing("1").replace(b"<ul>", b"<ul hidden>", 1), {})
+        # 중복·실제 원본에 없던 태그·속성, 숨김 루트, 짝이 어긋난 끝 태그, scope 경계가 열린 숨김 요소.
+        for old, new in (('onclick="go', 'onclick="x" onclick="go'), ("<ul>", "<ul hidden>"), ("<ul>", "<ul><details>"),
+                         ('"con_list"', '"con_list" hidden'), ("</div></li>", "</span></div></li>"), ('"fR">', '"fR"></div\xa0>'),
+                         ('<div class="con_list">', "<div hidden><table></div><div class=con_list>")):
+            cases[new] = (listing("1").replace(old.encode(), new.encode(), 1), {})
         cases["빈 안내"] = (listing().replace("검색된 전체일정이 없습니다.".encode(), b""), {})
         for name, (raw, override) in cases.items():
             with self.subTest(name), self.assertRaises(ValueError):
@@ -129,10 +131,10 @@ class ArthallDetailTest(unittest.TestCase):
         first, second = record["sections"]
         self.assertEqual((first["title"], first["text"], first["images"]),
                          ("공연 소개", None, ["/common/imgView.do?attachId=a&fileSn=b&mode=originView"]))
-        self.assertEqual(second["text"], "- 안성시민 15% * 인증 후 안내 증빙 필요")
-        self.assertEqual(second["links"], ["https://example.invalid/pass"])
+        self.assertEqual((second["text"], second["links"]), ("- 안성시민 15% * 인증 후 안내 증빙 필요", []))
         self.assertEqual(record["review_flags"], [])
-        adjacent = _body("<div>안성시민 15%</div><div>경로 50%</div>")
+        # 열린 적 없는 `</p>`·`</strong>`·`</font>`는 실제 3829처럼 브라우저도 무시한다.
+        adjacent = _body("<div>안성시민 15%</div></font></p><div>경로 50%</div>")
         self.assertEqual(parse_detail(adjacent, concert_id="3809")["sections"][0]["text"], "안성시민 15% 경로 50%")
 
     def test_missing_values_stay_null_with_flags(self):
@@ -164,9 +166,8 @@ class ArthallDetailTest(unittest.TestCase):
                 self.assertEqual(parse_detail(text, concert_id="3809"), base)
 
     def test_reads_tag_borders_like_browsers(self):
-        # 브라우저처럼 `</ div>`·`</div\xa0>`는 div를 닫지 않고 void가 아닌 `<div/>`는 열어 둔다(3.13.5는 달리 읽었다).
-        for markup, text in (("1</ div>2", "12"), ("1</\ndiv>2", "12"), ("1</div\xa0>2", "12"), ("<div/>1</div>2", "1 2"),
-                             ("<!x>1<?x>", "1")):
+        # 브라우저처럼 `</ div>`는 div를 닫지 않고 void가 아닌 `<div/>`는 열어 둔다(3.13.5는 달리 읽었다).
+        for markup, text in (("1</ div>2", "12"), ("1</\ndiv>2", "12"), ("<div/>1</div>2", "1 2"), ("<!x>1<?x>", "1")):
             with self.subTest(markup):
                 self.assertEqual(parse_detail(_body(f"<div>{markup}</div>"), concert_id="3809")["sections"][0]["text"], text)
 
@@ -175,7 +176,6 @@ class ArthallDetailTest(unittest.TestCase):
             "번호": detail(init_id="1"),
             "제목 태그": detail(title="합성 <Art Story>"),
             "숨김": detail(fields=[("장소", '<span style="display:none">숨김</span>')]),
-            "본문 태그": _body('<iframe src="/x"></iframe>'),
             "중복 항목": detail(fields=[("장소", "a"), ("장소", "b")]),
             "없는 탭": detail(sections=""),
             "다른 화면": detail(action="/arthall/other/list.do"),
@@ -189,21 +189,29 @@ class ArthallDetailTest(unittest.TestCase):
             "script 주석": detail(head="<script><!--<script>\n</script>"),
             "항목 밖": detail().replace("</h4><ul>", "</h4></div><ul>"),
             "예매 밖": detail().replace("<!-- 기존 noimage -->", "</div>"),
-            # 남는 `</div>`가 영역을 일찍 닫으면 뒤 버튼·포스터·본문이 표시 없이 버려진다.
             "버튼 밖 링크": detail().replace('<div class="ticket_btns">', '<div class="ticket_btns"></div><div>'),
             "포스터 밖": detail(buttons=False).replace('<div class="conInfo_img">', '<div class="conInfo_img"></div>'),
             "본문 밖 글자": _body("<div>본문1</div></div>본문2"),
             "본문 밖 태그": _body('<div>본문1</div></div><img src="/x.png">'),
             "영역 사이 글자": detail().replace('<div class="cleB"></div>', '<div class="cleB"></div>보이는글'),
-            "중복 숨김": _body('<p style="display:none" style>숨김</p>'),
             "중복 src": detail().replace("<img", '<img src="/b.png"'),
-            "CSS 이스케이프": _body(r'<p style="disp\lay:none">숨김</p>'),
         }
-        # 끝 태그가 빠진 숨김 요소가 뒤 영역을 감싼다.
-        for head in ('<div style="display:none;">', "<div hidden><div></div>", "<template>"):
+        # 끝 태그가 빠졌거나, 브라우저가 `</div>`를 무시하게 하는 scope 경계가 열린 숨김 요소가 뒤 영역을 감싼다.
+        for head in ('<div style="display:none;">', "<div hidden><div></div>", "<template>", "<div hidden><object></div>",
+                     '<div id="layer_popup1" style="display:none;"><table><tr><td>팝업</div>'):
             cases[head] = detail(head=head)
-        # 공용 파서의 거부 규칙 전체는 test_html_tokens가 본다.
-        for markup in ("<!-- a --!>보이는글<!-- b -->", "<!-- 끝없음", "<![CDATA[x]]>보이는글", 'a</div x=">">b',
+        # 영역 루트의 숨김과 실제 원본에 없던 태그·속성·스타일·끝 태그 짝.
+        for old, new in (('"conInfo_list"', '"conInfo_list" hidden'), ('"conInfo_img"', '"conInfo_img" style="display:none"'),
+                         ('"tab_view"', '"tab_view" hidden'), ('style="display: none;"', 'style="visibility: hidden;"'),
+                         ("<h4 class", "<h4 popover class"), ("<ul><li", "<ul><dialog><li"),
+                         ('<p class="p_notice">안내', '<p class="p_notice" style="opacity: 0">안내'),
+                         ("증빙 필요", '<font style="font-size: 0">숨김</font>'),
+                         ('alt="소개"', 'alt="소개" onerror="this.remove()"'), ("<strong>증빙", "<strong>증빙</p>")):
+            cases[new] = detail().replace(old, new, 1)
+        for markup in ("<details>숨김</details>", '<a href="/x">링크</a>', "<b>굵게</b>", "1</div\xa0>2",
+                       '<iframe src="/x"></iframe>', '<p style="display:none" style>숨김</p>', r'<p style="disp\lay:none">숨김</p>',
+                       # 공용 파서의 거부 규칙 전체는 test_html_tokens가 본다.
+                       "<!-- a --!>보이는글<!-- b -->", "<!-- 끝없음", "<![CDATA[x]]>보이는글", 'a</div x=">">b',
                        # 3.13.5는 따옴표 밖 `\xa0`와 `==`를 속성 구분자로 읽어 3.14·브라우저와 속성이 달랐다.
                        '<span class="a"\xa0id="b">x</span>', "<span title==x>x</span>"):
             cases[markup] = _body(f"<div>{markup}</div>")
