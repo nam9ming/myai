@@ -174,10 +174,11 @@ def _mentions(fields: dict, names: tuple[str, ...], pattern: str | re.Pattern) -
 def _no_location(value: object) -> bool:
     """위치 판정용 빈 값. 공용 `_blank`와 같지만 글자 여부를 고정된 유니코드 3.2 DB로 본다."""
     # isalnum·casefold는 파이썬마다 유니코드 판이 달라 같은 원본의 판정이 바뀐다. 3.2 뒤에 생긴 문자는 Cn이라 자리표시로 보고 검토로 보낸다.
+    # 줄표 대신 흔히 치는 'ㅡ' 같은 한글 호환 자모(U+3131–U+318E)도 자리표시로 본다. 자모만으로 된 지명은 없다.
     if not isinstance(value, str):
         return value is None
     return ("".join(unicodedata.normalize("NFC", value).split()).casefold() in PLACEHOLDERS
-            or not any(unicodedata.ucd_3_2_0.category(c)[0] in "LN" for c in value))
+            or not any(unicodedata.ucd_3_2_0.category(c)[0] in "LN" and not "\u3131" <= c <= "\u318e" for c in value))
 
 
 def select_items(page: int, items: list[dict], matched: list, review: list) -> None:

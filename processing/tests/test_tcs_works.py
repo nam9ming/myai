@@ -83,7 +83,8 @@ class ParseTest(unittest.TestCase):
                 row(4, name="안성 방면 합성 공사"), row(5, builder="안성건설"), row(6),
                 row(7, police="", road="", name="안성 방면 합성 공사"), row(8, police="", road=""),
                 row(9, police="-", road="없음"), row(10, police="", road=" - ", control="안성 방면 통제"),
-                row(11, police="", road="\U00010D50", name="안성 방면 합성 공사")]
+                row(11, police="", road="\U00010D50", name="안성 방면 합성 공사"), row(12, police="ㅡ", road="ㅡ"),
+                row(13, police=" - ", road="ㅡ ㅡ")]
         matched, review = tcs.select_records(tcs.parse_tcs_csv(csv_bytes(*rows).decode())[0])
         self.assertEqual([m["match"] for m in matched],
                          [{"constRoad": "경기도 안성시 공도읍 합성로"}, {"poliName": "안성"}])
@@ -92,7 +93,9 @@ class ParseTest(unittest.TestCase):
                           (7, "blank_location", ["constName"]), (8, "blank_location", []),
                           (9, "blank_location", []), (10, "blank_location", ["trafficControl"]),
                           # 3.2 뒤에 생긴 문자만 있으면 파이썬 판과 관계없이 검토로 간다(3.14 isalnum으로는 other_mention).
-                          (11, "blank_location", ["constName"])])
+                          (11, "blank_location", ["constName"]),
+                          # 줄표 대신 친 한글 자모 'ㅡ'도 자리표시다.
+                          (12, "blank_location", []), (13, "blank_location", [])])
         self.assertEqual([review[4]["record"]["fields"]["poliName"], review[5]["record"]["fields"]["constRoad"]],
                          ["-", " - "])
 
