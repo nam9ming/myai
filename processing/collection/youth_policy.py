@@ -43,8 +43,11 @@ _DETAIL_NEST = frozenset("a>span button>img dd>div dd>script div>br div>button d
 # 상태어가 든 한 낱말(`조기마감`·`(마감)`)과 그 앞 낱말 하나(`접수 종료`·`신청 (마감)`)까지만 맞춘다.
 # `선착순 마감 시까지 방문 접수`처럼 방법 문구 안의 상태어는 맞추지 않는다.
 _NOT_METHOD = re.compile(r"[^0-9A-Za-z가-힣]*|(?:\S+\s)?\S*(?:마감|종료)\S*")
-# 상세 본문 맨 앞의 대표 이미지 영역(div.photo_viewer)은 이 틀만 받고 본문 텍스트로 읽지 않는다.
-_VIEWER_TAGS = {"div", "figure", "img", "button", "ul", "li", "script"}
+# 상세 본문 맨 앞의 대표 이미지 영역(div.photo_viewer)은 본문 텍스트로 읽지 않는다. 상세 24쪽 모두 같은 틀이었고,
+# 그 표본의 부모>자식 짝(None은 영역 자신)별 속성·스크립트 주소·글자만 받는다. 개수·순서·글자 위치는 보지 않는다.
+_VIEWER_ATTRS = {None: "class", "div>div": "class id", "div>figure": "", "figure>img": "alt src",
+                 "div>button": "class type", "div>ul": "class", "ul>li": "class",
+                 "li>button": "data-origin onclick type", "button>img": "alt src", "div>script": "src"}
 _VIEWER_SCRIPTS = {"/common/js/swiper/swiper.js", "/portal/js/unit/cardNews/view.js"}
 _VIEWER_TEXT = {"", "이전보기", "다음보기", "init_thumbnail_view('.photo_viewer');"}
 _VIEWER_IMAGE = re.compile(
@@ -298,12 +301,15 @@ class _PolicyParser(_NoticeParser):
             self.info.append(self.section)
 
     def _viewer_start(self, tag, names, values):
+        pair = f"{self.viewer[-1]}>{tag}" if self.viewer else None
         source = values.get("src") or ""
-        if (tag not in _VIEWER_TAGS
-                or (tag == "script" and names and (names != ["src"] or source not in _VIEWER_SCRIPTS))
-                or (tag == "img" and not _VIEWER_IMAGE.fullmatch(source))):
+        # 원본 주소(data-origin)는 슬라이드 li 바로 아래, 원본 보기 onclick이 있는 버튼에서만 읽는다.
+        if (pair not in _VIEWER_ATTRS or not set(names) <= set(_VIEWER_ATTRS[pair].split())
+                or (tag == "script" and names and source not in _VIEWER_SCRIPTS)
+                or (tag == "img" and not _VIEWER_IMAGE.fullmatch(source))
+                or (pair == "li>button" and values.get("onclick") != "fn_view_original(this);")):
             raise ValueError(_INVALID_VIEWER)
-        if tag == "button" and "data-origin" in values:
+        if "data-origin" in values:
             origin = values["data-origin"] or ""
             if not _VIEWER_IMAGE.fullmatch(origin):
                 raise ValueError(_INVALID_VIEWER)

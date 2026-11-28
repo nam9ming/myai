@@ -208,6 +208,9 @@ class YouthPolicyParserTest(unittest.TestCase):
             (detail(body='<p style="display:none">숨김</p>'), "숨김"),
             # 실제 상세 24쪽에 없던 속성·부모 짝과 생략한 종료 태그는 공지 허용 목록이 받더라도 거부한다.
             (detail(viewer=VIEWER.replace("<figure>", "<figure popover>")), "대표 이미지 영역"),
+            # 원본 주소는 슬라이드 li 바로 아래 원본 보기 버튼에서만 읽는다. 이전 버튼의 주소는 화면에 없다.
+            (detail(viewer=VIEWER.replace('class="prev"', f'class="prev" data-origin="{_IMG}"')), "대표 이미지 영역"),
+            (detail(viewer=VIEWER.replace("fn_view_original(this);", "x();")), "대표 이미지 영역"),
             (detail().replace('"bod_view"', '"bod_view" title="x"'), "숨김"),
             (detail(body='<span style="font-size:4px">작게</span>'), "숨김"),
             (detail(body="<ul><li>가<li>나</li></ul>"), "숨김"),
