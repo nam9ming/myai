@@ -395,6 +395,29 @@ python3.13 -B -m processing.collection.edu_course_batch --name edu-courses-20261
 
 상세 표본은 공공누리 표시가 없었다. 앱 공개 전 이용 조건 확인이 필요하다. 로그인 후 화면, 접수예정·대기접수 같은 다른 접수상태의 제목 줄, 빈 수강료, 명령으로 여러 페이지를 이어 받는 순회(`--max-pages` 2 이상)는 실제로 실행하지 않았다.
 
+### 도서관 행사신청 목록·상세 수집
+
+교육·배움 분야의 도서관 프로그램은 안성시 도서관 [행사신청](https://www.anseong.go.kr/library/activity/program/list.do?mId=0202020000)에서 수집한다. 포털 비교 원본 없이 공식 웹만 사용한다. 목록은 공식 폼의 `currentPageNo`를 붙인 `list.do?mId=0202020000&currentPageNo=<페이지>`로, 상세는 `view.do?idx=<번호>&mId=0202020000`로 GET 요청한다. 공식 화면은 페이지 이동을 POST 폼으로 보낸다. 2026-11-28에 같은 GET 주소가 요청한 페이지를 돌려주는 것을 확인했다. 리디렉션은 따르지 않는다. 두 경로는 [robots.txt](https://www.anseong.go.kr/robots.txt)의 제한 목록에 없다.
+
+```sh
+python3.13 -B -m processing.collection.library_program_batch --name library-programs-20261128 --max-pages 2 --max-items 40
+python3.13 -B -m processing.collection.library_program_batch --name library-programs-p3 --start-page 3 --max-pages 2 --max-items 40
+```
+
+요청은 하나씩 1.5초 간격으로 보낸다. 페이지·건수 한도, `--start-page`와 `end_reached`·`partial`, HTTP 401·403·429·503 중단, 종료 코드 0·2·1은 도로 공사현황 수집과 같다. 2026-11-28 기준 목록은 110페이지(페이지당 20건)이고 지난 행사도 포함한다. 정렬 기준은 확인하지 않았다. `data/private/collection-library-programs/<name>/`에 목록·상세 HTML 원본, 파싱 결과 `parsed-<번호>.json`, 마지막으로 `batch.json`을 저장한다.
+
+- 목록: `form#listForm`의 action, 숨은 `currentPageNo`, 페이지 이동의 현재 페이지를 요청과 대조한다. 전체 페이지 수는 `맨끝으로`의 `module.goPage(N)`에서 읽는다. 표 머리글 7개(`도서관`…`접수현황`)가 바뀌거나 행마다 상세 링크가 정확히 하나가 아니면 형식 변경으로 본다. 행 안 신청 버튼의 `data-idx`가 상세 링크 번호와 다르거나 행사명·접수현황 칸이 비어도 형식 변경이다. 다른 칸이 비면 `listing`에 `null`, `unknown["listing.<필드>"]=empty`를 남긴다.
+- 신청 상태: 접수현황은 상세에 없어 목록 행의 문구를 `record.listing.application_status`에 그대로 둔다. `접수중`·`대기자접수중`·`접수마감`·`접수완료`를 확인했다. 이 문구나 상세 신청 버튼의 `data-state`(`apply_button_state`, `A`·`B`·`C`·`F` 확인)로 접수 가능 여부를 계산하지 않는다. 목록 행의 다른 칸도 `listing`에 원문으로 둔다.
+- 상세: 표 `문화강좌 신청확인`의 항목을 `fields`에 표시 문구 그대로 보관한다. 신청 기간 `접수기간`(`application_period`)과 진행 일정 `행사기간`·`행사요일`·`행사시간`(`activity_*`)은 키를 나누고 날짜로 해석하지 않는다. `행사대상`·`재료비`·`준비물`·`접수방법`에서 자격이나 무료 여부를 추정하지 않으며 `없음.` 같은 문구도 그대로 둔다. 줄 안의 공백은 하나로 줄이고 `br`·문단 경계는 줄바꿈으로 남긴다.
+- 빈 값: `진행자`·`재료비`·`준비물`·`유의사항` 행이 없는 게시물이 있다. 행이 없으면 `null`과 `unknown.<필드>=missing`, 행은 있으나 비면 `empty`를 남긴다. 실제로 `행사요일`·`접수방법`이 빈 사례가 있었다. 다른 필수 항목이 빠지거나 모르는 항목명·중복 항목이 나오면 형식 변경으로 보고 원본과 실패 사유를 남긴다.
+- 첨부: 첨부 파일은 받지 않는다. 파일 이름·크기 표시를 줄 단위로 `attachments`에 두고 `attachment` 표시를 남긴다. `자료없음`이면 빈 목록이다. 파일 목록도 `자료없음`도 없이 첨부 스크립트만 있는 칸은 유무를 확정할 수 없어 `null`과 `unknown.attachments=empty`로 둔다. 값 안의 그림은 `image:<필드>`로 표시한다.
+- 허용 표기: 목록 칸에는 실제 표본에 나온 `a`·`br`·`span`·`strong`만 받는다. 상세 값 칸에는 인라인 글자 태그와 `br`·`p`·`img`·`a`만, 첨부 칸에는 첨부 목록 구조와 전자정부 첨부 스크립트만 받는다. 칸 안쪽 태그와 대상 표의 `table`·`caption`·`colgroup`·`col`·`thead`·`tbody`·`tr`·`th`·`td`에 `style`·`hidden` 속성이 있으면 화면 표시를 확정할 수 없어 형식 변경으로 본다. 표 바깥 조상 요소의 숨김과 CSS 클래스에 의한 숨김은 확인하지 않는다. 표 밖 `script`·`style`·`template`·`noscript`의 내용은 무시하고, `template` 안의 짝 없는 `</style>`·`</noscript>` 등은 브라우저처럼 무시해 `template`이 문서 끝까지 열려 있으면 거부한다. 상세의 숨은 번호가 없으므로 신청 버튼의 `data-idx`를 요청 번호와 대조하고, `data-state`가 없거나 비어도 형식 변경으로 본다. 태그·주석·원문 텍스트·종료 태그의 경계는 공지 수집과 같은 `PinnedHTMLParser`의 브라우저 규칙을 따르고, 해석이 갈리는 표기(`<!-->`·`--!>` 주석, CDATA, 따옴표가 든 종료 태그 등)는 형식 변경으로 본다. 빈 요소가 아닌 태그의 `/>`는 브라우저처럼 무시하므로 `<span/>`은 칸이 끝날 때까지 닫히지 않아 거부되고 `<script/>` 뒤 글자는 스크립트 내용으로 숨는다. 실제 표본에는 이런 표기가 없었고, 공용 기반으로 바꾼 파서 `library-program-parser-v2`의 실제 28쪽 결과는 이전과 같았으며 Python 3.13.5·3.14.6에서도 서로 같았다.
+- 통합예약: 신청 버튼은 같은 번호를 포털 통합예약 신청 양식의 `programIdx`로 넘긴다(공식 `program.js`). 이 번호를 `cross_reference_candidate.integrated_reservation_program_idx`에 후보로만 남긴다. 통합예약에 같은 번호의 같은 행사가 있는지는 확인하지 않았다. 레코드를 합치거나 중복을 판정하지 않는다.
+
+`read_program_assets(private_root, name, ids)`는 `batch.json`에 기록된 목록·상세 원본 해시를 확인한다. 두 원본을 현재 파서로 다시 읽어 `parsed-<번호>.json`과 같은지 대조한 뒤 상세 원본 경로·해시·주소·수신 시각과 `collection_method=official-web-library-program`을 돌려준다. 접수현황 문구의 원본은 목록 페이지이므로 `listing_raw_asset_path`·`listing_raw_sha256`·`listing_url`·`listing_collected_at`도 돌려준다. 파일은 바꾸지 않는다. **D03 연결은 후속**이며 `d03`·`d03_sources`는 아직 이 수집 종류를 받지 않는다. 연결할 때 신청 상태의 증거로 상세 원본과 함께 목록 원본도 등록해야 한다.
+
+2026-11-28 실제 확인: 목록 7페이지(1·2·4·30·60·90·110) 135행과 상세 19건을 파싱했고(1페이지 재요청·수집 실행 2페이지를 포함하면 175행) Python 3.13·3.14 결과가 같았다. 상세 19건 중 첨부 목록 4건, 스크립트만 있는 첨부 칸 1건이 있었고 그림만 있는 본문은 없었다. 한 상세는 `행사내용`의 신청기간(`~마감시까지`)이 `접수기간` 칸과 달랐다. 둘 다 원문으로 두고 맞추지 않는다. 확인한 상세에는 공공누리 표시가 없었다. 앱 재게시 전 안성시 정책에 따른 이용 조건 확인이 필요하다.
+
 ## 시민 수동 추출·보관
 
 [extract-citizen-v1](../contracts/citizen-extraction.md)은 기존 ai-input-v1·manual archive-v1을 재사용하는 별도 family입니다. title/categories와12개 원문 사실을 FieldValue로 보존하며 분류 미상은 null+ambiguous입니다. 날짜·무료·자격·모집/취소·일정 대응을 추론하지 않습니다. 작성자의 기술 계약이며 실제 팀원·Flutter 최종 합의나 새 평가 기준을 대신하지 않습니다.
