@@ -71,6 +71,13 @@ class ParseTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "따옴표"):
             tcs.parse_tcs_csv('a,"b\r\n')
 
+    def test_line_is_where_multiline_record_starts(self):
+        text = "\r\n" + csv_bytes(row(1), row(2, road="합성로\r\n2구간"), row(2)).decode()
+        records, rejected = tcs.parse_tcs_csv(text)
+        self.assertEqual([r["line"] for r in records], [2, 3])
+        self.assertEqual(records[1]["fields"]["constRoad"], "합성로\r\n2구간")
+        self.assertEqual([r["line"] for r in rejected], [5])
+
     def test_anseong_selection_uses_road_and_police_only(self):
         rows = [row(1, road="경기도 안성시 공도읍 합성로"), row(2, police="안성"), row(3, road="무주군 안성면 합성로"),
                 row(4, name="안성 방면 합성 공사"), row(5, builder="안성건설"), row(6),

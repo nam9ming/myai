@@ -84,14 +84,17 @@ def parse_tcs_csv(text: str) -> tuple[list[dict], list[dict]]:
     """머리글 없는 레퍼런스 예제 배치만 읽는다. 맞지 않는 행은 원문과 사유를 `rejected`에 남긴다."""
     records, rejected, seen = [], [], set()
     reader = csv.reader(io.StringIO(text, newline=""), strict=True)
+    end = 0
     try:
         for columns in reader:
+            # line_num은 레코드가 끝난 줄이다. 여러 줄 레코드도 시작 줄을 남긴다.
+            start, end = end + 1, reader.line_num
             if not columns:
                 continue
             record, reason = _row(columns)
             if record is not None and columns[0] in seen:
                 record, reason = None, "같은 일련번호(seq)가 앞 행에 있습니다."
-            place = {"line": reader.line_num}
+            place = {"line": start}
             if record is None:
                 rejected.append({**place, "reason": reason, "columns": columns})
             else:
