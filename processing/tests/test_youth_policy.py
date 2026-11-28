@@ -100,6 +100,12 @@ class YouthPolicyParserTest(unittest.TestCase):
             (listing(card("1").replace('<span class="info"><strong>신청기간', '<em class="info"><strong>신청기간')),
              1, "구조"),
             (listing(card("1")).replace(b"<fieldset", b'<span class="page_num"></span><fieldset'), 1, "구조"),
+            # tit·info가 함께 붙은 span은 항목으로 세어 IndexError나 앞 항목 빈 값 채우기 없이 거부한다.
+            (listing(card("1").replace('<span class="tit">합성 청년 월세 지원 1</span>',
+                                       '<span class="tit info"><strong>x</strong></span>')), 1, "구조"),
+            (listing(card("1").replace('<span class="tit">합성 청년 월세 지원 1</span>', "").replace(
+                '<span>온라인 신청: 복지로(http://www.bokjiro.go.kr)</span></span>',
+                '</span><span class="tit info">제목<span>x</span></span>')), 1, "구조"),
             (listing(), 1, "구조"),
             (b"\xff", 1, "구조"),
         ):

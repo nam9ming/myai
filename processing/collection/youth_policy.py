@@ -120,14 +120,15 @@ class _ListingParser(HTMLParser):
         card = self.card
         if tag == "a" and parent[0] == "li":
             card["links"].append(values.get("href") or "")
+        # thumb·tit 분기보다 먼저 둔다. `.cont > span.info`는 class가 더 붙어도 모두 항목을 만든다.
+        elif tag == "span" and "info" in classes and "cont" in parent[1]:
+            card["info"].append([None, None])
         elif tag == "span" and "thumb" in parent[1] and card["category"] is None:
             card["category"] = []
             return card["category"]
         elif tag == "span" and "tit" in classes and "cont" in parent[1] and card["title"] is None:
             card["title"] = []
             return card["title"]
-        elif tag == "span" and "info" in classes and "cont" in parent[1]:
-            card["info"].append([None, None])
         # 위 분기에서 항목을 만든 `.cont > span.info` 바로 아래만 읽는다. 다른 .info 요소는 글자가 있으면 형식 변경이다.
         elif (tag in ("strong", "span") and parent[0] == "span" and "info" in parent[1]
               and "cont" in self.stack[-2][1]):
