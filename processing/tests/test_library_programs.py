@@ -119,6 +119,9 @@ class LibraryProgramParserTest(unittest.TestCase):
             "duplicate": listing(row("1"), row("1")),
             "tag": listing(row("1", period="<div>2026-12-10</div>")),
             "hidden": listing(row("1", period='<span style="display:none">x</span>')),
+            # 칸 안 box_page를 페이지 이동 영역으로 보면 숨긴 `마감`이 상태 문구에 붙는다.
+            "cell box_page": listing(row("1").replace(
+                status, '>접수중</span><div class="box_page"><span style="display:none">마감</span></div>')),
             "stray text": listing(row("1") + "x"),
             "nul": listing(row("1")).replace(b"</html>", b"\x00</html>"),
         }
@@ -157,6 +160,12 @@ class LibraryProgramParserTest(unittest.TestCase):
             "button idx": detail("1", button='<a data-button="write" data-idx="2" data-state="A">신청</a>'),
             "no button": detail("1", button="<span></span>"),
             "repeated attr": detail("1", button='<a data-button="write" data-idx="2" data-idx="1">신청</a>'),
+            "no button state": detail("1", button='<a data-button="write" data-idx="1">신청</a>'),
+            "empty button state": detail("1", button='<a data-button="write" data-idx="1" data-state="">신청</a>'),
+            "repeated script src": detail("1", *replace(
+                "첨부파일", '<script src="/files.js" src="/dwr/engine.js"></script>')),
+            "cell box_page": detail("1", *replace(
+                "장소", '아양<div class="box_page"><span style="display:none">비밀</span></div>')),
             "unknown label": detail("1", *_FIELDS, ("수강료", "1000원")),
             "duplicate": detail("1", *_FIELDS, ("장소", "다른 곳")),
             "missing": detail("1", *(pair for pair in _FIELDS if pair[0] != "접수기간")),

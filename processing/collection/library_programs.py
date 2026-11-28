@@ -118,18 +118,21 @@ class _PageParser(HTMLParser):
         raise ValueError(self.error)
 
     def handle_starttag(self, tag, attrs):
+        values = dict(attrs)
+        # 같은 속성이 반복되면 브라우저(첫 값)와 dict(마지막 값)의 해석이 갈린다. 칸 안 script src도 같다.
+        repeated = len(values) != len(attrs)
         if tag in _IGNORED_TAGS:
             if self.cell is not None:
-                self.cell["tags"].append((tag, dict(attrs)))
+                if repeated:
+                    self.fail()
+                self.cell["tags"].append((tag, values))
             elif self.stack is not None and not self.ignored:
                 self.fail()
             self.ignored += 1
             return
         if self.ignored:
             return
-        values = dict(attrs)
-        # 같은 속성이 반복되면 브라우저(첫 값)와 dict(마지막 값)의 해석이 갈린다.
-        if len(values) != len(attrs):
+        if repeated:
             self.fail()
         classes = (values.get("class") or "").split()
         if tag == "form" and values.get("id") == "listForm":
@@ -145,7 +148,8 @@ class _PageParser(HTMLParser):
                 self.on_text = []
             elif tag == "a" and "btn_end" in classes:
                 self.end_pages.append(values.get("onclick"))
-        elif tag == "div" and "box_page" in classes:
+        elif tag == "div" and "box_page" in classes and self.stack is None:
+            # 표 안의 box_page는 칸 태그로 검사해야 하므로 페이지 이동 영역으로 보지 않는다.
             self.box = 1
         elif self.stack is not None:
             self._table_start(tag, values)
@@ -328,6 +332,9 @@ def parse_program_detail(text: str, program_id: str) -> dict:
         raise ValueError(_INVALID_DETAIL)
     if parser.buttons[0].get("data-idx") != program_id:
         raise ValueError("도서관 행사신청 상세의 행사 번호가 요청과 일치하지 않습니다.")
+    # 실제 표본의 신청 버튼은 모두 상태 코드가 있었다. 없거나 비면 형식 변경으로 본다.
+    if not parser.buttons[0].get("data-state"):
+        raise ValueError(_INVALID_DETAIL)
 
     fields = dict.fromkeys(_DETAIL_FIELDS.values())
     seen, flags, attachments = set(), [], None
