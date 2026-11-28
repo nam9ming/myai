@@ -568,7 +568,7 @@ def _board_options(board: str) -> dict:
 
 
 def parse_board_media(text: str, *, board: str, notice_id: str) -> list[dict]:
-    """같은 게시판 구조를 쓰는 시청·안성배움e·읍면동 공지 상세의 이미지와 첨부 후보를 확인한다."""
+    """같은 게시판 구조를 쓰는 시청·안성배움e·읍면동·문화도시 안성 공지 상세의 이미지와 첨부 후보를 확인한다."""
     parser = _MediaParser(**_board_options(board))
     board_detail_url(board, notice_id)  # HTML을 읽기 전에 18자리 번호 한도를 확인한다.
     return _media(text, notice_id, parser)
@@ -584,11 +584,12 @@ def parse_library_notice(text: str, *, notice_id: str) -> dict:
 # 이력(이전 공유 이름 board-notice-parser): v1 시작, v2 시청 viewForm 필수, 안성배움e 추가.
 # v3: 본문 영역(div.bod_view 포함)은 허용 목록의 태그·속성·인라인 스타일만 받고, 문서 전체의 태그·주석·
 #     원문 텍스트 경계를 브라우저 규칙으로 고정해 해석이 갈리는 표기를 거부한다.
-# 읍면동 게시판은 v3 규칙에서 v1로 시작한다. 한 곳만 올릴 때는 아래 펼침 뒤에 그 키를 다시 적는다.
+# 읍면동·문화도시 안성 게시판은 v3 규칙에서 v1로 시작한다. 읍면동 한 곳만 올릴 때는 아래 펼침 뒤에 그 키를 다시 적는다.
 BOARD_PARSER_VERSIONS = MappingProxyType({
     'city': 'city-notice-parser-v3',
     'edu': 'edu-notice-parser-v3',
     **{key: f'{key}-notice-parser-v1' for key in BOARDS if key.startswith('town-')},
+    'ccas': 'ccas-notice-parser-v1',
 })
 
 
@@ -600,7 +601,7 @@ def board_parser_version(board: str) -> str:
 
 
 def parse_board_notice(text: str, *, board: str, notice_id: str) -> dict:
-    """같은 게시판 구조를 쓰는 시청·안성배움e·읍면동 공지 상세의 본문 텍스트와 게시일만 준비한다."""
+    """같은 게시판 구조를 쓰는 시청·안성배움e·읍면동·문화도시 안성 공지 상세의 본문 텍스트와 게시일만 준비한다."""
     source = board_info(board).source
     url = board_detail_url(board, notice_id)
     return _notice_record(_NoticeParser(**_board_options(board)), text, notice_id, source, lambda: url)
