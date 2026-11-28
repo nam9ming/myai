@@ -108,17 +108,24 @@ class YouthPolicyParserTest(unittest.TestCase):
                 '</span><span class="tit info">제목<span>x</span></span>')), 1, "구조"),
             (listing(), 1, "구조"),
             (b"\xff", 1, "구조"),
-            # 목록도 공용 토큰 경계로 읽는다. 브라우저는 빈 요소가 아닌 `<div/>`를 닫지 않아 뒤 카드 구조가 어긋난다.
-            (listing(card("1", extra='<div class="note"/>')), 1, "구조"),
+            # 목록도 공용 토큰 경계로 읽는다. 브라우저는 빈 요소가 아닌 `<span/>`을 닫지 않아 뒤 카드 구조가 어긋난다.
+            (listing(card("1", extra='<span class="note"/>')), 1, "구조"),
             (listing(card("1")).replace(b"<!--  -->", b"<!-->"), 1, "목록 페이지에 브라우저와 해석이 갈리는"),
             (listing(card("1")).replace(b"<html>", b"<html><script><!--<script></script>--></script>"), 1,
              "목록 페이지에 브라우저와 해석이 갈리는"),
             # 원문 텍스트 요소는 문자 참조를 풀지 않거나 브라우저 화면에 나오지 않아 카드 표시 문구와 달라진다.
             (listing(card("1").replace("지원 1<", "지원 1<textarea>&lt;B</textarea><")), 1, "구조"),
             (listing(card("1").replace("지원 1<", "지원 1<iframe>숨김</iframe><")), 1, "구조"),
-            # 브라우저는 template 안의 짝 없는 `</style>`을 무시해 뒤 카드 전부를 숨긴다.
-            (listing(card("1").replace("지원 1<", "지원 1<template></style>2099-01-01 ~ 2099-12-31<style>"
-                                                  "</template></style><")), 1, "구조"),
+            # 브라우저는 template 안의 짝 없는 `</style>`을 무시해 뒤 목록 폼 전부를 숨긴다.
+            (listing(card("1")).replace(b"<body>", b"<body><template></style><style></template></style>"), 1, "구조"),
+            # 실제 목록 5쪽에 없던 속성·태그·부모 짝(숨김 속성, 카드 안 style·script, a 안 a, p 안 div)은 거부한다.
+            *((listing(card("1").replace(old, new, 1)), 1, "구조") for old, new in (
+                ('"info">', '"info" hidden>'), ('"info">', '"info" style="display:none">'),
+                ('"info">', '"info" popover>'), ("<li>", "<li hidden>"), ("지원 1<", "지원 1<style>.cont{}</style><"),
+                ("지원 1<", '지원 1<script>document.write("<!--")</script><'),
+                ('<span class="tit">', '<a href="#"></a><span class="tit">'))),
+            (listing(card("1")).replace(b'id="list"', b'id="list" hidden'), 1, "구조"),
+            (listing(card("1")).replace(b"</span> /", b"</span><div></div> /"), 1, "구조"),
         ):
             with self.subTest(message=message, page=page), self.assertRaisesRegex(ValueError, message):
                 parse_youth_listing(raw, page=page)
@@ -199,6 +206,12 @@ class YouthPolicyParserTest(unittest.TestCase):
             (detail(info=INFO + "<li><span>작성자</span> : 합성</li>"), "알 수 없거나 중복된 항목"),
             (detail(body=""), "본문 텍스트가 없습니다"),
             (detail(body='<p style="display:none">숨김</p>'), "숨김"),
+            # 실제 상세 24쪽에 없던 속성·부모 짝과 생략한 종료 태그는 공지 허용 목록이 받더라도 거부한다.
+            (detail(viewer=VIEWER.replace("<figure>", "<figure popover>")), "대표 이미지 영역"),
+            (detail().replace('"bod_view"', '"bod_view" title="x"'), "숨김"),
+            (detail(body='<span style="font-size:4px">작게</span>'), "숨김"),
+            (detail(body="<ul><li>가<li>나</li></ul>"), "숨김"),
+            (detail(body="<ul><li>가</ul>"), "구조"),
             (detail(category_id="x"), "분야 번호"),
             (detail().replace('type="hidden" value="2"/>', 'type="hidden"/>'), "없거나 중복"),
         )

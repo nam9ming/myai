@@ -3,8 +3,8 @@
 import re
 from urllib.parse import urlencode
 
-from .html_tokens import RAW_TEXT_TAGS, PinnedHTMLParser
-from .libraries import _MARKUP_ERROR, _VOID_TAGS, _NoticeParser, _notice_record
+from .html_tokens import PinnedHTMLParser
+from .libraries import _HIDDEN_ERROR, _MARKUP_ERROR, _VOID_TAGS, _NoticeParser, _notice_record
 from .official_web import OFFICIAL_ORIGIN, _fetch
 from .road_works import _period
 
@@ -21,6 +21,24 @@ _CARD_LABELS = ("신청기간", "신청방법")
 _INFO_FIELDS = {"작성자": "author", "신청방법": "application_method", "조회": None}  # 조회수는 요청마다 바뀌어 보관하지 않는다.
 _INVALID_LISTING = "청년정책 목록 HTML 구조가 올바르지 않습니다."
 _INVALID_VIEWER = "청년정책 상세의 대표 이미지 영역 형식이 바뀌었습니다."
+# 읽는 영역(목록 `form#list`, 상세 `div.bod_view`, 둘 다 자신 포함)은 2026-11-28 저장한 실제 목록 5쪽·상세 24쪽에
+# 나온 태그별 속성과 부모>자식 짝만 받는다. 인라인 스타일은 표본에 없어 받지 않는다. 짝을 고정하면 브라우저가 시작
+# 태그로 요소를 대신 닫는 경우(p 안 div, li 안 li 등)가 생기지 않는다(목록의 a 안 a만 따로 막는다).
+# 숨김 여부를 따지지 않고 목록 밖은 거부한다.
+_LISTING_ATTRS = {
+    "a": "class href onclick tabindex title", "div": "class", "fieldset": "class", "figure": "",
+    "form": "action id method name", "img": "alt data-attach-id data-file-sn onerror src",
+    "input": "id name onclick placeholder title type value", "label": "class for", "legend": "class", "li": "",
+    "option": "value", "p": "class", "select": "id name title", "span": "class", "strong": "", "ul": "class"}
+_LISTING_NEST = frozenset("a>div div>a div>fieldset div>figure div>p div>span div>ul fieldset>input fieldset>label "
+                          "fieldset>legend fieldset>select figure>img form>div form>input li>a p>span select>option "
+                          "span>span span>strong ul>li".split())
+_DETAIL_ATTRS = {
+    "a": "href onclick", "br": "", "button": "class data-origin onclick type", "dd": "",
+    "div": "class data-saved-file-container id", "dl": "class", "dt": "", "figure": "", "h4": "", "img": "alt src",
+    "li": "class", "script": "src", "span": "class", "ul": "class"}
+_DETAIL_NEST = frozenset("a>span button>img dd>div dd>script div>br div>button div>div div>dl div>figure div>h4 "
+                         "div>script div>ul dl>dd dl>dt dt>span figure>img li>a li>button li>span ul>li".split())
 # 신청방법 칸 값 전체가 상태어·자리표시인 경우(실제 `모집마감`, `.`). 걸러 내지 않고 표시만 단다.
 # 상태어가 든 한 낱말(`조기마감`·`(마감)`)과 그 앞 낱말 하나(`접수 종료`·`신청 (마감)`)까지만 맞춘다.
 # `선착순 마감 시까지 방문 접수`처럼 방법 문구 안의 상태어는 맞추지 않는다.
@@ -61,6 +79,12 @@ def _text(parts: list[str]) -> str:
     return " ".join("".join(parts).split())
 
 
+def _allowed(tag, names, parent, attrs, nest) -> bool:
+    """속성이 중복 없이 태그별 허용 목록 안에 있고, 영역 뿌리(`parent=None`)가 아니면 부모>자식 짝도 표본에 있다."""
+    return (tag in attrs and len(set(names)) == len(names) and set(names) <= set(attrs[tag].split())
+            and (parent is None or f"{parent}>{tag}" in nest))
+
+
 class _ListingParser(PinnedHTMLParser):
     """`form#list` 안의 숨은 입력·페이지 표시·정책 카드만 읽는다. 카드 안 다른 위치의 글자는 형식 변경으로 본다."""
 
@@ -82,25 +106,26 @@ class _ListingParser(PinnedHTMLParser):
 
     def handle_starttag(self, tag, attrs):
         super().handle_starttag(tag, attrs)
+        names = [name for name, _ in attrs]
+        values = dict(attrs)
+        # 폼 안에서는 숨김 요소(script 등)도 목록 밖이라 열리지 않으므로, 폼 안에서 self.ignored는 늘 비어 있다.
+        root = tag == "form" and values.get("id") == "list" and not self.ignored
+        if self.in_form or root:
+            parent = self.stack[-1][0] if self.stack else "form" if self.in_form else None
+            if (not _allowed(tag, names, parent, _LISTING_ATTRS, _LISTING_NEST)
+                    or (tag == "a" and any(entry[0] == "a" for entry in self.stack))):  # 브라우저는 a 안 a를 닫는다.
+                self.fail()
         if tag in _IGNORED_TAGS:
             self.ignored.append(tag)
         if self.ignored:
             return
-        names = [name for name, _ in attrs]
-        values = dict(attrs)
-        if tag == "form":
-            if self.in_form:
+        if root:
+            if self.form_seen or values.get("action") != YOUTH_LISTING_PATH:
                 self.fail()
-            if values.get("id") == "list":
-                if self.form_seen or len(set(names)) != len(names) or values.get("action") != YOUTH_LISTING_PATH:
-                    self.fail()
-                self.form_seen = self.in_form = True
+            self.form_seen = self.in_form = True
             return
         if not self.in_form:
             return
-        # 공용 파서가 원문 텍스트로 읽는 요소는 문자 참조(textarea)·화면 표시(title·iframe 등)가 브라우저와 달라 받지 않는다.
-        if len(set(names)) != len(names) or (tag in RAW_TEXT_TAGS and tag not in _IGNORED_TAGS):
-            self.fail()
         classes = (values.get("class") or "").split()
         parent = self.stack[-1] if self.stack else ("form", [], None)
         slot = None
@@ -236,16 +261,21 @@ class _PolicyParser(_NoticeParser):
     def handle_starttag(self, tag, attrs):
         names = [name for name, _ in attrs]
         values = dict(attrs)
-        if self.viewer is not None or (
-                self.section == "description" and len(self.tags) == self.section_depth and not self.hidden_depth
-                and tag == "div" and "photo_viewer" in (values.get("class") or "").split()):
-            # 대표 이미지 틀은 공지 본문 허용 목록 대신 아래 틀 검사를 받으므로 태그 경계 검사만 거친다.
+        classes = (values.get("class") or "").split()
+        viewer = self.viewer is not None or (
+            self.section == "description" and len(self.tags) == self.section_depth and not self.hidden_depth
+            and tag == "div" and "photo_viewer" in classes)
+        # 중복 class면 브라우저는 첫 값을 써 대표 이미지 틀이 아닌 본문으로 보이므로, 틀 여부와 함께 여기서 거부한다.
+        if (self.tags or (tag == "div" and "bod_view" in classes)) and not _allowed(
+                tag, names, (self.viewer or self.tags or [None])[-1], _DETAIL_ATTRS, _DETAIL_NEST):
+            raise ValueError(_INVALID_VIEWER if viewer else _HIDDEN_ERROR.format(self.label))
+        if viewer:
+            # 대표 이미지 틀은 공지 본문 허용 목록 대신 위 표본 허용 목록과 아래 틀 검사를 받는다.
             PinnedHTMLParser.handle_starttag(self, tag, attrs)
             if self.viewer is None:
                 if self.viewer_seen or "".join(self.parts["description"]).strip():
                     raise ValueError(_INVALID_VIEWER)
                 self.viewer, self.viewer_seen = [], True
-            # 여는 div도 같은 검사를 받는다. 중복 class면 브라우저는 첫 값을 써 틀이 아닌 본문으로 보인다.
             self._viewer_start(tag, names, values)
             return
         super().handle_starttag(tag, attrs)
@@ -269,7 +299,7 @@ class _PolicyParser(_NoticeParser):
 
     def _viewer_start(self, tag, names, values):
         source = values.get("src") or ""
-        if (tag not in _VIEWER_TAGS or len(set(names)) != len(names) or "hidden" in values or "style" in values
+        if (tag not in _VIEWER_TAGS
                 or (tag == "script" and names and (names != ["src"] or source not in _VIEWER_SCRIPTS))
                 or (tag == "img" and not _VIEWER_IMAGE.fullmatch(source))):
             raise ValueError(_INVALID_VIEWER)
@@ -283,6 +313,9 @@ class _PolicyParser(_NoticeParser):
 
     def handle_endtag(self, tag):
         if self.viewer is None:
+            # 본문 영역의 종료 태그는 가장 안쪽 요소만 닫는다. 공지 파서가 대신 닫는 생략 가능 태그(li 등)도 받지 않는다.
+            if self.tags and tag not in _VOID_TAGS and self.tags[-1] != tag:
+                raise ValueError(self.label + " HTML 구조가 올바르지 않습니다.")
             super().handle_endtag(tag)
         elif tag not in _VOID_TAGS:
             if self.viewer[-1] != tag:
