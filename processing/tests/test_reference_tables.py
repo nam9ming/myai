@@ -84,7 +84,7 @@ class LibraryHoursParserTest(unittest.TestCase):
         ])
         self.assertEqual(blocks[5]["head"][0][1], cell("th", "이용시간", scope="col", colspan=2))
         self.assertEqual(len(content_sha256(record)), 64)
-        # 제목은 원본 위치로 다시 확인하므로 앞에 줄(CRLF 포함)이 있어도, 문자 참조가 있어도 읽혀야 한다.
+        # 제목 앞에 줄(CRLF 포함)이 있어도, 문자 참조가 있어도 읽혀야 한다.
         moved = page(title="이용시간 및 정기휴관일 | 이용&middot;안내 | 안성시 도서관").replace("<head>", "<head>\n\r\n")
         self.assertEqual(parse_library_hours(moved)["page_title"], "이용시간 및 정기휴관일 | 이용·안내 | 안성시 도서관")
 
