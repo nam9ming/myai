@@ -31,7 +31,10 @@ _PREVIEW = re.compile(r"fn_egov_gosi_preview\('([1-9][0-9]{0,17})','([^']*)','([
 _URI_SAFE = ";,/?:@&=+$!*'()#"
 _QUERY_DELIMITERS = set("&=#+")
 # 번호 체계는 발행 주체(안성시·안성시 농업기술센터·안성시 공도읍 …)마다 따로라, 번호 앞 주체 문구까지 원문 그대로 담는다.
-_NOTICE_NUMBER = re.compile(r"(?:안성시(?: [가-힣]{1,20}){0,3}? ?(?:고시|공고) ?)?제\s?[0-9]{4}\s?-\s?[0-9]{1,6}\s?호")
+# 주체는 `경기도`·`안성시`로 시작할 때만 읽는다(붙여 쓴 `안성시공도읍`, 괄호 `공고(제…호)` 포함). `다시 공고`처럼
+# 낱말 끝만 보고 주체를 지어내지 않도록 다른 주체는 번호만 남긴다. 여는 괄호를 담았으면 닫는 괄호도 있어야 한다.
+_NOTICE_NUMBER = re.compile(r"(?:(?:경기도|안성시)(?: ?[가-힣]{1,20}){0,3}? ?(?:고시|공고) ?(\()?)?"
+                            r"제\s?[0-9]{4}\s?-\s?[0-9]{1,6}\s?호(?(1)\))")
 _MEDIA_LIMIT = 40
 
 
@@ -381,10 +384,10 @@ def parse_gosi_detail(text: str, *, notice_id: str, listing: dict) -> dict:
     if registered is None and fields["registered_date"] is not None:
         flags.add("registered_date_unparsed")
     # 정정·변경 관계는 본문·제목에 적힌 고시공고번호 문자열만 남기고, 제목의 `(정정)`만으로 원공고를 추정하지 않는다.
-    # 자기 번호 제외와 중복 제거는 같은 정규화(공백 제거)로, 발행 주체까지 같은 전체 번호일 때만 한다.
-    references, seen = [], {"".join((fields["notice_number"] or "").split())}
+    # 자기 번호 제외와 중복 제거는 같은 정규화(공백·괄호 제거)로, 발행 주체까지 같은 전체 번호일 때만 한다.
+    references, seen = [], {re.sub(r"[\s()]", "", fields["notice_number"] or "")}
     for found in _NOTICE_NUMBER.finditer(f"{title}\n{fields['description'] or ''}"):
-        if (key := "".join(found[0].split())) not in seen:
+        if (key := re.sub(r"[\s()]", "", found[0])) not in seen:
             seen.add(key)
             references.append(found[0])
     return {

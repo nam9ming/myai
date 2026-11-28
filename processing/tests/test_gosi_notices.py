@@ -147,6 +147,16 @@ class GosiParserTest(unittest.TestCase):
         record = parse_gosi_detail(detail(title="합성 공고(정정)"), notice_id="75365", listing=row(title="합성 공고(정정)"))
         self.assertEqual(record["referenced_notice_numbers"], [])
 
+    def test_detail_keeps_issuer_of_spaced_or_bracketed_numbers(self):
+        # 경기도 발행, 붙여 쓴 주체, 괄호 표기도 주체까지 원문대로 남긴다. 괄호·공백만 다른 같은 번호는 하나로 본다.
+        # 모르는 주체(`다시`는 주체가 아니다)와 짝이 맞지 않는 괄호는 주체를 지어내지 않고 번호만 남긴다.
+        body = ("경기도 고시 제2026-100호, 안성시공도읍 공고 제2026-79호, 안성시 공고(제2026-3155호)를 정정합니다."
+                " 안성시 공고 (제2026-3155호), 안성시 고시(제2026-343호), 다시 공고 제2026-5호, 안성시 공고(제2026-6호 참조")
+        record = parse_gosi_detail(detail(body=body), notice_id="75365", listing=row())
+        self.assertEqual(record["referenced_notice_numbers"],
+                         ["경기도 고시 제2026-100호", "안성시공도읍 공고 제2026-79호", "안성시 공고(제2026-3155호)",
+                          "제2026-5호", "제2026-6호"])
+
     def test_detail_rejects_other_notices_and_format_changes(self):
         cases = {
             "목록 항목과 일치하지": (detail(), row(title="다른 제목")),
