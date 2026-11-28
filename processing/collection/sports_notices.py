@@ -67,8 +67,10 @@ _STYLE = {name: re.compile("|".join(map(re.escape, values.split("|")))) for name
     "font-family mso-ascii-font-family mso-fareast-font-family mso-hansi-font-family": r"[\w ,'-]+",
     "border border-bottom border-left border-top": rf"[1-5]px (?:solid|dashed) {_HEX}|0px(?: currentcolor)?|none",
 }.items() for name in names.split()}
-# 브라우저가 강제 줄바꿈으로 보이는 문자(UAX #14 BK·NL)를 str.split은 공백으로 접고 `&#11;`은 Python이 지운다.
-_UNREAD = re.compile(r"[\x00\x0b\x0c\x85\u2028\u2029]|&#(?:0*(?:1[12]|823[23])(?![0-9])|x0*(?:[bc]|202[89])(?![0-9a-f]))", re.I)
+# 브라우저가 강제 줄바꿈으로 보이거나(UAX #14 BK·NL) 공백으로 보지 않는 문자(U+001C~U+001F)를 str.split은 공백으로 접고,
+# 그 숫자 참조(`&#11;`·`&#28;` 등)는 Python이 지운다.
+_UNREAD = re.compile(r"[\x00\x0b\x0c\x1c-\x1f\x85\u2028\u2029]|&#(?:0*(?:1[12]|2[89]|3[01]|823[23])(?![0-9])|"
+                     r"x0*(?:[bc]|1[c-f]|202[89])(?![0-9a-f]))", re.I)
 _INVALID_DETAIL = "체육시설 공지 상세 HTML 구조가 예상과 다릅니다."
 _INVALID_LISTING = "체육시설 공지 목록 HTML 구조가 올바르지 않습니다."
 _INVALID_BODY = "체육시설 공지 본문에 허용하지 않는 태그·속성이 있습니다."
@@ -127,12 +129,19 @@ def robots_rules(raw: bytes) -> dict:
             raise ValueError("체육시설 robots.txt에 규칙이 아닌 줄이 있어 허용 여부를 확정할 수 없습니다.")
         key, value = match[1].lower(), match[2].strip()
         if key == "user-agent":
+            # 제품 토큰이나 `*` 뒤에 다른 글자가 붙은 값(`yeogi-it, x`·`* all`)은 그룹이 갈려 허용 쪽으로 판정되므로 멈춘다.
+            token = re.match(r"\*|[A-Za-z_-]*", value)[0].lower()
+            if token in ("*", _PRODUCT) and value.split("/", 1)[0].strip().lower() != token:
+                raise ValueError("체육시설 robots.txt의 User-agent 값을 확정할 수 없습니다.")
             # Allow·Disallow 뒤에 나온 user-agent 줄만 새 그룹을 연다. Crawl-delay는 RFC 9309의 규칙이 아니다.
             if not groups or any(k != "crawl-delay" for k, _ in groups[-1][1]):
                 groups.append((set(), []))
             groups[-1][0].add(value.split("/", 1)[0].strip().lower())
         elif key in ("allow", "disallow", "crawl-delay") and groups:
             groups[-1][1].append((key, value))
+        elif groups and re.match(r"allow|dis|diasl", key):
+            # `Disalow`·`Dissallow` 같은 오타를 모르는 줄로 건너뛰면 막힌 주소를 허용하게 된다.
+            raise ValueError("체육시설 robots.txt에 확정할 수 없는 Allow·Disallow 줄이 있습니다.")
     if any(lines) and not groups:
         raise ValueError("체육시설 robots.txt에 User-agent 줄이 없어 허용 여부를 확정할 수 없습니다.")
     # 이름이 맞는 그룹이 없을 때만 `*` 그룹을 따르고, 맞는 그룹이 여럿이면 규칙을 합친다.

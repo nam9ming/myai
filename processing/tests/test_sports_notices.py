@@ -145,9 +145,9 @@ class SportsParserTest(unittest.TestCase):
                 # 브라우저는 시작 태그로 앞 요소를 닫는다.
                 "<p>가<div>나</div></p>", "<ul><li><div><li>가</li></div></li></ul>", "<h1><h2>가</h2></h1>")),
             # 실제 제목 h4 안에는 태그가 없었다. 강제 줄바꿈 문자는 줄을 합친다.
-            *(("구조", {"title": title}) for title in ("<span>2026년</span> 안내", "예약<br>안내", "<b popover>x</b>안내", "예약\u2029안내")),
+            *(("구조", {"title": title}) for title in ("<span>2026년</span> 안내", "예약<br>안내", "<b popover>x</b>안내", "예약\u2029안내", "예약\x1c일정")),
             *(("구조", {"body": f"<p>가{c}나</p>"})
-              for c in ("\u2028", "&#x2028;", "&#8233;", "\x85", "\x0b", "&#11;", "&#xC;")),
+              for c in ("\u2028", "&#x2028;", "&#8233;", "\x85", "\x0b", "&#11;", "&#xC;", "\x1c", "\x1f", "&#28;", "&#x1F;")),
             ("구조", {"body": "<p><strong>x</p></strong>"}),
             *(("구조", {"head": head}) for head in ("<div><span></div></span>", "<body hidden>", "<lin\u212a hidden>",
                                                    "<ak hidden>x</a\u212a>")),
@@ -182,7 +182,11 @@ class SportsParserTest(unittest.TestCase):
                     b"User-agent: *\nCrawl-delay: soon\n", b"Error: Request Blocked\n",
                     b"User-agent: *\nDisallow: index.do\n", b"User-agent: yeogi-it\nAllow: https://x/\n",
                     # RFC 9309의 공백은 SP·HTAB뿐이다.
-                    *(f"User-agent: *\nDisallow: /index\nAllow: /index.do{c}\n".encode() for c in "\xa0\u3000\x85\x1c\u2028")):
+                    *(f"User-agent: *\nDisallow: /index\nAllow: /index.do{c}\n".encode() for c in "\xa0\u3000\x85\x1c\u2028"),
+                    # 토큰 뒤에 글자가 붙은 User-agent 값과 Disallow 오타는 허용 쪽으로 판정되므로 멈춘다.
+                    b"User-agent: yeogi-it, otherbot\nDisallow: /\n", b"User-agent: yeogi-it;\nDisallow: /\n",
+                    b"User-agent: * all\nDisallow: /\n", b"User-agent: *\nDisalow: /\n",
+                    b"User-agent: *\nDissallow: /\n", b"User-agent: *\nDisallowed: /index.do\n"):
             with self.subTest(raw=raw), self.assertRaises(ValueError):
                 robots_rules(raw)
 
