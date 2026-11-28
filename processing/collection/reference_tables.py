@@ -317,8 +317,14 @@ def capture_reference(page: str, name: str, root: Path, *, previous: str | None 
     # 받은 원본을 버리지 않도록 저장할 수 없는 경우는 요청 전에 거부한다. 묶음은 요청이 성공한 뒤에 만든다.
     if root.resolve() != root:
         raise ValueError("수집 디렉터리에 심볼릭 링크를 사용할 수 없습니다.")
-    if root.exists() and (root.stat().st_uid != os.geteuid() or stat.S_IMODE(root.stat().st_mode) & 0o077):
-        raise ValueError("수집 디렉터리는 실행 사용자만 접근할 수 있어야 합니다.")
+    try:  # 일반 파일이거나 상위에 만들 수 없으면 여기서 막힌다.
+        root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    except OSError:
+        raise ValueError("수집 디렉터리를 만들 수 없습니다.") from None
+    info = root.lstat()
+    if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) & 0o077
+            or not os.access(root, os.W_OK | os.X_OK)):
+        raise ValueError("수집 디렉터리는 실행 사용자만 접근하고 쓸 수 있어야 합니다.")
     if (root / name).exists() or (root / name).is_symlink():
         raise ValueError("이미 사용 중인 수집 이름입니다.")
     raw = fetch_page()

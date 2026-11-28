@@ -306,6 +306,14 @@ class ReferenceCaptureTest(unittest.TestCase):
         self.section.chmod(0o755)
         with self.assertRaisesRegex(ValueError, "실행 사용자만"):
             capture_reference("library-hours", "x", self.section)
+        (self.root / "file").write_bytes(b"")
+        (self.root / "file").chmod(0o600)
+        with self.assertRaisesRegex(ValueError, "만들 수 없습니다"):
+            capture_reference("library-hours", "x", self.root / "file")
+        for mode in (0o500, 0o600):
+            self.section.chmod(mode)
+            with self.subTest(mode=oct(mode)), self.assertRaisesRegex(ValueError, "쓸 수 있어야"):
+                capture_reference("library-hours", "x", self.section)
         self.section.chmod(0o700)
         self.fetch.assert_not_called()
         self.fetch.side_effect = ValueError("도서관 이용시간 응답을 받지 못했습니다.")
