@@ -355,6 +355,46 @@ python3.13 -B -m processing.collection.d03 --input data/private/source-review-in
 
 `data/private/collection-d03/<name>/`에 검토 입력의 원본 `review.json`과 등록 입력 `source-import.json`을 저장한다. 같은 이름은 덮어쓰지 않는다. 제목·본문의 유니코드 NFC와 본문 줄바꿈을 정규화한다. 등록 입력에 원본 바이트나 다른 게시물 후보의 문구를 복사하지 않는다. 검토 입력과 등록 입력은 각각 8MiB, 수집 기록은 64MiB까지 사용한다. 수집 기록 한도를 넘으면 완료 파일 없이 이미 받은 원본을 남긴다. 수집 디렉터리와 원본·기록은 실행 사용자 소유와 비공개 권한을 유지한다. D03 초기 상태는 `pending`·`unchecked`다. [기존 Java 등록 명령](../backend/docs/extraction-run-import.md#수집-묶음에서-준비한-원문-등록)을 명시적으로 실행해야 DB에 반영된다.
 
+### 안성배움e 전체 강좌 목록·상세 수집
+
+교육·배움 분야의 강좌는 [안성배움e 강좌 전체보기](https://www.anseong.go.kr/edu/portal/edu/eduLctre/selectEduLctreWebList.do?mId=1400000000)에서 받는다. 공지 게시판 `board_batch edu`(`BOARDS["edu"]`)와 다른 강좌 신청 화면이다. 목록은 `selectEduLctreWebList.do?mId=1400000000&page=N`, 상세는 강좌 번호 `eduLctreNo`로 `eduLctreView.do?eduLctreNo=…&mId=1400000000`을 GET으로 요청하고 리디렉션은 따르지 않는다. 두 경로는 `/edu/` 아래이며 2026-11-28 [robots.txt](https://www.anseong.go.kr/robots.txt)의 제한 목록에 없었다. 포털 비교 원본 없이 공식 웹만 쓴다. D03 연결은 후속이다.
+
+```sh
+python3.13 -B -m processing.collection.edu_course_batch --name edu-courses-20261128 --max-pages 2 --max-items 20
+```
+
+`data/private/collection-edu-courses/<name>/`에 목록·상세 HTML, `parsed-<번호>.json`(`edu-course-parser-v9`, 이전 버전 기록은 파서 버전 오류로 거부), 마지막으로 `batch.json`(`citizen-edu-course-batch-v1`)을 쓴다. 한도·`--start-page`·중단 HTTP 상태·종료 코드는 도로 공사현황과 같은 공통 묶음 규칙(`web_batch.py`)이다. 요청 간격만 1.5초로 늘렸다. `read_course_batch`는 보관한 상세 원본의 해시, 파서 버전, 현재 파서로 다시 만든 파싱 결과를 대조한 뒤 강좌별 기록과 원본 경로·해시·수신 시각을 돌려준다.
+
+목록은 `p.page_num`(`전체 N건 [ 현재 / 전체페이지 ]`)의 현재 페이지를 요청과 대조하고, `수강신청 목록` 표의 행마다 상세 링크(제목·접수상태 단추)가 한 강좌 번호만 가리켜야 받는다. `p.page_num`과 목록 표 안은 실제 목록 6쪽에 있던 태그 경로 16가지(`p > b`, `table > caption`·`colgroup > col`·`thead > tr > th > br`·`tbody > tr > td > a`·`br`·`span`, `edu_courses.py`의 `_LIST_TAGS`)와 경로별 속성(`class`·`href`·`scope`, `col`의 `style="width:…"` 다섯 값), class 값(`page_num`·`bod_maintain`·`text_left`·`btn`·`xsmall`·`type3`·`type5`·`mL5`·`mR5`)만 받는다. `noscript`·`dialog`처럼 태그로 숨긴 글자와 표 바로 아래 같은 다른 위치의 행도 거부한다. 숨긴 행의 강좌 번호나 숨긴 숫자가 붙은 전체 페이지 수(순회 종료 판단)를 읽지 않기 위해서다. 목록·상세는 공용 브라우저 기준 태그 경계 규칙(`html_tokens.py`의 `PinnedHTMLParser`)으로 읽고, `script`·`style`·`template` 안쪽은 맞는 종료 태그가 올 때까지 숨김으로 본다(`template` 안의 짝 없는 `</style>`·`</script>`는 무시). 읽는 영역 안의 종료 태그는 가장 안쪽 열린 요소를 닫아야 하고(실제 원본 34쪽 모두 그랬다), 어긋나거나 `</img>` 같은 빈 요소의 종료 태그가 있으면 거부한다. 영역 밖에서 연 서식 요소(`a`·`b`·`font` 등 14가지, `_FORMATTING`)와 그 뒤에 연 요소가 종료 태그로 안쪽부터 차례대로 닫히지 않은 채 영역이 시작돼도 거부한다. 브라우저는 `<p><a hidden></p>`처럼 암묵적으로 닫히거나 `object` 안의 `</b>`처럼 무시된 서식 요소를 영역 안 다음 글자·태그 앞에 같은 속성으로 다시 만들어 일부만 숨길 수 있다(실제 원본 34쪽은 영역 시작 때 남은 요소가 없었다). 선언형 shadow root(`shadowrootmode`·`shadowroot` 속성의 `template`)는 부모 요소의 원래 자식 대신 template 안쪽을 그리므로 문서 어디서든 거부한다. 이 수집기가 `div#learning_cont` 안의 제목 줄과 `dl > dt + dd` 항목을 읽는다. 상세 HTML에는 강좌 번호를 담은 입력값이 없다. 그래서 페이지 머리의 QR 주소(요청 주소를 되돌려 주는 값)가 요청 번호와 같은지만 확인한다. 이 값은 본문이 그 강좌라는 서버 보증이 아니다. 같은 화면의 공유 도구에 있는 다른 형식의 QR 주소(모든 표본에서 `eduLctreNo=3203&eduInsttNo=7`)는 읽지 않는다. 첨부 주소는 페이지 설정의 `contextPath`로 만들므로, 선언이 정확히 한 번 `/edu`일 때만 받는다. 목록·상세 모두 확인하지 않는 것은 읽는 영역 바깥 요소(`p.page_num`을 감싼 `div.bod_head`, `div#learning_cont`의 조상, 제목 줄·항목 묶음의 형제)의 숨김, 허용한 class·`id`에 스타일시트가 건 숨김, 허용한 값끼리의 조합으로 생기는 숨김(글자색과 배경색이 같음, 고정 크기 상자의 넘침 잘림 등), 인라인·외부 스크립트의 실행 결과다.
+
+| 상세 항목 | `fields` 키 |
+| --- | --- |
+| 제목 줄 접수상태 | `reception_status` |
+| 접수기간 | `application_period` |
+| 접수현황(신청·모집인원·대기) | `enrollment_status` |
+| 선발방법 | `selection_method` |
+| 교육기간 / 교육시간 | `course_period` / `course_schedule` |
+| 교육장 / 강사명 / 수강료 / 문의전화 | `venue` / `instructor` / `fee` / `contact_phone` |
+| 강좌소개 / 유의사항 | `description` / `notes` |
+
+값은 표시 문구 그대로 둔다. `br`만 줄바꿈으로 남기고 줄마다 공백을 하나로 줄이며 빈 줄은 버린다. 제목·접수상태·항목명·값 칸·첨부 이름에는 `br`·`span`·`em`·`a`만 허용하고 그 밖의 태그(`noscript`·`details` 등 안의 글자는 화면에 나오지 않을 수 있다)는 형식 변경으로 거부한다. 사진 칸의 `button`은 `file_slide_prev`·`file_slide_next` class에 `span` 하나와 `이전`·`다음` 글자만 있을 때 건너뛰고, 그 밖의 단추는 그림을 감쌀 수 있어 거부한다. 제목 줄과 항목 묶음은 실제 상세 28쪽에 있던 태그 경로 19가지(`div > span`, `div > dl > dt`·`dd`와 `dd` 아래 `br`·`a`·`span > em`, 사진·첨부 칸의 `div`·`button > span`·`a > img`·`a > span`, `_TAGS`)와 경로별 속성(`alt`·`class`·`href`·`id`·`onclick`·`src`·`target`·`title`·`type`, `style="vertical-align:middle"`), class 값(`bod_*`·`em_b_black`·`mL5` 같은 여백·`updateFileList`·`file_slide*`, `edu_courses.py`의 `_CLASSES`)만 받고, 문서 전체에서 중복 속성(브라우저는 첫 값을 쓴다)은 거부한다. 이 사이트의 화면 숨김 class(`blind`·`skip`)도 거부한다. `skip`은 첨부 링크 바로 아래의 `파일 다운로드` 안내에서만 받고 파일 이름에서 뺀다. 제목 줄·항목 묶음·`dl` 행에서 요소 밖에 놓인 글자(공백 제외)는 화면에 보이지만 읽을 칸이 없어 거부한다. `div#learning_cont`는 실제 28쪽처럼 속성이 `id="learning_cont" class="learning_content"`뿐일 때만 받는다. 13개 항목 중 하나라도 빠지거나 다른 항목명·중복이 나와도 거부한다. 빈 값은 `null`과 `missing:<키>`로 남긴다. 접수기간(신청 일정)과 교육기간·교육시간(수업 일정)은 다른 키에 두고 날짜로 해석하지 않는다. `수강료`의 `무료`는 문구 그대로 두고, 빈 칸은 `null`이며 무료로 바꾸지 않는다. 정원은 `enrollment_status`의 `모집인원` 문구에만 있고 숫자로 뽑지 않는다. 강좌소개의 대상·연령 문구에서 신청 자격을 추정하지 않는다. 같은 제목의 다른 회차는 강좌 번호와 원문 주소로 구별한다. `교육장 사진`·`강의계획서 및 이미지` 칸은 그림(`alt`, `/edu/common/imgView.do` 주소)과 첨부(파일 이름, `/edu/cmm/fms/FileDown.do` 주소)를 `media`에 순서대로 남기고 `image:<칸>`·`attachment:<칸>`으로 표시한다. 형식이 다른 주소는 `null`이다. 그림·첨부 내용은 읽지 않는다. 목록에만 있는 `지역`·`접수방법` 열은 `list-N.html` 원본에만 남는다.
+
+2026-11-28 공식 HTML로 확인한 결과는 다음과 같다(요청 36건, 1.5초 이상 간격).
+
+| 확인 범위 | 결과 |
+| --- | --- |
+| 목록 | 전체 3,292건·330페이지. 1·2·150·250·300페이지 모두 10행. 목록 순서가 강좌 번호 순은 아니다(250페이지 `1035, 1016, 992…`). |
+| 명령 실행 | 1페이지 10건, 250페이지 10건(`--start-page 250`) 모두 파싱했다. `read_course_batch` 재검증을 Python 3.13.5·3.14.6에서 통과했고 두 결과는 같았다. |
+| 탐색용 상세 8건 | 5085·5086·5094·4673·2803·2788·347·339. 모두 같은 13개 항목이고 두 Python 버전의 결과가 같았다. |
+| 같은 제목의 회차 | 5084·5085·5086·5087은 제목이 같고 접수기간·교육기간·신청 인원만 다르다. |
+| `수강료` | 2025~2026년 표본은 모두 `무료`. 2023~2024년 표본은 `48,000 원 ( 재료비 280000 )`, `48,000 원 ( 교재비 )`, `48,000 원 ( 개별 프린트 )`, `48,000 원 ( 100000 )`처럼 괄호 안 부가 문구가 붙는다. 빈 칸은 보지 못했다. |
+| `교육시간` | `화/14:00 ~ 16:00` 줄이 요일마다 나뉜 형식과 `화 목/10:00 ~ 12:00` 한 줄 형식이 섞여 있다. |
+| `접수현황` | 대기 정보가 없는 형식과 `(대기신청 0명 / 대기정원 10명)`이 붙은 형식이 있다. 339번은 대기정원 `9999명`, 5094번은 신청 6명·모집인원 1명이었다. |
+| 그림·첨부 | 실행 20건 중 교육장 사진 5건, 강의계획서 그림 5건, 첨부 4건(JPEG), 둘 다 없음 11건(2024년 표본 10건 모두). 탐색용 347번은 HWP 강의계획서 첨부였다. 강좌 안내가 포스터 그림·첨부에만 있을 수 있어 표시를 보고 확인한다. |
+| 없는 번호 | `eduLctreNo=999999999`은 HTTP 200의 196바이트 `alert('잘못된 접근입니다.')` 화면이고 구조 오류로 거부된다. |
+
+상세 표본은 공공누리 표시가 없었다. 앱 공개 전 이용 조건 확인이 필요하다. 로그인 후 화면, 접수예정·대기접수 같은 다른 접수상태의 제목 줄, 빈 수강료, 명령으로 여러 페이지를 이어 받는 순회(`--max-pages` 2 이상)는 실제로 실행하지 않았다.
+
 ## 시민 수동 추출·보관
 
 [extract-citizen-v1](../contracts/citizen-extraction.md)은 기존 ai-input-v1·manual archive-v1을 재사용하는 별도 family입니다. title/categories와12개 원문 사실을 FieldValue로 보존하며 분류 미상은 null+ambiguous입니다. 날짜·무료·자격·모집/취소·일정 대응을 추론하지 않습니다. 작성자의 기술 계약이며 실제 팀원·Flutter 최종 합의나 새 평가 기준을 대신하지 않습니다.

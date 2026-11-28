@@ -18,6 +18,8 @@ CASES = {
     "processing.collection.road_batch": (["road_batch", "closed", "--name", "x"], ["capture_road_batch"]),
     "processing.collection.board_batch": (["board_batch", "library", "--name", "x"], ["capture_board_batch"]),
     "processing.collection.welfare_batch": (["welfare_batch", "--name", "x", "--max-pages", "x"], ["collect_welfare"]),
+    "processing.collection.edu_course_batch": (["edu_course_batch", "--name", "x", "--max-items", "x"],
+                                               ["capture_course_batch"]),
 }
 
 
