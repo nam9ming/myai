@@ -583,6 +583,35 @@ python3.13 -B -m processing.collection.library_program_batch --name library-prog
 
 2026-11-28 실제 확인: 목록 7페이지(1·2·4·30·60·90·110) 135행과 상세 19건을 파싱했고(1페이지 재요청·수집 실행 2페이지를 포함하면 175행) Python 3.13·3.14 결과가 같았다. 상세 19건 중 첨부 목록 4건, 스크립트만 있는 첨부 칸 1건이 있었고 그림만 있는 본문은 없었다. 한 상세는 `행사내용`의 신청기간(`~마감시까지`)이 `접수기간` 칸과 달랐다. 둘 다 원문으로 두고 맞추지 않는다. 확인한 상세에는 공공누리 표시가 없었다. 앱 재게시 전 안성시 정책에 따른 이용 조건 확인이 필요하다.
 
+### 경기도교통정보센터 돌발정보 API 수집
+
+공사·교통 분야의 실시간 사고·공사·차로 통제 후보는 경기도교통정보센터 Open API의 [돌발정보 조회](https://openapigits.gg.go.kr/api/jsp/manual_getIncidentInfo.jsp?m1=2&m2=6)에서 받는다. **이 수집기는 합성 XML 응답으로만 시험했고 센터가 발급하는 인증 키가 필요한 실제 API는 호출하지 않았다.** D03 연결은 후속이다.
+
+```sh
+GITS_SERVICE_KEY=<발급 키> python3.13 -B -m processing.collection.gits_incidents --name gits-20261128
+```
+
+- 키: 센터의 공개키 신청으로 받은 키를 실행 환경의 `GITS_SERVICE_KEY`에만 넣는다. 키는 요청 주소에만 붙고 원본·파싱 결과·`capture.json`·오류 문구에는 쓰지 않는다. 명세에 키 형식이 없어 영문·숫자·`_+/=-` 8~256자만 받는다. 응답에 키가 되돌아오면 복지 API와 같은 검사(`welfare_api.reject_key_echo`, 문구만 `GITS 돌발 API`)로 원본을 쓰기 전에 거부한다.
+- 요청: `https://openapigits.gg.go.kr/api/rest/getIncidentInfo`에 `serviceKey`만 붙여 GET을 한 번 보낸다. 선택 인자 `routeId`·`linkId`는 안성 구간 ID를 확인하지 못해 쓰지 않고 경기도 전체를 받는다. 리디렉션은 따르지 않는다. 응답은 4 MiB까지, UTF-8 XML만 받고 DTD 선언은 파싱 전에 거부한다.
+- 구조: 명세의 [응답결과 예시](https://openapigits.gg.go.kr/api/commons/images/result/manual_result_7.jpg)를 따라 소문자 태그만 받는다. 최상위 `serviceresult` 아래에 비어 있는 `commsgheader`, `msgheader`(`headercd`·`headermsg`·`itemcount`), 반복 `itemlist`를 담은 `msgbody`가 온다. 결과 코드 `0`만 정상이고 `itemcount`가 `itemlist` 수와 같아야 한다. 응답코드표의 `4`(결과가 존재하지 않습니다)는 돌발 0건으로 받고, 다른 코드(키 미등록 `6`, 요청 제한 `8` 등)는 코드와 메시지를 사유로 남긴다. 예시에 없는 봉투 요소, 하위 구조, 같은 요소의 반복, 하위 요소 밖 글자, 내용이 있는 `commsgheader`, `regseq`가 없는 항목은 형식 변경으로 거부한다. 한 응답 안에서 같은 `regseq`가 반복되는지는 명세에 없어 거부하지 않고 순서대로 둔다.
+- 명세 표와 예시의 차이: 명세 표는 `headerCd`·`itemCount`·`regSeq`·`estEndDate`처럼 대소문자를 섞어 적지만 예시는 모두 소문자다. 예시 첫 줄이 `<!--?xml ... ?-->`라 브라우저가 HTML로 다시 쓴 화면일 수 있다. 실제 응답이 대소문자를 섞으면 최상위 요소 불일치로 실패하고 원본과 사유가 남는다. 표의 봉투 요소 이름은 문서에 없어 추정해 받지 않는다. 첫 실제 실행에서 확인한 뒤 갱신한다.
+
+`data/private/collection-gits/<name>/`에 원본 `incidents.xml`, 파서 버전·원본 해시를 담은 파싱 결과 `incidents.json`, 마지막으로 `capture.json`을 쓴다. 상태는 `parsed`, 원본과 사유를 남긴 `parse_failed`, 원본 없이 사유만 남긴 `fetch_failed`(HTTP 오류, 키 되돌림 등)다. 종료 코드는 0 완료, 2 실패 기록, 1 입력·키 설정·보관 오류다. `read_incidents(private_root, name)`은 완료 기록과 수신 시각, 원본 해시를 확인하고 현재 파서로 원본을 다시 읽어 `incidents.json`·기록 건수와 대조한다. 파서 버전이 다르면 다시 수집한다.
+
+파싱 결과는 항목 요소 이름(`routeid`·`linkid`·`spotid`·`regseq`·`confirmdate`·`startdate`·`estenddate`·`enddate`·`restricttype`·`incidesc`·`inciplace1`·`inciplace2`·`coord_x`·`coord_y`)을 키로 원문 텍스트를 그대로 둔다. 앞뒤 공백·줄바꿈도 바꾸지 않는다. 없거나 공백뿐인 값은 `null`로 두고 `unknown`에 `missing`·`empty`를 남긴다. 예시에 없는 단일 값 요소는 `undocumented`에 원문 그대로 보관한다. 감지·시작·종료 예정·종료 시각은 날짜로 해석하지 않으며, `enddate`가 비어도 진행 중으로 판단하지 않는다. 돌발 시각은 신청 기간이 아니다. 통제 차로와 좌표도 해석하지 않는다.
+
+안성 관련성(`anseong_relevance`)은 명세의 돌발 지점1(도로명) `inciplace1`과 돌발 지점2(방향, 구간) `inciplace2` 원문으로만 정한다. 둘 중 하나에 `안성`이 있으면 `location_text`와 해당 필드를 남긴다. 다만 뒤에 `방향`·`방면`이 붙은 `안성`은 진행 방향이라 위치로 보지 않는다. 돌발 내용 `incidesc`는 위치 필드가 아니어서 쓰지 않는다. 나머지 항목은 사유와 함께 `needs_review`로 둔다. 공식 안성시 행정경계 좌표를 확보하지 못해 좌표로는 판정하지 않는다. 한국민족문화대백과사전의 경위도 범위(동경 127°06′~127°31′, 북위 36°53′~37°09′)는 공식 경계가 아니다. 또 사각형이라 평택·용인·이천·천안 등 이웃 시군도 포함하므로 쓰지 않았다. `location_text`도 확정이 아니다. 이름에 `안성`이 들어간 다른 시군 시설이 있을 수 있어 사람 검토를 거친다.
+
+2026-11-28 확인한 [이용약관](https://openapigits.gg.go.kr/api/jsp/apiKey_requestInfo.jsp)(2011-07-01 시행)의 가공·배포 조건은 다음과 같다. **앱에 가공·노출하기 전에 센터의 명시적 승인을 받아야 한다.**
+
+- 제18조 2항: 운영기관이 명시적으로 승인한 경우를 제외하고, 서비스에 관한 정보 등의 전부 또는 일부를 수정·배포·판매·상업적으로 이용할 수 없고 제3자에게 허락할 수 없다.
+- 제2조 4호: 활용기관을 공유서비스를 직접 이용하거나 재가공해 배포하는 기관으로 정의하지만, 배포를 허용하는 별도 조항은 없다.
+- 제7조: 인증키 관리와 키 사용 결과의 책임은 사용자에게 있고, 부정 사용을 알면 즉시 신고해야 한다.
+- 제3조 2항: 약관은 사전 고지 없이 바뀔 수 있다. 제21조: 운영기관은 정보에 의존한 손익에 책임이 없다.
+- 약관 본문은 제10조 다음이 제14조, 그다음이 제18조다. 공개 페이지에 호출 한도 숫자는 없고 응답코드 `8`(요청 제한 초과)만 있다.
+
+센터 소개의 [교통정보 연계](https://gits.gg.go.kr/web/center/webCenterTrafficInfo1.do) 이미지 설명에 따르면 돌발정보는 경기도소방재난본부·한국도로공사·서울도시고속도로·도로교통공단·SK telecom·도내 주요 터널에서 연계한다. 제공 대상 유관기관에는 안성시가 있다. API의 안성 시군도 포착률은 인증 호출로 확인해야 하며 미확인이다. `openapigits.gg.go.kr/robots.txt`는 모든 경로를 허용한다. `gits.gg.go.kr/robots.txt`는 Googlebot 그룹만 두고 위 경로를 막지 않는다. 문서 확인에는 robots 2회, 명세·예시·약관·API 소개·연계 페이지 각 1회로 모두 7회 요청했다. 원본은 git 제외 `data/private/`에만 두었다.
+
 ## 시민 수동 추출·보관
 
 [extract-citizen-v1](../contracts/citizen-extraction.md)은 기존 ai-input-v1·manual archive-v1을 재사용하는 별도 family입니다. title/categories와12개 원문 사실을 FieldValue로 보존하며 분류 미상은 null+ambiguous입니다. 날짜·무료·자격·모집/취소·일정 대응을 추론하지 않습니다. 작성자의 기술 계약이며 실제 팀원·Flutter 최종 합의나 새 평가 기준을 대신하지 않습니다.
