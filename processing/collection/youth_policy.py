@@ -8,7 +8,7 @@ from .libraries import _MARKUP_ERROR, _STRICT_START_TAG, _VOID_TAGS, _NoticePars
 from .official_web import OFFICIAL_ORIGIN, _fetch
 from .road_works import _period
 
-PARSER_VERSION = "youth-policy-parser-v2"
+PARSER_VERSION = "youth-policy-parser-v3"
 SOURCE = "안성청년포털"
 # 메뉴 이름은 `청년문화사업`이지만 categoryId가 빈 값이라 네 분야 정책 전체가 나온다(2026-11-28 확인).
 YOUTH_MENU = "0201040000"
@@ -21,8 +21,9 @@ _CARD_LABELS = ("신청기간", "신청방법")
 _INFO_FIELDS = {"작성자": "author", "신청방법": "application_method", "조회": None}  # 조회수는 요청마다 바뀌어 보관하지 않는다.
 _INVALID_LISTING = "청년정책 목록 HTML 구조가 올바르지 않습니다."
 _INVALID_VIEWER = "청년정책 상세의 대표 이미지 영역 형식이 바뀌었습니다."
-# 신청방법 칸에 방법 대신 상태어·자리표시가 온 값(실제 `모집마감`, `.`). 걸러 내지 않고 표시만 단다.
-_NOT_METHOD = re.compile(r"[^0-9A-Za-z가-힣]*|.*(?:마감|종료).*")
+# 신청방법 칸 값 전체가 상태어·자리표시인 경우(실제 `모집마감`, `.`). 걸러 내지 않고 표시만 단다.
+# `선착순 마감 시까지 방문 접수`처럼 방법 문구 안의 상태어는 맞추지 않는다.
+_NOT_METHOD = re.compile(r"[^0-9A-Za-z가-힣]*|(?:모집|접수|신청)?\s?(?:마감|종료)")
 # 상세 본문 맨 앞의 대표 이미지 영역(div.photo_viewer)은 이 틀만 받고 본문 텍스트로 읽지 않는다.
 _VIEWER_TAGS = {"div", "figure", "img", "button", "ul", "li", "script"}
 _VIEWER_SCRIPTS = {"/common/js/swiper/swiper.js", "/portal/js/unit/cardNews/view.js"}

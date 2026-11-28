@@ -136,6 +136,11 @@ class YouthPolicyParserTest(unittest.TestCase):
                 self.assertEqual(record["review_flags"], flags)
                 self.assertEqual(record["listing_period_range"], {"start": "2026-01-01", "end": "2026-12-31"})
                 self.assertEqual(record["fields"]["application_method"], detail_method)
+        # 방법 문구 안에 상태어가 섞인 값은 방법으로 본다.
+        method = "선착순 마감 시까지 방문 접수"
+        info = INFO.replace("온라인 신청: 복지로(http://www.bokjiro.go.kr)", method)
+        record = parse_youth_detail(detail(info=info), policy_id="881", card=listed(method=method))
+        self.assertEqual(record["review_flags"], ["application_period_unconfirmed"])
 
     def test_detail_flags_differences_without_overwriting(self):
         files = "<li><a href=\"#\" onclick=\"fn_egov_downFile('x','y'); return false;\">안내.pdf</a></li>"
