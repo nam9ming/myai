@@ -438,6 +438,34 @@ D03: `BOARDS`에 등록했으므로 D03 `prepare archive_kind=board`가 이 묶�
 
 실제 원본은 Git 제외 `data/private/boards-probe/`(권한 0700)에 두었다.
 
+### 도서관 이용시간·정기휴관일 기준표 수집
+
+생활정보 분야의 상시 기준표인 안성시 도서관 [이용시간 및 정기휴관일](https://www.anseong.go.kr/library/contents.do?mId=0501040000) 한 페이지를 원본과 함께 받는다. 임시 휴관·단축 운영은 도서관 공지 목록 수집(`processing.collection.batch living`)에서 따로 받으며, 이 표만으로 특정 날짜의 운영 여부를 정하지 않는다. `/library/` 경로는 [robots.txt](https://www.anseong.go.kr/robots.txt)의 제한 목록에 없다(2026-11-28 확인). 요청은 고정 호스트에 GET 한 번이고 리디렉션은 따르지 않는다.
+
+```sh
+python3.13 -B -m processing.collection.reference_tables library-hours --name library-hours-20261128
+python3.13 -B -m processing.collection.reference_tables library-hours --name library-hours-20261205 \
+  --previous library-hours-20261128
+```
+
+`data/private/collection-reference-tables/<name>/`에 원본 `page.html`, 파싱 결과 `parsed.json`(`library-hours-parser-v1`), 마지막으로 `capture.json`을 쓴다. 종료 코드는 0 파싱 완료, 2 원본과 실패 사유(`parse_error`)만 남긴 형식 변경, 1 인자·요청·보관 오류다. 요청이 실패하면 원본이 없으므로 묶음을 만들지 않고 사유만 출력한다.
+
+- 파싱: 유일한 `div#conts` 안의 `h4` 제목·`p` 문단(`class` 포함)·표를 문서 순서대로 `blocks`에 남긴다. 표는 `caption`·`thead`·`tbody`가 하나씩 이 순서로 있어야 하고, 칸은 `tag`(`th`·`td`)·`scope`·`rowspan`·`colspan`·`text`로 둔다. 칸 글자는 문자 참조만 풀고(`&middot;`→`·`) `br`을 줄바꿈으로 바꿀 뿐 앞뒤 공백과 빈 칸도 고치지 않는다. 병합 칸은 펼치지 않고, 펼쳤을 때 모든 행이 머리글 너비를 빈틈없이 채우는지만 확인한다. 요일·시간·휴관일·동절기/하절기를 해석하거나 날짜로 바꾸지 않는다.
+- 형식 검사: `head`의 제목이 `이용시간 및 정기휴관일 | … | 안성시 도서관`이어야 한다. 본문 영역에는 2026-11-28 실제 페이지에 쓰인 요소(`h4`·`div`·`p`·`table`·`caption`·`thead`·`tbody`·`tr`·`th`·`td`·`br`)와 속성(`class`의 `tbl-respon`·`tbl-box`·`guide`·`tip`·`mT10`·`tbl`·`taC`, `th`의 `scope`, 1~99의 `rowspan`·`colspan`)만 받는다. `style`·숨김 class·인라인 태그·스크립트·선언·처리 지시문이 나오거나 칸 수가 맞지 않으면 형식 변경으로 본다. 주석은 읽지 않는다.
+- 변경 확인: `capture.json`에 원본 SHA-256과, `blocks`를 키 정렬 JSON으로 만든 SHA-256(`content_sha256`)을 남긴다. `--previous`를 주면 그 묶음을 먼저 재검증하고(실패하면 요청 없이 종료 1), `previous`에 두 해시와 `raw_changed`·`content_changed`를 쓴다. 메뉴 등 본문 밖만 바뀌면 `raw_changed`만 참이다. 이번 수집이 파싱에 실패하면 `content_changed`는 `null`이다. 이전 묶음은 자동으로 고르지 않는다.
+- 재검증: `read_reference_capture`는 원본 해시를 대조하고 현재 파서로 다시 만든 결과를 `parsed.json`·`content_sha256`과 비교한다. 파서 버전이 다르면 다시 수집하라는 오류를 낸다. `parse_failed` 묶음은 읽지 않으며 `--previous`로도 쓸 수 없다.
+
+2026-11-28 공식 HTML로 확인한 결과는 다음과 같다. 요청은 robots.txt 3회를 포함해 모두 7회, 1.5초 이상 간격이었다.
+
+| 확인 범위 | 결과 |
+| --- | --- |
+| 원본 | 173,971바이트 UTF-8 HTML. 확인용 2회와 명령 2회, 네 번 받은 원본의 해시가 모두 같았다. 공공누리 표시는 찾지 못했다. |
+| 표 | 공공도서관 6개관 표(머리글 1행·본문 15행)와 작은도서관 11개관 표(머리글 2행·본문 20행). 문단은 표 이동 안내 2개와 비고 3개(법정공휴일 휴관, 동절기·하절기 기간, 점심시간 휴관 도서관)다. |
+| 칸 형식 차이 | 시간은 공공도서관 표가 `09:00 ~ 22:00`, 작은도서관 표가 `09:00~18:00`으로 물결표 앞뒤 공백이 다르다. 보개도서관 책다락 칸은 시설·운영일·이용시간을 각각 두 줄로 나눠 한 칸에 적었고, 서운작은도서관 운영시간 칸에는 `(매주 화 ~21:00 까지 연장운영)`이 줄바꿈으로 붙어 있다. 휴관일은 `매주 월요일`(병합 칸)과 `매주 월요일, 법정공휴일`처럼 표마다 적는 방식이 다르다. 모두 원문대로 둔다. |
+| 명령 실행 | 두 번 실행(두 번째는 `--previous`)이 모두 파싱됐고 `raw_changed`·`content_changed`가 모두 거짓이었다. Python 3.13.5·3.14.6에서 같은 `content_sha256`으로 재검증을 통과했다. |
+
+생활쓰레기 구역별 수거요일([수거 일정](https://www.asimc.or.kr/portal/garbageSchedule/list.do?mid=0103110700))은 구현하지 않았다. 2026-11-28 `https://www.asimc.or.kr/robots.txt`가 두 번 모두 HTTP 200과 robots 규칙이 아닌 서버 점검 안내 HTML(작업시간 `~11.14.`)을 돌려줘 수집 허용 여부를 확인할 수 없었다. 그래서 수거 일정 페이지는 요청하지 않았고, `token` 없는 주소가 동작한다는 설계 기록도 다시 확인하지 않았다. robots.txt를 확인할 수 있게 되면 같은 명령에 새 기준표 키로 추가한다. 월별·도서관별 휴관일정(`mId=0603010000`)은 달마다 바뀌는 달력 자료라 이 기준표에 넣지 않았다. D03 연결은 후속이다.
+
 ### 수집 원본을 D03 등록 입력으로 준비하기
 
 단건 수집은 `archive_kind=single`과 `capture.json`, 목록 수집은 `archive_kind=batch`와 `batch.json`을 사용한다. 직접 내려받은 포털 CSV는 `asset=portal`, 웹 상세는 게시물 번호를 지정한다. 부분 수집 묶음에서도 파싱에 성공한 상세를 선택할 수 있다. 명령은 수집 기록의 원본 해시와 파일을 대조하고 웹 상세의 게시물 번호를 다시 확인한다.
