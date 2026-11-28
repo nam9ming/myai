@@ -137,10 +137,13 @@ class GosiParserTest(unittest.TestCase):
         self.assertEqual(record["review_flags"], ["attachment", "inline_image", "missing:description"])
 
     def test_detail_records_only_stated_notice_numbers(self):
-        body = "안성시 공고 제2026-100호(2026.11.1.)를 정정합니다.<br>안성시 고시 제2026-343호 참조. 제2026-100호"
+        # 발행 주체마다 번호 체계가 따로라 다른 주체의 같은 번호는 남기고, 주체가 없는 번호는 주체 없이 그대로 둔다.
+        body = ("안성시 공고 제2026-343호(2026.11.1.)를 정정합니다.<br>안성시 고시 제 2026-343호 참조."
+                " 안성시&nbsp;농업기술센터 공고 제2026-268호, 제2026-100호, 제 2026-100호")
         record = parse_gosi_detail(detail(body=body, title="합성 공고(정정)"), notice_id="75365",
                                    listing=row(title="합성 공고(정정)"))
-        self.assertEqual(record["referenced_notice_numbers"], ["제2026-100호"])
+        self.assertEqual(record["referenced_notice_numbers"],
+                         ["안성시 공고 제2026-343호", "안성시 농업기술센터 공고 제2026-268호", "제2026-100호"])
         record = parse_gosi_detail(detail(title="합성 공고(정정)"), notice_id="75365", listing=row(title="합성 공고(정정)"))
         self.assertEqual(record["referenced_notice_numbers"], [])
 

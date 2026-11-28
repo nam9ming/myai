@@ -30,7 +30,8 @@ _PREVIEW = re.compile(r"fn_egov_gosi_preview\('([1-9][0-9]{0,17})','([^']*)','([
 # 페이지 스크립트는 encodeURI로 인자를 붙인다. encodeURI가 그대로 두는 문자 가운데 질의 구분자는 주소를 확정하지 않는다.
 _URI_SAFE = ";,/?:@&=+$!*'()#"
 _QUERY_DELIMITERS = set("&=#+")
-_NOTICE_NUMBER = re.compile(r"제\s?[0-9]{4}\s?-\s?[0-9]{1,6}\s?호")
+# 번호 체계는 발행 주체(안성시·안성시 농업기술센터·안성시 공도읍 …)마다 따로라, 번호 앞 주체 문구까지 원문 그대로 담는다.
+_NOTICE_NUMBER = re.compile(r"(?:안성시(?: [가-힣]{1,20}){0,3}? ?(?:고시|공고) ?)?제\s?[0-9]{4}\s?-\s?[0-9]{1,6}\s?호")
 _MEDIA_LIMIT = 40
 
 
@@ -380,10 +381,11 @@ def parse_gosi_detail(text: str, *, notice_id: str, listing: dict) -> dict:
     if registered is None and fields["registered_date"] is not None:
         flags.add("registered_date_unparsed")
     # 정정·변경 관계는 본문·제목에 적힌 고시공고번호 문자열만 남기고, 제목의 `(정정)`만으로 원공고를 추정하지 않는다.
-    own = _NOTICE_NUMBER.search(fields["notice_number"] or "")
-    references = []
+    # 자기 번호 제외와 중복 제거는 같은 정규화(공백 제거)로, 발행 주체까지 같은 전체 번호일 때만 한다.
+    references, seen = [], {"".join((fields["notice_number"] or "").split())}
     for found in _NOTICE_NUMBER.finditer(f"{title}\n{fields['description'] or ''}"):
-        if (own is None or "".join(found[0].split()) != "".join(own[0].split())) and found[0] not in references:
+        if (key := "".join(found[0].split())) not in seen:
+            seen.add(key)
             references.append(found[0])
     return {
         "source": "city_gosi_notice",
