@@ -103,14 +103,12 @@ class ArthallListingTest(unittest.TestCase):
         cases["쪽 번호 밖"] = (listing("1", pager='<span>1</span></div><a onclick="goPage(2); return false;">2</a>'), {})
         cases["중복 onclick"] = (listing("1").replace(b'onclick="go', b'onclick="x" onclick="go'), {})
         cases["숨김"] = (listing("1").replace(b"<ul>", b"<ul hidden>", 1), {})
+        cases["빈 안내"] = (listing().replace("검색된 전체일정이 없습니다.".encode(), b""), {})
         for name, (raw, override) in cases.items():
             with self.subTest(name), self.assertRaises(ValueError):
                 parse_listing(raw, **{"year": 2026, "month": 12, "page": 1, **override})
         with self.assertRaisesRegex(ValueError, "2000~2100"):
             parse_listing(listing("1"), year=2026, month=13, page=1)
-        empty = listing().replace("검색된 전체일정이 없습니다.".encode(), b"")
-        with self.assertRaises(ValueError):
-            parse_listing(empty, year=2026, month=12, page=1)
 
 
 class ArthallDetailTest(unittest.TestCase):
@@ -286,24 +284,26 @@ class ArthallBatchTest(unittest.TestCase):
     def test_cli_capture_and_verify(self):
         self.listing.return_value = listing("5")
         self.detail.return_value = detail("5").encode()
+
+        def run(*argv):
+            with patch("sys.argv", ["arthall_batch", *argv]), contextlib.redirect_stdout(io.StringIO()) as out, \
+                    contextlib.redirect_stderr(io.StringIO()) as error:
+                return arthall_batch.main(), out.getvalue() and json.loads(out.getvalue()), error.getvalue()
+
+        capture = ("capture", "--year", "2026", "--month", "12", "--name")
         with patch.object(arthall_batch, "ARTHALL_ROOT", self.root):
-            for argv, expected in ((["capture", "--year", "2026", "--month", "12", "--name", "cli"], "complete"),
-                                   (["verify", "--name", "cli"], "verified")):
-                with patch("sys.argv", ["arthall_batch", *argv]), contextlib.redirect_stdout(io.StringIO()) as out:
-                    self.assertEqual(arthall_batch.main(), 0)
-                self.assertEqual(json.loads(out.getvalue())["status"], expected)
-            self.assertEqual(json.loads(out.getvalue())["batch_status"], "complete")
+            code, out, _ = run(*capture, "cli")
+            self.assertEqual((code, out["status"]), (0, "complete"))
+            code, out, _ = run("verify", "--name", "cli")
+            self.assertEqual((code, out["status"], out["batch_status"]), (0, "verified", "complete"))
             # 일부 실패 묶음은 검증을 통과해도 원래 상태와 함께 종료 코드 2를 돌려준다.
             self.detail.side_effect = ValueError("합성 수신 실패")
-            for argv in (["capture", "--year", "2026", "--month", "12", "--name", "part"], ["verify", "--name", "part"]):
-                with patch("sys.argv", ["arthall_batch", *argv]), contextlib.redirect_stdout(io.StringIO()) as out:
-                    self.assertEqual(arthall_batch.main(), 2)
-            self.assertEqual(json.loads(out.getvalue()), {"batch_id": "part", "status": "verified",
-                                                          "batch_status": "partial", "selected": 1, "parsed": 0})
-            with patch("sys.argv", ["arthall_batch", "verify", "--name", "none"]), \
-                    contextlib.redirect_stderr(io.StringIO()) as error:
-                self.assertEqual(arthall_batch.main(), 1)
-            self.assertIn("아트홀 일정 수집 실패", error.getvalue())
+            self.assertEqual(run(*capture, "part")[0], 2)
+            self.assertEqual(run("verify", "--name", "part")[:2], (2, {"batch_id": "part", "status": "verified",
+                                                                        "batch_status": "partial", "selected": 1, "parsed": 0}))
+            code, _, error = run("verify", "--name", "none")
+            self.assertEqual(code, 1)
+            self.assertIn("아트홀 일정 수집 실패", error)
 
 
 if __name__ == "__main__":
