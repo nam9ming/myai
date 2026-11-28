@@ -131,7 +131,8 @@ class YouthPolicyParserTest(unittest.TestCase):
 
     def test_detail_flags_status_word_or_placeholder_method(self):
         # 실제 874·875(`모집마감`)·877(`.`)처럼 카드 기간이 사업 기간과 같고 신청방법이 방법이 아닌 경우.
-        for listed_method, detail_method in (("모집마감", "모집마감"), (".", "."), ("온라인 신청", "접수 종료")):
+        for listed_method, detail_method in (("모집마감", "모집마감"), (".", "."), ("온라인 신청", "접수 종료"),
+                                             ("온라인 신청", "조기마감"), ("온라인 신청", "(마감)")):
             with self.subTest(method=detail_method):
                 info = INFO.replace("온라인 신청: 복지로(http://www.bokjiro.go.kr)", detail_method)
                 record = parse_youth_detail(detail(info=info), policy_id="881", card=listed(

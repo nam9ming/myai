@@ -41,7 +41,7 @@ Java의 `citizen-human-handoff-import-v1` 요청은 전체 이미지·등록 출
 | 교육·지원 | 읍면동 15곳 공지사항 | `board_batch town-<경로>`, `media inspect --board town-<경로> --batch <묶음>` | `board`, `media` | 15곳 1페이지 목록·상세 97쪽 파싱, 시청과 같은 공지 번호 중복 거부(PR #81) |
 | 교육 / 공사·교통 | 디지털배움터 교육장 현황, 국토부 CALS 도로 공사정보(파일데이터 API) | `odcloud digital-learning`, `odcloud road-construction` | `odcloud` | 키 없이 합성 응답만 시험(PR #76·#79) |
 | 지원·혜택 | 지자체복지서비스 OpenAPI(안성시 목록·상세) | `welfare_batch` | `welfare` | 키 없이 합성 XML만 시험(PR #77·#83) |
-| 지원·혜택 | 안성청년포털 청년정책 목록·상세 | `youth_batch capture`, `youth_batch verify` | 없음(후속) | 2026-11-28 1·12페이지 18건 파싱·verify(v1), v2는 같은 원본 재파싱 |
+| 지원·혜택 | 안성청년포털 청년정책 목록·상세 | `youth_batch capture`, `youth_batch verify` | 없음(후속) | 2026-11-28 1·12페이지 18건 파싱·verify(v1), v2·v3는 같은 원본 재파싱(v3: 따로 받은 5쪽 포함 23쪽 중 신청방법 표시 4쪽) |
 
 - 모든 명령은 원본 바이트·SHA-256·수신 시각을 Git 제외 `data/private/`에 비공개 권한으로 보관하고, 파싱 실패도 원본과 사유를 남깁니다. 인자 오류는 종료 1, 부분 결과는 종료 2입니다(PR #73).
 - D03 준비는 원본 해시·파싱 결과·게시판별 파서 버전을 다시 대조하고 `use_review=pending`·`check_result=unchecked`로 만듭니다. 제목·본문은 사람이 원문을 검토해 넣으며 도구가 사실을 확정하지 않습니다.
