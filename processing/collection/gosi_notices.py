@@ -16,9 +16,9 @@ _SE_CODE = "01"
 _DETAIL_ACTION = f"/portal/saeol/gosiView.do?mId={_MENU}"
 _NOTICE_ID = re.compile(r"[1-9][0-9]{0,17}")
 _IGNORED_TAGS = {"script", "style", "template", "noscript"}
-# 읽는 영역은 2026-11-28 실제 원본(목록 6쪽, 상세 27쪽. README 표)의 구조만 받는다. 한 칸 들여쓰기가 중첩, 요소는
+# 읽는 영역은 2026-11-28 실제 원본(README 표)의 구조만 받는다. 한 칸 들여쓰기가 중첩, 요소는
 # `태그.class[그 밖 속성 이름]`, 뒤 글자는 `*`(읽는 칸)·표본 고정 문구·빈칸(공백만) 가운데 하나다. 그 밖(인라인 스타일
-# 포함)은 거부한다. 표본에는 브라우저가 시작 태그에서 요소를 암묵적으로 닫는 자리도 없다.
+# 포함)은 거부한다. 표본에는 암묵적으로 닫히는 자리도 없다.
 _LISTING_SHAPE = """
 div.board_page *
  span.red
@@ -70,17 +70,17 @@ _CELLS = ("gosi_num", "gosi_tit", "gosi_dept", "gosi_date")
 _TOTAL = re.compile(r"Total ([0-9]{1,18}) Page ([1-9][0-9]{0,17}) / ([1-9][0-9]{0,17})")
 _CAPTION = "고시/공고게시판 목록"
 _INVALID_LISTING = f"{LABEL} 목록 HTML 구조가 올바르지 않습니다."
-# 첨부 내려받기 호스트(eminwon)의 robots.txt는 2026-11-28 HTTP 302로 판단할 수 없어 주소는 검토 후보로만 남기고 요청하지 않는다.
+# 첨부 호스트(eminwon)의 robots.txt를 판단할 수 없어(README) 주소는 검토 후보로만 남기고 요청하지 않는다.
 _DOWNLOAD = re.compile(r"javascript:goDownload\('([^']*)', '([^']*)', '([^']*)'\)")
 _DOWNLOAD_URL = "https://eminwon.anseong.go.kr/emwp/jsp/ofr/FileDown.jsp"
 _PREVIEW = re.compile(r"fn_egov_gosi_preview\('([1-9][0-9]{0,17})','([^']*)','([^']*)','([^']*)','([^']*)'\);"
                       r" return false;")
 # encodeURI 전에 브라우저가 javascript: 주소의 탭·줄바꿈 제거·퍼센트 디코딩·JS 이스케이프를 하므로
-# 인자는 실제 원본 36벌(108개)에 쓰인 한글 음절·ASCII 영숫자·공백·`()./[]_~「」`만 받는다.
+# 인자는 실제 원본 36벌(108개)에 쓰인 문자만 받는다.
 _URI_SAFE = ";,/?:@&=+$!*'()#"
 _ARGUMENT = re.compile(r"[가-힣A-Za-z0-9 ()./\[\]_~「」]+")
-# 번호 체계가 발행 주체마다 따로라 `경기도`·`안성시`로 시작하는 주체 문구(`안성시공도읍`, `공고(제…호)` 포함)까지 담는다.
-# `다시 공고`처럼 주체를 지어내지 않도록 다른 주체는 번호만 남긴다. 여는 괄호를 담았으면 닫는 괄호도 있어야 한다.
+# 번호 체계가 주체마다 따로라 `경기도`·`안성시`로 시작하는 주체 문구(`안성시공도읍`, `공고(제…호)` 포함)까지 담고,
+# `다시 공고` 같은 다른 주체는 지어내지 않도록 번호만 남긴다. 여는 괄호를 담았으면 닫는 괄호도 있어야 한다.
 _NOTICE_NUMBER = re.compile(r"(?:(?:경기도|안성시)(?: ?[가-힣]{1,20}){0,3}? ?(?:고시|공고) ?(\()?)?"
                             r"제\s?[0-9]{4}\s?-\s?[0-9]{1,6}\s?호(?(1)\))")
 _MEDIA_LIMIT = 40
@@ -246,7 +246,7 @@ class _ListingParser(PinnedHTMLParser):
             if tag in ("div", "caption", "td"):
                 self.parts = None
         elif self.ignored:
-            # 무시하는 요소 안의 짝 없는 종료 태그(template 안 `</style>` 등)는 브라우저가 무시하므로 깊이를 셀 수 없어 거부한다.
+            # 숨김 요소 안의 짝 없는 종료 태그(template 안 `</style>` 등)는 브라우저가 무시해 깊이를 셀 수 없으니 거부한다.
             if tag in _IGNORED_TAGS and tag != self.ignored.pop():
                 self.fail()
         elif tag == "form":
@@ -336,7 +336,6 @@ class _GosiParser(_NoticeParser):
         if self.hidden_depth or not self.tags:
             return
         if tag == "dl":
-            # 템플릿은 첨부가 없어도 빈 `dl.view_file`을 출력한다(없는 번호 화면). 영역의 유무로 형식 변경을 가린다.
             if self.file_section_seen:
                 raise ValueError(f"{LABEL} 첨부 영역이 중복되었습니다.")
             self.file_section_seen = True
@@ -354,7 +353,7 @@ class _GosiParser(_NoticeParser):
         if "class" not in values:
             self.anchor = (_DOWNLOAD.fullmatch(values["href"] or ""), [])
             return
-        # 바로 보기 인자는 게시물 번호와 바로 앞 첨부의 내려받기 인자를 되풀이한다. 다르면 형식 변경으로 본다.
+        # 바로 보기 인자는 게시물 번호와 바로 앞 첨부의 내려받기 인자를 되풀이한다.
         match = _PREVIEW.fullmatch(values["onclick"] or "")
         if match is None:
             raise ValueError(f"{LABEL} 첨부 바로 보기 형식이 바뀌었습니다.")
@@ -404,7 +403,7 @@ def _info(parser: _GosiParser, section: str, label: str) -> str | None:
 
 
 def parse_gosi_detail(text: str, *, notice_id: str, listing: dict) -> dict:
-    """상세의 표시 문구를 그대로 보관한다. 상세에는 번호가 첨부 바로 보기에만 있으므로 목록 항목과 머리 항목을 대조한다."""
+    """표시 문구를 그대로 보관한다. 번호가 바로 보기에만 있어 목록 항목과 머리 항목을 대조한다."""
     url = gosi_detail_url(notice_id)
     if not isinstance(text, str) or "\x00" in text:
         raise ValueError(f"{LABEL} HTML 형식이 올바르지 않습니다.")
@@ -444,7 +443,7 @@ def parse_gosi_detail(text: str, *, notice_id: str, listing: dict) -> dict:
         pass
     if registered is None and fields["registered_date"] is not None:
         flags.add("registered_date_unparsed")
-    # 적힌 번호 문자열만 남기고 `(정정)`만으로 원공고를 추정하지 않는다. 자기 번호 제외·중복 제거는 같은 키로, 값은 원문이다.
+    # 적힌 번호만 남긴다(`(정정)`으로 추정하지 않음). 자기 번호 제외·중복 제거는 같은 키로, 값은 원문이다.
     references, seen = [], {_notice_key(fields["notice_number"] or "")}
     for found in _NOTICE_NUMBER.finditer(f"{title}\n{fields['description'] or ''}"):
         if (key := _notice_key(found[0])) not in seen:

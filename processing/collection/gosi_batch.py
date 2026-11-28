@@ -25,6 +25,10 @@ RECORD_SCHEMA = "citizen-gosi-notice-v1"
 _RAW_KEPT = ("parsed", "parse_failed")
 
 
+def _recollect(filename: str) -> ValueError:
+    return ValueError(f"{LABEL} 파싱 실패로 기록된 원본({filename})을 현재 파서는 읽습니다. 다시 수집해 주세요.")
+
+
 def _remember(rows: dict[str, dict], items: list[dict]) -> list[str]:
     # 페이지 사이 중복은 공통 순회가 실패로 남긴다. 앞 페이지의 항목을 유지해 재검증과 같은 순서로 고른다.
     for item in items:
@@ -84,6 +88,7 @@ def read_gosi_batch(private_root: Path, name: str) -> dict[str, dict]:
                 or not isinstance(pages, list) or not isinstance(items, list)):
             raise ValueError(f"{LABEL} 수집 기록의 규격·이름이 맞지 않습니다.")
         rows: dict[str, dict] = {}
+        total = None
         for entry in pages:
             status = entry.get("status") if isinstance(entry, dict) else None
             if status not in _RAW_KEPT:
@@ -94,7 +99,14 @@ def read_gosi_batch(private_root: Path, name: str) -> dict[str, dict]:
             raw = _checked(directory, entry, f"list-{page}.html", OFFICIAL_ORIGIN + gosi_listing_path(page),
                            LIST_MAX_BYTES)
             if status != "parsed":
-                continue
+                try:
+                    again, found = parse_gosi_listing(raw, page=page)
+                except ValueError:
+                    continue
+                # 앞 페이지와 페이지 수가 다르거나 번호가 겹치면 수집 때처럼 실패다.
+                if total not in (None, again) or rows.keys() & {item["notice_id"] for item in found}:
+                    continue
+                raise _recollect(f"list-{page}.html")
             total, found = parse_gosi_listing(raw, page=page)
             if entry.get("reported_pages") != total or entry.get("web_ids") != _remember(rows, found):
                 raise ValueError(f"{LABEL} 목록 원본과 수집 기록의 게시물 번호가 다릅니다.")
@@ -109,7 +121,11 @@ def read_gosi_batch(private_root: Path, name: str) -> dict[str, dict]:
             url = gosi_detail_url(notice_id)
             raw = _checked(directory, item, f"detail-{notice_id}.html", url, DETAIL_MAX_BYTES)
             if item["status"] != "parsed":
-                continue
+                try:
+                    parse_gosi_detail(decode_input(raw, LABEL)[0], notice_id=notice_id, listing=rows[notice_id])
+                except ValueError:
+                    continue
+                raise _recollect(f"detail-{notice_id}.html")
             text, digest = decode_input(raw, f"{LABEL} 상세")
             parsed_file = f"parsed-{notice_id}.json"
             stored = read_receipt(directory, parsed_file) if item.get("parsed_file") == parsed_file else None

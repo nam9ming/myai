@@ -109,7 +109,7 @@ class GosiParserTest(unittest.TestCase):
                 parse_gosi_listing(listing(rows=rows), page=1)
 
     def test_listing_reads_tag_borders_like_a_browser(self):
-        # 빈 요소가 아닌 태그의 `/>`는 무시되고 textarea 안 글은 태그가 아니다(3.13.5 표준 파서는 가짜 listForm을 읽었다).
+        # 빈 요소가 아닌 태그의 `/>`는 무시되고 textarea 안 글은 태그가 아니다(표준 파서는 가짜 listForm을 읽었다).
         rows = _row("1").replace('<td class="gosi_dept">', '<td class="gosi_dept"/>')
         decoy = '<body><textarea><form id="listForm" action="/x"></form></textarea>'.encode()
         self.assertEqual(parse_gosi_listing(listing(rows=rows).replace(b"<body>", decoy), page=1), (1, [row("1")]))
@@ -118,7 +118,7 @@ class GosiParserTest(unittest.TestCase):
                 parse_gosi_listing(listing("1").replace(b"<tbody>", f"<tbody>{markup}".encode()), page=1)
 
     def test_listing_accepts_only_sampled_markup_in_read_regions(self):
-        # 읽는 영역은 실제 목록에 있던 태그·속성·class만 받고, 종료 태그는 가장 안쪽에 열린 요소를 닫아야 한다.
+        # 종료 태그는 가장 안쪽에 열린 요소를 닫아야 한다.
         cell = '<td class="gosi_dept">'
         for old, new in ((cell, '<td class="gosi_dept blind">'), (cell, '<td class="gosi_dept" style="color:red">'),
                          (cell, '<td class="gosi_dept" hidden>'), (cell, cell + "<span>x</span>"), ("<thead>", "<thead><br>"),
@@ -134,20 +134,20 @@ class GosiParserTest(unittest.TestCase):
             parse_gosi_listing(hidden.replace(b"</form></body>", b"</form></template></body>"), page=1)
 
     def test_detail_accepts_only_sampled_markup_in_body(self):
-        # 공지 게시판 허용 목록이 받는 표기라도 표본에 없던 자리·태그·속성·class·중첩 목록은 거부한다.
+        # 공지 게시판이 받는 표기라도 표본에 없으면 거부한다.
         empty = detail(body="")
         texts = [detail(body=body) for body in (
             "<b>마감</b>", '<span style="color:red">마감</span>', '<p class="blind">마감</p>', '<div data-x="1">마감</div>',
             '<a href="#" href="#">x</a>', "<table><tr><td>x</td></tr></table>", "<p>가<p>나</p>", '<img src="/x" alt="x">',
             "<ul><li>가<ul><li>나</li></ul></li></ul>")] + [detail(title="가<h4>나</h4>")] + [
-            # 값 없는 class는 class 없는 자리(`a[href]`·`h4`)로 맞추지 않는다(첨부 링크는 KeyError로 멈췄다).
+            # 값 없는 class는 class 없는 자리(`a[href]`·`h4`)로 맞추지 않는다.
             detail().replace(old, new, 1) for old, new in (("<p><a href", "<p><a class href"), ("<h4>합성", "<h4 class>합성"))] + [
             empty.replace("</div>\n<dl", f"</div>{extra}\n<dl") for extra in (
                 "<p>접수기간 2026.12.01~12.05</p>", '<div class="gosi_b">마감</div>', "<ul><li>지원금 50만원</li></ul>")]
         for text in texts:
             with self.subTest(text=text), self.assertRaisesRegex(ValueError, "숨김"):
                 parse_gosi_detail(text, notice_id="75365", listing=row())
-        # 읽는 칸 밖의 글자는 화면에 보여도 버려지므로 표본의 고정 문구만 받는다. 종료 태그는 가장 안쪽 요소만 닫아야 한다.
+        # 읽는 칸 밖 글자는 버려지므로 표본 고정 문구만 받고, 종료 태그는 가장 안쪽 요소만 닫아야 한다.
         for old, new in (("</div>\n<dl", "</div>접수기간 2026.12.01~12.05\n<dl"), ("</ul>", "</ul>신청 마감 12.05"),
                          ("첨부 파일", "첨부 파일 12.05 마감"), ("변경 금지", "변경 금지 12.05 마감"),
                          ("</div>\n<dl", "</span></div>\n<dl"), ('alt="공공누리 제4유형">', 'alt="공공누리 제4유형"></img>')):
@@ -155,7 +155,7 @@ class GosiParserTest(unittest.TestCase):
                 parse_gosi_detail(empty.replace(old, new), notice_id="75365", listing=row())
 
     def test_repeated_class_or_id_fails_anywhere(self):
-        # 브라우저는 중복 속성의 첫 값을 써서 미끼가 보인다(예전에는 마지막 값을 읽어 받았다).
+        # 브라우저는 중복 속성의 첫 값을 써서 미끼가 보인다.
         url = "/portal/saeol/gosiList.do?seCode=01&amp;mId=0501040000&amp;page=1"
         table = f'<table class="tableSt_list row_over" class="x"><tbody>{_row("2")}</tbody></table><div class="box_page">'
         for old, new in (('<div class="box_page">', table), ("<body>", f'<body><form id="listForm" id="z" action="{url}"></form>')):
@@ -203,7 +203,7 @@ class GosiParserTest(unittest.TestCase):
         self.assertEqual(record["review_flags"], ["attachment", "missing:description"])
 
     def test_detail_records_only_stated_notice_numbers(self):
-        # 발행 주체마다 번호 체계가 따로라 다른 주체의 같은 번호는 남기고, 주체가 없는 번호는 주체 없이 그대로 둔다.
+        # 다른 주체의 같은 번호는 남기고, 주체 없는 번호는 번호만 둔다.
         body = ("안성시 공고 제2026-343호(2026.11.1.)를 정정합니다.<br>안성시 고시 제 2026-343호 참조."
                 " 안성시&nbsp;농업기술센터 공고 제2026-268호, 제2026-100호, 제 2026-100호")
         record = parse_gosi_detail(detail(body=body, title="합성 공고(정정)"), notice_id="75365",
@@ -214,8 +214,7 @@ class GosiParserTest(unittest.TestCase):
         self.assertEqual(record["referenced_notice_numbers"], [])
 
     def test_detail_keeps_issuer_of_spaced_or_bracketed_numbers(self):
-        # 경기도 발행·붙여 쓴 주체·괄호 표기는 주체까지 남기고 괄호·공백만 다른 번호는 하나로 본다.
-        # 모르는 주체(`다시`)·짝 없는 괄호는 번호만 남긴다.
+        # 경기도·붙여 쓴 주체·괄호 표기는 주체까지 남기고 괄호·공백만 다른 번호는 하나로, 모르는 주체·짝 없는 괄호는 번호만 남긴다.
         body = ("경기도 고시 제2026-100호, 안성시공도읍 공고 제2026-79호, 안성시 공고(제2026-3155호)를 정정합니다."
                 " 안성시 공고 (제2026-3155호), 안성시 고시(제2026-343호), 다시 공고 제2026-5호, 안성시 공고(제2026-6호 참조")
         record = parse_gosi_detail(detail(body=body), notice_id="75365", listing=row())
@@ -224,12 +223,12 @@ class GosiParserTest(unittest.TestCase):
                           "제2026-5호", "제2026-6호"])
 
     def test_detail_treats_gyeonggi_prefixed_anseong_number_as_same(self):
-        # `경기도 (및) 안성시 고시`는 `안성시 고시`와 같은 주체라 자기 번호로 빠지고, 같은 번호는 처음 적힌 원문 하나만 남는다.
+        # `경기도 (및) 안성시 고시`는 `안성시 고시`와 같아 자기 번호로 빠지고, 같은 번호는 처음 원문 하나만 남는다.
         body = ("경기도 안성시 고시 제2026-343호, 안성시 고시 제2026-1호 및 경기도 안성시 고시 제2026-1호,"
                 " 경기도 고시 제2026-1호, 경기도 및 안성시 고시 제2026-343호, 경기도와 안성시 고시 제2026-343호")
         record = parse_gosi_detail(detail(body=body), notice_id="75365", listing=row())
         self.assertEqual(record["referenced_notice_numbers"], ["안성시 고시 제2026-1호", "경기도 고시 제2026-1호"])
-        # 한계: 붙여 쓴 낱말이 주체 이름인지 조사인지 가리지 못해 `안성시에서 공고`는 다른 값으로 남는다(README).
+        # 한계: 붙여 쓴 낱말과 조사를 가리지 못해 `안성시에서 공고`는 다른 값이다(README).
         body = "안성시에서 공고 제2026-5호와 안성시 공고 제2026-5호"
         record = parse_gosi_detail(detail(body=body), notice_id="75365", listing=row())
         self.assertEqual(record["referenced_notice_numbers"], ["안성시에서 공고 제2026-5호", "안성시 공고 제2026-5호"])
@@ -333,6 +332,20 @@ class GosiBatchTest(unittest.TestCase):
                 path.write_bytes(raw)
                 path.chmod(0o600)
         self.assertEqual(self.run_cli("verify", "--name", "run")[0], 0)
+
+    def test_failed_raw_now_parsed_needs_recapture(self):
+        first, old = parse_gosi_listing(listing("5", total=2), page=1), ValueError()
+        # c·d는 앞 페이지와 번호가 겹치거나 페이지 수가 달라 지금도 실패인 목록이라 통과한다.
+        cases = (("a", "6", 2, "parse_gosi_listing", [first, old]), ("b", "6", 2, "parse_gosi_detail", old),
+                 ("c", "5", 2, "", None), ("d", "6", 3, "", None))
+        for name, second, total, target, failure in cases:
+            self.listing.side_effect = [listing("5", total=2), listing(second, page=2, total=total)]
+            with patch.object(gosi_batch, target, side_effect=failure) if target else contextlib.nullcontext():
+                capture_gosi_batch(name, self.root)
+            if target:
+                self.assertRaisesRegex(ValueError, "현재 파서는 읽습니다", read_gosi_batch, self.private, name)
+            else:
+                self.assertEqual(list(read_gosi_batch(self.private, name)), ["5"])
 
     def test_cli_reports_capture_and_verify(self):
         self.listing.return_value = listing("7")
