@@ -22,12 +22,15 @@ from .web_batch import WebSource, _stop, capture_detail, check_limits
 
 SPORTS_SECTION = "collection-sports-notices"
 SPORTS_ROOT = CAPTURE_ROOT.with_name(SPORTS_SECTION)
-BATCH_SCHEMA = "citizen-sports-notice-batch-v1"
-RECORD_SCHEMA = "citizen-sports-notice-v1"
+BATCH_SCHEMA = "citizen-sports-notice-batch-v2"
+RECORD_SCHEMA = "citizen-sports-notice-v2"
 BOARD = "notice"
 _ROBOTS_BLOCKED = "robots.txt가 이 상세 주소를 허용하지 않습니다."
 # 이 호스트의 차단 화면은 HTTP 400이라 여기서만 멈춘다.
 _WAF_BLOCKED = str(SourceHTTPError(400, "체육시설 공지 상세"))
+# RFC 9309 2.3.1.3: 429 밖의 4xx는 robots.txt "unavailable"이라 규칙 없이 허용한다(사용자 결정 2026-11-29, 실제 400).
+_UNAVAILABLE = frozenset(range(400, 500)) - {429}
+_NO_RULES = {"rules": [], "delay": 0.0}
 
 
 def _pause(delay: float = 0.0) -> None:
@@ -51,12 +54,15 @@ SOURCE = WebSource(
 
 
 def _robots(directory: int) -> tuple[dict, dict | None]:
-    """robots.txt를 HTTP 200으로 받아 목록 주소를 허용할 때만 규칙을 돌려준다."""
+    """robots.txt가 목록 주소를 허용하거나 unavailable일 때만 규칙을 돌려준다. 429·5xx·연결 오류는 멈춘다."""
     entry = {"source_url": ROBOTS_URL}
     try:
         raw = fetch_robots()
     except ValueError as error:
         entry.update(status="fetch_failed", error=str(error))
+        if isinstance(error, SourceHTTPError) and error.status in _UNAVAILABLE:
+            entry.update(status="unavailable", http_status=error.status)
+            return entry, _NO_RULES
         return entry, None
     entry.update(save_web(directory, "robots.txt", raw))
     try:
@@ -161,12 +167,18 @@ def read_sports_batch(private_root: Path, name: str) -> dict[str, dict]:
         state, rules = _attempt(robots_rules, _raw(directory, robots, "robots.txt", ROBOTS_URL, ROBOTS_MAX_BYTES))
         if state == "parsed":
             state = "allowed" if allowed(rules, LISTING_URL) else "disallowed"
+        # unavailable은 원본 없이 기록한 4xx(429 제외)이고 오류 문구가 그 상태의 문구와 같을 때뿐이다.
+        code = _halt(robots, "체육시설 robots.txt", _UNAVAILABLE) if state == "fetch_failed" else None
+        if code is not None:
+            state, rules = "unavailable", _NO_RULES
+        go = state in ("allowed", "unavailable")
         listed, discovery, page = [], "robots_not_allowed", None
-        if state == "allowed" and len(pages) == 1:
+        if go and len(pages) == 1:
             page = _attempt(parse_listing, _raw(directory, pages[0], "list-1.html", LISTING_URL, LIST_MAX_BYTES))
             listed = page[1] or []
             discovery = "item_limit" if len(listed) > limit else "first_page_only" if listed else "failed"
-        if (robots.get("status") != state or len(pages) != (state == "allowed")
+        if (robots.get("status") != state or len(pages) != go
+                or (type(robots.get("http_status")), robots.get("http_status")) != (type(code), code)
                 or (pages and (pages[0].get("status"), pages[0].get("web_ids")) != page)
                 or [row.get("web_id") for row in items] != listed[:limit]):
             raise ValueError("체육시설 공지 robots.txt·목록 기록이 원본과 다릅니다.")

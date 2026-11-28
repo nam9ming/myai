@@ -293,25 +293,36 @@ python3.13 -B -m processing.collection.arthall_batch verify --name arthall-2026-
 
 확인하지 않은 것: 한 달이 2쪽 이상인 월별 목록(쪽 번호 형식은 연간 보기에서만 봤다), 표(`table`)가 든 탭 본문(지금은 거부한다), 탭 이미지 안의 글자(OCR은 별도 단계), 실제 예매 창과 잔여석, 2026-01~10월 목록과 그 상세 대부분.
 
-### 직영 공공체육시설 예약 누리집 공지 수집 (실제 페이지 미수집)
+### 직영 공공체육시설 예약 누리집 공지 수집
 
-예약 일정·우선 대상·중단 안내는 체육시설 예약 누리집 [공지 목록](https://reservation.anseong.go.kr/index.do?menu_id=0008)에서 받는다. **2026-11-27·28 robots.txt가 이 User-Agent(`yeogi-it/official-source-capture`)에 HTTP 400을 돌려줘 실제 목록·상세는 받지 않았고, 시험은 합성 원본뿐이다.**
+예약 일정·우선 대상·중단 안내는 체육시설 예약 누리집 [공지 목록](https://reservation.anseong.go.kr/index.do?menu_id=0008)에서 받는다. robots.txt는 2026-11-27~29 이 User-Agent(`yeogi-it/official-source-capture`)에 HTTP 400 `Request Blocked`를 돌려줬고 같은 User-Agent의 목록·상세는 HTTP 200이었다. RFC 9309 2.3.1.3은 429 밖의 4xx를 "unavailable"(규칙 없음)로 보므로 **2026-11-29 사용자 결정으로 이때는 규칙 없이 수집한다.**
 
 ```sh
-python3.13 -B -m processing.collection.sports_batch --name sports-20261128 --max-items 20
-python3.13 -B -m processing.collection.sports_batch --name sports-20261128 --verify
+python3.13 -B -m processing.collection.sports_batch --name sports-20261129 --max-items 20
+python3.13 -B -m processing.collection.sports_batch --name sports-20261129 --verify
 ```
 
-- robots.txt(HTTP 200·UTF-8)가 허용하는 목록 1쪽과 상세만 받는다. RFC 9309(가장 긴 일치, `*`·`$`, 그룹 병합, 제품 토큰 `yeogi-it`, 비예약 글자 인코딩만 풀기)대로 읽고, `*`·`$` 밖을 모두 푼 주소가 막혀도 막힌 것으로 본다. 규칙 아닌 줄·값, SP·HTAB 아닌 공백, 토큰 뒤 글자, `Disalow` 같은 오타, 못 읽는 `Crawl-delay`는 판단 불가로 멈춘다(`robots_not_allowed`, 종료 2). `Crawl-delay`가 1.5초보다 길면 그 간격을 쓴다.
+- robots.txt가 HTTP 200·UTF-8이면 허용하는 목록 1쪽과 상세만 받는다. RFC 9309(가장 긴 일치, `*`·`$`, 그룹 병합, 제품 토큰 `yeogi-it`, 비예약 글자 인코딩만 풀기)대로 읽고, `*`·`$` 밖을 모두 푼 주소가 막혀도 막힌 것으로 본다. 규칙 아닌 줄·값, SP·HTAB 아닌 공백, 토큰 뒤 글자, `Disalow` 같은 오타, 못 읽는 `Crawl-delay`는 판단 불가로 멈춘다. 429 밖의 4xx는 원본 없이 `http_status`·오류 문구를 남긴 `unavailable`로 전부 허용한다. 429·5xx·연결 오류(`fetch_failed`), HTTP 200 HTML 차단 화면·못 읽는 규칙(`parse_failed`), 목록 비허용(`disallowed`)은 멈춘다(`robots_not_allowed`, 종료 2). `Crawl-delay`가 1.5초보다 길면 그 간격을 쓴다.
 - 호스트 고정, 리디렉션 미추종, 1.5초 간격, 크기 한도 robots.txt 512 KiB·목록 2 MiB·상세 8 MiB, 상세 `--max-items` 1~80건(기본 20). 상세 HTTP 400(이 수집기만)·401·403·429·503이면 남은 상세는 `not_attempted`다.
-- `complete`는 목록 1쪽(`first_page_only`)에서 고른 상세를 다 파싱했다는 뜻뿐이다. 인자 다섯 개가 실제 상세 주소(`board_id=notice&cp=%2Fboard%2Fview.do&menu_id=0008&pageIndex=1&seq=…`)와 같은 `href`만 읽는다.
-- 상세 마크업은 가정이다. `input[name=seq]` 하나가 요청과 같고 제목은 유일한 `<h4>`, 본문은 유일한 `div.view_cont`여야 한다. 허용 목록(`_BODY`·`_STYLE`·`_ANCESTORS` 등)은 `data/private`의 안성시 누리집 실제 원본(상세 234개·목록 35개)에서 본 표기만 옮겼다. 표·`pre`·`normal` 밖 `white-space`, 브라우저가 시작 태그로 닫는 표기, 어긋난 중첩, `frameset`, 강제 줄바꿈 문자와 U+001C~U+001F도 거부한다.
+- `complete`는 목록 1쪽(`first_page_only`)에서 고른 상세를 다 파싱했다는 뜻뿐이다. 목록 `href`가 `/index.do?menu_id=0008&cp=/board/view.do&pageIndex=1&seq=…&board_id=notice&searchCondition=&searchKeyword=`와 글자까지 같을 때만 읽고 상세도 이 주소 그대로 요청한다.
+- 마크업은 2026-11-29 실제 원본(`data/private/sports-probe-20261129`의 목록 1쪽·상세 `seq=96·100·106·110·111`)으로 정했다. 링크는 `form#gnBoardVOL > ul.bbsList > li > a.subject`, 상세는 `input[name=seq]` 하나가 요청과 같고 제목은 유일한 `h3.bbsTitle`, 본문은 `td.conts` 안의 유일한 `div.conts`다. 허용 목록(`_BODY`·`_STYLE`·`_ANCESTORS` 등)은 이 원본의 태그·속성·스타일 값만 받고 색·글꼴만 그 형태로 넓혔다. `font`의 `face`·`color`도 같은 표로 본다.
+- 실제 메뉴·하단에는 어긋난 중첩(닫지 않은 `li`, 범위 밖 `</li>`, `</nav>`가 닫는 숨긴 `li`, `</br>`, 상세의 겹친 댓글 `form`)이 있다. 영역 밖은 HTML5 복구 가운데 이것만 따라 조상을 정하고, 서식 요소를 다시 열거나 표·select에서 요소를 옮기거나 `p`를 닫는 등 다른 복구가 일어날 표기는 거부한다. 영역 안은 어긋난 중첩, `</br>`, 표·`pre`·링크, 강제 줄바꿈 문자와 U+001C~U+001F를 거부한다.
 
-`data/private/collection-sports-notices/<name>/`에 `robots.txt`·`list-1.html`·`detail-<seq>.html`·`parsed-<seq>.json`(`sports-notice-parser-v7`)을 쓰고 마지막에 `batch.json`을 쓴다. 종료 코드는 0 완료, 2 robots 미허용·한도·일부 실패, 1 입력·보관·재검증 오류다. `--verify`는 요청 없이 모든 원본 해시와, 원본에서 다시 낸 상태·건수·번호·파싱 결과(파서 버전 먼저)·중단 상태를 대조하고 `not_attempted`는 중단 뒤나 robots가 막은 주소만 받는다. **D03 연결은 후속이다.**
+`data/private/collection-sports-notices/<name>/`에 `robots.txt`·`list-1.html`·`detail-<seq>.html`·`parsed-<seq>.json`(`sports-notice-parser-v8`, 묶음 `citizen-sports-notice-batch-v2`·기록 `citizen-sports-notice-v2`)을 쓰고 마지막에 `batch.json`을 쓴다. 종료 코드는 0 완료, 2 robots 미허용·한도·일부 실패, 1 입력·보관·재검증 오류다. `--verify`는 요청 없이 모든 원본 해시와, 원본에서 다시 낸 상태·건수·번호·파싱 결과(파서 버전 먼저)·중단 상태를 대조하고 `not_attempted`는 중단 뒤나 robots가 막은 주소만, `unavailable`은 원본 없는 4xx(429 제외) `http_status`와 그 상태의 오류 문구가 맞을 때만 받는다. **D03 연결은 후속이다.**
 
-파싱 결과는 표시 문구 그대로다: `title`, 문단·블록·`display` 상자·`br` 경계로 나눈 `body_lines`(화면 한 줄이 나뉠 수 있다), 본문 `images`(`src`·`alt`)·`links`(`href`·글자), `KEYWORD_GROUPS` 검색어가 든 줄 `keyword_lines`(관계없는 줄 포함), `review_flags`(늘 `markup_unverified`, `inline_image`, `image_only`, `link`, 소스 줄바꿈을 합친 `source_newline_joined`). 날짜·비용·자격은 해석하지 않고, 예약·이용 일정이 한 줄이거나 세부가 이미지뿐이면(`seq=111`) 사람이 본다.
+파싱 결과는 표시 문구 그대로다: `title`, 문단·블록·`br` 경계로 나눈 `body_lines`(화면 한 줄이 나뉠 수 있다), 본문 `images`(`src`), `KEYWORD_GROUPS` 검색어가 든 줄 `keyword_lines`(관계없는 줄 포함), `review_flags`(`inline_image`, `image_only`, 소스 줄바꿈을 합친 `source_newline_joined`). 날짜·비용·자격은 해석하지 않는다. 예약(접수) 일정과 이용 기간을 합치지 않고 비용이 없으면 무료가 아니라 미상이다. 예약·이용 일정이 한 줄이거나 세부가 이미지뿐이면 사람이 본다.
 
-확인하지 않은 것: 실제 마크업·인코딩, 페이지·고정 글 표시, 목록·상세 차단 여부, 공공누리 표시, 영역 밖 요소·스크립트, 스타일시트 선택자·글꼴 숨김, 허용 값끼리의 조합(같은 글자·배경색 등), `img` 크기, 빈 링크 글자. 실제 수집 전에 robots.txt를 다시 보고, 원본으로 가정을 고쳐 파서 버전을 올린다.
+| 실제 상세 | 제목 | 본문 줄 | 이미지 | `keyword_lines` 예약·우선·중단 |
+| --- | --- | --- | --- | --- |
+| 96 | 2026년 12월 이용분 예약 일정 안내 | 19 | 1 | 8·5·2 |
+| 100 | 5. 29. 예약 기능 제한 안내 | 0 | 1(`image_only`) | 0·0·1(제목) |
+| 106 | 안성시민 인증 기능 추가 안내 | 0 | 1(`image_only`) | 0·0·0 |
+| 110 | 안성시 직영 공공체육시설예약시스템 점검 안내 | 9 | 0 | 0·0·2 |
+| 111 | 공공체육시설 이용 제한 안내 | 0 | 1(`image_only`) | 0·0·1(제목) |
+
+목록 1쪽은 이 5건이다. 위 결과는 3.13.5·3.14.6에서 같고, robots 400과 이 원본을 넣은 `capture`·`--verify`도 요청 없이 두 버전에서 `complete`였다.
+
+확인하지 않은 것: 새 원본으로 한 실제 `capture`, 목록 2쪽 이후·고정 글 표시, 이 5건 밖 본문 표기(링크·표·목록·다른 스타일 값은 지금 거부한다), 이미지 안 글자(OCR은 별도), 공공누리 표시, 스타일시트 선택자·글꼴 숨김, 허용 값끼리의 조합(같은 글자·배경색 등), `img` 크기, 실제 브라우저 DOM과의 기계 대조(복구는 HTML 명세 규칙으로 맞췄다).
 
 ### 지자체복지서비스 OpenAPI 목록·상세 수집
 
