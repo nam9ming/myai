@@ -25,6 +25,8 @@ _PRODUCT = USER_AGENT.split("/")[0]  # RFC 9309 그룹은 제품 토큰으로 �
 _CRAWL_DELAY = re.compile(r"[0-9]{1,5}(?:\.[0-9]+)?")
 # noscript 등 원문 텍스트 요소 안은 공용 파서가 태그로 읽지 않는다.
 _HIDDEN_TAGS = ("template",)
+# 내용이 화면에 없는 요소(details·dialog는 open이 없을 때).
+_FOLDED = frozenset("datalist audio video canvas".split())
 _VOID_TAGS = frozenset("area base br col embed hr img input link meta source track wbr".split())
 _BREAK_TAGS = frozenset("br p div li tr td th h1 h2 h3 h4 h5 h6 table ul ol dl dt dd blockquote caption center hr pre".split())
 _BODY_TAGS = _BREAK_TAGS | frozenset("a b strong em i u s span font sub sup small mark img tbody thead tfoot col "
@@ -176,7 +178,8 @@ class _LinkParser(PinnedHTMLParser):
         values = dict(attrs)
         if tag == self.veil:
             self.depth += 1
-        elif self.veil is None and tag not in _VOID_TAGS and not _shown(names, values):
+        elif self.veil is None and tag not in _VOID_TAGS and (
+                not _shown(names, values) or tag in _FOLDED or tag in ("details", "dialog") and "open" not in values):
             self.veil, self.depth = tag, 1
         if tag == "a":
             if names.count("href") > 1:

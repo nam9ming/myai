@@ -58,9 +58,11 @@ class SportsParserTest(unittest.TestCase):
         link = f'<a href="{_LINK.format(2)}">x</a>'
         for extra in (f'<div style="display: none"><div></div>{link}</div>', f'<p style="visibility:hidden">{link}</p>',
                       link.replace("<a", "<a hidden"), f'<div style="display/**/:none">{link}</div>',
-                      link.replace("<a", '<a style="display:\\6e one"'), f'<span style="visibility:collapse">{link}</span>'):
+                      link.replace("<a", '<a style="display:\\6e one"'), f'<span style="visibility:collapse">{link}</span>',
+                      *(f'<{tag}>{link}</{tag}>' for tag in "details dialog datalist audio video canvas".split())):
             with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, "숨긴"):
                 parse_listing(listing("1", extra=extra))
+        self.assertEqual(parse_listing(listing("1", extra=f"<details open>{link}</details>")), ["1", "2"])
 
     def test_detail_keeps_display_text_and_keyword_lines_verbatim(self):
         body = ("<p>예약 일정 : 3월 2일(월) 09:00</p><p>관내 거주자 <b>우선</b>&nbsp;배정</p>"
