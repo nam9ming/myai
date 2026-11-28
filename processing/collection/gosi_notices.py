@@ -38,6 +38,11 @@ _NOTICE_NUMBER = re.compile(r"(?:(?:경기도|안성시)(?: ?[가-힣]{1,20}){0,
 _MEDIA_LIMIT = 40
 
 
+def _notice_key(number: str) -> str:
+    # 공백·괄호를 지우고, `경기도 안성시 …`는 `안성시 …`와 같은 주체로 본다. `경기도 고시`처럼 도 자체 발행은 그대로 둔다.
+    return re.sub(r"^경기도(?=안성시)", "", re.sub(r"[\s()]", "", number))
+
+
 def _text(parts: list[str]) -> str:
     return " ".join("".join(parts).split())
 
@@ -384,10 +389,10 @@ def parse_gosi_detail(text: str, *, notice_id: str, listing: dict) -> dict:
     if registered is None and fields["registered_date"] is not None:
         flags.add("registered_date_unparsed")
     # 정정·변경 관계는 본문·제목에 적힌 고시공고번호 문자열만 남기고, 제목의 `(정정)`만으로 원공고를 추정하지 않는다.
-    # 자기 번호 제외와 중복 제거는 같은 정규화(공백·괄호 제거)로, 발행 주체까지 같은 전체 번호일 때만 한다.
-    references, seen = [], {re.sub(r"[\s()]", "", fields["notice_number"] or "")}
+    # 자기 번호 제외와 중복 제거는 같은 비교 키로, 발행 주체까지 같은 전체 번호일 때만 한다. 키만 정규화하고 값은 원문이다.
+    references, seen = [], {_notice_key(fields["notice_number"] or "")}
     for found in _NOTICE_NUMBER.finditer(f"{title}\n{fields['description'] or ''}"):
-        if (key := re.sub(r"[\s()]", "", found[0])) not in seen:
+        if (key := _notice_key(found[0])) not in seen:
             seen.add(key)
             references.append(found[0])
     return {
