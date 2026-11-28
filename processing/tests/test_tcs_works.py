@@ -73,12 +73,14 @@ class ParseTest(unittest.TestCase):
 
     def test_anseong_selection_uses_road_and_police_only(self):
         rows = [row(1, road="경기도 안성시 공도읍 합성로"), row(2, police="안성"), row(3, road="무주군 안성면 합성로"),
-                row(4, name="안성 방면 합성 공사"), row(5, builder="안성건설"), row(6)]
+                row(4, name="안성 방면 합성 공사"), row(5, builder="안성건설"), row(6),
+                row(7, police="", road="", name="안성 방면 합성 공사"), row(8, police="", road="")]
         matched, review = tcs.select_records(tcs.parse_tcs_csv(csv_bytes(*rows).decode())[0])
         self.assertEqual([m["match"] for m in matched],
                          [{"constRoad": "경기도 안성시 공도읍 합성로"}, {"poliName": "안성"}])
         self.assertEqual([(r["record"]["line"], r["reason"], r["mentions"]) for r in review],
-                         [(3, "mention", ["constRoad"]), (4, "other_mention", ["constName"])])
+                         [(3, "mention", ["constRoad"]), (4, "other_mention", ["constName"]),
+                          (7, "blank_location", ["constName"]), (8, "blank_location", [])])
 
 
 class ImportTest(unittest.TestCase):

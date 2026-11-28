@@ -117,6 +117,10 @@ def select_records(records: list[dict]) -> tuple[list, list]:
             match["poliName"] = fields["poliName"]
         if match:
             matched.append({"match": match, "record": record})
+        elif fields["constRoad"] is None and fields["poliName"] is None:
+            # 위치 근거가 없어 버리면 안성 행이 조용히 빠질 수 있다.
+            review.append({"reason": "blank_location", "record": record,
+                           "mentions": [name for name in OTHER_FIELDS if _has(fields[name], "안성")]})
         elif found := [name for name in ("constRoad", "poliName") if _has(fields[name], "안성")]:
             review.append({"reason": "mention", "mentions": found, "record": record})
         elif found := [name for name in OTHER_FIELDS if _has(fields[name], "안성")]:
