@@ -31,7 +31,7 @@ def _qr(url):
 def _slides(items=""):
     return (f'<div class="updateFileList"><div class="file_slide"><div class="file_slide_list">{items}</div>'
             '<div class="file_slide_control"><button type="button" class="file_slide_prev"><span>이전</span></button>'
-            '</div></div></div>')
+            '<button type="button" class="file_slide_next"><span>다음</span></button></div></div></div>')
 
 
 _PHOTO = (f'<div class="file_slide_item"><a href="/edu/DATA/EDU/PLACE/ratio/PLACE_1_ratio_.jpg" '
@@ -176,7 +176,17 @@ class CourseDetailTest(unittest.TestCase):
             ("구조", _detail().replace('<div class="bod_title">', '<div class="bod_title">[숨김접두]')),
             ("강좌명", _detail(title="")),
             ("해석이 갈리는", _detail(강좌소개="<!--->숨김-->")),
+            ("구조", _detail().replace("<span>이전</span></button>", f'<img src="{_IMAGE}" alt="사진"></button>', 1)),
+            ("구조", _detail().replace("<span>이전</span>", f'<span>이전</span><img src="{_IMAGE}" alt="사진">', 1)),
+            ("구조", _detail().replace('class="learning_content"', 'class="learning_content blind"')),
+            ("구조", _detail().replace('<div id="learning_cont"', '<div hidden id="learning_cont"')),
         ]
+        # 화면에 나오지 않을 수 있는 글자가 제목·접수상태·항목명·첨부 이름에 섞이면 거부한다.
+        for wrap in ("<noscript>{}</noscript>", "<details>{}</details>"):
+            cases += [("구조", _detail(title=wrap.format("[취소] ") + "강좌")),
+                      ("구조", _detail(state=wrap.format("접수중") + "접수마감")),
+                      ("구조", _detail().replace("<dt>수강료</dt>", f"<dt>{wrap.format('수강료')}</dt>")),
+                      ("구조", _detail().replace("강의계획서.hwp</a>", wrap.format("강의계획서.hwp") + "</a>"))]
         for number, (message, text) in enumerate(cases):
             with self.subTest(case=number), self.assertRaisesRegex(ValueError, message):
                 parse_course_detail(text, course_id="5086")
@@ -226,7 +236,7 @@ class CourseBatchTest(unittest.TestCase):
 
         parsed = self.root / "run" / "parsed-5086.json"
         original = parsed.read_bytes()
-        for changed, message in ((original.replace(b"edu-course-parser-v2", b"edu-course-parser-v1"), "파서 버전"),
+        for changed, message in ((original.replace(b"edu-course-parser-v3", b"edu-course-parser-v2"), "파서 버전"),
                                  (original.replace("선착순".encode(), "추첨".encode()), "파싱 결과")):
             parsed.chmod(0o600)
             parsed.write_bytes(changed)

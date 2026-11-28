@@ -25,7 +25,7 @@ _IMAGE = re.compile(re.escape(CONTEXT_PATH) + r"/common/imgView\.do\?attachId=[0
                     r"&mode=ratioView")
 _MAX_ROWS = 100
 # 공유 태그 경계 규칙(_NoticeParser)이나 아래 출력·허용 규칙이 바뀌면 올린다.
-PARSER_VERSION = "edu-course-parser-v2"
+PARSER_VERSION = "edu-course-parser-v3"
 _TEXT_FIELDS = {
     "접수기간": "application_period",
     "접수현황": "enrollment_status",
@@ -172,6 +172,13 @@ def _value(node: tuple) -> str | None:
     return "\n".join(line for line in lines if line) or None
 
 
+def _text(node: tuple, error: str = _INVALID_DETAIL) -> str | None:
+    """하위 태그가 _TEXT_TAGS뿐인 칸만 읽는다. noscript·details 같은 태그 안 글자는 화면에 나오지 않을 수 있다."""
+    if any(child[0] not in _TEXT_TAGS for child in _descendants(node)):
+        raise ValueError(error)
+    return _value(node)
+
+
 def _link_id(href: str | None) -> str:
     path, _, query = (href or "").partition("?")
     pairs = [pair.partition("=") for pair in query.split("&")]
@@ -230,7 +237,10 @@ def _media(node: tuple, field: str, items: list[dict], hints: set[int]) -> None:
                 raise ValueError(_INVALID_DETAIL)
             continue
         tag, values, _ = child
-        if tag == "button":  # 슬라이드 이전·다음 단추
+        if tag == "button":  # 슬라이드 이전·다음 단추만 건너뛴다. 그림을 감싼 단추 등은 거부한다.
+            if ((values.get("class"), _value(child)) not in (("file_slide_prev", "이전"), ("file_slide_next", "다음"))
+                    or [part[0] for part in _descendants(child)] != ["span"]):
+                raise ValueError(_INVALID_DETAIL)
             continue
         if tag == "img":
             source = values.get("src") or ""
@@ -242,7 +252,7 @@ def _media(node: tuple, field: str, items: list[dict], hints: set[int]) -> None:
             hidden = [part for part in child[2] if isinstance(part, tuple) and "skip" in _classes(part)]
             hints.update(map(id, hidden))
             visible = (tag, values, [part for part in child[2] if part not in hidden])
-            items.append({"field": field, "kind": "attachment", "label": _value(visible),
+            items.append({"field": field, "kind": "attachment", "label": _text(visible),
                           "url": f"{OFFICIAL_ORIGIN}{CONTEXT_PATH}/cmm/fms/FileDown.do?atchFileId={match[1]}"
                                  f"&fileSn={match[2]}" if match else None})
         elif tag in ("div", "a"):
@@ -258,7 +268,7 @@ def _title(node: tuple) -> tuple[str | None, str]:
         if kind == "unknown" or kind in found:
             raise ValueError(_INVALID_DETAIL)
         if kind:
-            found[kind] = _value(child)
+            found[kind] = _text(child)
     if not found.get("subject") or "state" not in found:
         raise ValueError(f"{_LABEL} 상세의 강좌명 또는 접수상태 칸이 없습니다.")
     return found["state"], found["subject"]
@@ -268,7 +278,8 @@ def parse_course_detail(text: str, *, course_id: str) -> dict:
     """강좌 상세 항목을 표시 문구 그대로 보관한다. 날짜·금액·정원·대상은 해석하지 않는다."""
     url = detail_url(course_id)
     parser = _read(text, lambda tag, _, values: tag == "div" and values.get("id") == "learning_cont", _INVALID_DETAIL)
-    if len(parser.trees) != 1:
+    # 실제 28쪽의 속성 그대로일 때만 받는다. hidden·style·class="blind" 등은 영역 전체를 숨길 수 있다.
+    if len(parser.trees) != 1 or parser.trees[0][1] != {"id": "learning_cont", "class": "learning_content"}:
         raise ValueError(_INVALID_DETAIL)
     # 첨부 주소는 페이지 설정의 contextPath로 만들어지므로 선언이 정확히 한 번, /edu여야 한다.
     if _declared_context_paths(parser.scripts) != [CONTEXT_PATH]:
@@ -289,7 +300,7 @@ def parse_course_detail(text: str, *, course_id: str) -> dict:
         cells = _children(row)
         if row[0] != "dl" or [cell[0] for cell in cells] != ["dt", "dd"]:
             raise ValueError(_INVALID_DETAIL)
-        label, value = _value(cells[0]) or "", cells[1]
+        label, value = _text(cells[0]) or "", cells[1]
         if label not in _TEXT_FIELDS and label not in _MEDIA_FIELDS:
             raise ValueError(f"{_LABEL} 상세에 알 수 없는 항목이 있습니다: {label[:40]}")
         if label in seen:
@@ -297,10 +308,8 @@ def parse_course_detail(text: str, *, course_id: str) -> dict:
         seen.add(label)
         if label in _MEDIA_FIELDS:
             _media(value, _MEDIA_FIELDS[label], media, hints)
-        elif any(tag[0] not in _TEXT_TAGS for tag in _descendants(value)):
-            raise ValueError(f"{_LABEL} 상세의 {label} 칸 형식이 바뀌었습니다.")
         else:
-            fields[_TEXT_FIELDS[label]] = _value(value)
+            fields[_TEXT_FIELDS[label]] = _text(value, f"{_LABEL} 상세의 {label} 칸 형식이 바뀌었습니다.")
     if len(seen) != len(_TEXT_FIELDS) + len(_MEDIA_FIELDS):
         raise ValueError(f"{_LABEL} 상세에 빠진 항목이 있습니다.")
     for node in (block for found in blocks.values() for block in (found[0], *_descendants(found[0]))):
