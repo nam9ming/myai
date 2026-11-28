@@ -64,8 +64,9 @@ class SportsParserTest(unittest.TestCase):
             with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, "허용 목록 밖"):
                 parse_listing(listing("1", extra=extra))
         # 브라우저와 경계가 갈리는 중첩(td 안의 </div> 등)과 뒤에 나온 body 속성도 거부한다.
+        # Python은 켈빈 기호(U+212A)를 k로 바꿔 빈 link·닫힌 ak로 읽지만 브라우저에서는 숨김 요소가 열린 채 남는다(기반 파서가 거부).
         for extra in ("<div><span></div></span>", f"<div hidden><table><tr><td></div>{link}", "<div>", "<body hidden>",
-                      "<frameset></frameset>"):
+                      "<frameset></frameset>", f"<lin\u212a hidden>{link}", f"<ak hidden>x</a\u212a>{link}"):
             with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, "목록 HTML 구조"):
                 parse_listing(listing("1", extra=extra))
 
@@ -154,7 +155,8 @@ class SportsParserTest(unittest.TestCase):
             *(("구조", {"body": f"<p>가{c}나</p>"})
               for c in ("\u2028", "&#x2028;", "&#8233;", "\x85", "\x0b", "&#11;", "&#xC;")),
             ("구조", {"body": "<p><strong>x</p></strong>"}),
-            *(("구조", {"head": head}) for head in ("<div><span></div></span>", "<body hidden>")),
+            *(("구조", {"head": head}) for head in ("<div><span></div></span>", "<body hidden>", "<lin\u212a hidden>",
+                                                   "<ak hidden>x</a\u212a>")),
         ):
             with self.subTest(options=options), self.assertRaisesRegex(ValueError, message):
                 parsed(**options)
