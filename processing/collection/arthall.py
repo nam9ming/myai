@@ -251,7 +251,8 @@ def parse_listing(raw: bytes, *, year: int, month: int, page: int) -> tuple[int,
 
 def _check_hidden(values: dict) -> None:
     # 탭 본문 영역 자신의 display:none은 화면 스크립트가 탭을 열 때 풀리므로 영역 안쪽만 본다.
-    if "hidden" in values or re.search(r"display|visibility", values.get("style") or "", re.I):
+    # `\`는 CSS 이스케이프(`disp\lay`)로 정규식을 피할 수 있어 숨김으로 본다.
+    if "hidden" in values or re.search(r"display|visibility|\\", values.get("style") or "", re.I):
         raise ValueError("안성맞춤아트홀 상세에 화면 표시를 확정할 수 없는 숨김 표기가 있습니다.")
 
 

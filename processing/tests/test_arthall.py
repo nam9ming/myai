@@ -199,6 +199,7 @@ class ArthallDetailTest(unittest.TestCase):
             "영역 사이 글자": detail().replace('<div class="cleB"></div>', '<div class="cleB"></div>보이는글'),
             "중복 숨김": _body('<p style="display:none" style>숨김</p>'),
             "중복 src": detail().replace("<img", '<img src="/b.png"'),
+            "CSS 이스케이프": _body(r'<p style="disp\lay:none">숨김</p>'),
         }
         # 공용 파서의 거부 규칙 전체는 test_html_tokens가 본다.
         for markup in ("<!-- a --!>보이는글<!-- b -->", "<!-- 끝없음", "<![CDATA[x]]>보이는글", 'a</div x=">">b',
