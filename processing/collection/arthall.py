@@ -25,8 +25,9 @@ _INVALID_LISTING = "안성맞춤아트홀 일정 목록 HTML 구조가 올바르
 _INVALID_DETAIL = "안성맞춤아트홀 공연·전시 상세 HTML 구조가 올바르지 않습니다."
 # 브라우저가 안을 마크업으로 읽지 않는 원문 요소. 3.13은 script·style만, 3.14는 나머지도 원문으로 읽는다.
 _RAW_TEXT = ("script", "style", "xmp", "iframe", "noembed", "noframes", "textarea", "title")
-# 따옴표·`=` 든 끝 태그와 `</title >`·`</ title>`처럼 이름 바로 뒤가 `>`가 아닌 원문 요소 끝 태그는 버전마다 끝 위치가 다르다.
-_ODD_END = re.compile(r"</[A-Za-z][^>]*[\"'=]|</(?!(?:{0})>)\s*(?:{0})\b".format("|".join(_RAW_TEXT)), re.I)
+# 따옴표·`=` 든 끝 태그와 `</title >`처럼 이름 바로 뒤가 `>`가 아닌 원문 요소 끝 태그는 버전마다 끝 위치가 다르다.
+# `</ div>`·`</\ndiv>`처럼 `</` 바로 뒤가 공백이면 3.13은 끝 태그로, 3.14와 브라우저는 주석으로 읽는다.
+_ODD_END = re.compile(r"</\s|</[A-Za-z][^>]*[\"'=]|</(?!(?:{0})>)(?:{0})\b".format("|".join(_RAW_TEXT)), re.I)
 _FIELDS = {
     "장르": "genre", "기간": "period", "시간": "time", "관람시간": "running_time", "장소": "venue",
     "관람연령": "age_rating", "입장권": "admission", "티켓 오픈 일시": "ticket_open", "문의처": "contact",

@@ -90,6 +90,9 @@ class ArthallListingTest(unittest.TestCase):
             "쪽 번호 없음": (listing("1", total=2).replace(b'class="bod_page"', b'class="paging"'), {}),
             "다른 목록": (listing("1", action="/arthall/other/list.do"), {}),
         }
+        # `</` 뒤 공백은 3.13만 끝 태그로 읽어 뒤 공연이 빠진다(3.14와 브라우저는 주석으로 본다).
+        for end in (b"</ div>", b"</\ndiv>"):
+            cases[end.decode()] = (listing("11", "12").replace(b'<div class="fR">', b'<div class="fR">' + end, 1), {})
         for name, (raw, override) in cases.items():
             with self.subTest(name), self.assertRaises(ValueError):
                 parse_listing(raw, **{"year": 2026, "month": 12, "page": 1, **override})
@@ -176,7 +179,8 @@ class ArthallDetailTest(unittest.TestCase):
             "plaintext": detail().replace('<div class="cleB"></div>', "<plaintext>"),
         }
         for markup in ("<!-- a --!>보이는글<!-- b -->", "<!-->보이는글<!-- b -->", "<!--->보이는글<!-- b -->", "<!-- 끝없음",
-                       "<![CDATA[x]]>보이는글", "<!x>", '<!DOCTYPE html PUBLIC "x>">', "<?x>", 'a</div x=">">b'):
+                       "<![CDATA[x]]>보이는글", "<!x>", '<!DOCTYPE html PUBLIC "x>">', "<?x>", 'a</div x=">">b',
+                       "본문1</ div>본문2", "본문1</\ndiv>본문2"):
             cases[markup] = detail(tabs="", sections=f'<div id="tap_wrapper1" class="tap_wrapper"><div>{markup}</div></div>')
         for name, text in cases.items():
             with self.subTest(name), self.assertRaises(ValueError):
