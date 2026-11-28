@@ -126,7 +126,7 @@ class GosiParserTest(unittest.TestCase):
                          ("<tbody>", "<tbody><template></template>"), ("<strong>", "<strong hidden>"),
                          ("<strong>", '<strong><span class="blind">9</span>'), ("</strong>", "</strong></b>"),
                          ("<strong>", "<strong><div>x</div>"), ('"red"', '"red" class="red"'), ("<tbody>", "<tbody>마감"),
-                         ("제목</th>", "제목 마감</th>"), ('"red">', '"red">9')):
+                         ("제목</th>", "제목 마감</th>"), ('"red">', '"red">9'), ("<a href", "<a class href")):
             with self.subTest(new=new), self.assertRaisesRegex(ValueError, "구조"):
                 parse_gosi_listing(listing("1").replace(old.encode(), new.encode(), 1), page=1)
         # template 안 짝 없는 종료 태그는 브라우저가 무시해 목록이 숨은 채로 남는다.
@@ -142,6 +142,8 @@ class GosiParserTest(unittest.TestCase):
             "<b>마감</b>", '<span style="color:red">마감</span>', '<p class="blind">마감</p>', '<div data-x="1">마감</div>',
             '<a href="#" href="#">x</a>', "<table><tr><td>x</td></tr></table>", "<p>가<p>나</p>", '<img src="/x" alt="x">',
             "<ul><li>가<ul><li>나</li></ul></li></ul>")] + [detail(title="가<h4>나</h4>")] + [
+            # 값 없는 class는 class 없는 자리(`a[href]`·`h4`)로 맞추지 않는다(첨부 링크는 KeyError로 멈췄다).
+            detail().replace(old, new, 1) for old, new in (("<p><a href", "<p><a class href"), ("<h4>합성", "<h4 class>합성"))] + [
             empty.replace("</div>\n<dl", f"</div>{extra}\n<dl") for extra in (
                 "<p>접수기간 2026.12.01~12.05</p>", '<div class="gosi_b">마감</div>', "<ul><li>지원금 50만원</li></ul>")]
         for text in texts:

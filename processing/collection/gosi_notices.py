@@ -117,7 +117,9 @@ _LISTING_SHAPE, _BODY_SHAPE = _shape(_LISTING_SHAPE), _shape(_BODY_SHAPE)
 def _step(shape: dict, parent: tuple, tag: str, attrs: list) -> tuple | None:
     """표본 구조에 있는 자리·class 값·속성 이름이면 새 경로를, 아니면(중복 속성 포함) None을 반환한다."""
     names = [name for name, _ in attrs]
-    path = parent + ((tag, dict(attrs).get("class"), tuple(sorted(set(names) - {"class"}))),)
+    # 값 없는 class는 ""로 보아(표본에 없다) class가 없는 자리와 구별한다.
+    classes = next((value or "" for name, value in attrs if name == "class"), None)
+    path = parent + ((tag, classes, tuple(sorted(set(names) - {"class"}))),)
     return path if path in shape and len(set(names)) == len(names) else None
 
 
