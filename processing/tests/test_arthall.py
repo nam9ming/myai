@@ -284,6 +284,16 @@ class ArthallBatchTest(unittest.TestCase):
         self.assertIn("번호가 요청과 일치하지 않습니다", receipt["items"][0]["error"])
         self.assertEqual(receipt["stop_http_status"], 429)
         self.assertEqual(read_arthall_batch(self.root.parent, "part")[1], {})
+        # 파싱에 실패한 상세·목록 원본도 바뀌거나 지워지면 거부한다.
+        self.listing.return_value = listing("1", month=11)
+        self.assertEqual(capture_arthall_batch(2026, 12, "list", self.root)["discovery_status"], "failed")
+        for name, raw in (("part", "detail-1.html"), ("list", "list-1.html")):
+            path, read = self.root / name / raw, lambda: read_arthall_batch(self.root.parent, name)
+            read()
+            path.write_bytes(path.read_bytes() + b" ")
+            self.assertRaisesRegex(ValueError, "해시", read)
+            path.unlink()
+            self.assertRaisesRegex(ValueError, "읽을 수 없", read)
 
     def test_cli_capture_and_verify(self):
         self.listing.return_value = listing("5")

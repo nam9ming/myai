@@ -49,7 +49,10 @@ def capture_arthall_batch(year: int, month: int, name: str, root: Path, *, start
                              start_page=start_page, max_pages=max_pages, max_items=max_items)
 
 
-def _checked(directory: int, entry: object, filename: str, url: str, limit: int) -> bytes:
+def _checked(directory: int, entry: object, filename: str, url: str, limit: int) -> bytes | None:
+    # 받기 실패·미시도만 원본이 없고, 파싱 실패를 포함한 나머지는 원본 해시까지 대조한다.
+    if isinstance(entry, dict) and entry.get("status") in ("fetch_failed", "not_attempted") and "file" not in entry:
+        return None
     if (not isinstance(entry, dict) or entry.get("file") != filename or entry.get("source_url") != url
             or not isinstance(entry.get("sha256"), str) or _SHA256.fullmatch(entry["sha256"]) is None):
         raise ValueError("아트홀 수집 기록의 파일 이름·원문 주소·해시 형식이 맞지 않습니다.")
@@ -75,11 +78,11 @@ def read_arthall_batch(private_root: Path, name: str) -> tuple[dict, dict[str, d
         for entry in pages:
             if not isinstance(entry, dict):
                 raise ValueError("아트홀 수집 기록의 목록 페이지가 맞지 않습니다.")
-            if entry.get("status") != "parsed":
-                continue
             page = entry.get("page")
             raw = _checked(directory, entry, f"list-{page}.html", OFFICIAL_ORIGIN + listing_path(year, month, page),
                            LIST_MAX_BYTES)
+            if entry.get("status") != "parsed":
+                continue
             if [*parse_listing(raw, year=year, month=month, page=page)] != [entry.get("reported_pages"),
                                                                             entry.get("web_ids")]:
                 raise ValueError("아트홀 목록 파싱 결과가 원본과 다릅니다.")
@@ -98,11 +101,11 @@ def read_arthall_batch(private_root: Path, name: str) -> tuple[dict, dict[str, d
                     or row.get("source_url") != detail_url(key)):
                 raise ValueError("아트홀 수집 기록의 공연 번호 또는 원문 주소가 맞지 않습니다.")
             seen.add(key)
+            raw = _checked(directory, row, f"detail-{key}.html", detail_url(key), DETAIL_MAX_BYTES)
             if row.get("status") != "parsed":
                 continue
             if row.get("parsed_file") != f"parsed-{key}.json":
                 raise ValueError("아트홀 수집 기록의 파싱 파일 이름이 맞지 않습니다.")
-            raw = _checked(directory, row, f"detail-{key}.html", detail_url(key), DETAIL_MAX_BYTES)
             text, digest = decode_input(raw, "안성맞춤아트홀 상세")
             stored = read_receipt(directory, row["parsed_file"])
             if stored.get("parser_version") != PARSER_VERSION:
