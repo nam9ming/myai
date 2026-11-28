@@ -4,7 +4,8 @@ robots.txt가 HTTP 400이라 실제 목록·상세는 받지 않았다. 상세 �
 """
 
 import re
-from urllib.parse import parse_qsl, unquote, urlencode, urlsplit
+import string
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit
 
 from .html_tokens import PinnedHTMLParser
 from .official_web import _fetch
@@ -173,12 +174,18 @@ def _verdict(rules: list[tuple[bool, str]], path: str) -> bool:
     return max(((len(pattern), allow) for allow, pattern in rules if _matches(pattern, path)), default=(0, True))[1]
 
 
+def _decode(value: str, plain) -> str:
+    """비ASCII는 인코딩하고 `plain` 글자만 풀며 남은 `%XX`는 대문자로 맞춘다."""
+    return re.sub("%[0-9A-Fa-f]{2}", lambda m: c if (c := chr(int(m[0][1:], 16))) in plain else m[0].upper(),
+                  quote(value, safe=string.punctuation))
+
+
 def allowed(rules: dict, url: str) -> bool:
-    """가장 긴 일치 규칙을 따르고 길이가 같으면 Allow를 쓴다. 퍼센트 인코딩을 푼 주소·규칙에서 막혀도 막힌 것으로 본다."""
+    """가장 긴 일치, 같은 길이면 Allow. RFC 9309대로 비예약 글자만 풀고(`%2A`·`%24`는 글자), `*`·`$` 밖을 다 풀어 막혀도 막힌다."""
     parts = urlsplit(url)
     path = parts.path + ("?" + parts.query if parts.query else "")
-    decoded = [(allow, unquote(pattern)) for allow, pattern in rules["rules"]]
-    return _verdict(rules["rules"], path) and _verdict(decoded, unquote(path))
+    return all(_verdict([(allow, _decode(pattern, plain)) for allow, pattern in rules["rules"]], _decode(path, plain))
+               for plain in (string.ascii_letters + string.digits + "-._~", set(map(chr, range(128))) - set("*$")))
 
 
 def _allowed(rules: dict, tag: str, attrs) -> list | None:
