@@ -16,12 +16,13 @@ from processing.collection.youth_policy import (
 _IMG = "/common/imgView.do?attachId=" + "a" * 64 + "&fileSn=" + "b" * 32 + "&mode=ratioView"
 
 
-def card(policy_id, category_id="2", *, label="신청기간", period="2026-03-30 ~ 2026-05-29", extra=""):
+def card(policy_id, category_id="2", *, label="신청기간", period="2026-03-30 ~ 2026-05-29",
+         method="온라인 신청: 복지로(http://www.bokjiro.go.kr)", extra=""):
     return f"""<li><a href="/youth/policy/view.do?mId=0201040000&idx={policy_id}&categoryId={category_id}">
       <div class="thumb"><span>복지&middot;건강 </span><figure><img src="{_IMG}&width=250" alt=""></figure></div>
       <div class="cont"><span class="tit">합성 청년 월세 지원 {policy_id}</span>
         <span class="info"><strong>{label}</strong><!-- <span>2023. 01 ~ 2023. 12</span> --><span>{period}</span></span>
-        <span class="info"><strong>신청방법</strong><span>온라인 신청: 복지로(http://www.bokjiro.go.kr)</span></span>{extra}
+        <span class="info"><strong>신청방법</strong><span>{method}</span></span>{extra}
       </div></a></li>"""
 
 
@@ -110,13 +111,27 @@ class YouthPolicyParserTest(unittest.TestCase):
             "author": "[합성과]합성과", "application_method": "온라인 신청: 복지로(http://www.bokjiro.go.kr)",
         })
         self.assertEqual(record["listing"]["application_period"], "2026-03-30 ~ 2026-05-29")
-        self.assertEqual(record["application_period_range"], {"start": "2026-03-30", "end": "2026-05-29"})
-        self.assertEqual(record["unknown"], {"support_target": "description_only", "support_amount": "description_only"})
+        self.assertEqual(record["listing_period_range"], {"start": "2026-03-30", "end": "2026-05-29"})
+        self.assertEqual(record["unknown"], {"support_target": "not_extracted", "support_amount": "not_extracted"})
         self.assertEqual(record["city_notice_candidate"],
                          {"search_url": city_notice_search_url("합성 청년 월세 지원 881"), "status": "unverified"})
         self.assertIn("searchTxt=%ED%95%A9%EC%84%B1", record["city_notice_candidate"]["search_url"])
         self.assertEqual(record["images"], ["https://www.anseong.go.kr" + _IMG])
-        self.assertEqual((record["category_id"], record["review_flags"]), ("2", []))
+        self.assertEqual((record["category_id"], record["review_flags"]), ("2", ["application_period_unconfirmed"]))
+
+    def test_detail_flags_status_word_or_placeholder_method(self):
+        # 실제 874·875(`모집마감`)·877(`.`)처럼 카드 기간이 사업 기간과 같고 신청방법이 방법이 아닌 경우.
+        for listed_method, detail_method in (("모집마감", "모집마감"), (".", "."), ("온라인 신청", "접수 종료")):
+            with self.subTest(method=detail_method):
+                info = INFO.replace("온라인 신청: 복지로(http://www.bokjiro.go.kr)", detail_method)
+                record = parse_youth_detail(detail(info=info), policy_id="881", card=listed(
+                    period="2026-01-01 ~ 2026-12-31", method=listed_method))
+                flags = ["application_method_not_method", "application_period_unconfirmed"]
+                if listed_method != detail_method:
+                    flags.append("listing_method_differs")
+                self.assertEqual(record["review_flags"], flags)
+                self.assertEqual(record["listing_period_range"], {"start": "2026-01-01", "end": "2026-12-31"})
+                self.assertEqual(record["fields"]["application_method"], detail_method)
 
     def test_detail_flags_differences_without_overwriting(self):
         files = "<li><a href=\"#\" onclick=\"fn_egov_downFile('x','y'); return false;\">안내.pdf</a></li>"
@@ -127,9 +142,9 @@ class YouthPolicyParserTest(unittest.TestCase):
                 record = parse_youth_detail(detail(category_id="4", info=info, viewer="", files=files),
                                             policy_id="881", card=listed(period=period))
                 self.assertEqual(record["review_flags"], sorted([
-                    flag, "attachment", "listing_category_differs", "listing_method_differs",
-                    "missing:application_method"]))
-                self.assertIsNone(record["application_period_range"])
+                    flag, "application_period_unconfirmed", "attachment", "listing_category_differs",
+                    "listing_method_differs", "missing:application_method"]))
+                self.assertIsNone(record["listing_period_range"])
                 self.assertEqual(record["listing"]["application_period"], period or None)
                 self.assertIsNone(record["fields"]["application_method"])
                 self.assertEqual(record["images"], [])

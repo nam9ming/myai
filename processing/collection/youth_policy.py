@@ -8,7 +8,7 @@ from .libraries import _MARKUP_ERROR, _STRICT_START_TAG, _VOID_TAGS, _NoticePars
 from .official_web import OFFICIAL_ORIGIN, _fetch
 from .road_works import _period
 
-PARSER_VERSION = "youth-policy-parser-v1"
+PARSER_VERSION = "youth-policy-parser-v2"
 SOURCE = "안성청년포털"
 # 메뉴 이름은 `청년문화사업`이지만 categoryId가 빈 값이라 네 분야 정책 전체가 나온다(2026-11-28 확인).
 YOUTH_MENU = "0201040000"
@@ -21,6 +21,8 @@ _CARD_LABELS = ("신청기간", "신청방법")
 _INFO_FIELDS = {"작성자": "author", "신청방법": "application_method", "조회": None}  # 조회수는 요청마다 바뀌어 보관하지 않는다.
 _INVALID_LISTING = "청년정책 목록 HTML 구조가 올바르지 않습니다."
 _INVALID_VIEWER = "청년정책 상세의 대표 이미지 영역 형식이 바뀌었습니다."
+# 신청방법 칸에 방법 대신 상태어·자리표시가 온 값(실제 `모집마감`, `.`). 걸러 내지 않고 표시만 단다.
+_NOT_METHOD = re.compile(r"[^0-9A-Za-z가-힣]*|.*(?:마감|종료).*")
 # 상세 본문 맨 앞의 대표 이미지 영역(div.photo_viewer)은 이 틀만 받고 본문 텍스트로 읽지 않는다.
 _VIEWER_TAGS = {"div", "figure", "img", "button", "ul", "li", "script"}
 _VIEWER_SCRIPTS = {"/common/js/swiper/swiper.js", "/portal/js/unit/cardNews/view.js"}
@@ -285,6 +287,9 @@ class _PolicyParser(_NoticeParser):
 def parse_youth_detail(text: str, *, policy_id: str, card: dict) -> dict:
     """상세 본문·작성자·신청방법과 목록 카드(신청기간)를 고치지 않고 묶는다.
 
+    카드 `신청기간` 칸에는 사업·운영 기간이 든 글도 있어(2026-11-28 확인) 날짜 범위는 `listing_period_range`로만
+    옮기고 모든 기록에 `application_period_unconfirmed`를 단다.
+
     지원 대상·금액은 별도 항목 없이 본문 자유 서술에만 있어 뽑지 않는다. 자격·마감은 시청 원공고가 기준이므로
     그 공고는 제목 검색 후보 주소만 남기고 이 기록의 값으로 덮어쓰지 않는다.
     """
@@ -314,12 +319,17 @@ def parse_youth_detail(text: str, *, policy_id: str, card: dict) -> dict:
         ("missing:application_period", card["application_period"] is None),
         ("listing_category_differs", card["category_id"] != parser.categories[0]),
         ("listing_method_differs", card["application_method"] != fields["application_method"]),
+        ("application_method_not_method", any(
+            value is not None and _NOT_METHOD.fullmatch(value)
+            for value in (card["application_method"], fields["application_method"]))),
+        ("application_period_unconfirmed", True),
     ) if differs)
     record.update({
         "category_id": parser.categories[0],
         "listing": card,
-        "application_period_range": period,
-        "unknown": {"support_target": "description_only", "support_amount": "description_only"},
+        "listing_period_range": period,
+        # 대상·금액은 본문이나 첨부에만 있고 어느 쪽인지도 확인하지 않아 위치를 단정하지 않는다.
+        "unknown": {"support_target": "not_extracted", "support_amount": "not_extracted"},
         "city_notice_candidate": {"search_url": city_notice_search_url(card["title"]), "status": "unverified"},
         "images": parser.images,
         "review_flags": sorted(flags),

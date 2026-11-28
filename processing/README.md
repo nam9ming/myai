@@ -340,11 +340,11 @@ python3.13 -B -m processing.collection.youth_batch capture --name youth-20261128
 python3.13 -B -m processing.collection.youth_batch verify --name youth-20261128
 ```
 
-요청 사이 간격은 1.5초다. 한도·중단 HTTP 상태·`--start-page`·종료 코드와 나누어 받을 때의 주의는 도로 공사현황과 같은 공통 묶음 규칙(`web_batch.py`)을 따른다. 고정 글은 없다. `data/private/collection-youth-policies/<name>/`에 목록·상세 HTML, `parsed-<번호>.json`(`youth-policy-parser-v1`), 마지막으로 `batch.json`을 쓴다. `verify`는 요청 없이 목록·상세 원본 해시와 목록 카드를 대조하고, 현재 파서로 다시 만든 파싱 결과가 기록과 같은지 확인한 뒤 통과한 정책 수를 출력한다(불일치는 종료 1). 같은 대조는 `youth_batch.read_youth_batch()`로 쓸 수 있다. D03 연결은 후속이다.
+요청 사이 간격은 1.5초다. 한도·중단 HTTP 상태·`--start-page`·종료 코드와 나누어 받을 때의 주의는 도로 공사현황과 같은 공통 묶음 규칙(`web_batch.py`)을 따른다. 고정 글은 없다. `data/private/collection-youth-policies/<name>/`에 목록·상세 HTML, `parsed-<번호>.json`(`youth-policy-parser-v2`), 마지막으로 `batch.json`을 쓴다. `verify`는 요청 없이 목록·상세 원본 해시와 목록 카드를 대조하고, 현재 파서로 다시 만든 파싱 결과가 기록과 같은지 확인한 뒤 통과한 정책 수를 출력한다(불일치는 종료 1). 같은 대조는 `youth_batch.read_youth_batch()`로 쓸 수 있다. D03 연결은 후속이다.
 
-- `listing`: 목록 카드의 분야·제목·`신청기간`·`신청방법` 표시 문구. 신청기간은 상세에 없고 목록에만 있다. 이 값은 신청 일정이며 본문의 사업·활동 `기간`과 섞지 않는다. 정확히 `YYYY-MM-DD ~ YYYY-MM-DD`이고 시작일이 종료일보다 늦지 않을 때만 `application_period_range`에 넣고, 아니면 `period_unparsed`·`period_inverted`·`missing:application_period`로 표시한다.
+- `listing`: 목록 카드의 분야·제목·`신청기간`·`신청방법` 표시 문구. 신청기간은 상세에 없고 목록에만 있다. 칸 이름은 `신청기간`이지만 본문의 사업·운영 `기 간`과 같은 값이 든 글이 있어(아래 표) 확정된 신청 일정으로 보지 않는다. 정확히 `YYYY-MM-DD ~ YYYY-MM-DD`이고 시작일이 종료일보다 늦지 않을 때만 `listing_period_range`에 날짜로 옮기고, 아니면 `period_unparsed`·`period_inverted`·`missing:application_period`로 표시한다. 모든 기록에 `application_period_unconfirmed`를 단다. 목록이나 상세의 신청방법이 방법 대신 상태어·자리표시(`마감`·`종료`가 든 문구, 글자·숫자가 없는 문구)이면 `application_method_not_method`를 단다. 두 표시 모두 값은 고치지 않는다.
 - `fields`: 상세 본문(`description`, 줄 구분 유지)·등록일·`작성자`·`신청방법`. 조회수는 요청마다 바뀌어 보관하지 않는다. `div.view_info`에 다른 항목명이 나오면 형식 변경으로 거부한다. 상세 신청방법이 없으면 `null`과 `missing:application_method`로 남긴다. 목록과 상세의 신청방법·분야 번호가 다르면 `listing_method_differs`·`listing_category_differs`로 표시하고 두 값을 모두 그대로 둔다.
-- 지원 대상·금액: 별도 항목 없이 본문 자유 서술에만 있어 뽑지 않고 `unknown.support_target`·`support_amount`를 `description_only`로 둔다. 연령·소득 문구에서 자격을 추정하지 않는다.
+- 지원 대상·금액: 별도 항목이 없어 뽑지 않고 `unknown.support_target`·`support_amount`를 `not_extracted`로 둔다. 본문이 제목 한 줄이고 내용이 첨부에만 있는 글(877)도 있어 값이 있는 위치도 단정하지 않는다. 연령·소득 문구에서 자격을 추정하지 않는다.
 - `city_notice_candidate`: 같은 사업이 [시청 고시·공고](https://www.anseong.go.kr/portal/saeol/gosiList.do?mId=0501040000)에도 올라오며 자격·마감은 시청 원공고·정정 공고가 기준이다. 목록 카드 제목으로 만든 고시·공고 제목 검색 주소만 `status=unverified`로 남긴다. 수집기는 이 주소를 요청하지 않고 시청 공고 값으로 덮어쓰지 않는다.
 - `images`: 본문 앞 대표 이미지 영역(`div.photo_viewer`)의 원본 이미지 주소. 이 영역은 버튼·스와이프 스크립트 2개·초기화 한 줄로 된 틀만 받고 다른 글자·태그가 있으면 거부한다. 나머지 본문은 시청 공지와 같은 태그 경계·본문 허용 목록(`libraries.py`)으로 읽고, 첨부 링크가 있으면 `attachment`로 표시한다. 목록은 다른 게시판 목록처럼 기본 `HTMLParser`로 읽는다.
 
@@ -353,8 +353,9 @@ python3.13 -B -m processing.collection.youth_batch verify --name youth-20261128
 | 확인 범위 | 결과 |
 | --- | --- |
 | 목록 | 전체 12페이지. 1·2·12페이지 모두 12건이었다. 12페이지에는 신청기간이 2023년인 정책도 그대로 있다. |
-| 상세 | 명령으로 받은 1페이지 12건과 12페이지 앞 6건, 18건 모두 파싱했고 Python 3.13.5·3.14.6의 `verify`를 통과했다. 따로 받은 861·856도 같은 형식으로 파싱됐다. |
+| 상세 | 명령으로 받은 1페이지 12건과 12페이지 앞 6건, 18건 모두 파싱했고 Python 3.13.5·3.14.6의 `verify`를 통과했다(v1). v2는 같은 원본을 요청 없이 다시 파싱해 18건 모두 읽었고, v1 묶음의 `verify`는 파서 버전 불일치로 종료 1이다. 따로 받은 861·856도 같은 형식으로 파싱됐다. |
 | 형식 차이 | 877은 본문이 제목 한 줄이고 내용은 PDF·XLSX 첨부에만 있으며 신청방법은 `.`이다. 875·874의 신청방법은 `모집마감`이다. 본문에 `지원대상:` 항목이 있는 글은 881(청년월세) 하나였고, 나머지는 `추진배경`·`사업개요`·`총사업비` 형식의 사업 계획이다. 모든 상세에 대표 이미지가 1개 있었다. |
+| 신청기간 칸 | 1페이지 868·874·875와 따로 받은 856의 카드 기간(2026-01-01 ~ 2026-12-31)은 본문 사업 `기 간`(2026. 1. ~ 12.)과 같았고, 861의 카드 기간(2026-03-01 ~ 2026-12-31)도 본문 `기 간`(2026. 3. ~ 12.)과 같았다. 874·875는 신청방법이 `모집마감`이고, 874 본문 추진계획의 참여자 모집은 `2026. 1. ~ 2.`이다. 카드 기간이 본문 `접수시기`와 같은 글은 881뿐이었다. v2로 다시 파싱한 18건 중 `application_method_not_method`는 874·875·877의 3건이다. |
 | 시청 원공고 | 881의 목록 제목으로 검색한 고시·공고는 1건(안성시 공고 제2026-917호)이었다. 접수 기간(3.30.~5.29.)은 같았지만 지원대상 문구는 달랐다(청년포털은 소득 기준 포함, 원공고 본문은 전입신고 필수 명시). 다른 정책의 검색 결과는 확인하지 않았다. |
 
 ### 수집 원본을 D03 등록 입력으로 준비하기
