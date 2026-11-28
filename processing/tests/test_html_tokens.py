@@ -26,12 +26,14 @@ class PinnedHTMLParserTest(unittest.TestCase):
         self.assertEqual(_read('<!DOCTYPE html><p class="a"title="b">앞</p><!-- 메모 --><script>x</script>뒤'), '앞뒤')
         # `</ x>`는 무시되는 가짜 주석이고 원문 텍스트는 `</script`+구분자에서만 끝난다.
         self.assertEqual(_read('<p>앞</ p><script>a</scriptx>b</script>뒤'), '앞뒤')
+        # 원문 텍스트 안의 `</br>`과 이름이 다른 `</bra>`는 받는다.
+        self.assertEqual(_read('<script>a</br>b</script><p>앞</bra>뒤'), '앞뒤')
 
     def test_rejects_forms_python_versions_or_browsers_read_differently(self):
         for html in ('<!--><p>x</p>-->', '<!-- a --!>', '<!-- 끝나지 않는 주석', '<![CDATA[x]]>', '<p></p title=">">',
                      '<!DOCTYPE html PUBLIC "x>', '<?x', '<p class="a"\xa0id="b">x</p>', '<plaintext>x',
                      '<script><!--<script></script>--></script>', '<svg><style><!--</style></svg>', '<svg><template>',
-                     '<svg><foreignObject><style/></foreignObject></svg>', '<p'):
+                     '<svg><foreignObject><style/></foreignObject></svg>', '<p', '가</br>나', '가</BR >나', '가</br/>나', '가</br x>나'):
             with self.subTest(html=html), self.assertRaisesRegex(ValueError, '해석이 갈리는'):
                 _read(html)
 
