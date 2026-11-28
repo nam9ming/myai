@@ -268,9 +268,10 @@ def parse_listing(raw: bytes, *, year: int, month: int, page: int) -> tuple[int,
     if not parser.ids and (_text(parser.text) != _EMPTY or page != 1 or parser.counts.get("pages")):
         raise ValueError(_INVALID_LISTING)
     if not parser.counts.get("pages"):
-        if parser.ids and page != 1:
+        # 실제 원본에서 쪽 번호 영역이 없는 목록은 결과 없는 달뿐이었다. 공연이 있으면 쪽 수를 확정할 수 없다.
+        if parser.ids:
             raise ValueError(_INVALID_LISTING)
-        return 1, parser.ids
+        return 1, []
     # 쪽 번호 영역은 현재 쪽 하나와 나머지 쪽 링크만 1부터 빠짐없이 있어야 한다(다음·끝 버튼이 생기면 형식 변경).
     numbers = {int(number) for number, label in parser.links if label == number}
     if (parser.current != [str(page)] or len(numbers) != len(parser.links) or page in numbers

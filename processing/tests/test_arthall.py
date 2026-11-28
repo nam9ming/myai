@@ -86,6 +86,8 @@ class ArthallListingTest(unittest.TestCase):
             "다음": (listing("1", pager='<span>1</span><a href="#" onclick="goPage(2); return false;">다음</a>'), {}),
             "건너뜀": (listing("1", pager='<span>1</span><a href="#" onclick="goPage(3); return false;">3</a>'), {}),
             "구조": (listing("1", "1"), {}),
+            # 쪽 번호 영역의 class가 바뀌면 여러 쪽짜리 달도 1쪽으로 보일 수 있다.
+            "쪽 번호 없음": (listing("1", total=2).replace(b'class="bod_page"', b'class="paging"'), {}),
             "다른 목록": (listing("1", action="/arthall/other/list.do"), {}),
         }
         for name, (raw, override) in cases.items():
