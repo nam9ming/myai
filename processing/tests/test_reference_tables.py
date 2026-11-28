@@ -90,6 +90,7 @@ class LibraryHoursParserTest(unittest.TestCase):
 
     def test_rejects_format_changes(self):
         grid = "표의 칸 수가 머리글과 다름"
+        markup = "해석이 갈리는 태그·주석·스크립트 표기"
         cases = {
             "inline_tag": (_TABLES.replace("열람실", "<strong>열람실</strong>"), "td 안의 strong"),
             "style": (_TABLES.replace("<td>열람실", '<td style="display:none">열람실'), r"td\[style\]"),
@@ -109,12 +110,19 @@ class LibraryHoursParserTest(unittest.TestCase):
             "br_outside_text": (_TABLES.replace("<h4>작은", "<br><h4>작은"), "글자 밖의 br"),
             "unclosed_caption": (_TABLES.replace("</caption>\n", "", 1), "caption 안의 thead"),
             "unclosed_row": (_TABLES.replace("</tbody>", "<tr></tbody>", 1), "tr 안에서 닫는 tbody"),
-            # 3.13.5는 주석을 첫 `-->`까지 읽어 `--!>` 뒤의 행·글자를 오류 없이 빼고, 3.14.6은 `--!>`에서 끝낸다.
             "comment": (_TABLES.replace("<h4>작은", "<!-- 주석 --><h4>작은"), "선언·처리 지시문·주석"),
-            "comment_hides_row": (_TABLES.replace('<tr><th scope="row">나', '<!-- a --!><tr><th scope="row">나')
-                                  .replace("<td></td></tr>", "<td></td></tr><!-- b -->"), "선언·처리 지시문·주석"),
-            "comment_in_cell": (_TABLES.replace("열람실", "열<!-- x --!>람-->실"), "선언·처리 지시문·주석"),
             "bogus_comment": (_TABLES.replace("<h4>작은", "<!x><h4>작은"), "선언·처리 지시문·주석"),
+            # 브라우저는 `</ x>`를 주석으로 읽고 `</>`를 버린다. 기반 파서는 콜백 없이 건너뛰므로 따로 거부해야 한다.
+            "endtag_comment": (_TABLES.replace("열람실", "열</ x>람실"), "선언·처리 지시문·주석"),
+            "empty_endtag": (_TABLES.replace("열람실", "열</>람실"), "선언·처리 지시문·주석"),
+            # 3.13.5는 주석을 첫 `-->`까지, 3.14.6은 `--!>`·`<!-->`에서 끝내고, 닫히지 않은 주석·CDATA도 버전마다 달리
+            # 읽어 칸 글자가 달라진다. 공용 파서가 문서 어디서든 거부한다.
+            "comment_hides_row": (_TABLES.replace('<tr><th scope="row">나', '<!-- a --!><tr><th scope="row">나')
+                                  .replace("<td></td></tr>", "<td></td></tr><!-- b -->"), markup),
+            "comment_in_cell": (_TABLES.replace("열람실", "열<!-- x --!>람-->실"), markup),
+            "empty_comment": (_TABLES.replace("열람실", "열<!-->실"), markup),
+            "cdata": (_TABLES.replace("열람실", "열<![CDATA[x]>실"), markup),
+            "unclosed_comment": (_TABLES.replace("열람실", "열람실<!-- 임시 ->"), markup),
             "nul": (_TABLES.replace("열람실", "열람\x00실"), "NUL 문자"),
             # 화면에서 공백이 되는 원본 줄바꿈은 `br`에서 온 줄바꿈과 구별할 수 없다.
             "raw_newline": (_TABLES.replace("<br />", "\n"), "글자 안의 원본 줄바꿈"),
@@ -125,13 +133,15 @@ class LibraryHoursParserTest(unittest.TestCase):
         fixtures = {name: (page(body), message) for name, (body, message) in cases.items()}
         fixtures.update({
             "title": (page(title="공지사항 | 안성시 도서관"), "페이지가 아닌 응답"),
+            "outside_comment": (page(outside="<!-- a --!> -->"), markup),
+            # 브라우저처럼 `<script/>`는 닫히지 않고 원문 텍스트를 시작하므로 뒤의 본문 영역이 스크립트 글자가 된다.
+            "self_closing_script": (page(outside='<script src="a.js" />'), "없거나 닫히지 않음"),
         })
-        # 3.13은 title 안의 태그·주석을 마크업으로, 3.14는 원문 글자로 읽으므로 어느 버전에서든 거부한다.
-        # `</>`는 3.13.5가 콜백 없이 건너뛰어 글자만 빠진다.
-        markup = ("<b>이용안내</b>", "</b>", "<!-- x -->", "<?x>", "<!x>", "&lt;", "1 < 2", "A</>B")
+        # title은 원문 텍스트로 읽는다. 태그처럼 보이는 글자나 `&lt;`가 있으면 버전·브라우저마다 제목이 달라질 수 있어 거부한다.
+        titles = ("<b>이용안내</b>", "</b>", "<!-- x -->", "<?x>", "<!x>", "&lt;", "1 < 2", "A</>B")
         fixtures.update({
             f"title_markup_{index}": (page(title=f"이용시간 및 정기휴관일 | {text} | 안성시 도서관"), "제목 안의 마크업")
-            for index, text in enumerate(markup)
+            for index, text in enumerate(titles)
         })
         fixtures.update({
             "second_conts": (page(outside='<div id="conts" class="conts"></div>'), r"\(본문 영역 div#conts\)"),

@@ -3,7 +3,6 @@
 from datetime import UTC, datetime
 import hashlib
 import html
-from html.parser import HTMLParser
 import json
 import os
 from pathlib import Path
@@ -17,6 +16,7 @@ from .capture import (
     validate_name, write_new, write_receipt,
 )
 from .cli import CollectionArguments
+from .html_tokens import PinnedHTMLParser
 from .official_web import DETAIL_MAX_BYTES, OFFICIAL_ORIGIN, _fetch
 
 REFERENCE_SECTION = "collection-reference-tables"
@@ -53,17 +53,13 @@ _ATTRS = {
 _SPAN = re.compile(r"[1-9][0-9]?")
 
 
-class _PageParser(HTMLParser):
+class _PageParser(PinnedHTMLParser):
     """`head`의 제목과 유일한 `div#conts` 안의 제목·문단·표를 문서 순서대로 읽는다."""
 
-    def __init__(self, source: str):
-        super().__init__(convert_charrefs=True)
-        # getpos()의 (줄, 열)을 원본 위치로 바꾸려고 줄 시작 위치를 둔다. HTMLParser는 LF만 줄로 센다.
-        self.line_starts = [0] + [match.end() for match in re.finditer("\n", source)]
-        self.source = source
+    def __init__(self):
+        super().__init__()
         self.in_head = False
         self.title: list[str] | None = None
-        self.title_start = 0
         self.titles: list[str] = []
         self.stack: list[str] | None = None
         self.conts_seen = False
@@ -78,6 +74,9 @@ class _PageParser(HTMLParser):
 
     def fail(self, detail: str):
         raise ValueError(f"{_INVALID} ({detail}).")
+
+    def markup_error(self) -> ValueError:
+        return ValueError(f"{_INVALID} (브라우저·Python 버전마다 해석이 갈리는 태그·주석·스크립트 표기).")
 
     def _check_attrs(self, tag, attrs):
         names = [name for name, _ in attrs]
@@ -97,13 +96,13 @@ class _PageParser(HTMLParser):
                 self.fail(f"허용하지 않은 {tag} {name} 값")
 
     def handle_starttag(self, tag, attrs):
-        self._reject_in_title()
+        super().handle_starttag(tag, attrs)
         if self.stack is None:
             values = dict(attrs)
             if tag == "head":
                 self.in_head = True
             elif tag == "title" and self.in_head:
-                self.title, self.title_start = [], self._offset() + len(self.get_starttag_text())
+                self.title = []
             elif tag == "div" and values.get("id") == "conts":
                 if self.conts_seen or sorted(name for name, _ in attrs) != ["class", "id"] or values["class"] != "conts":
                     self.fail("본문 영역 div#conts")
@@ -137,15 +136,21 @@ class _PageParser(HTMLParser):
     def handle_startendtag(self, tag, attrs):
         if self.stack is not None and tag != "br":
             self.fail(f"스스로 닫는 {tag[:40]}")
-        self.handle_starttag(tag, attrs)
+        super().handle_startendtag(tag, attrs)
+
+    def parse_endtag(self, i):
+        if self.stack is not None and re.match(r"</[a-zA-Z]", self.rawdata[i:i + 3]) is None:
+            # 브라우저가 주석으로 읽는 `</ x>`와 버리는 `</>`를 기반 클래스는 콜백 없이 건너뛴다. 본문 영역에서는 주석처럼 거부한다.
+            self.fail("본문 영역의 선언·처리 지시문·주석")
+        return super().parse_endtag(i)
 
     def handle_endtag(self, tag):
         if self.title is not None:
-            title = "".join(self.title)
-            # 3.13.5는 `</>`를 콜백 없이 건너뛰므로 콜백 대신 원본 조각을 문자 참조만 풀어 모은 제목과 비교한다.
-            source = html.unescape(self.source[self.title_start:self._offset()])
-            if tag != "title" or "<" in source or source != title:
-                self._reject_in_title()
+            # title은 원문 텍스트 요소라 `</title`까지 원본 그대로 온다. 브라우저처럼 문자 참조만 푼다.
+            title = html.unescape("".join(self.title))
+            if "<" in title:
+                # 태그·주석처럼 보이는 글자나 `&lt;`는 Python 버전·브라우저마다 제목을 다르게 만들 수 있어 받지 않는다.
+                self.fail("제목 안의 마크업")
             self.titles.append(title)
             self.title = None
             return
@@ -187,6 +192,7 @@ class _PageParser(HTMLParser):
             self.blocks.append(self.table)
 
     def handle_data(self, data):
+        super().handle_data(data)
         if self.title is not None:
             self.title.append(data)
         if self.stack is None:
@@ -201,18 +207,8 @@ class _PageParser(HTMLParser):
         elif data.strip():
             self.fail(f"{self.stack[-1]} 안의 글자")
 
-    def _offset(self) -> int:
-        line, column = self.getpos()
-        return self.line_starts[line - 1] + column
-
-    def _reject_in_title(self, *_):
-        # 3.13은 title 안의 태그·주석을 마크업으로 읽어 글자를 빼고, 3.14는 원문 글자로 둔다. 둘 다 거부해야 버전마다 같다.
-        if self.title is not None:
-            self.fail("제목 안의 마크업")
-
     def _reject_in_body(self, *_):
-        # 3.13.5는 주석을 첫 `-->`까지 읽어 `--!>` 뒤의 행·글자를 오류 없이 빼므로 본문 영역의 주석도 거부한다.
-        self._reject_in_title()
+        # 2026-11-28 실제 본문 영역에는 주석·선언이 없었다. 화면에 없는 표기도 허용 목록 밖의 형식 변경으로 본다.
         if self.stack is not None:
             self.fail("본문 영역의 선언·처리 지시문·주석")
 
@@ -246,7 +242,7 @@ def parse_library_hours(text: str) -> dict:
     """
     if not isinstance(text, str):
         raise ValueError(f"{_INVALID}.")
-    parser = _PageParser(text)
+    parser = _PageParser()
     try:
         parser.feed(text)
         parser.close()
