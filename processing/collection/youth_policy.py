@@ -50,8 +50,9 @@ _VIEWER_ATTRS = {None: "class", "div>div": "class id", "div>figure": "", "figure
                  "li>button": "data-origin onclick type", "button>img": "alt src", "div>script": "src"}
 _VIEWER_SCRIPTS = {"/common/js/swiper/swiper.js", "/portal/js/unit/cardNews/view.js"}
 _VIEWER_TEXT = {"", "이전보기", "다음보기", "init_thumbnail_view('.photo_viewer');"}
-_VIEWER_IMAGE = re.compile(
-    r"/common/imgView\.do\?attachId=[0-9a-f]{64}&fileSn=[0-9a-f]{32}&mode=ratioView(?:&width=500&heigth=500)?")
+_VIEWER_IMAGE = re.compile(r"/common/imgView\.do\?attachId=[0-9a-f]{64}&fileSn=[0-9a-f]{32}&mode=ratioView")
+# 줄인 보기 꼬리는 표본 24쪽 모두 큰 보기(figure>img)에만 있었다. 원본(data-origin)·썸네일(button>img) 주소에는 받지 않는다.
+_VIEWER_PREVIEW = re.compile(_VIEWER_IMAGE.pattern + "&width=500&heigth=500")
 # 시청 고시·공고 제목 검색. 같은 사업의 원공고·정정 공고 후보를 찾는 주소일 뿐 일치를 확인하지 않는다.
 CITY_NOTICE_LIST = OFFICIAL_ORIGIN + "/portal/saeol/gosiList.do"
 
@@ -307,7 +308,7 @@ class _PolicyParser(_NoticeParser):
         # 원본 주소(data-origin)는 슬라이드 li 바로 아래, 원본 보기 onclick이 있는 버튼에서만 읽고 그 버튼에는 꼭 있어야 한다.
         if (pair not in _VIEWER_ATTRS or not set(names) <= set(_VIEWER_ATTRS[pair].split())
                 or (tag == "script" and names and source not in _VIEWER_SCRIPTS)
-                or (tag == "img" and not _VIEWER_IMAGE.fullmatch(source))
+                or (tag == "img" and not (_VIEWER_PREVIEW if pair == "figure>img" else _VIEWER_IMAGE).fullmatch(source))
                 or (pair == "li>button" and (values.get("onclick") != "fn_view_original(this);"
                                              or not _VIEWER_IMAGE.fullmatch(origin)))):
             raise ValueError(_INVALID_VIEWER)

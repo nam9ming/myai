@@ -214,6 +214,10 @@ class YouthPolicyParserTest(unittest.TestCase):
             # 원본 보기 버튼에 data-origin이 없거나 슬라이드가 없으면 화면의 대표 이미지가 기록에서 빠진다.
             (detail(viewer=VIEWER.replace(f"data-origin='{_IMG}' ", "")), "대표 이미지 영역"),
             (detail(viewer=VIEWER[:VIEWER.index("<li ")] + VIEWER[VIEWER.index("</li>") + 5:]), "대표 이미지 영역"),
+            # 줄인 보기 꼬리는 큰 보기 figure>img에만 받는다. 원본(data-origin)·썸네일 주소에 붙거나 큰 보기에 없으면 거부한다.
+            *((detail(viewer=VIEWER.replace(old, new)), "대표 이미지 영역") for old, new in (
+                (f"{_IMG}'", f"{_IMG}&width=500&heigth=500'"), (f'{_IMG}" alt', f'{_IMG}&width=500&heigth=500" alt'),
+                ("&width=500&heigth=500", ""))),
             (detail().replace('"bod_view"', '"bod_view" title="x"'), "숨김"),
             (detail(body='<span style="font-size:4px">작게</span>'), "숨김"),
             (detail(body="<ul><li>가<li>나</li></ul>"), "숨김"),
