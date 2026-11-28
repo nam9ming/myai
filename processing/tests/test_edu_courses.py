@@ -10,7 +10,7 @@ from processing.collection.edu_course_batch import (
     COURSE_SECTION, capture_course_batch, main, read_course_batch,
 )
 from processing.collection.edu_courses import (
-    detail_url, fetch_detail, fetch_listing, parse_course_detail, parse_course_listing,
+    PARSER_VERSION, detail_url, fetch_detail, fetch_listing, parse_course_detail, parse_course_listing,
 )
 
 
@@ -108,6 +108,9 @@ class CourseListingTest(unittest.TestCase):
             ("구조", _listing(rows=_row("1", extra=_DEEP))),
             # 브라우저는 template 안의 `</style>`를 무시하므로 목록 표 전체가 화면에 나오지 않는다.
             ("구조", _listing("1").replace(b"<table", b"<template></style><table").replace(b"</body>", b"</template></body>")),
+            # 선언형 shadow root를 단 요소는 원래 자식(목록 표) 대신 template 안쪽만 그린다.
+            ("구조", _listing("1").replace(b"<table", b'<div><template shadowrootmode="open"></template><table')
+             .replace(b"</table>", b"</table></div>")),
         ]
         for number, (message, raw) in enumerate(cases):
             with self.subTest(case=number), self.assertRaisesRegex(ValueError, message):
@@ -183,6 +186,10 @@ class CourseDetailTest(unittest.TestCase):
             ("안성배움e 강좌 페이지에 브라우저와 해석이 갈리는", _detail(강좌소개="<!--->숨김-->")),
             ("구조", _detail().replace('<div id="learning_cont"', '<template></style><div id="learning_cont"')
              .replace("</body>", "</template></body>")),
+            # learning_cont가 shadow host가 되어 bod_title·bod_write 대신 template 안쪽만 그린다. 숨김 안쪽도 거부한다.
+            ("구조", _detail().replace('class="learning_content">',
+                                       'class="learning_content"><template shadowrootmode="open"><p>다른 강좌</p></template>')),
+            ("구조", _detail().replace("</body>", '<template><template shadowroot="closed"></template></template></body>')),
             ("구조", _detail().replace("<span>이전</span></button>", f'<img src="{_IMAGE}" alt="사진"></button>', 1)),
             ("구조", _detail().replace("<span>이전</span>", f'<span>이전</span><img src="{_IMAGE}" alt="사진">', 1)),
             ("구조", _detail().replace('class="learning_content"', 'class="learning_content blind"')),
@@ -244,7 +251,7 @@ class CourseBatchTest(unittest.TestCase):
 
         parsed = self.root / "run" / "parsed-5086.json"
         original = parsed.read_bytes()
-        for changed, message in ((original.replace(b"edu-course-parser-v5", b"edu-course-parser-v4"), "파서 버전"),
+        for changed, message in ((original.replace(PARSER_VERSION.encode(), b"edu-course-parser-v0"), "파서 버전"),
                                  (original.replace("선착순".encode(), "추첨".encode()), "파싱 결과")):
             parsed.chmod(0o600)
             parsed.write_bytes(changed)

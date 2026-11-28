@@ -28,7 +28,7 @@ _MAX_ROWS = 100
 # 고른 영역 안 중첩 한도. 실제 목록·상세 28쪽은 9단이었다. 하위 트리를 재귀로 읽으므로 RecursionError 전에 거부한다.
 _MAX_DEPTH = 64
 # 공유 태그 경계 규칙(PinnedHTMLParser)이나 아래 출력·허용 규칙이 바뀌면 올린다.
-PARSER_VERSION = "edu-course-parser-v5"
+PARSER_VERSION = "edu-course-parser-v6"
 _TEXT_FIELDS = {
     "접수기간": "application_period",
     "접수현황": "enrollment_status",
@@ -107,6 +107,9 @@ class _Page(PinnedHTMLParser):
 
     def handle_starttag(self, tag, attrs):
         super().handle_starttag(tag, attrs)
+        # 선언형 shadow root가 붙은 요소는 원래 자식 대신 template 안쪽을 그린다. 숨김 안쪽이어도 문서 어디서든 거부한다.
+        if tag == "template" and any(name in ("shadowrootmode", "shadowroot") for name, _ in attrs):
+            raise ValueError(self.error)
         hidden = bool(self.hidden)
         if tag in _HIDDEN_TAGS:
             self.hidden.append(tag)
