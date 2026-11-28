@@ -168,6 +168,9 @@ class ArthallDetailTest(unittest.TestCase):
                                    '모바일<div>본문1</div></div><div id="tap_wrapper2" class="tap_wrapper"><div>본문2</div></div>'),
             "안내 밖 닫힘": detail(tabs="", sections='<div id="tap_wrapper1" class="tap_wrapper"><div>'
                                    '<p class="p_notice">모바일</div>본문</p></div>'),
+            # 브라우저는 void가 아닌 `<div/>`를 열어 둬 뒤 글이 본문 안에 남는다.
+            "스스로 닫은 태그": detail(tabs="", sections='<div id="tap_wrapper1" class="tap_wrapper"><div/>본문1</div>본문2'),
+            "스스로 닫은 영역": detail(tabs="", sections='<div id="tap_wrapper1" class="tap_wrapper"/>본문'),
             # 원문 요소의 끝 위치가 Python 버전마다 다르다.
             "원문 끝 태그": detail().replace("</script>", "</script/>"),
             "plaintext": detail().replace('<div class="cleB"></div>', "<plaintext>"),

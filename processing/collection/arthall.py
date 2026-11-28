@@ -118,6 +118,9 @@ class _Parser(HTMLParser):
     def handle_startendtag(self, tag, attrs):
         self.handle_starttag(tag, attrs)
         if tag not in _VOID_TAGS:
+            # 브라우저는 void가 아닌 `<div/>`를 열린 채로 둬 뒤 글이 그 안에 들어가므로 영역 안에서는 거부한다.
+            if self.region is not None or self.capture is not None:
+                self.fail()
             self.handle_endtag(tag)
 
     def handle_starttag(self, tag, attrs):
