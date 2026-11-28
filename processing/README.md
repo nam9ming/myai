@@ -301,6 +301,34 @@ DATA_GO_KR_SERVICE_KEY=<디코딩 키> python3.13 -B -m processing.collection.we
 
 이 API 상세 페이지의 참고문서는 코드표 하나이며 응답 XML 예시와 오류 코드표가 없다. 같은 기관의 중앙부처 API는 Swagger에 `response`로 적혀 있지만 활용가이드 예시는 `wantedList`·`wantedDtl`을 쓴다. 그래서 두 문서의 이름을 모두 허용했다. 이 API의 실제 최상위 이름·성공 코드는 미확인이다. 최대 `numOfRows`, 한글 지역 인자의 인코딩, 목록 항목의 `ctpvNm`·`sggNm` 포함 여부, 게이트웨이 오류 응답 형식, 최신순 정렬의 페이지 안정성도 실제 응답으로 확인하지 않았다. 게이트웨이가 200과 함께 다른 최상위 요소(예: `OpenAPI_ServiceResponse`)를 보내면 최상위 요소 불일치로 기록하고 남은 요청을 멈춘다. 다음 세 가지도 실제 응답으로 확인하지 않았고, 해당하면 수집이 실패로 남는다. 첫째, `servDtlLink`의 `&`가 `&amp;`로 이스케이프되지 않으면 목록 페이지 전체가 XML 형식 오류가 된다. 둘째, 경기도 공통 서비스처럼 `sggNm`이 빈 목록 항목이 있으면 그 페이지 전체가 실패한다. 셋째, 중앙부처 API의 신청방법 목록 `applmetList` 같은 하위 목록이 상세에 나오면 문서에 없는 하위 구조로 거부한다. XML 문법 오류는 오류 화면과 구별할 수 없어 서비스 오류로 본다. 그래서 상세 한 건의 원문에 이스케이프되지 않은 `&` 같은 문법 오류가 하나만 있어도 남은 상세(`--max-items` 최대 500건)를 요청하지 않고 배치 전체가 멈춘다. 같은 원문이 계속 오면 다시 실행해도 같은 자리에서 멈추므로 이 실패가 나오면 원본을 보고 처리 방식을 다시 정한다. 첫 실제 실행에서 `batch.json`과 원본을 보고 위 항목을 확인한 뒤 이 표를 갱신한다. 이전 조사에서 확인한 안성시 공공근로사업 `WLF00000915`([복지로 상세](https://www.bokjiro.go.kr/ssis-tbu/twataa/wlfareInfo/moveTWAT52011M.do?wlfareInfoId=WLF00000915))도 이번 작업에서 다시 조회하지 않았다.
 
+### 안성시 고시·공고 목록·상세 수집
+
+지원사업 원공고(대상·금액·마감·신청 방법)와 도로정비 허가·도로지정 같은 고시는 [안성시 고시·공고](https://www.anseong.go.kr/portal/saeol/gosiList.do?mId=0501040000)에서 받는다. 목록은 `GET /portal/saeol/gosiList.do?seCode=01&mId=0501040000&page=N`(`seCode=01`은 고시/공고 구분), 상세는 `GET /portal/saeol/gosiView.do?notAncmtMgtNo=…&mId=0501040000`이다. 공식 화면은 목록·상세를 `listForm` POST로 열지만, 같은 GET 주소가 같은 화면을 반환하는 것을 확인했다. 리디렉션은 따르지 않는다. `/portal/saeol/`은 [robots.txt](https://www.anseong.go.kr/robots.txt)의 제한 목록에 없다. D03 연결은 후속이다.
+
+```sh
+python3.13 -B -m processing.collection.gosi_batch capture --name gosi-20261128 --max-pages 2 --max-items 20
+python3.13 -B -m processing.collection.gosi_batch verify --name gosi-20261128
+```
+
+`data/private/collection-gosi/<name>/`에 목록·상세 HTML, `parsed-<번호>.json`(파서 버전 `gosi-notice-parser-v1`), 마지막으로 `batch.json`을 쓴다. 한도·`--start-page`·중단 HTTP 상태·종료 코드(0 완료, 2 한도 도달·일부 실패, 1 입력·보관 오류)는 공통 묶음 규칙(`web_batch.py`)과 같고, 요청 간격은 1.5초다. `verify`는 요청 없이 보관한 목록·상세 원본의 해시, 목록 번호, 파싱 결과를 현재 파서로 다시 만들어 대조하고 파싱된 건수와 첨부 후보 수를 출력한다. 하나라도 다르면 종료 1이다.
+
+- 목록: `form#listForm`의 action이 요청한 주소(검색어 없음, 같은 페이지)와 정확히 같아야 한다. 표 제목은 `고시/공고게시판 목록`으로 시작해야 하고, `Total … Page 현재 / 전체`가 요청 페이지와 맞아야 한다. 행마다 고시공고번호·제목·담당부서·등록일 칸과 `boardView('<페이지>', '<번호>')` 링크 하나가 있어야 하며, 다르면 형식 변경으로 본다.
+- 상세 대조: 상세 HTML에는 게시물 번호가 숨은 입력에 없고 첨부 `바로 보기` 인자에만 나온다. 없는 번호도 HTTP 200으로 제목·항목이 빈 같은 화면을 돌려준다. 그래서 제목이 없으면 실패로 남긴다. 상세의 제목·고시공고번호·등록일·담당부서는 같은 묶음 목록 행과 정확히 같아야 하고, `바로 보기`의 번호와 내려받기 인자도 요청·바로 앞 첨부와 같아야 한다. `form#detailForm` action도 고시·공고 상세 주소여야 한다.
+- 본문: 공지 게시판과 같은 본문 허용 목록과 브라우저 기준 태그 경계(`libraries.py`의 `_NoticeParser`)를 쓴다. `fields`에는 표시 문구를 그대로 둔다(공백·줄바꿈만 정리). `등록일`은 게시 날짜이며 신청 기간이나 진행 일정이 아니다. 정확히 `YYYY.MM.DD`일 때만 `registered_on`에 날짜를 넣고, 아니면 `registered_date_unparsed`로 표시한다. 본문의 접수기간·지원 금액·대상은 `description` 원문으로만 두고 일정·비용·자격을 해석하지 않는다. 빈 항목은 `null`과 `missing:<필드>`로 남긴다. 본문이 비어도 첨부가 핵심일 수 있어 실패로 보지 않는다.
+- 첨부: `dl.view_file`의 링크를 `attachments`에 `kind`·`source_url`·`label`·`format`(PDF·HWP·HWPX·PNG·JPEG, 그 밖은 `null`)으로 남긴다. 페이지 스크립트(`goDownload`)가 만드는 `https://eminwon.anseong.go.kr/emwp/jsp/ofr/FileDown.jsp?…` 주소를 encodeURI 규칙으로 재현한다. 인자에 `&`·`=`·`#`·`+`가 있거나 형식이 다른 링크(`goDownload_direct` 등)는 `source_url=null`로 둔다. 첨부는 자동으로 내려받지 않는다. 다른 호스트인 `eminwon.anseong.go.kr`의 robots.txt는 2026-11-28 HTTP 302를 반환해 판단할 수 없었고, 공시송달 명단 등 개인정보가 든 첨부도 있기 때문이다. 확보·OCR·본문 추출은 운영자 검토 뒤 별도 단계다.
+- 정정 관계: 제목·본문에 적힌 다른 고시공고번호(`제YYYY-N호`) 문자열만 `referenced_notice_numbers`에 남긴다. 제목의 `(정정)`·`재공고`만으로 원공고를 추정해 연결하지 않는다. `정정`은 개별공시지가 정정처럼 정정 공고가 아닌 글에도 쓰인다.
+
+2026-11-28 실제 요청 35건(robots.txt 2건, 목록 6쪽, 상세 27쪽(없는 번호 1건 포함), 하나씩 1.5초 이상 간격)으로 확인한 결과는 다음과 같다. 원본은 비공개 `data/private/gosi-check-20261128/`, `data/private/collection-gosi/gosi-real-20261128/`에 두었다.
+
+| 확인 범위 | 결과 |
+| --- | --- |
+| 목록 | `Total 6579`, 658페이지. 1·2쪽 10행, 마지막 658쪽 9행(2008·2009년 글). 검색 결과 2건과 수집기 주소가 아닌 1쪽은 action이 요청 주소를 그대로 되돌려 주는 것을 확인했고, 수집기 주소와 달라 거부됐다. |
+| 상세 표본 16건 (2009년 2건·2026년 14건) | 모두 같은 머리 항목·본문·첨부 구조였고, 목록 행이 있는 15건이 파싱됐다. 목록을 받지 않은 1건(71814)은 대조할 행이 없어 거부됐다. 본문은 글자와 `br`뿐이었고 이미지형·본문 없는 글은 없었다. 16건 모두 첨부가 1~3개 있었고 HWPX가 가장 많았다. HWP·JPG·PDF·XLSX도 있었다. |
+| 명령 실행 | `capture --max-pages 1 --max-items 10`로 1쪽 10건을 받아 10건 모두 파싱했고(첨부 HWPX 11·PDF 1·XLSX 1), Python 3.13.5·3.14.6의 `verify`가 같은 결과로 통과했다. |
+| 정정 공고 | 제목 검색 `정정` 85건 가운데 상세 3건(75255·74979·74835)의 본문에 원공고 번호가 없었다. 원공고 번호는 HWPX 첨부에만 있을 수 있으나 확인하지 않았다. |
+
+없는 번호(999999999)의 상세가 빈 화면을 돌려주는 것을 확인했다. 첨부가 없는 글, 이미지만 있는 본문, 3쪽 이후 목록과 페이지 사이 글 이동은 실제로 확인하지 않았다. 공공누리 제4유형 표시가 있었으므로 공개 전 게시물별 이용 조건 확인이 필요하다.
+
 ### 수집 원본을 D03 등록 입력으로 준비하기
 
 단건 수집은 `archive_kind=single`과 `capture.json`, 목록 수집은 `archive_kind=batch`와 `batch.json`을 사용한다. 직접 내려받은 포털 CSV는 `asset=portal`, 웹 상세는 게시물 번호를 지정한다. 부분 수집 묶음에서도 파싱에 성공한 상세를 선택할 수 있다. 명령은 수집 기록의 원본 해시와 파일을 대조하고 웹 상세의 게시물 번호를 다시 확인한다.

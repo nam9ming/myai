@@ -1,0 +1,234 @@
+import contextlib
+import io
+import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
+import unittest
+from unittest.mock import patch
+
+from processing.collection import gosi_batch
+from processing.collection.gosi_batch import capture_gosi_batch, read_gosi_batch
+from processing.collection.gosi_notices import (
+    fetch_gosi_detail, fetch_gosi_listing, gosi_detail_url, parse_gosi_detail, parse_gosi_listing,
+)
+
+_FILE = ("공고문[(주)합성].hwpx", "공고문[(주)합성]_ofr_ofr_X_1.hwpx", "/ntishome/file/upload/ofr/ofr/20261126")
+
+
+def _row(notice_id, page=1, *, number="안성시 고시 <br/> 제2026-343호", title="합성 도로정비 허가", dept="도로시설과"):
+    return (f'<tr><td class="gosi_num">{number}</td><td class="taL gosi_tit">'
+            f'<a href="#" onclick="javascript:boardView(\'{page}\', \'{notice_id}\');return false;">\n {title}\n</a></td>'
+            f'<td class="gosi_dept">{dept}</td><td class="gosi_date">\n 2026.11.27\n</td></tr>')
+
+
+def listing(*ids, page=1, total=1, rows=None, caption="고시/공고게시판 목록 고시공고번호,제목 순서의 표", action=None):
+    rows = rows if rows is not None else "".join(_row(notice_id, page) for notice_id in ids)
+    action = action or f"/portal/saeol/gosiList.do?seCode=01&amp;mId=0501040000&amp;page={page}"
+    return f"""<html><body><form id="searchForm" action="/search/front/Search.jsp"></form>
+<script>function boardView(page, idx) {{ frm.action = '<form id="listForm">'; }}</script>
+<form id="listForm" name="listForm" action="{action}" method="post">
+<input id="page" name="page" type="hidden" value="{page}"/>
+<div class="search_box"><div class="board_page">Total 6579\tPage <span class="red"><strong>{page}</strong></span>
+ / {total}</div></div>
+<div class="gosi_wrap"><table class="tableSt_list row_over"><caption>{caption}</caption>
+<thead><tr><th scope="col" class="gosi_num">고시공고번호</th><th class="gosi_tit">제목</th></tr></thead>
+<tbody>{rows}</tbody></table></div>
+<div class="box_page"><a href="#" onclick="goPage(2); return false;">2</a></div>
+</form></body></html>""".encode()
+
+
+def _links(notice_id, files, preview_id=None):
+    return "".join(
+        f"""<!-- 20461 20458 --><p><a href="javascript:goDownload('{user}', '{system}', '{path}')">
+{user}
+</a><a href="#" onclick="fn_egov_gosi_preview('{preview_id or notice_id}','{notice_id}-{number}.hwpx','{user}','{system}','{path}'); return false;" target="_blank" title="새창으로 열림" class="bt_white_s"><span class="blank">바로 보기</span></a></p>"""
+        for number, (user, system, path) in enumerate(files))
+
+
+def detail(notice_id="75365", *, title="합성 도로정비 허가", number="안성시 고시 제2026-343호", registered="2026.11.27",
+           dept="도로시설과", body="우리시&nbsp;미양면&nbsp;일원<br><br>붙임&nbsp;공고문&nbsp;1부.", files=(_FILE,),
+           links=None, action="/portal/saeol/gosiView.do?mId=0501040000"):
+    links = links if links is not None else _links(notice_id, files)
+    return f"""<!DOCTYPE html><html><head><title>고시/공고 상세</title><script>
+var yh = {{"contextPath": ""}};
+</script></head><body>
+<form id="detailForm" name="detailForm" action="{action}" method="post">
+<input type="hidden" name="page" value="1" /><h4 class="hidden">고시/공고게시판 내용보기</h4>
+<div class="bod_wrap"><div class="bod_view"><h4>{title}</h4>
+<div class="view_info gosi_b"><ul>
+<li class="view_write"><span>고시공고번호</span> : {number}</li>
+<li class="view_date"><span>등록일</span> :
+  {registered}
+</li>
+<li class="view_hit"><span>담당부서</span> : {dept}</li>
+</ul></div>
+<div class="view_cont">
+{body}
+</div>
+<dl class="view_file"><dt><span>첨부 파일</span></dt><dd>{links}</dd></dl>
+<div class="open_license clFix mB20"><a rel="license" href="https://www.kogl.or.kr/info/license.do" target="_blank"
+ title="새창열기"><img src="/common/img/KOGL/new_img_opentype04.png" alt="공공누리 제4유형"></a><p>공공누리</p></div>
+</div></div></form></body></html>"""
+
+
+def row(notice_id="75365", **changes):
+    return {"notice_id": notice_id, "notice_number": "안성시 고시 제2026-343호", "title": "합성 도로정비 허가",
+            "department": "도로시설과", "registered_date": "2026.11.27", **changes}
+
+
+class GosiParserTest(unittest.TestCase):
+    def test_listing_keeps_rows_verbatim_and_checks_request_echo(self):
+        total, items = parse_gosi_listing(listing("75365", "64", page=3, total=658), page=3)
+        self.assertEqual(total, 658)
+        self.assertEqual(items, [row(), row("64")])
+        cases = {
+            "요청한 게시판·페이지": listing("1", page=2),
+            "페이지 번호": listing(rows=_row("1", 3), page=2, total=5,
+                                action="/portal/saeol/gosiList.do?seCode=01&amp;mId=0501040000&amp;page=3"),
+            "게시판 구분": listing("1", caption="입법예고 목록"),
+            "구조": listing(rows=_row("1", page=2)),
+            "같은 게시물": listing("1", "1"),
+        }
+        for message, raw in cases.items():
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                parse_gosi_listing(raw, page=3 if message == "페이지 번호" else 1)
+        searched = "/portal/saeol/gosiList.do?seCode=01&amp;mId=0501040000&amp;page=1&amp;searchTxt=x"
+        with self.assertRaisesRegex(ValueError, "요청한 게시판"):
+            parse_gosi_listing(listing("1", action=searched), page=1)
+        broken = _row("1").replace('class="gosi_dept"', 'class="other"')
+        for rows in (broken, _row("1").replace("</a>", "</a><div>x</div>"), "<tr><td colspan='4'>없음</td></tr>"):
+            with self.subTest(rows=rows), self.assertRaisesRegex(ValueError, "구조"):
+                parse_gosi_listing(listing(rows=rows), page=1)
+
+    def test_detail_keeps_text_and_attachment_candidates(self):
+        files = (_FILE, ("포스터.JPG", "포스터_1.jpg", "/p"), ("조서.xlsx", "조서_2.xlsx", "/p"),
+                 ("A&B.hwp", "A&B_3.hwp", "/p"))
+        record = parse_gosi_detail(detail(files=files), notice_id="75365", listing=row())
+        self.assertEqual(record["official_url"],
+                         "https://www.anseong.go.kr/portal/saeol/gosiView.do?notAncmtMgtNo=75365&mId=0501040000")
+        self.assertEqual(record["fields"], {"notice_number": "안성시 고시 제2026-343호", "registered_date": "2026.11.27",
+                                            "department": "도로시설과",
+                                            "description": "우리시 미양면 일원\n붙임 공고문 1부."})
+        self.assertEqual(record["registered_on"], "2026-11-27")
+        self.assertEqual(record["review_flags"], ["attachment"])
+        self.assertEqual([(item["label"], item["format"]) for item in record["attachments"]],
+                         [(_FILE[0], "hwpx"), ("포스터.JPG", "jpeg"), ("조서.xlsx", None), ("A&B.hwp", "hwp")])
+        self.assertEqual(record["attachments"][0]["source_url"],
+                         "https://eminwon.anseong.go.kr/emwp/jsp/ofr/FileDown.jsp?user_file_nm=%EA%B3%B5%EA%B3%A0%EB%AC%B8"
+                         "%5B(%EC%A3%BC)%ED%95%A9%EC%84%B1%5D.hwpx&sys_file_nm=%EA%B3%B5%EA%B3%A0%EB%AC%B8%5B(%EC%A3%BC)"
+                         "%ED%95%A9%EC%84%B1%5D_ofr_ofr_X_1.hwpx&file_path=/ntishome/file/upload/ofr/ofr/20261126")
+        # 질의 구분자가 든 인자는 서버가 읽을 주소를 확정할 수 없어 비워 둔다.
+        self.assertIsNone(record["attachments"][3]["source_url"])
+        self.assertEqual(record["referenced_notice_numbers"], [])
+
+    def test_detail_without_attachments_body_or_date_keeps_null_reasons(self):
+        record = parse_gosi_detail(detail(body="", links="", registered="2026.13.01", dept=""), notice_id="1",
+                                   listing=row("1", registered_date="2026.13.01", department=None))
+        self.assertEqual((record["fields"]["description"], record["fields"]["department"]), (None, None))
+        self.assertIsNone(record["registered_on"])
+        self.assertEqual(record["attachments"], [])
+        self.assertEqual(record["review_flags"],
+                         ["missing:department", "missing:description", "registered_date_unparsed"])
+        direct = "<p><a href=\"javascript:goDownload_direct('a.hwp', '/old')\">a.hwp</a></p>"
+        record = parse_gosi_detail(detail(body='<img src="/x.png" alt="표">', links=direct), notice_id="1",
+                                   listing=row("1"))
+        self.assertEqual(record["attachments"], [{"kind": "attachment", "source_url": None, "label": "a.hwp",
+                                                  "format": "hwp"}])
+        self.assertEqual(record["review_flags"], ["attachment", "inline_image", "missing:description"])
+
+    def test_detail_records_only_stated_notice_numbers(self):
+        body = "안성시 공고 제2026-100호(2026.11.1.)를 정정합니다.<br>안성시 고시 제2026-343호 참조. 제2026-100호"
+        record = parse_gosi_detail(detail(body=body, title="합성 공고(정정)"), notice_id="75365",
+                                   listing=row(title="합성 공고(정정)"))
+        self.assertEqual(record["referenced_notice_numbers"], ["제2026-100호"])
+        record = parse_gosi_detail(detail(title="합성 공고(정정)"), notice_id="75365", listing=row(title="합성 공고(정정)"))
+        self.assertEqual(record["referenced_notice_numbers"], [])
+
+    def test_detail_rejects_other_notices_and_format_changes(self):
+        cases = {
+            "목록 항목과 일치하지": (detail(), row(title="다른 제목")),
+            "번호가 요청과": (detail(links=_links("75365", (_FILE,), preview_id="75366")), row()),
+            "제목이 없습니다": (detail(title="", number="", registered="", dept="", body="", links=""), row()),
+            "게시판이 요청과": (detail(action="/portal/bbs/view.do?mId=0501010000"), row()),
+            "바로 보기 정보": (detail(links=_links("75365", (_FILE,)).replace("_1.hwpx','/nt", "_9.hwpx','/nt")), row()),
+            "숨김": (detail(body='<div style="display:none">숨은 마감</div>'), row()),
+            "해석이 갈리는": (detail(body="<!--> 마감"), row()),
+        }
+        for message, (text, listed) in cases.items():
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                parse_gosi_detail(text, notice_id="75365", listing=listed)
+        with self.assertRaisesRegex(ValueError, "18자리"):
+            gosi_detail_url("0")
+
+    def test_requests_use_fixed_get_paths(self):
+        with patch("processing.collection.gosi_notices._fetch", return_value=b"ok") as fetch:
+            fetch_gosi_listing(2, limit=10)
+            fetch_gosi_detail("75365", limit=20)
+        self.assertEqual([call.args for call in fetch.call_args_list], [
+            ("GET", "/portal/saeol/gosiList.do?seCode=01&mId=0501040000&page=2", None, 10),
+            ("GET", "/portal/saeol/gosiView.do?notAncmtMgtNo=75365&mId=0501040000", None, 20),
+        ])
+
+
+class GosiBatchTest(unittest.TestCase):
+    def setUp(self):
+        self.private = Path(self.enterContext(TemporaryDirectory())).resolve()
+        self.root = self.private / gosi_batch.GOSI_SECTION
+        self.enterContext(patch("processing.collection.gosi_batch.sleep"))
+        self.listing = self.enterContext(patch("processing.collection.gosi_batch.fetch_gosi_listing"))
+        self.detail = self.enterContext(patch("processing.collection.gosi_batch.fetch_gosi_detail"))
+        self.detail.side_effect = lambda notice_id, **_options: detail(notice_id).encode()
+
+    def test_capture_keeps_raw_and_read_revalidates(self):
+        self.listing.side_effect = [listing("3", "2", total=2), listing("1", page=2, total=2)]
+        summary = capture_gosi_batch("run", self.root)
+        self.assertEqual(summary, {"batch_id": "run", "status": "complete", "discovery_status": "complete",
+                                   "selected": 3, "parsed": 3})
+        receipt = json.loads((self.root / "run" / "batch.json").read_text(encoding="utf-8"))
+        self.assertEqual(receipt["schema_version"], "citizen-gosi-batch-v1")
+        self.assertEqual(receipt["pages"][1]["source_url"],
+                         "https://www.anseong.go.kr/portal/saeol/gosiList.do?seCode=01&mId=0501040000&page=2")
+        records = read_gosi_batch(self.private, "run")
+        self.assertEqual(list(records), ["3", "2", "1"])
+        self.assertEqual(records["1"]["raw_asset_path"], "collection-gosi/run/detail-1.html")
+        self.assertEqual(records["1"]["record"]["attachments"][0]["format"], "hwpx")
+
+        parsed = self.root / "run" / "parsed-2.json"
+        stored = json.loads(parsed.read_text(encoding="utf-8"))
+        stored["record"]["title"] = "바뀐 제목"
+        parsed.write_text(json.dumps(stored, ensure_ascii=False), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "파싱 결과가 원본과 다릅니다"):
+            read_gosi_batch(self.private, "run")
+        (self.root / "run" / "detail-2.html").write_bytes(b"x")
+        with self.assertRaisesRegex(ValueError, "원본 해시"):
+            read_gosi_batch(self.private, "run")
+
+    def test_mismatched_detail_keeps_raw_and_reason(self):
+        self.listing.return_value = listing("5", "6")
+        self.detail.side_effect = [detail("5", title="다른 글").encode(), ValueError("합성 수신 실패")]
+        summary = capture_gosi_batch("run", self.root)
+        self.assertEqual((summary["status"], summary["parsed"]), ("partial", 0))
+        receipt = json.loads((self.root / "run" / "batch.json").read_text(encoding="utf-8"))
+        self.assertEqual([item["status"] for item in receipt["items"]], ["parse_failed", "fetch_failed"])
+        self.assertIn("목록 항목과 일치하지", receipt["items"][0]["error"])
+        self.assertTrue((self.root / "run" / "detail-5.html").exists())
+        self.assertEqual(read_gosi_batch(self.private, "run"), {})
+
+    def test_cli_reports_capture_and_verify(self):
+        self.listing.return_value = listing("7")
+        with (patch.object(gosi_batch, "GOSI_ROOT", self.root), patch("sys.argv", ["gosi_batch", "capture", "--name", "a"]),
+              contextlib.redirect_stdout(io.StringIO()) as output):
+            self.assertEqual(gosi_batch.main(), 0)
+        self.assertEqual(json.loads(output.getvalue())["parsed"], 1)
+        with (patch.object(gosi_batch, "GOSI_ROOT", self.root), patch("sys.argv", ["gosi_batch", "verify", "--name", "a"]),
+              contextlib.redirect_stdout(io.StringIO()) as output):
+            self.assertEqual(gosi_batch.main(), 0)
+        self.assertEqual(json.loads(output.getvalue()), {"batch_id": "a", "parsed": 1, "attachments": 1})
+        with (patch.object(gosi_batch, "GOSI_ROOT", self.root), patch("sys.argv", ["gosi_batch", "verify", "--name", "b"]),
+              contextlib.redirect_stderr(io.StringIO()) as error):
+            self.assertEqual(gosi_batch.main(), 1)
+        self.assertIn("수집 기록 확인 실패", error.getvalue())
+
+
+if __name__ == "__main__":
+    unittest.main()

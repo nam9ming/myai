@@ -22,6 +22,7 @@ CASES = {
                                                ["capture_course_batch"]),
     "processing.collection.library_program_batch": (["library_program_batch", "--name", "x", "--start-page", "x"],
                                                     ["capture_program_batch"]),
+    "processing.collection.gosi_batch": (["gosi_batch", "fetch", "--name", "x"], ["capture_gosi_batch", "read_gosi_batch"]),
 }
 
 
