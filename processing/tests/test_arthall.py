@@ -200,6 +200,7 @@ class ArthallDetailTest(unittest.TestCase):
         # 영역 루트의 숨김과 원본에 없던 태그·속성·스타일·끝 태그 짝.
         for old, new in (('"conInfo_list"', '"conInfo_list" hidden'), ('"conInfo_img"', '"conInfo_img" style="display:none"'),
                          ('"tab_view"', '"tab_view" hidden'), ('style="display: none;"', 'style="visibility: hidden;"'),
+                         ('style="display: none;"', "style"),
                          ("<h4 class", "<h4 popover class"), ("<ul><li", "<ul><dialog><li"),
                          ('<p class="p_notice">안내', '<p class="p_notice" style="opacity: 0">안내'),
                          ("증빙 필요", '<font style="font-size: 0">숨김</font>'),

@@ -128,8 +128,9 @@ class _Parser(PinnedHTMLParser):
                     if self.open:
                         raise ValueError(_HIDDEN)
                     # 루트는 class만 받는다. 탭 본문 루트의 `display: none;`은 parse_detail이 탭과 대조한다.
+                    # 값 없는 style도 거부한다(실제 탭 본문 루트 147개는 모두 `style="display: none;"`였다).
                     if not values.keys() <= ({"class", "id", "style"} if kind == "section" else {"class"}) or \
-                            values.get("style") not in (None, "display: none;"):
+                            "style" in values and values["style"] != "display: none;":
                         self.fail()
                     self.counts[kind] = self.counts.get(kind, 0) + 1
                     self.region = kind
