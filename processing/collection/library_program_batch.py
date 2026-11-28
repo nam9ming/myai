@@ -93,7 +93,8 @@ def read_program_assets(private_root: Path, name: str, program_ids: set[str]) ->
                 raise ValueError("선택한 행사의 목록 페이지 기록이 맞지 않습니다.")
             list_raw = read_capture_file(directory, listed[0]["file"], LIST_MAX_BYTES)
             raw = read_capture_file(directory, row["file"], DETAIL_MAX_BYTES)
-            if (hashlib.sha256(list_raw).hexdigest() != listed[0].get("sha256")
+            list_digest = hashlib.sha256(list_raw).hexdigest()
+            if (list_digest != listed[0].get("sha256")
                     or hashlib.sha256(raw).hexdigest() != row.get("sha256")):
                 raise ValueError("도서관 행사신청 원본 해시가 수집 기록과 다릅니다.")
             stored = read_receipt(directory, row["parsed_file"])
@@ -112,6 +113,11 @@ def read_program_assets(private_root: Path, name: str, program_ids: set[str]) ->
                 "official_url": row["source_url"],
                 "collected_at": capture_timestamp(row.get("fetched_at")),
                 "collection_method": COLLECTION_METHOD,
+                # 접수현황 문구의 원본은 목록 페이지라서 그 원본·주소·수신 시각을 따로 돌려준다.
+                "listing_raw_asset_path": (relative / listed[0]["file"]).as_posix(),
+                "listing_raw_sha256": list_digest,
+                "listing_url": listed[0]["source_url"],
+                "listing_collected_at": capture_timestamp(listed[0].get("fetched_at")),
             }
         return assets
 

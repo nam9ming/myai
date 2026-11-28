@@ -18,6 +18,8 @@ _VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link"
 _BREAK = "\x00"
 _BREAK_TAGS = {"br", "p", "li", "div"}
 _TEXT_TAGS = {"a", "b", "br", "em", "font", "i", "img", "p", "small", "span", "strong", "sub", "sup", "u"}
+# 목록 칸은 실제 표본(2026-11-28, 155행)에 나온 태그만 받는다. 그림 상태 표시 등은 형식 변경으로 본다.
+_LISTING_TAGS = {"a", "br", "span", "strong"}
 _ATTACHMENT_TAGS = {"a", "div", "li", "script", "span", "ul"}
 # 화면 표시를 확정할 수 없는 속성. 실제 표본에는 없었으므로 나오면 형식 변경으로 본다.
 _HIDING_ATTRS = {"style", "hidden"}
@@ -148,6 +150,8 @@ class _PageParser(HTMLParser):
         elif self.stack is not None:
             self._table_start(tag, values)
         elif tag == "table" and self.table_class in classes:
+            if _HIDING_ATTRS & values.keys():
+                self.fail()
             self.tables += 1
             self.stack = ["table"]
 
@@ -158,6 +162,9 @@ class _PageParser(HTMLParser):
             self.cell["tags"].append((tag, values))
             if tag in _BREAK_TAGS:
                 self.cell["text"].append(_BREAK)
+        elif _HIDING_ATTRS & values.keys():
+            # 칸 안쪽 태그뿐 아니라 표 구조 태그 자신의 숨김 속성도 형식 변경으로 본다.
+            self.fail()
         elif tag == "caption" and self.stack == ["table"]:
             self.caption = []
         elif tag in ("colgroup", "thead", "tbody") and self.stack == ["table"]:
@@ -272,11 +279,17 @@ def parse_program_listing(raw: bytes, *, page: int) -> tuple[int, list[tuple[str
         if len(cells) != len(_HEADERS) or any(cell["tag"] != "td" for cell in cells):
             raise ValueError(_INVALID_LISTING)
         for cell in cells:
-            _check_tags(cell, _TEXT_TAGS, _INVALID_LISTING)
+            _check_tags(cell, _LISTING_TAGS, _INVALID_LISTING)
         links = [[values.get("href") for tag, values in cell["tags"] if tag == "a"] for cell in cells]
         match = _DETAIL_LINK.fullmatch(links[2][0] or "") if len(links[2]) == 1 else None
         if match is None or sum(map(len, links)) != 1:
             raise ValueError(_INVALID_LISTING)
+        # 상태 칸 신청 버튼의 번호가 링크와 다르면 다른 행사의 상태가 붙을 수 있다.
+        if any(values.get("data-idx", match[1]) != match[1] for cell in cells for _, values in cell["tags"]):
+            raise ValueError("도서관 행사신청 목록 행의 행사 번호가 서로 다릅니다.")
+        # 행사명과 접수현황(목록에만 있는 신청 상태)이 비면 형식 변경으로 본다.
+        if not cells[2]["text"] or not cells[6]["text"]:
+            raise ValueError("도서관 행사신청 목록 행의 행사명 또는 접수현황이 비었습니다.")
         if match[1] in (program_id for program_id, _ in rows):
             raise ValueError("도서관 행사신청 목록에 같은 행사 번호가 있습니다.")
         rows.append((match[1], {key: cell["text"] or None for key, cell in zip(_LISTING_KEYS, cells)}))
@@ -364,5 +377,6 @@ def parse_program_detail(text: str, program_id: str) -> dict:
 
 
 def program_record(page: int, listing: dict, detail: dict) -> dict:
-    """목록 행(접수현황 원문 포함)과 상세 항목을 합치지 않고 나란히 둔다."""
-    return {**detail, "list_page": page, "listing": listing}
+    """목록 행(접수현황 원문 포함)과 상세 항목을 합치지 않고 나란히 둔다. 빈 목록 칸은 사유를 남긴다."""
+    unknown = {**detail["unknown"], **{f"listing.{key}": "empty" for key, value in listing.items() if value is None}}
+    return {**detail, "unknown": unknown, "list_page": page, "listing": listing}

@@ -9,7 +9,7 @@ from processing.collection.library_program_batch import (
     PROGRAM_SECTION, capture_program_batch, read_program_assets,
 )
 from processing.collection.library_programs import (
-    parse_program_detail, parse_program_listing, program_detail_url, program_listing_url,
+    parse_program_detail, parse_program_listing, program_detail_url, program_listing_url, program_record,
 )
 
 _HEADERS = ("도서관", "행사구분", "행사명", "행사기간", "행사대상", "접수자/정원(대기정원)", "접수현황")
@@ -88,10 +88,19 @@ class LibraryProgramParserTest(unittest.TestCase):
             "activity_period": "2026-12-10 ~ 2026-12-10\n19:00 ~ 21:00", "target": "시민 누구나",
             "enrollment": "14/100\n(0/30)", "application_status": "대기자접수중",
         })
+        # 비어도 되는 목록 칸은 null과 사유를 남긴다.
+        _, rows = parse_program_listing(listing(row("1").replace("<td>시민 누구나</td>", "<td></td>")), page=1)
+        record = program_record(1, rows[0][1], parse_program_detail(detail("1"), "1"))
+        self.assertIsNone(record["listing"]["target"])
+        self.assertEqual(record["unknown"]["listing.target"], "empty")
 
     def test_listing_rejects_changed_structure_or_page(self):
         bad_link = row("1").replace("idx=1", "idx=1&x=2")
+        status = ">접수중</span>"
         cases = {
+            "form action": listing(row("1")).replace(b"list.do?mId=0202020000\" method", b"list.do?mId=1\" method"),
+            "second table": listing(row("1")).replace(
+                b"</form>", f'<table class="bod_list"><tbody>{row("2")}</tbody></table></form>'.encode()),
             "hidden page": listing(row("1"), page=2, current=1),
             "current page": listing(row("1"), current=2),
             "beyond total": listing(row("1"), page=4, total=3),
@@ -100,6 +109,12 @@ class LibraryProgramParserTest(unittest.TestCase):
             "no rows": listing(),
             "extra cell": listing(row("1", extra="<td>x</td>")),
             "second link": listing(row("1", title='<a href="/library/x">x</a>')),
+            "other cell link": listing(row("1", period='<a href="/library/x">x</a>')),
+            "status idx": listing(row("1").replace('data-idx="1"', 'data-idx="2"')),
+            "status image": listing(row("1").replace(status, '><img src="/img/state_ing.gif" alt="">접수중</span>')),
+            "empty status": listing(row("1").replace(status, "></span>")),
+            "empty title": listing(row("1", title=" ")),
+            "hidden cell": listing(row("1").replace("<td>시민", '<td style="display:none">시민')),
             "link": listing(bad_link),
             "duplicate": listing(row("1"), row("1")),
             "tag": listing(row("1", period="<div>2026-12-10</div>")),
@@ -109,7 +124,7 @@ class LibraryProgramParserTest(unittest.TestCase):
         }
         for name, raw in cases.items():
             with self.subTest(name=name), self.assertRaises(ValueError):
-                parse_program_listing(raw, page=2 if name == "hidden page" else 4 if name == "beyond total" else 1)
+                parse_program_listing(raw, page=4 if name == "beyond total" else 1)
 
     def test_detail_keeps_schedules_apart_and_unknowns_null(self):
         record = parse_program_detail(detail("7666"), "7666")
@@ -155,6 +170,11 @@ class LibraryProgramParserTest(unittest.TestCase):
             "attachment link": detail("1", *replace("첨부파일", '<a href="/x.hwp">x.hwp</a>')),
             "attachment script": detail("1", *replace("첨부파일", '<script src="/other.js"></script>')),
             "odd cells": detail("1", head=("구분", "아양도서관", "행사구분")),
+            "caption": detail("1").replace("문화강좌 신청확인", "문화강좌 목록"),
+            "label tag": detail("1").replace("<th>장소</th>", "<th><span>장소</span></th>"),
+            "hidden row": detail("1").replace("<tr><th>재료비", '<tr style="display:none"><th>재료비'),
+            "hidden cell": detail("1").replace('<td colspan="3">없음.', '<td colspan="3" hidden>없음.'),
+            "hidden table": detail("1").replace('<table class="tbl">', '<table class="tbl" style="display:none">'),
         }
         for name, text in cases.items():
             with self.subTest(name=name), self.assertRaises(ValueError):
@@ -203,10 +223,49 @@ class LibraryProgramBatchTest(unittest.TestCase):
         self.assertEqual(assets["8"]["raw_asset_path"], f"{PROGRAM_SECTION}/run/detail-8.html")
         self.assertEqual(assets["8"]["official_url"], program_detail_url("8"))
         self.assertEqual(assets["8"]["collection_method"], "official-web-library-program")
+        directory = self.root / "run"
+        receipt = json.loads((directory / "batch.json").read_text(encoding="utf-8"))
+        self.assertEqual((assets["8"]["listing_raw_asset_path"], assets["8"]["listing_url"]),
+                         (f"{PROGRAM_SECTION}/run/list-2.html", program_listing_url(2)))
+        self.assertEqual((assets["8"]["listing_raw_sha256"], assets["8"]["listing_collected_at"]),
+                         (receipt["pages"][1]["sha256"], receipt["pages"][1]["fetched_at"]))
         with self.assertRaisesRegex(ValueError, "파싱이 완료된"):
             read_program_assets(self.private, "run", {"5"})
 
-        directory = self.root / "run"
+        originals = {path: path.read_bytes() for path in directory.iterdir()}
+
+        def rewrite_receipt(change):
+            changed = json.loads(originals[directory / "batch.json"])
+            change(changed)
+            (directory / "batch.json").write_text(json.dumps(changed, ensure_ascii=False), encoding="utf-8")
+
+        def detail_and_parsed():
+            # 원본과 파싱 결과를 함께 바꿔도 수집 기록의 해시가 다르면 거부한다.
+            (directory / "detail-9.html").write_text(detail("9", *replace("장소", "다른 곳")), encoding="utf-8")
+            parsed = json.loads(originals[directory / "parsed-9.json"])
+            parsed["record"]["fields"]["place"] = "다른 곳"
+            parsed["sha256"] = hashlib.sha256((directory / "detail-9.html").read_bytes()).hexdigest()
+            (directory / "parsed-9.json").write_text(json.dumps(parsed, ensure_ascii=False), encoding="utf-8")
+
+        def listing_without_row():
+            (directory / "list-1.html").write_bytes(listing(row("7", "접수마감"), total=2))
+            rewrite_receipt(lambda data: data["pages"][0].update(
+                sha256=hashlib.sha256((directory / "list-1.html").read_bytes()).hexdigest()))
+
+        tampering = {
+            "batch id": (lambda: rewrite_receipt(lambda data: data.update(batch_id="other")), "규격·이름"),
+            "detail url": (lambda: rewrite_receipt(lambda data: data["items"][0].update(source_url="x")), "파싱이 완료된"),
+            "listing url": (lambda: rewrite_receipt(lambda data: data["pages"][0].update(source_url="x")), "목록 페이지"),
+            "detail with parsed": (detail_and_parsed, "해시"),
+            "listing row gone": (listing_without_row, "원본과 다릅니다"),
+        }
+        for name, (change, message) in tampering.items():
+            with self.subTest(name=name):
+                change()
+                with self.assertRaisesRegex(ValueError, message):
+                    read_program_assets(self.private, "run", {"9"})
+                for path, content in originals.items():
+                    path.write_bytes(content)
         parsed = json.loads((directory / "parsed-9.json").read_text(encoding="utf-8"))
         for change, message in ((lambda: parsed["record"]["listing"].update(application_status="접수중!"), "원본과 다릅니다"),
                                 (lambda: parsed.update(parser_version="old"), "다른 파서 버전")):
