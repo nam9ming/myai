@@ -96,6 +96,10 @@ class YouthPolicyParserTest(unittest.TestCase):
             (listing(card("1"), card("1")), 1, "같은 정책 번호"),
             (listing(card("1", label="접수기간")), 1, "구조"),
             (listing(card("1", extra="<span>추가 안내</span>")), 1, "구조"),
+            # span이 아닌 .info·p가 아닌 .page_num은 IndexError·TypeError가 아니라 형식 오류여야 한다.
+            (listing(card("1").replace('<span class="info"><strong>신청기간', '<em class="info"><strong>신청기간')),
+             1, "구조"),
+            (listing(card("1")).replace(b"<fieldset", b'<span class="page_num"></span><fieldset'), 1, "구조"),
             (listing(), 1, "구조"),
             (b"\xff", 1, "구조"),
         ):

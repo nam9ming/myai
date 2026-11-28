@@ -102,7 +102,9 @@ class _ListingParser(HTMLParser):
         slot = None
         if tag == "input" and values.get("type") == "hidden":
             self.inputs.setdefault(values.get("name"), []).append(values.get("value"))
-        elif tag == "p" and "page_num" in classes:
+        elif "page_num" in classes:
+            if tag != "p":  # 페이지 표시가 p가 아니면 형식 변경이다. 끝 태그에서 글자 슬롯을 읽으므로 여기서 막는다.
+                self.fail()
             slot = []
         elif tag == "li" and parent[0] == "ul" and len(self.stack) > 1 and "bod_photo" in self.stack[-2][1]:
             if self.card is not None:
@@ -125,7 +127,9 @@ class _ListingParser(HTMLParser):
             return card["title"]
         elif tag == "span" and "info" in classes and "cont" in parent[1]:
             card["info"].append([None, None])
-        elif tag in ("strong", "span") and "info" in parent[1]:
+        # 위 분기에서 항목을 만든 `.cont > span.info` 바로 아래만 읽는다. 다른 .info 요소는 글자가 있으면 형식 변경이다.
+        elif (tag in ("strong", "span") and parent[0] == "span" and "info" in parent[1]
+              and "cont" in self.stack[-2][1]):
             index = 0 if tag == "strong" else 1
             if card["info"][-1][index] is not None:
                 self.fail()
