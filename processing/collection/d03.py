@@ -27,6 +27,9 @@ UTC_STAMP = r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,
 D03_SECTION = "collection-d03"
 _BOARD_ID = re.compile(r"[?&]bIdx=([1-9][0-9]{0,17})(?:&|$)")
 _MEDIA = "official-web-media-manual"
+# 2026-11-28 실측: 시청 상세 경로가 문화도시 글 202581(ptIdx 1363)을 시청 공지로 열었다. bIdx는 ptIdx 16·1363이
+# 함께 쓰는 사이트 순번이므로 문화도시 글을 시청 번호 공간에서 대조한다. 안성배움e(300)는 따로 둔다.
+_ID_SPACE = {"1363": "16"}
 
 
 def kept_text(value, field: str, limit: int, *, multiline: bool = False) -> str:
@@ -117,7 +120,7 @@ def _board_notice(url: str) -> tuple[str, str] | None:
             return "16", match[1]
         for key, info in BOARDS.items():
             if url == board_detail_url(key, match[1]):
-                return info.pt_idx, match[1]
+                return _ID_SPACE.get(info.pt_idx, info.pt_idx), match[1]
     return None
 
 
@@ -153,7 +156,7 @@ def _prepared_documents(private_root: Path) -> list[tuple[str, dict]]:
 
 
 def _check_board_notices(private_root: Path, name: str, documents: list[dict]) -> None:
-    """시청·도서관·읍면동 공지는 게시물 번호(ptIdx=16)를 공유하고 원본 해시가 게시판마다 달라 같은 공지가 별개 문서로 들어간다.
+    """시청·도서관·읍면동·문화도시 공지는 시청(ptIdx=16)의 게시물 번호를 공유하고 원본 해시가 게시판마다 달라 같은 공지가 별개 문서로 들어간다.
 
     그래서 같은 번호 공간의 같은 공지 번호는 모든 준비본에서 한 게시판 주소만 쓰고, 공지 본문 문서는 한 문서 ID(그 문서의
     새 버전 포함)만 허용한다. 같은 게시판의 매체 문서는 여러 개일 수 있다. 도서관 본문(official-web-capture)도 게시판 본문과

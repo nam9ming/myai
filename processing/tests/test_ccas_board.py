@@ -6,13 +6,13 @@ from unittest.mock import patch
 
 from processing.collection import media
 from processing.collection.board_batch import BOARD_SECTION, capture_board_batch
-from processing.collection.d03 import _board_notice
 from processing.collection.libraries import board_parser_version, parse_board_media, parse_board_notice
 from processing.collection.library_listing import parse_board_listing
 from processing.collection.official_web import (
     BOARDS, board_detail_url, board_listing_path, fetch_board_detail, fetch_board_listing,
 )
-from processing.tests.test_board_notices import CITY_VIEW, _listing, _notice
+from processing.tests.test_board_notices import CITY_VIEW, _listing, _notice, _row as _city_row
+from processing.tests import test_town_boards as town
 from processing.tests.test_edu_board import ATTACH, ATTACHMENT, FILE_SN, _edu_row
 
 # 2026-11-28 실제 목록·상세에서 확인한 문화도시 안성 공지사항의 메뉴·게시판 번호와 폼 주소
@@ -61,12 +61,6 @@ class CcasRegistryTest(unittest.TestCase):
         self.assertEqual((listing.args, listing.kwargs["body"]),
                          (("POST", "/ccas/bbs/list.do?ptIdx=1363&mId=0501000000"), b"page=2"))
         self.assertEqual(detail.args, ("GET", "/ccas/bbs/view.do?bIdx=202581&mId=0501000000&ptIdx=1363"))
-
-    def test_known_gap_city_and_ccas_keys_differ(self):
-        # 알려진 제약: 시청 상세 경로도 문화도시 글 202581을 열어 주지만 D03 번호 공간 키가 ptIdx별로 갈려 교차 중복을 못 잡는다.
-        # 후속 D03 PR이 키를 bIdx 하나로 합치면 이 시험이 실패하므로 그때 교차 중복 거부 시험으로 바꾼다(README 참고).
-        self.assertEqual(_board_notice(board_detail_url("ccas", "202581")), ("1363", "202581"))
-        self.assertEqual(_board_notice(board_detail_url("city", "202581")), ("16", "202581"))
 
 
 class CcasListingTest(unittest.TestCase):
@@ -145,6 +139,28 @@ class CcasPipelineTest(unittest.TestCase):
             media.inspect_notice(self.private, "202581", "notice", board="ccas", batch="ccas")
         notice = media._notice(self.private, "notice")
         self.assertEqual((notice["board"], notice["listing_batch"]), ("ccas", "ccas"))
+
+
+class CcasDuplicateTest(unittest.TestCase):
+    """시청 상세 경로가 문화도시 글 202581을 열었으므로 두 게시판의 같은 bIdx는 D03에서 한 공지로 대조한다."""
+
+    prepare = town.TownDuplicateTest.prepare
+
+    def setUp(self):
+        self.private = Path(self.enterContext(TemporaryDirectory())).resolve() / "private"
+        self.private.mkdir(mode=0o700)
+        city = _listing(_city_row("202684") + _city_row("202581"), total=1).encode()
+        town._capture(self.private, "city", "city", city, town._city_notice)
+        town._capture(self.private, "ccas", "ccas", _ccas_listing(_row("202684") + _row("202581", "25"), total=1),
+                      _ccas_notice)
+
+    def test_same_notice_id_from_city_and_ccas_is_rejected(self):
+        for first, second, notice_id in (("city", "ccas", "202581"), ("ccas", "city", "202684")):
+            self.prepare(f"{first}-{notice_id}", "board", first, notice_id, first, notice_id, int(notice_id))
+            with self.subTest(first=first):
+                with self.assertRaisesRegex(ValueError, f"^공지 번호 {notice_id}의 문서가 D03 준비본 {first}-{notice_id}에 다른"):
+                    self.prepare(f"{second}-{notice_id}", "board", second, notice_id, second, notice_id, 1)
+                self.assertFalse((self.private / "collection-d03" / f"{second}-{notice_id}").exists())
 
 
 if __name__ == "__main__":
