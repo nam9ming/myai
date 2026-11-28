@@ -346,7 +346,7 @@ python3.13 -B -m processing.collection.youth_batch verify --name youth-20261128
 - `fields`: 상세 본문(`description`, 줄 구분 유지)·등록일·`작성자`·`신청방법`. 조회수는 요청마다 바뀌어 보관하지 않는다. `div.view_info`에 다른 항목명이 나오면 형식 변경으로 거부한다. 상세 신청방법이 없으면 `null`과 `missing:application_method`로 남긴다. 목록과 상세의 신청방법·분야 번호가 다르면 `listing_method_differs`·`listing_category_differs`로 표시하고 두 값을 모두 그대로 둔다.
 - 지원 대상·금액: 별도 항목이 없어 뽑지 않고 `unknown.support_target`·`support_amount`를 `not_extracted`로 둔다. 본문이 제목 한 줄이고 내용이 첨부에만 있는 글(877)도 있어 값이 있는 위치도 단정하지 않는다. 연령·소득 문구에서 자격을 추정하지 않는다.
 - `city_notice_candidate`: 같은 사업이 [시청 고시·공고](https://www.anseong.go.kr/portal/saeol/gosiList.do?mId=0501040000)에도 올라오며 자격·마감은 시청 원공고·정정 공고가 기준이다. 목록 카드 제목으로 만든 고시·공고 제목 검색 주소만 `status=unverified`로 남긴다. 수집기는 이 주소를 요청하지 않고 시청 공고 값으로 덮어쓰지 않는다.
-- `images`: 본문 앞 대표 이미지 영역(`div.photo_viewer`)의 원본 이미지 주소. 이 영역은 버튼·스와이프 스크립트 2개·초기화 한 줄로 된 틀만 받고 다른 글자·태그가 있으면 거부한다. 나머지 본문은 시청 공지와 같은 태그 경계·본문 허용 목록(`libraries.py`)으로 읽고, 첨부 링크가 있으면 `attachment`로 표시한다. 목록과 대표 이미지 영역도 `html_tokens.py`의 `PinnedHTMLParser`로 같은 태그 경계 규칙을 따르며, 빈 요소가 아닌 태그의 `/>`는 브라우저처럼 닫지 않는다. 목록 폼 안의 `title`·`textarea`·`iframe` 같은 원문 텍스트 요소는 문자 참조나 화면 표시가 브라우저와 달라 거부한다.
+- `images`: 본문 앞 대표 이미지 영역(`div.photo_viewer`)의 원본 이미지 주소. 이 영역은 버튼·스와이프 스크립트 2개·초기화 한 줄로 된 틀만 받고 다른 글자·태그가 있으면 거부한다. 나머지 본문은 시청 공지와 같은 태그 경계·본문 허용 목록(`libraries.py`)으로 읽고, 첨부 링크가 있으면 `attachment`로 표시한다. 목록과 대표 이미지 영역도 `html_tokens.py`의 `PinnedHTMLParser`로 같은 태그 경계 규칙을 따르며, 빈 요소가 아닌 태그의 `/>`는 브라우저처럼 닫지 않는다. 목록 폼 안의 `title`·`textarea`·`iframe` 같은 원문 텍스트 요소는 문자 참조나 화면 표시가 브라우저와 달라 거부한다. `template` 안의 짝 없는 `</style>`처럼 숨김 요소의 종료 태그가 열린 순서와 다르면 숨김 범위가 갈려 거부한다.
 
 2026-11-28 실제 확인(요청 33건, 순차·1.5초 이상 간격):
 

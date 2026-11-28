@@ -116,6 +116,9 @@ class YouthPolicyParserTest(unittest.TestCase):
             # 원문 텍스트 요소는 문자 참조를 풀지 않거나 브라우저 화면에 나오지 않아 카드 표시 문구와 달라진다.
             (listing(card("1").replace("지원 1<", "지원 1<textarea>&lt;B</textarea><")), 1, "구조"),
             (listing(card("1").replace("지원 1<", "지원 1<iframe>숨김</iframe><")), 1, "구조"),
+            # 브라우저는 template 안의 짝 없는 `</style>`을 무시해 뒤 카드 전부를 숨긴다.
+            (listing(card("1").replace("지원 1<", "지원 1<template></style>2099-01-01 ~ 2099-12-31<style>"
+                                                  "</template></style><")), 1, "구조"),
         ):
             with self.subTest(message=message, page=page), self.assertRaisesRegex(ValueError, message):
                 parse_youth_listing(raw, page=page)

@@ -66,7 +66,7 @@ class _ListingParser(PinnedHTMLParser):
 
     def __init__(self):
         super().__init__()
-        self.ignored = 0
+        self.ignored: list[str] = []  # 열린 숨김 요소 이름. 짝이 맞지 않는 종료 태그는 브라우저가 무시해 숨김 범위가 갈린다.
         self.form_seen = self.in_form = False
         self.stack: list[tuple[str, list[str], list[str] | None]] = []
         self.inputs: dict[str, list[str | None]] = {}
@@ -83,7 +83,7 @@ class _ListingParser(PinnedHTMLParser):
     def handle_starttag(self, tag, attrs):
         super().handle_starttag(tag, attrs)
         if tag in _IGNORED_TAGS:
-            self.ignored += 1
+            self.ignored.append(tag)
         if self.ignored:
             return
         names = [name for name, _ in attrs]
@@ -145,7 +145,9 @@ class _ListingParser(PinnedHTMLParser):
     def handle_endtag(self, tag):
         if self.ignored:
             if tag in _IGNORED_TAGS:
-                self.ignored -= 1
+                if tag != self.ignored[-1]:
+                    self.fail()
+                self.ignored.pop()
             return
         if not self.in_form or tag in _VOID_TAGS:
             return
