@@ -10,7 +10,7 @@ from unittest.mock import patch
 from processing.collection import sports_batch
 from processing.collection.official_web import SourceHTTPError
 from processing.collection.sports_batch import capture_sports_batch, read_sports_batch
-from processing.collection.sports_notices import detail_url, parse_detail, parse_listing, robots_rules
+from processing.collection.sports_notices import LISTING_URL, allowed, detail_url, parse_detail, parse_listing, robots_rules
 
 # 실제 HTML을 받지 못해 만든 합성 원본이다. 상세 링크 형식만 조사 기록의 실제 주소(seq=96)를 따른다.
 _LINK = "/index.do?board_id=notice&amp;cp=%2Fboard%2Fview.do&amp;menu_id=0008&amp;pageIndex=1&amp;seq={}"
@@ -68,6 +68,13 @@ class SportsParserTest(unittest.TestCase):
         self.assertEqual(record["links"], [{"href": "/board/download.do?id=1", "text": "안내문.hwp"}])
         self.assertEqual(record["review_flags"], ["link", "markup_unverified"])
 
+    def test_table_cells_stay_separate_lines(self):
+        body = ("<table><tr><td>정원</td><td>2</td><td>30</td></tr>"
+                "<tr><th>예약기간</th><td>3.2.~3.6.</td><th>이용기간</th><td>4.1.~6.30.</td></tr></table>")
+        record = parse_detail(detail("96", body), seq="96")
+        self.assertEqual(record["body_lines"], ["정원", "2", "30", "예약기간", "3.2.~3.6.", "이용기간", "4.1.~6.30."])
+        self.assertEqual(record["keyword_lines"]["reservation_schedule"], ["예약기간"])
+
     def test_image_only_restriction_is_flagged_for_review(self):
         record = parse_detail(detail("111", '<p><img src="/upload/limit.jpg" alt="이용 제한 안내"></p>',
                                      title="체육관 이용 제한 안내"), seq="111")
@@ -85,6 +92,9 @@ class SportsParserTest(unittest.TestCase):
             ("허용하지 않는", detail("96", body="<iframe src=x></iframe>")),
             ("허용하지 않는", detail("96", body='<p style="display: none">숨김</p>')),
             ("허용하지 않는", detail("96", body="<img src=a src=b>")),
+            ("구조", detail("96", title='<span style="display:none">숨김</span>예약 안내')),
+            ("구조", detail("96", title="<b hidden>숨김</b>예약 안내")),
+            ("구조", detail("96", title="<i class=a class=b>x</i>예약 안내")),
             ("구조", detail("96", body="<p><b>x</p></b>")),
         ):
             with self.subTest(text=text[-80:]), self.assertRaisesRegex(ValueError, message):
@@ -97,17 +107,39 @@ class SportsParserTest(unittest.TestCase):
 
     def test_robots_rules_need_plain_rule_lines(self):
         rules = robots_rules(b"User-agent: *\nDisallow: /index.do?board_id=\n")
-        self.assertFalse(rules.can_fetch("yeogi-it/official-source-capture", detail_url("1")))
-        for raw in (b"<html><h1>Request Blocked</h1></html>", "규칙".encode("cp949")):
+        self.assertFalse(allowed(rules, detail_url("1")))
+        for raw in (b"<html><h1>Request Blocked</h1></html>", "규칙".encode("cp949"),
+                    b"User-agent: *\nCrawl-delay: soon\n"):
             with self.subTest(raw=raw), self.assertRaises(ValueError):
                 robots_rules(raw)
+
+    def test_robots_follow_rfc_9309_on_every_python(self):
+        # 표준 라이브러리 robotparser가 3.13 또는 3.14에서 상세를 허용해 버리던 경우다.
+        for raw, listing_allowed in (
+            (b"User-agent: *\nAllow: /\nDisallow: /index.do\n", False),
+            (b"User-agent: *\nDisallow: /x\n\nUser-agent: *\nDisallow: /index.do\n", False),
+            (b"User-agent: *\nDisallow: /*.do\n", False),
+            (b"User-agent: *\nDisallow: /*seq=\n", True),
+            (b"User-agent: *\nAllow: /index.do?menu_id=\nDisallow: /index.do\n", True),
+            (b"User-agent: *\nDisallow: /index.do?board_id=notice&cp=/board\n", True),
+            (b"User-agent: yeogi\nDisallow:\n\nUser-agent: *\nDisallow: /index.do?b\n", True),
+            (b"User-agent: YEOGI-IT/1.0\nDisallow: /index.do?b\n\nUser-agent: *\nDisallow:\n", True),
+        ):
+            with self.subTest(raw=raw):
+                rules = robots_rules(raw)
+                self.assertEqual(allowed(rules, LISTING_URL), listing_allowed)
+                self.assertFalse(allowed(rules, detail_url("96")))
+        rules = robots_rules(b"User-agent: *\nDisallow: /index.do$\nDisallow: /*seq=97$\nCrawl-delay: 2.5\n")
+        self.assertEqual((allowed(rules, LISTING_URL), allowed(rules, detail_url("96"))), (True, True))
+        self.assertFalse(allowed(rules, detail_url("97")))
+        self.assertEqual(rules["delay"], 2.5)
 
 
 class SportsBatchTest(unittest.TestCase):
     def setUp(self):
         self.private = Path(self.enterContext(TemporaryDirectory())).resolve()
         self.root = self.private / sports_batch.SPORTS_SECTION
-        self.enterContext(patch("processing.collection.sports_batch.sleep"))
+        self.sleep = self.enterContext(patch("processing.collection.sports_batch.sleep"))
         self.robots = self.enterContext(patch("processing.collection.sports_batch.fetch_robots", return_value=ROBOTS))
         self.listing = self.enterContext(patch("processing.collection.sports_batch.fetch_listing"))
         self.detail = self.enterContext(patch("processing.collection.sports_batch.fetch_detail"))
@@ -130,7 +162,7 @@ class SportsBatchTest(unittest.TestCase):
         self.assertEqual(receipt["pages"][0]["source_url"], "https://reservation.anseong.go.kr/index.do?menu_id=0008")
         self.assertEqual([item["web_id"] for item in receipt["items"]], ["111", "96"])
         parsed = json.loads((directory / "parsed-96.json").read_text(encoding="utf-8"))
-        self.assertEqual((parsed["parser_version"], parsed["record"]["external_id"]), ("sports-notice-parser-v1", "96"))
+        self.assertEqual((parsed["parser_version"], parsed["record"]["external_id"]), ("sports-notice-parser-v2", "96"))
 
         assets = read_sports_batch(self.private, "run")
         self.assertEqual(list(assets), ["111", "96"])
@@ -174,6 +206,16 @@ class SportsBatchTest(unittest.TestCase):
         self.assertEqual(receipt["stop_http_status"], 429)
         self.assertEqual([call.args for call in self.detail.call_args_list], [("1",), ("3",)])
         self.assertEqual(read_sports_batch(self.private, "run"), {})
+
+    def test_waf_block_and_crawl_delay(self):
+        self.robots.return_value = b"User-agent: *\nCrawl-delay: 30\nDisallow: /admin/\n"
+        self.listing.return_value = listing("1", "2", "3")
+        self.detail.side_effect = SourceHTTPError(400, "체육시설 공지 상세")
+        _, receipt, _ = self.capture()
+        self.assertEqual([item["status"] for item in receipt["items"]], ["fetch_failed", "not_attempted", "not_attempted"])
+        self.assertEqual(receipt["stop_http_status"], 400)
+        self.assertEqual(self.detail.call_count, 1)
+        self.assertEqual([call.args for call in self.sleep.call_args_list], [(30.0,), (30.0,)])
 
     def test_listing_failure_keeps_original(self):
         self.listing.return_value = b"<html><a href='javascript:fnView(96)'>x</a></html>"

@@ -13,7 +13,7 @@ from .capture import (
     write_receipt,
 )
 from .cli import CollectionArguments
-from .official_web import DETAIL_MAX_BYTES
+from .official_web import DETAIL_MAX_BYTES, SourceHTTPError
 from .sports_notices import (
     LISTING_URL, PARSER_VERSION, ROBOTS_MAX_BYTES, ROBOTS_URL, allowed, detail_url, fetch_detail, fetch_listing,
     fetch_robots, parse_detail, parse_listing, robots_rules,
@@ -27,10 +27,12 @@ RECORD_SCHEMA = "citizen-sports-notice-v1"
 BOARD = "notice"
 _ITEM_STATUSES = ("parsed", "parse_failed", "fetch_failed", "not_attempted")
 _ROBOTS_BLOCKED = "robots.txt가 이 상세 주소를 허용하지 않습니다."
+# 이 호스트의 차단 화면은 HTTP 400이다. 공통 중단 상태(web_batch)는 다른 수집기와 같이 두고 여기서만 멈춘다.
+_WAF_BLOCKED = str(SourceHTTPError(400, "체육시설 공지 상세"))
 
 
-def _pause() -> None:
-    sleep(1.5)
+def _pause(delay: float = 0.0) -> None:
+    sleep(max(1.5, delay))  # robots.txt Crawl-delay가 더 길면 그 간격을 쓴다.
 
 
 SOURCE = WebSource(
@@ -49,7 +51,7 @@ SOURCE = WebSource(
 )
 
 
-def _robots(directory: int) -> tuple[dict, object]:
+def _robots(directory: int) -> tuple[dict, dict | None]:
     """robots.txt를 HTTP 200으로 받아 목록 주소를 허용할 때만 규칙을 돌려준다. 4xx도 판단 불가로 멈춘다."""
     entry = {"source_url": ROBOTS_URL}
     try:
@@ -93,7 +95,7 @@ def capture_sports_batch(name: str, root: Path, *, max_items: int = 20) -> dict:
         robots, rules = _robots(directory)
         pages, ids, discovery, stop = [], [], "robots_not_allowed", None
         if rules is not None:
-            _pause()
+            _pause(rules["delay"])
             pages, ids, discovery, stop = _listing(directory, max_items)
         items = []
         for seq in ids:
@@ -102,8 +104,10 @@ def capture_sports_batch(name: str, root: Path, *, max_items: int = 20) -> dict:
             elif not allowed(rules, detail_url(seq)):
                 item = {"web_id": seq, "source_url": detail_url(seq), "status": "not_attempted", "error": _ROBOTS_BLOCKED}
             else:
-                _pause()
+                _pause(rules["delay"])
                 item, stop = capture_detail(directory, SOURCE, seq)
+                if item.get("error") == _WAF_BLOCKED:
+                    stop = 400
             items.append(item)
         parsed = sum(item["status"] == "parsed" for item in items)
         status = "complete" if discovery == "first_page_only" and parsed == len(items) else "partial"

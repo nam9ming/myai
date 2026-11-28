@@ -427,23 +427,23 @@ python3.13 -B -m processing.collection.sports_batch --name sports-20261128 --max
 python3.13 -B -m processing.collection.sports_batch --name sports-20261128 --verify
 ```
 
-- 요청 순서: robots.txt를 먼저 받는다. HTTP 200이고 UTF-8 규칙 줄만 있으며 목록 주소를 허용할 때만 목록 1쪽을, 각 상세 주소를 허용할 때만 그 상세를 받는다. RFC 9309는 4xx robots.txt를 제한 없음으로 볼 수 있게 하지만, 이 호스트의 400은 차단 화면이므로 판단 불가로 보고 멈춘다. 그래서 지금 실행하면 `discovery_status=robots_not_allowed`·종료 2로 끝나고 목록·상세는 요청하지 않는다. 규칙 줄이 아닌 내용(HTML 차단 화면 등)이 있는 200 응답도 같다. `Crawl-delay`는 읽지 않는다.
-- 요청 조건: 호스트 고정, 리디렉션 미추종, 요청 하나씩 1.5초 간격, 크기 한도 robots.txt 512 KiB·목록 2 MiB·상세 8 MiB. 상세는 `--max-items` 1~80건(기본 20)이다. HTTP 401·403·429·503을 받으면 남은 상세를 `not_attempted`로 남긴다.
+- 요청 순서: robots.txt를 먼저 받는다. HTTP 200이고 UTF-8 규칙 줄만 있으며 목록 주소를 허용할 때만 목록 1쪽을, 각 상세 주소를 허용할 때만 그 상세를 받는다. RFC 9309는 4xx robots.txt를 제한 없음으로 볼 수 있게 하지만, 이 호스트의 400은 차단 화면이므로 판단 불가로 보고 멈춘다. 그래서 지금 실행하면 `discovery_status=robots_not_allowed`·종료 2로 끝나고 목록·상세는 요청하지 않는다. 규칙 줄이 아닌 내용(HTML 차단 화면 등)이 있는 200 응답도 같다. 규칙은 표준 라이브러리 `urllib.robotparser`가 아니라 RFC 9309대로 직접 해석한다. 그 라이브러리는 3.13에서 첫 일치 규칙을 쓰고 같은 user-agent의 둘째 그룹과 `*` 와일드카드를 버리며, 3.14에서도 `Disallow: /*seq=`를 놓쳐 상세를 허용했다. 그래서 가장 긴 일치 규칙(길이가 같으면 Allow), `*`·끝 `$`, 같은 이름 그룹의 병합, 제품 토큰 `yeogi-it`의 대소문자 무시 일치(없을 때만 `*` 그룹)를 따른다. 원래 주소와 퍼센트 인코딩을 푼 주소 중 하나라도 막히면 막힌 것으로 본다. 적용 그룹의 `Crawl-delay`가 1.5초보다 길면 그 간격으로 요청하고, 숫자로 읽을 수 없으면 판단 불가로 멈춘다.
+- 요청 조건: 호스트 고정, 리디렉션 미추종, 요청 하나씩 1.5초 간격, 크기 한도 robots.txt 512 KiB·목록 2 MiB·상세 8 MiB. 상세는 `--max-items` 1~80건(기본 20)이다. 상세에서 HTTP 400(이 호스트의 차단 화면)·401·403·429·503을 받으면 남은 상세를 `not_attempted`로 남긴다. 400은 이 수집기에서만 중단 상태로 본다.
 - 목록: 전체 페이지 수·고정 글 표시 형식을 몰라 1쪽만 읽는다. `discovery_status=first_page_only`이며, 상태 `complete`는 1쪽에서 고른 상세를 모두 파싱했다는 뜻일 뿐이다. 상세 링크는 조사 기록의 실제 주소 `index.do?board_id=notice&cp=%2Fboard%2Fview.do&menu_id=0008&pageIndex=1&seq=…`와 인자 다섯 개가 정확히 같은 `href`만 읽는다(`cp`의 `%2F` 인코딩 여부, 상대·절대 주소는 가리지 않는다). 이 호스트 `index.do` 링크에 `seq`가 있는데 형식이 다르거나, 같은 번호가 두 번 나오거나, 상세 링크가 하나도 없으면(예: 자바스크립트 링크) 목록을 실패로 남긴다.
-- 상세 마크업은 가정이다. `input[name=seq]`가 정확히 하나이고 값이 요청과 같아야 하며, 제목은 유일한 `<h4>`(인라인 태그만), 본문은 유일한 `div.view_cont`에서 읽는다. `template`·`noscript` 안은 세지 않는다. 본문 안에서는 문단·표·목록·인라인 태그와 `img`·`a`만 받고, `hidden`·`display:none`·`visibility:hidden`·중복 속성이나 그 밖의 태그가 나오면 형식 변경으로 본다. 실제 응답이 다르면 원본과 파싱 실패 사유를 남긴다.
+- 상세 마크업은 가정이다. `input[name=seq]`가 정확히 하나이고 값이 요청과 같아야 하며, 제목은 유일한 `<h4>`(인라인 태그만, 숨김·중복 속성 검사는 본문과 같다), 본문은 유일한 `div.view_cont`에서 읽는다. `template`·`noscript` 안은 세지 않는다. 본문 안에서는 문단·표·목록·인라인 태그와 `img`·`a`만 받고, `hidden`·`display:none`·`visibility:hidden`·중복 속성이나 그 밖의 태그가 나오면 형식 변경으로 본다. 실제 응답이 다르면 원본과 파싱 실패 사유를 남긴다.
 
-`data/private/collection-sports-notices/<name>/`에 `robots.txt`·`list-1.html`·`detail-<seq>.html`·`parsed-<seq>.json`(파서 `sports-notice-parser-v1`)을 쓰고 마지막에 `batch.json`을 쓴다. 종료 코드는 0 완료, 2 robots 미허용·한도 도달·일부 실패, 1 입력·보관·재검증 오류다. `--verify`는 새 요청 없이 원본 해시, robots.txt 허용, 목록 원본의 공지 번호·순서, 현재 파서로 다시 만든 파싱 결과를 대조한다. **D03 연결은 후속이다.** `batch.json`은 게시판 키 `board=notice`와 공통 묶음(`web_batch.py`)의 상세 기록 형식을 따른다.
+`data/private/collection-sports-notices/<name>/`에 `robots.txt`·`list-1.html`·`detail-<seq>.html`·`parsed-<seq>.json`(파서 `sports-notice-parser-v2`)을 쓰고 마지막에 `batch.json`을 쓴다. 종료 코드는 0 완료, 2 robots 미허용·한도 도달·일부 실패, 1 입력·보관·재검증 오류다. `--verify`는 새 요청 없이 원본 해시, robots.txt 허용, 목록 원본의 공지 번호·순서, 현재 파서로 다시 만든 파싱 결과를 대조한다. **D03 연결은 후속이다.** `batch.json`은 게시판 키 `board=notice`와 공통 묶음(`web_batch.py`)의 상세 기록 형식을 따른다.
 
 파싱 결과는 판정 없이 표시 문구를 그대로 둔다.
 
 | 필드 | 내용 |
 | --- | --- |
-| `title`·`body_lines` | 제목과, 본문을 문단·줄바꿈 경계로 나눈 줄. 줄 안 공백만 하나로 줄이고 빈 줄은 뺀다. |
+| `title`·`body_lines` | 제목과, 본문을 문단·표 칸(`td`·`th`)·줄바꿈 경계로 나눈 줄. 이웃 칸 글자는 붙이지 않는다. 줄 안 공백만 하나로 줄이고 빈 줄은 뺀다. |
 | `images`·`links` | 본문 이미지의 `src`·`alt`, 링크의 `href`·글자 원문. 본문 밖 첨부 목록과 게시일은 위치를 몰라 읽지 않는다. |
 | `keyword_lines` | 제목·본문 줄 가운데 검색어가 든 줄을 그대로 옮긴 색인. 검색어는 공백을 무시하고 맞춘다. `reservation_schedule`: 예약일정·예약기간·예약일시·예약접수·예약개시·예약오픈·예약시작·접수기간·신청기간, `priority`: 우선, `suspension`: 중단·중지·제한·휴관·폐쇄. 넓게 고르므로 관계없는 줄도 들어온다. |
 | `review_flags` | `markup_unverified`(실제 마크업 확인 전까지 항상), `inline_image`, `image_only`, `link`. |
 
-날짜·시간·비용은 해석하지 않는다. 예약(신청) 일정 줄은 이용·운영 일정과 합치지 않으며, 한 줄에 둘이 함께 적혀 있으면 원문 그대로 사람이 나눈다. `priority` 줄은 우선 대상 문구일 뿐 신청 자격 판정이 아니다. 비용은 읽지 않으므로 무료와 미상을 여기서 구분하지 않는다. 조사 기록에 따르면 이용 제한 세부가 이미지에만 있는 공지가 있다([seq=111](https://reservation.anseong.go.kr/index.do?board_id=notice&cp=%2Fboard%2Fview.do&menu_id=0008&pageIndex=1&seq=111)). 이런 공지는 `inline_image`·`image_only`로 사람 확인 대상이 되며 OCR은 하지 않는다.
+날짜·시간·비용은 해석하지 않는다. 예약(신청) 일정 줄은 이용·운영 일정과 합치지 않으며, 원문 한 문단·한 칸에 둘이 함께 적혀 있으면 원문 그대로 사람이 나눈다. `priority` 줄은 우선 대상 문구일 뿐 신청 자격 판정이 아니다. 비용은 읽지 않으므로 무료와 미상을 여기서 구분하지 않는다. 조사 기록에 따르면 이용 제한 세부가 이미지에만 있는 공지가 있다([seq=111](https://reservation.anseong.go.kr/index.do?board_id=notice&cp=%2Fboard%2Fview.do&menu_id=0008&pageIndex=1&seq=111)). 이런 공지는 `inline_image`·`image_only`로 사람 확인 대상이 되며 OCR은 하지 않는다.
 
 확인하지 않은 것: 실제 목록·상세 마크업과 문자 인코딩, 목록의 페이지·고정 글 표시, 이 User-Agent를 막는 차단 규칙이 목록·상세에도 걸리는지, 게시물별 공공누리 표시. 실제 수집 전에 robots.txt를 다시 확인하고, 받은 원본으로 위 가정을 고친 뒤 파서 버전을 올린다.
 

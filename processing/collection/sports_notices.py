@@ -7,8 +7,7 @@
 
 from html.parser import HTMLParser
 import re
-from urllib.parse import parse_qsl, urlencode, urlsplit
-from urllib.robotparser import RobotFileParser
+from urllib.parse import parse_qsl, unquote, urlencode, urlsplit
 
 from .official_web import _fetch
 
@@ -19,15 +18,18 @@ ROBOTS_URL = ORIGIN + "/robots.txt"
 ROBOTS_MAX_BYTES = 512 * 1024
 _LISTING_PATH = "/index.do?menu_id=0008"
 LISTING_URL = ORIGIN + _LISTING_PATH
-PARSER_VERSION = "sports-notice-parser-v1"
+PARSER_VERSION = "sports-notice-parser-v2"
 _DETAIL_QUERY = {"board_id": "notice", "cp": "/board/view.do", "menu_id": "0008", "pageIndex": "1"}
 _SEQ = re.compile(r"[1-9][0-9]{0,17}")
-_ROBOTS_LINE = re.compile(r"[A-Za-z-]+[ \t]*:.*")
+_ROBOTS_LINE = re.compile(r"([A-Za-z-]+)[ \t]*:(.*)")
+_PRODUCT = USER_AGENT.split("/")[0]  # RFC 9309 그룹은 제품 토큰으로 고른다.
+# 다섯 자리를 넘는 값은 sleep 한도를 넘을 수 있어 읽지 않는다.
+_CRAWL_DELAY = re.compile(r"[0-9]{1,5}(?:\.[0-9]+)?")
 _HIDDEN_TAGS = ("template", "noscript")
 _VOID_TAGS = frozenset("area base br col embed hr img input link meta source track wbr".split())
-_BREAK_TAGS = frozenset("br p div li tr h1 h2 h3 h4 h5 h6 table ul ol dl dt dd blockquote caption center hr pre".split())
-_BODY_TAGS = _BREAK_TAGS | frozenset("a b strong em i u s span font sub sup small mark img tbody thead tfoot td th "
-                                     "col colgroup".split())
+_BREAK_TAGS = frozenset("br p div li tr td th h1 h2 h3 h4 h5 h6 table ul ol dl dt dd blockquote caption center hr pre".split())
+_BODY_TAGS = _BREAK_TAGS | frozenset("a b strong em i u s span font sub sup small mark img tbody thead tfoot col "
+                                     "colgroup".split())
 _TITLE_TAGS = frozenset("b strong em i u span font".split())
 _HIDDEN_STYLE = re.compile(r"display\s*:\s*none|visibility\s*:\s*hidden", re.I)
 _INVALID_DETAIL = "체육시설 공지 상세 HTML 구조가 예상과 다릅니다."
@@ -67,22 +69,69 @@ def fetch_detail(seq: str, *, limit: int) -> bytes:
     return _fetch("GET", _detail_path(seq), None, limit, host=HOST, source="체육시설 공지 상세")
 
 
-def robots_rules(raw: bytes) -> RobotFileParser:
-    """HTTP 200으로 받은 robots.txt만 해석한다. 규칙 줄이 아닌 내용(예: HTML 차단 화면)이 있으면 판단하지 않는다."""
+def robots_rules(raw: bytes) -> dict:
+    """HTTP 200으로 받은 robots.txt를 RFC 9309대로 읽어 이 수집기에 적용할 규칙과 Crawl-delay를 돌려준다.
+
+    표준 라이브러리 robotparser는 판(3.13·3.14)마다 최장 일치·와일드카드·그룹 병합·제품 토큰 비교가 달라 쓰지 않는다.
+    규칙 줄이 아닌 내용(예: HTML 차단 화면)이나 읽을 수 없는 Crawl-delay가 있으면 판단하지 않는다.
+    """
     try:
         lines = raw.decode("utf-8-sig").splitlines()
     except UnicodeDecodeError:
         raise ValueError("체육시설 robots.txt를 UTF-8로 읽을 수 없습니다.") from None
-    if any(line.split("#", 1)[0].strip() and not _ROBOTS_LINE.fullmatch(line.split("#", 1)[0].strip())
-           for line in lines):
-        raise ValueError("체육시설 robots.txt에 규칙이 아닌 줄이 있어 허용 여부를 확정할 수 없습니다.")
-    rules = RobotFileParser()
-    rules.parse(lines)
-    return rules
+    groups: list[tuple[set[str], list[tuple[str, str]]]] = []
+    for line in lines:
+        line = line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        match = _ROBOTS_LINE.fullmatch(line)
+        if match is None:
+            raise ValueError("체육시설 robots.txt에 규칙이 아닌 줄이 있어 허용 여부를 확정할 수 없습니다.")
+        key, value = match[1].lower(), match[2].strip()
+        if key == "user-agent":
+            if not groups or groups[-1][1]:  # 규칙 뒤에 나온 user-agent 줄은 새 그룹을 연다.
+                groups.append((set(), []))
+            groups[-1][0].add(value.split("/", 1)[0].strip().lower())
+        elif key in ("allow", "disallow", "crawl-delay") and groups:
+            groups[-1][1].append((key, value))
+    # 이름이 맞는 그룹이 없을 때만 `*` 그룹을 따르고, 맞는 그룹이 여럿이면 규칙을 합친다.
+    chosen = [rules for agents, rules in groups if _PRODUCT in agents] or [
+        rules for agents, rules in groups if "*" in agents]
+    rules = [rule for group in chosen for rule in group]
+    delays = [value for key, value in rules if key == "crawl-delay"]
+    if any(_CRAWL_DELAY.fullmatch(value) is None for value in delays):
+        raise ValueError("체육시설 robots.txt의 Crawl-delay를 읽을 수 없어 요청 간격을 확정할 수 없습니다.")
+    return {"rules": [(key == "allow", value) for key, value in rules if key != "crawl-delay" and value],
+            "delay": max(map(float, delays), default=0.0)}
 
 
-def allowed(rules: RobotFileParser, url: str) -> bool:
-    return rules.can_fetch(USER_AGENT, url)
+def _matches(pattern: str, path: str) -> bool:
+    """`*`는 아무 글자열, 끝의 `$`는 주소 끝이다. 정규식 역추적 없이 조각을 왼쪽부터 찾는다."""
+    anchored = pattern.endswith("$")
+    first, *rest = (pattern[:-1] if anchored else pattern).split("*")
+    if not path.startswith(first):
+        return False
+    position = len(first)
+    for index, part in enumerate(rest):
+        if anchored and index == len(rest) - 1:
+            return path.endswith(part) and len(path) - len(part) >= position
+        position = path.find(part, position)
+        if position < 0:
+            return False
+        position += len(part)
+    return not anchored or position == len(path)
+
+
+def _verdict(rules: list[tuple[bool, str]], path: str) -> bool:
+    return max(((len(pattern), allow) for allow, pattern in rules if _matches(pattern, path)), default=(0, True))[1]
+
+
+def allowed(rules: dict, url: str) -> bool:
+    """가장 긴 일치 규칙을 따르고 길이가 같으면 Allow를 쓴다. 퍼센트 인코딩을 푼 주소·규칙에서 막혀도 막힌 것으로 본다."""
+    parts = urlsplit(url)
+    path = parts.path + ("?" + parts.query if parts.query else "")
+    decoded = [(allow, unquote(pattern)) for allow, pattern in rules["rules"]]
+    return _verdict(rules["rules"], path) and _verdict(decoded, unquote(path))
 
 
 def _feed(parser: HTMLParser, text: str, message: str) -> None:
@@ -158,6 +207,12 @@ def parse_listing(raw: bytes) -> list[str]:
     return ids
 
 
+def _shown(names, values) -> bool:
+    # 속성이 중복되면 브라우저는 첫 값을, 이 파서는 마지막 값을 쓰므로 받지 않는다.
+    return (len(set(names)) == len(names) and "hidden" not in values
+            and not _HIDDEN_STYLE.search(values.get("style") or ""))
+
+
 class _DetailParser(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
@@ -183,7 +238,7 @@ class _DetailParser(HTMLParser):
         if self.body is not None:
             self._body_start(tag, names, values)
         elif self.title is not None:
-            if tag != "br" and tag not in _TITLE_TAGS:
+            if tag != "br" and tag not in _TITLE_TAGS or not _shown(names, values):
                 raise ValueError(_INVALID_DETAIL)
             if tag == "br":
                 self.title.append(" ")
@@ -196,6 +251,8 @@ class _DetailParser(HTMLParser):
         elif tag == "input" and values.get("name") == "seq":
             self.seqs.append(values.get("value"))
         elif tag == "h4":
+            if not _shown(names, values):
+                raise ValueError(_INVALID_DETAIL)
             self.title = []
         elif tag == "div" and "view_cont" in (values.get("class") or "").split():
             self.bodies += 1
@@ -203,9 +260,7 @@ class _DetailParser(HTMLParser):
             self._body_start(tag, names, values)
 
     def _body_start(self, tag, names, values):
-        # 속성이 중복되면 브라우저는 첫 값을, 이 파서는 마지막 값을 쓰므로 받지 않는다.
-        if (tag not in _BODY_TAGS or len(set(names)) != len(names) or "hidden" in values
-                or _HIDDEN_STYLE.search(values.get("style") or "")):
+        if tag not in _BODY_TAGS or not _shown(names, values):
             raise ValueError("체육시설 공지 본문에 허용하지 않는 태그·속성이 있습니다.")
         if tag in _BREAK_TAGS:
             self.text.append("\n")
