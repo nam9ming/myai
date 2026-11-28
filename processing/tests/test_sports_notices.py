@@ -115,8 +115,12 @@ class SportsParserTest(unittest.TestCase):
     def test_robots_rules_need_plain_rule_lines(self):
         rules = robots_rules(b"User-agent: *\nDisallow: /index.do?board_id=\n")
         self.assertFalse(allowed(rules, detail_url("1")))
+        # 빈 파일과, 적용되지 않는 그룹의 이상한 값은 판단을 막지 않는다.
+        for raw in (b"# empty\n\n", b"User-agent: other\nDisallow: x\n\nUser-agent: *\nDisallow: /admin/\n"):
+            self.assertTrue(allowed(robots_rules(raw), detail_url("1")))
         for raw in (b"<html><h1>Request Blocked</h1></html>", "규칙".encode("cp949"),
-                    b"User-agent: *\nCrawl-delay: soon\n"):
+                    b"User-agent: *\nCrawl-delay: soon\n", b"Error: Request Blocked\n",
+                    b"User-agent: *\nDisallow: index.do\n", b"User-agent: yeogi-it\nAllow: https://x/\n"):
             with self.subTest(raw=raw), self.assertRaises(ValueError):
                 robots_rules(raw)
 

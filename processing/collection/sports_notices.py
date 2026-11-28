@@ -73,17 +73,15 @@ def robots_rules(raw: bytes) -> dict:
     """HTTP 200으로 받은 robots.txt를 RFC 9309대로 읽어 이 수집기에 적용할 규칙과 Crawl-delay를 돌려준다.
 
     표준 라이브러리 robotparser는 판(3.13·3.14)마다 최장 일치·와일드카드·그룹 병합·제품 토큰 비교가 달라 쓰지 않는다.
-    규칙 줄이 아닌 내용(예: HTML 차단 화면)이나 읽을 수 없는 Crawl-delay가 있으면 판단하지 않는다.
+    규칙 줄이 아닌 내용(예: HTML 차단 화면), 내용은 있는데 User-agent 줄이 없는 응답(예: `Error: Request Blocked`),
+    적용 그룹의 경로 형식이 아닌 Allow·Disallow 값, 읽을 수 없는 Crawl-delay가 있으면 판단하지 않는다.
     """
     try:
-        lines = raw.decode("utf-8-sig").splitlines()
+        lines = [line.split("#", 1)[0].strip() for line in raw.decode("utf-8-sig").splitlines()]
     except UnicodeDecodeError:
         raise ValueError("체육시설 robots.txt를 UTF-8로 읽을 수 없습니다.") from None
     groups: list[tuple[set[str], list[tuple[str, str]]]] = []
-    for line in lines:
-        line = line.split("#", 1)[0].strip()
-        if not line:
-            continue
+    for line in filter(None, lines):
         match = _ROBOTS_LINE.fullmatch(line)
         if match is None:
             raise ValueError("체육시설 robots.txt에 규칙이 아닌 줄이 있어 허용 여부를 확정할 수 없습니다.")
@@ -94,10 +92,14 @@ def robots_rules(raw: bytes) -> dict:
             groups[-1][0].add(value.split("/", 1)[0].strip().lower())
         elif key in ("allow", "disallow", "crawl-delay") and groups:
             groups[-1][1].append((key, value))
+    if any(lines) and not groups:
+        raise ValueError("체육시설 robots.txt에 User-agent 줄이 없어 허용 여부를 확정할 수 없습니다.")
     # 이름이 맞는 그룹이 없을 때만 `*` 그룹을 따르고, 맞는 그룹이 여럿이면 규칙을 합친다.
     chosen = [rules for agents, rules in groups if _PRODUCT in agents] or [
         rules for agents, rules in groups if "*" in agents]
     rules = [rule for group in chosen for rule in group]
+    if any(key != "crawl-delay" and value and value[0] not in "/*" for key, value in rules):
+        raise ValueError("체육시설 robots.txt의 Allow·Disallow 값이 경로 형식이 아닙니다.")
     delays = [value for key, value in rules if key == "crawl-delay"]
     if any(_CRAWL_DELAY.fullmatch(value) is None for value in delays):
         raise ValueError("체육시설 robots.txt의 Crawl-delay를 읽을 수 없어 요청 간격을 확정할 수 없습니다.")
