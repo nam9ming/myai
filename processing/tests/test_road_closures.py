@@ -113,9 +113,9 @@ class CollectTest(unittest.TestCase):
         self.root = Path(self.temporary).resolve() / rc.CLOSURE_SECTION
         self.enterContext(patch.object(rc, "sleep"))
 
-    def collect(self, *responses):
+    def collect(self, *responses, name="closures-1"):
         with patch.object(rc, "fetch_page", side_effect=list(responses)) as fetch:
-            result = rc.collect_road_closures("0010", "closures-1", self.root, KEY)
+            result = rc.collect_road_closures("0010", name, self.root, KEY)
         return result, fetch
 
     def test_collects_pages_and_rereads_archive(self):
@@ -146,6 +146,18 @@ class CollectTest(unittest.TestCase):
         self.assertFalse((bundle / "anseong.json").exists())
         with self.assertRaisesRegex(ValueError, "완료된"):
             rc.read_road_closure_snapshot(self.root.parent, "closures-1")
+
+    def test_repeated_rows_and_zero_count_fail_closed(self):
+        first = [item(limtPlanSeq=str(n)) for n in range(rc.PAGE_SIZE)]
+        cases = {"앞 페이지": (page(first, total=101), page([first[0]], page=2, total=101)),
+                 "0건": (page([]),)}
+        for message, responses in cases.items():
+            with self.subTest(message=message):
+                result, _ = self.collect(*responses, name=message.encode().hex())
+                bundle = self.root / message.encode().hex()
+                self.assertEqual((result["status"], result["pages"]), ("failed", len(responses)))
+                self.assertIn(message, json.loads((bundle / "closures.json").read_text(encoding="utf-8"))["error"])
+                self.assertFalse((bundle / "anseong.json").exists())
 
     def test_missing_key_and_cli_exit_codes(self):
         with self.assertRaisesRegex(ValueError, rc.SERVICE_KEY_ENV):

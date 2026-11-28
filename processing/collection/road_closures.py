@@ -24,6 +24,7 @@ from .capture import (
     validate_name, write_new, write_receipt,
 )
 from .cli import CollectionArguments
+from .odcloud_format import row_fingerprints
 from .official_web import _fetch
 
 HOST = "data.ex.co.kr"
@@ -200,12 +201,20 @@ def _receipt_base(route: str) -> dict:
 
 
 def _read(raw: bytes, route: str, page: int, total: int | None, list_key: str | None,
-          matched: list, review: list) -> tuple[int, str, int]:
+          seen: set[bytes], matched: list, review: list) -> tuple[int, str, int]:
     found, key, items = parse_page(raw, route, page)
     if (total is not None and found != total) or (list_key is not None and key != list_key):
         raise ValueError(f"{_LABEL} 조회 중 전체 건수 또는 목록 키가 달라졌습니다.")
+    if found == 0:
+        # 노선번호 표를 확인하지 못해 잘못된 노선번호와 '차단 계획 없음'을 구별할 수 없다.
+        raise ValueError(f"{_LABEL}의 전체 건수가 0건이라 노선번호 오류와 차단 계획 없음을 구별할 수 없어 완료로 보지 않습니다.")
     if found > MAX_PAGES * PAGE_SIZE:
         raise ValueError(f"{_LABEL}의 전체 건수가 페이지 수집 한도를 초과했습니다.")
+    # 서버가 pageNo를 무시하거나 정렬이 흔들리면 앞 페이지 행이 다시 오고 다른 행이 빠진다. 한 응답 안의 중복은 허용한다.
+    fingerprints = row_fingerprints(items)
+    if fingerprints & seen:
+        raise ValueError(f"{_LABEL}가 앞 페이지의 행을 다시 보냈습니다. 빠진 행이 있을 수 있습니다.")
+    seen |= fingerprints
     select_items(page, items, matched, review)
     return found, key, len(items)
 
@@ -215,7 +224,7 @@ def collect_road_closures(route: str, name: str, root: Path, key: str) -> dict:
     validate_name(name)
     route_code(route)
     validate_key(key)
-    pages, matched, review = [], [], []
+    pages, matched, review, seen = [], [], [], set()
     total = list_key = None
     rows = 0
     result = {"snapshot_id": name, "status": "failed", "pages": 0, "rows": 0}
@@ -231,7 +240,7 @@ def collect_road_closures(route: str, name: str, root: Path, key: str) -> dict:
                 entry = {"page": page, "file": filename, "source_url": source_url(route, page),
                          "fetched_at": datetime.now(UTC).isoformat(), "sha256": hashlib.sha256(raw).hexdigest()}
                 pages.append(entry)
-                total, list_key, entry["rows"] = _read(raw, route, page, total, list_key, matched, review)
+                total, list_key, entry["rows"] = _read(raw, route, page, total, list_key, seen, matched, review)
                 rows += entry["rows"]
                 if rows == total:
                     break
@@ -258,7 +267,7 @@ def read_road_closure_snapshot(private_root: Path, name: str) -> tuple[bytes, di
                 or any(receipt.get(k) != v for k, v in _receipt_base(route_code(route)).items())
                 or not isinstance(responses, list) or not 1 <= len(responses) <= MAX_PAGES):
             raise ValueError("완료된 고속도로 차단 계획 수집 기록을 확인할 수 없습니다.")
-        matched, review = [], []
+        matched, review, seen = [], [], set()
         total = list_key = None
         rows = 0
         for page, entry in enumerate(responses, 1):
@@ -270,7 +279,7 @@ def read_road_closure_snapshot(private_root: Path, name: str) -> tuple[bytes, di
             raw = read_capture_file(directory, filename, RESPONSE_MAX_BYTES)
             if entry.get("sha256") != hashlib.sha256(raw).hexdigest():
                 raise ValueError("고속도로 차단 계획 응답 원본 해시가 맞지 않습니다.")
-            total, list_key, received = _read(raw, route, page, total, list_key, matched, review)
+            total, list_key, received = _read(raw, route, page, total, list_key, seen, matched, review)
             if type(entry.get("rows")) is not int or entry["rows"] != received:
                 raise ValueError("고속도로 차단 계획 수집 기록의 페이지 건수가 맞지 않습니다.")
             rows += received
