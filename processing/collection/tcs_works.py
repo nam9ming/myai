@@ -1,8 +1,7 @@
-"""경찰청 도시교통정보센터(UTIC) TCS 공사정보 CSV를 운영자가 받은 파일에서 읽어 비공개로 보관한다.
+"""경찰청 도시교통정보센터(UTIC) TCS 공사정보 CSV를 운영자가 받은 파일로 비공개 보관한다.
 
-TCS 자료는 개방데이터 신청(소속·이메일·신청 IP·목적)으로 받은 인증키가 있어야 내려받으므로 자동으로 받지 않는다.
-열 배치는 2026-11-28에 받은 공개 레퍼런스 화면의 예제 행을 따른다. 예제에는 항목표에 없는 두 열(8·9번째)이
-공사 일자 뒤에 있고 항목표의 공지여부(anouncePol)는 없다. 이 두 열은 이름을 붙이지 않고 `columns`에만 원문으로 둔다.
+신청해 받은 인증키가 있어야 내려받으므로 자동으로 받지 않는다. 열 배치는 2026-11-28 공개 레퍼런스 화면의 예제 행을
+따른다. 항목표에 없는 8·9번째 열은 이름 없이 `columns`에만 두고, 예제에 없는 공지여부(anouncePol)는 null이다.
 """
 
 import csv
@@ -31,12 +30,13 @@ SCHEMA = "citizen-tcs-import-v1"
 SELECTION_SCHEMA = "tcs-anseong-v1"
 PARSER_VERSION = "tcs-csv-parser-v6"
 CSV_MAX_BYTES = PORTAL_MAX_BYTES
+SELECTION_MAX_BYTES = 8 * CSV_MAX_BYTES  # anseong.json 쓰기·다시 읽기 공통 한도
 # 레퍼런스 예제의 열 순서. None은 항목표에 없는 열이다.
 LAYOUT = ("seq", "poliCode", "revYear", "revSeq", "poliName", "constFromDate", "constToDate", None, None,
           "constRoad", "trafficControl", "constName", "builderName")
 FIELDS = ("seq", "poliCode", "revYear", "revSeq", "poliName", "constFromDate", "constToDate", "constRoad",
           "trafficControl", "constName", "builderName", "anouncePol")
-# 열 밀림을 찾기 위한 모양 검사. 날짜·시각은 해석하지 않는다. 빈 값은 허용한다.
+# 열 밀림을 찾는 모양 검사. 값은 해석하지 않고 빈 값은 허용한다.
 _SHAPES = {1: r"[0-9]{4}", 2: r"[0-9]{4}", 3: r"[0-9]{6}", 5: r"[0-9]{8}|", 6: r"[0-9]{8}|", 7: r"[0-9]{4}|",
            8: r"[0-9]{4}|"}
 RULE = "constRoad에 '안성시' 포함 또는 poliName이 '안성'(안성경찰서)"
@@ -46,7 +46,7 @@ READ_FIELDS = ("constRoad", "poliName", *OTHER_FIELDS)
 
 
 def decode_csv(raw: bytes) -> tuple[str, str]:
-    """UTF-8(BOM 허용)과 CP949만 받는다. 둘 다로 읽히는데 글자가 다르면 어느 쪽인지 알 수 없어 거부한다."""
+    """UTF-8(BOM 허용)과 CP949만 받고, 둘 다 읽히는데 글자가 다르면 거부한다."""
     if b"\x00" in raw:
         raise ValueError("TCS CSV에 NUL 바이트가 있습니다(UTF-16 등은 지원하지 않음).")
     bom = raw.startswith(b"\xef\xbb\xbf")
@@ -126,7 +126,7 @@ def select_records(records: list[dict]) -> tuple[list, list]:
         elif match:
             matched.append({"match": match, "record": record})
         elif _no_location(fields["constRoad"]) and _no_location(fields["poliName"]):
-            # 위치 근거가 없는(자리표시 포함) 행을 버리면 안성 행이 조용히 빠질 수 있다. 저장 값은 원문 그대로다.
+            # 위치 근거 없는 행을 버리면 안성 행이 조용히 빠질 수 있다.
             review.append({"reason": "blank_location", "record": record,
                            "mentions": [name for name in OTHER_FIELDS if _has(fields[name], "안성")]})
         elif found := [name for name in ("constRoad", "poliName") if _has(fields[name], "안성")]:
@@ -137,13 +137,15 @@ def select_records(records: list[dict]) -> tuple[list, list]:
 
 
 def _selection(raw: bytes) -> tuple[bytes, dict]:
-    """원본에서 선택 결과와 기록 요약을 만든다. 디코딩·CSV 형식 오류는 ValueError로 알린다."""
+    """원본에서 선택 결과와 기록 요약을 만든다. 디코딩·형식·크기 오류는 ValueError로 알린다."""
     text, encoding = decode_csv(raw)
     records, rejected = parse_tcs_csv(text)
     matched, review = select_records(records)
     document = {"schema_version": SELECTION_SCHEMA, "parser_version": PARSER_VERSION, "rule": RULE,
                 "encoding": encoding, "rows": matched, "needs_review": review, "rejected": rejected}
     selection = (json.dumps(document, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    if len(selection) > SELECTION_MAX_BYTES:
+        raise ValueError(f"안성 선택 결과가 다시 읽기 한도 {SELECTION_MAX_BYTES}바이트를 넘습니다.")
     return selection, {"file": "anseong.json", "sha256": hashlib.sha256(selection).hexdigest(), "encoding": encoding,
                        "records": len(records), "rows": len(matched), "needs_review": len(review),
                        "rejected": len(rejected)}
@@ -155,7 +157,7 @@ def _base() -> dict:
 
 
 def import_tcs(csv_file: Path, name: str, root: Path) -> dict:
-    """운영자 CSV를 먼저 그대로 쓰고 `tcs.json`을 마지막에 쓴다. 내려받은 시각은 알 수 없어 들여온 시각만 남긴다."""
+    """운영자 CSV를 먼저 그대로 쓰고 `tcs.json`을 마지막에 쓴다. 내려받은 시각은 몰라 들여온 시각만 남긴다."""
     validate_name(name)
     raw = read_raw(csv_file, CSV_MAX_BYTES, "TCS CSV")
     with bundle_directory(root, name) as directory:
@@ -188,7 +190,7 @@ def read_tcs_snapshot(private_root: Path, name: str) -> tuple[bytes, dict]:
             raise ValueError("TCS CSV 원본 해시가 맞지 않습니다.")
         selection, computed = _selection(raw)
         status = "partial" if computed["rejected"] or not computed["records"] else "complete"
-        if (read_capture_file(directory, "anseong.json", 8 * CSV_MAX_BYTES) != selection
+        if (read_capture_file(directory, "anseong.json", SELECTION_MAX_BYTES) != selection
                 or receipt.get("selection") != computed or receipt["status"] != status):
             raise ValueError("TCS 안성 선택 결과가 CSV 원본 또는 보관 기록과 다릅니다.")
         return selection, receipt

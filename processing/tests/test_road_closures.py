@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from processing.collection import road_closures as rc
 
-# 합성 값. 실제 인증 키와 실제 API 응답이 아니다. 목록 키 이름 `list`도 합성이다.
+# 합성 값. 실제 인증 키·API 응답이 아니며 목록 키 `list`도 합성이다.
 KEY = "synthetic+ex/key="
 ENCODED_KEY = "synthetic%2Bex%2Fkey%3D"
 
@@ -95,8 +95,8 @@ class ParseTest(unittest.TestCase):
                     rc.parse_page(raw, "0010", 1)
 
     def test_selects_only_explicit_section_text(self):
-        # 3.2 뒤에 생긴 문자(Garay, 3.14의 casefold가 옛 글자로 바꾸는 U+A7CB)도 파이썬 판과 관계없이 검토로 간다.
-        # 반각 채움·반각 'ㅡ'·첫가끝 채움·첫가끝 'ㅡ'·NFD '수원'·호환 채움은 자모뿐이라 자리표시다.
+        # 3.2 뒤 문자(Garay, 3.14 casefold가 바꾸는 U+A7CB)도 판과 관계없이 검토로 간다.
+        # 반각·첫가끝·호환 채움, 'ㅡ', NFD '수원'은 자모뿐이라 자리표시다.
         names = ("-", "없음", "\U00010D50", "\ua7cb", "ㅡ", "\uffa0", "\uffda", "\u115f\u1160", "\u1173",
                  "\u1109\u116e\u110b\u116f\u11ab", " \u3164 ")
         rows = [item(), item(section="서울TG~수원IC", name=""), item(section="안성선", name=""),
@@ -114,7 +114,7 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(matched[0]["page"], 3)
 
     def test_markup_goes_to_review_before_matching(self):
-        # 태그·문자 참조가 있으면 화면 글자를 알 수 없어 일치·불일치 모두 원문으로 정하지 않는다.
+        # 태그·문자 참조가 있으면 화면 글자를 알 수 없다.
         rows = [item(section="안성IC&lt;"), item(section="경부선", name="&#xC548;성IC"),
                 item(section="경부선", name="평택IC", cnstnCtnt="안<b></b>성 방면"), item(blcCtnt="1차로<br>차단")]
         matched, review = [], []
@@ -131,9 +131,9 @@ class ParseTest(unittest.TestCase):
         rows = [item(section="무주 안성\u200b면 부근"), item(section="안성\ufe0f면"),
                 *[item(section="경부선", name=f"안{c}성IC") for c in chars], item(section="경부선", name="\uffa0수원IC"),
                 item(section="경부선", name="평택IC", cnstnCtnt="안\u00ad성 방면"),
-                # 채움 문자 앞 제어 문자도 빈 값이 아니라 invisible이다.
+                # 채움 문자 앞 제어 문자도 invisible이다.
                 item(section="경부선", name="\x1c\u3164"), item(section="\x0b\u3164", name="평택IC"),
-                # str.strip이 지우는 제어 문자만 있어도 빈 값이 아니다.
+                # strip이 지우는 제어 문자만 있어도 빈 값이 아니다.
                 item(section="경부선", name="\x1c"), item(section="경부선", name="\x85 "), item(section="\x0b", name="평택IC"),
                 item(section="경부선", name="평택IC", blcCtnt="\x0b"),
                 item(blcCtnt="1차로\t차단\r\n")]
@@ -174,7 +174,7 @@ class CollectTest(unittest.TestCase):
             rc.read_road_closure_snapshot(self.root.parent, "closures-1")
 
     def test_selection_limit_is_checked_at_write(self):
-        # 긴 구간명이 match·record에 겹친 20페이지. 한도까지 다시 읽고 넘으면 쓰지 않는다.
+        # 긴 구간명이 match·record에 겹친 20페이지.
         total = rc.MAX_PAGES * rc.PAGE_SIZE
         pages = [page([item(section="안성IC" * 50, limtPlanSeq=f"{p}-{n}") for n in range(rc.PAGE_SIZE)], page=p,
                       total=total) for p in range(1, rc.MAX_PAGES + 1)]

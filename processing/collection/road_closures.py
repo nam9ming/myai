@@ -1,8 +1,7 @@
 """한국도로공사 공사 및 도로 차단 계획 OpenAPI 응답과 안성 구간 선택 결과를 비공개로 보관한다.
 
-공공데이터포털 15076650은 제공처 링크형 API다. 요청·출력 항목은 2026-11-28에 받은 제공처 상세 화면
-(data.ex.co.kr apiId 0613)의 항목표를 따른다. 키가 없어 실제 응답은 받지 않았다. 항목표에 없는 목록 키 이름과
-성공 코드 값은 추정해 넓히지 않고, 다르면 원본과 사유를 남기고 멈춘다.
+요청·출력 항목은 2026-11-28 제공처 상세 화면(data.ex.co.kr apiId 0613)의 항목표를 따른다. 키가 없어 실제 응답은
+받지 않았다. 항목표에 없는 목록 키·성공 코드는 넓혀 추정하지 않고 다르면 원본과 사유를 남기고 멈춘다.
 """
 
 from datetime import UTC, datetime
@@ -31,7 +30,6 @@ HOST = "data.ex.co.kr"
 PATH = "/openapi/safeDriving/construction"
 CATALOG_URL = "https://www.data.go.kr/data/15076650/openapi.do"
 SPEC_URL = "https://data.ex.co.kr/openapi/basicinfo/openApiInfoM?apiId=0613"
-# 키는 공공데이터포털이 아니라 고속도로 공공데이터 포털(data.ex.co.kr)이 발급한다.
 SERVICE_KEY_ENV = "EX_OPENAPI_KEY"
 CLOSURE_SECTION = "collection-road-closures"
 CLOSURE_ROOT = CAPTURE_ROOT.with_name(CLOSURE_SECTION)
@@ -51,7 +49,7 @@ FIELDS = ("limtPlanDates", "limtPlanSeq", "hqdrNm", "mtnofKorNm", "cnstnStrtDate
 SECTION_FIELDS = ("useRotnm", "icNm")
 OTHER_FIELDS = ("hqdrNm", "mtnofKorNm", "blcCtnt", "cnstnCtnt")
 RULE = "icNm이 자리표시가 아니고 useRotnm 또는 icNm에 '안성' 포함('안성면' 제외)"
-# 항목표에 값이 없다. 같은 포털 다른 API의 'SUCCESS'만 성공으로 보고 다르면 거부한다(미확인).
+# 항목표에 없어 같은 포털 다른 API 관례를 따른다(미확인).
 SUCCESS_CODES = ("SUCCESS",)
 _ANSEONG = re.compile("안성(?!면)")
 _KEY = re.compile(r"[A-Za-z0-9_+/=-]{8,256}", re.ASCII)
@@ -60,9 +58,9 @@ _ASCII_ESCAPE = re.compile(r"\\u00([0-7][0-9a-fA-F])")
 # 첫가끝·호환·반각 한글 자모(채움 문자 포함).
 _JAMO = re.compile("[\u1100-\u11ff\u3131-\u318e\uffa0-\uffdc]")
 _LABEL = "고속도로 차단 계획 API"
-# 실제 표본(TCS 예제 8행, API 응답 0건)에 태그·문자 참조가 없어 `<`·`&`는 모두 검토로 보낸다.
+# 실제 표본에 태그·문자 참조가 없어 `<`·`&`는 모두 검토로 보낸다.
 _MARKUP = re.compile("[<&]")
-# 제어 문자(탭·줄바꿈 제외)·기본 무시 문자. 파이썬 판과 관계없게 코드값으로 고정한다.
+# 제어 문자(탭·줄바꿈 제외)·기본 무시 문자. 판과 무관하게 코드값으로 고정한다.
 _INVISIBLE = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f"
                         "\u200b-\u200f\u202a-\u202e\u2060-\u206f\u3164\ufe00-\ufe0f\ufeff\uffa0\U0001bca0-\U0001bca3"
                         "\U0001d173-\U0001d17a\U000e0000-\U000e0fff]")
@@ -94,10 +92,7 @@ def source_url(route: str, page: int) -> str:
 
 
 def reject_key_echo(raw: bytes, key: str) -> None:
-    """키가 원문·URL 인코딩·JSON 이스케이프·HTML 문자 참조로 들어 있으면 저장 전에 거부한다.
-
-    NUL이 있거나 UTF-8이 아닌 본문은 키 비교를 빠져나갈 수 있어 확인하기 전에 거부한다. 파서도 읽지 않는다.
-    """
+    """키가 원문·URL 인코딩·JSON 이스케이프·HTML 문자 참조로 있으면 거부한다. NUL·비UTF-8 본문은 먼저 거부한다."""
     if b"\x00" in raw:
         raise ValueError(f"{_LABEL} 응답에 NUL 바이트가 있어 인증 키 포함 여부를 확인할 수 없습니다.")
     try:
@@ -127,7 +122,7 @@ def _label(value: object) -> str:
 
 
 def _count(value: object, name: str) -> int:
-    # 항목표는 모든 값을 string으로 적는다. 숫자 문자열과 정수만 받는다.
+    # 항목표는 모든 값을 string으로 적어 숫자 문자열과 정수만 받는다.
     if type(value) is int and value >= 0:
         return value
     if isinstance(value, str) and re.fullmatch(r"[0-9]{1,9}", value, re.ASCII):
@@ -136,7 +131,7 @@ def _count(value: object, name: str) -> int:
 
 
 def parse_page(raw: bytes, route: str, page: int) -> tuple[int, str, list[dict]]:
-    """전체 건수, 목록 키 이름, 항목을 돌려준다. 값은 원문 그대로 두고 없거나 공백뿐이면 null과 사유를 남긴다."""
+    """전체 건수·목록 키·항목. 값은 원문 그대로, 없거나 공백뿐이면 null과 사유를 남긴다."""
     _arguments(route, page)
     try:
         document = decode(raw, "input", max_bytes=RESPONSE_MAX_BYTES)
@@ -147,7 +142,7 @@ def parse_page(raw: bytes, route: str, page: int) -> tuple[int, str, list[dict]]
     if document.get("code") not in SUCCESS_CODES:
         raise ValueError(f"{_LABEL} 결과 코드가 성공이 아닙니다"
                                  f"({_label(document.get('code'))}: {_label(document.get('message'))}).")
-    # 항목표에 목록 키 이름이 없다. 봉투 밖의 키가 정확히 하나일 때만 그 값을 목록으로 본다.
+    # 목록 키 이름은 항목표에 없어 봉투 밖 키가 하나일 때만 목록으로 본다.
     extra = set(document) - set(ENVELOPE)
     if set(ENVELOPE) - set(document) or len(extra) != 1 or not isinstance(document[next(iter(extra))], list):
         raise ValueError(f"{_LABEL} 응답 구조가 항목표와 다릅니다.")
@@ -166,12 +161,12 @@ def parse_page(raw: bytes, route: str, page: int) -> tuple[int, str, list[dict]]
         fields, unknown = {}, {}
         for name in FIELDS:
             value = row.get(name)
-            # str.strip이 공백으로 지우는 제어 문자(U+000B·U+001C 등)만 있는 값은 빈 값이 아니라 invisible로 보낸다.
+            # strip이 지우는 제어 문자(U+000B 등)만 있어도 빈 값이 아니라 invisible이다.
             blank = value is None or (isinstance(value, str) and not value.strip() and not _INVISIBLE.search(value))
             fields[name] = None if blank else value
             if blank:
                 unknown[name] = "missing" if name not in row else "empty"
-        # 노선번호로 거른 목록인지 확인한다. 형식이 달라도(예: 10과 0010) 맞춰 고치지 않는다.
+        # 형식이 달라도(예: 10과 0010) 고치지 않는다.
         if fields["routeCd"] != route:
             raise ValueError(f"{_LABEL} 응답 항목의 노선코드가 요청과 다릅니다.")
         undocumented = {name: value for name, value in row.items() if name not in FIELDS}
@@ -185,9 +180,8 @@ def _mentions(fields: dict, names: tuple[str, ...], pattern: str | re.Pattern) -
 
 
 def _no_location(value: object) -> bool:
-    """위치 판정용 빈 값. 공용 `_blank`와 달리 아래 기준으로 본다."""
-    # isalnum·casefold는 파이썬 판마다 결과가 달라 3.2 DB를 쓴다. 그 뒤에 생긴 문자는 Cn이라 자리표시다.
-    # 글자가 한글 자모뿐이면('ㅡ'·채움 문자, NFC 전 원문이라 NFD 한글 포함) 자리표시다. 자모만으로 쓴 지명은 없다.
+    """위치 판정용 빈 값. 판마다 다른 isalnum 대신 3.2 DB를 써 그 뒤 문자(Cn)는 자리표시다."""
+    # 한글 자모뿐인 값('ㅡ'·채움 문자, NFD 한글 포함)도 자리표시다. 자모만으로 쓴 지명은 없다.
     if not isinstance(value, str):
         return value is None
     return ("".join(unicodedata.normalize("NFC", value).split()).casefold() in PLACEHOLDERS
@@ -205,13 +199,13 @@ def unreadable(fields: dict, names: tuple[str, ...]) -> str | None:
 
 
 def select_items(page: int, items: list[dict], matched: list, review: list) -> None:
-    """차단 구간 글자에 안성이 보이는 항목만 고른다. 판단할 수 없거나 다른 열에만 보이면 사람 검토로 넘긴다."""
+    """구간 글자에 안성이 보이는 항목만 고르고 판단할 수 없거나 다른 열에만 보이면 검토로 넘긴다."""
     for position, item in enumerate(items, 1):
         fields, place = item["fields"], {"page": page, "position": position}
         if reason := unreadable(fields, FIELDS):
             review.append({**place, "reason": reason, "mentions": _mentions(fields, FIELDS, "안성"), "record": item})
         elif _no_location(fields["icNm"]):
-            # useRotnm은 노선명뿐일 수 있어 icNm이 비거나 자리표시뿐이면 일치해도 구간 근거가 없다. 저장 값은 원문 그대로다.
+            # useRotnm은 노선명뿐일 수 있어 icNm 없이는 구간 근거가 없다.
             review.append({**place, "reason": "blank_section", "mentions": _mentions(fields, FIELDS, "안성"),
                            "record": item})
         elif found := _mentions(fields, SECTION_FIELDS, _ANSEONG):
@@ -244,11 +238,10 @@ def _read(raw: bytes, route: str, page: int, total: int | None, list_key: str | 
     if (total is not None and found != total) or (list_key is not None and key != list_key):
         raise ValueError(f"{_LABEL} 조회 중 전체 건수 또는 목록 키가 달라졌습니다.")
     if found == 0:
-        # 노선번호 표를 확인하지 못해 잘못된 노선번호와 '차단 계획 없음'을 구별할 수 없다.
         raise ValueError(f"{_LABEL}의 전체 건수가 0건이라 노선번호 오류와 차단 계획 없음을 구별할 수 없어 완료로 보지 않습니다.")
     if found > MAX_PAGES * PAGE_SIZE:
         raise ValueError(f"{_LABEL}의 전체 건수가 페이지 수집 한도를 초과했습니다.")
-    # pageNo 무시·정렬 흔들림이면 앞 페이지 행이 다시 오고 다른 행이 빠진다. 한 응답 안 중복은 허용한다.
+    # pageNo 무시·정렬 흔들림이면 앞 페이지 행이 다시 온다. 한 응답 안 중복은 허용한다.
     fingerprints = row_fingerprints(items)
     if fingerprints & seen:
         raise ValueError(f"{_LABEL}가 앞 페이지의 행을 다시 보냈습니다. 빠진 행이 있을 수 있습니다.")
@@ -258,7 +251,7 @@ def _read(raw: bytes, route: str, page: int, total: int | None, list_key: str | 
 
 
 def collect_road_closures(route: str, name: str, root: Path, key: str) -> dict:
-    """응답 원본을 먼저 쓰고 `closures.json`을 마지막에 쓴다. 키는 요청에만 쓰고 기록하지 않는다."""
+    """응답 원본을 먼저 쓰고 `closures.json`을 마지막에 쓴다. 키는 요청에만 쓴다."""
     validate_name(name)
     route_code(route)
     validate_key(key)

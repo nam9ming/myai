@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from processing.collection import tcs_works as tcs
 
-# 합성 행. 공개 레퍼런스 예제와 같은 13열 배치이며 실제 신고 자료가 아니다.
+# 합성 행. 레퍼런스 예제와 같은 13열이며 실제 신고 자료가 아니다.
 
 
 def row(number=1, police="합성", road="합성로", control="", name="합성 공사", builder="합성건설", code="9999"):
@@ -93,16 +93,16 @@ class ParseTest(unittest.TestCase):
                          [(3, "mention", ["constRoad"]), (4, "other_mention", ["constName"]),
                           (7, "blank_location", ["constName"]), (8, "blank_location", []),
                           (9, "blank_location", []), (10, "blank_location", ["trafficControl"]),
-                          # 3.2 뒤에 생긴 문자만 있으면 파이썬 판과 관계없이 검토로 간다(3.14 isalnum으로는 other_mention).
+                          # 3.2 뒤 문자만 있으면 판과 관계없이 검토다(3.14 isalnum이면 other_mention).
                           (11, "blank_location", ["constName"]),
-                          # 줄표 대신 친 한글 자모 'ㅡ'와 반각·첫가끝 자모·채움 문자도 자리표시다.
+                          # 'ㅡ'와 반각·첫가끝 자모·채움 문자도 자리표시다.
                           (12, "blank_location", []), (13, "blank_location", []), (14, "blank_location", []),
                           (15, "blank_location", []), (16, "blank_location", [])])
         self.assertEqual([review[4]["record"]["fields"]["poliName"], review[5]["record"]["fields"]["constRoad"]],
                          ["-", " - "])
 
     def test_markup_in_read_columns_goes_to_review(self):
-        # 읽는 네 열의 `<`·`&`만 본다. 판단에 쓰지 않는 시공사 열은 보지 않는다.
+        # 읽는 네 열만 본다. 시공사 열은 보지 않는다.
         rows = [row(1, road="안성시 &amp; 평택시"), row(2, police="&#xC548;성"), row(3, control="안<b></b>성 방면"),
                 row(4, name="<br>"), row(5, builder="<b>합성</b>건설")]
         matched, review = tcs.select_records(tcs.parse_tcs_csv(csv_bytes(*rows).decode())[0])
@@ -111,7 +111,7 @@ class ParseTest(unittest.TestCase):
                          [(1, "markup", ["constRoad"]), (2, "markup", []), (3, "markup", []), (4, "markup", [])])
 
     def test_invisible_characters_in_read_columns_go_to_review(self):
-        # 보이지 않는 문자가 `안성`을 가르면 조용히 빠진다. 판단에 쓰지 않는 시공사 열은 보지 않는다.
+        # 보이지 않는 문자가 `안성`을 가르면 조용히 빠진다. 시공사 열은 보지 않는다.
         rows = [row(1, police="안\u200b성"), row(2, road="안\u00ad성시 합성로"), row(3, control="\x01"),
                 row(4, name="안\ufe0f성 방면"), row(5, builder="안\u200b성건설"), row(6, police="", road=" \u3164 "),
                 row(7, name="\x1f\u3164"), row(8, name="\x1f"), row(9, control="\x0c"), row(10, police="\x1c", road="")]
@@ -157,6 +157,17 @@ class ImportTest(unittest.TestCase):
         self.assertEqual((self.root / "tcs-2" / "source.csv").read_bytes(), b"\xff\xfe\x80")
         with self.assertRaisesRegex(ValueError, "보관 기록"):
             tcs.read_tcs_snapshot(self.temporary, "tcs-2")
+
+    def test_selection_limit_is_checked_at_write(self):
+        self.run_import(csv_bytes(row(1, road="안성시")))
+        size = len(tcs.read_tcs_snapshot(self.temporary, "tcs-1")[0])
+        with patch.object(tcs, "SELECTION_MAX_BYTES", size):
+            self.assertEqual(tcs.import_tcs(self.source, "fit", self.root)["status"], "complete")
+            self.assertEqual(len(tcs.read_tcs_snapshot(self.temporary, "fit")[0]), size)
+        with patch.object(tcs, "SELECTION_MAX_BYTES", size - 1):
+            self.assertEqual(tcs.import_tcs(self.source, "over", self.root)["status"], "failed")
+        self.assertIn("한도", json.loads((self.root / "over" / "tcs.json").read_bytes())["error"])
+        self.assertFalse((self.root / "over" / "anseong.json").exists())
 
     def test_cli_exit_codes(self):
         with patch("sys.argv", ["x", "--csv"]), contextlib.redirect_stderr(io.StringIO()):
