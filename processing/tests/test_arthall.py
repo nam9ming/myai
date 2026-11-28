@@ -98,6 +98,8 @@ class ArthallListingTest(unittest.TestCase):
                          ('"con_list"', '"con_list" hidden'), ("</div></li>", "</span></div></li>"), ('"fR">', '"fR"></div\xa0>'),
                          ('<div class="con_list">', "<div hidden><table></div><div class=con_list>"),
                          ('onclick="go', 'onclic\u212a="go'), ("<form", "<lin\u212a hidden><form"),
+                         # 이름 속 따옴표로 켈빈 기호를 따옴표 안처럼 보이게 한 태그(공용 파서가 거부한다).
+                         ("<form", '<div" onclic\u212a="x" y="z"></div><form'),
                          ("<form", "<svg><source hidden><foreignObject><form")):
             cases[new] = (listing("1").replace(old.encode(), new.encode(), 1), {})
         cases["빈 안내"] = (listing().replace("검색된 전체일정이 없습니다.".encode(), b""), {})

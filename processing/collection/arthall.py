@@ -113,17 +113,10 @@ class _Parser(PinnedHTMLParser):
     def start_capture(self, allowed, done):
         self.capture = [len(self.open), [], allowed, done]
 
-    def parse_endtag(self, i):
-        # 끝 태그도 ASCII만 받는다(이유는 handle_starttag).
-        if not self.rawdata[i:self.rawdata.find(">", i) + 1].isascii():
-            self.fail()
-        return super().parse_endtag(i)
-
     def handle_starttag(self, tag, attrs):
         super().handle_starttag(tag, attrs)
-        # Python만 이름의 켈빈 기호를 k로 바꿔 `<linK>`를 빈 요소로 읽고, svg·math 안은 빈 요소 규칙이 다르다.
-        # 실제 29건은 태그의 따옴표 밖이 ASCII였고 svg·math가 없었다.
-        if tag in FOREIGN_TAGS or not re.sub(r"\"[^\"]*\"|'[^']*'", "", self.get_starttag_text()).isascii():
+        # svg·math 안은 빈 요소 규칙이 달라 받지 않는다(실제 29건에 없었다). 이름의 비ASCII는 공용 파서가 거부한다.
+        if tag in FOREIGN_TAGS:
             self.fail()
         values = dict(attrs)
         if len(values) < len(attrs):  # 브라우저는 같은 이름 속성의 첫 값을 쓴다.
