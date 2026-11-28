@@ -281,6 +281,11 @@ class GosiBatchTest(unittest.TestCase):
         self.detail = self.enterContext(patch("processing.collection.gosi_batch.fetch_gosi_detail"))
         self.detail.side_effect = lambda notice_id, **_options: detail(notice_id).encode()
 
+    def run_cli(self, *argv, redirect=contextlib.redirect_stdout):
+        with (patch.object(gosi_batch, "GOSI_ROOT", self.root), patch("sys.argv", ["gosi_batch", *argv]),
+              redirect(io.StringIO()) as output):
+            return gosi_batch.main(), output.getvalue()
+
     def test_capture_keeps_raw_and_read_revalidates(self):
         self.listing.side_effect = [listing("3", "2", total=2), listing("1", page=2, total=2)]
         summary = capture_gosi_batch("run", self.root)
@@ -306,23 +311,32 @@ class GosiBatchTest(unittest.TestCase):
             read_gosi_batch(self.private, "run")
 
     def test_mismatched_detail_keeps_raw_and_reason(self):
-        self.listing.return_value = listing("5", "6")
+        self.listing.side_effect = [listing("5", "6", total=2), b"bad"]
         self.detail.side_effect = [detail("5", title="다른 글").encode(), ValueError("합성 수신 실패")]
         summary = capture_gosi_batch("run", self.root)
         self.assertEqual((summary["status"], summary["parsed"]), ("partial", 0))
         receipt = json.loads((self.root / "run" / "batch.json").read_text(encoding="utf-8"))
-        self.assertEqual([item["status"] for item in receipt["items"]], ["parse_failed", "fetch_failed"])
+        self.assertEqual([entry["status"] for entry in receipt["pages"] + receipt["items"]],
+                         ["parsed", "parse_failed", "parse_failed", "fetch_failed"])
         self.assertIn("목록 항목과 일치하지", receipt["items"][0]["error"])
         self.assertTrue((self.root / "run" / "detail-5.html").exists())
         self.assertEqual(read_gosi_batch(self.private, "run"), {})
+        # 파싱에 실패한 목록·상세 원본도 바뀌거나 지워지면 verify가 실패해야 한다.
+        for name in ("list-2.html", "detail-5.html"):
+            path = self.root / "run" / name
+            raw = path.read_bytes()
+            for change, reason in ((lambda: path.write_bytes(b"x"), "원본 해시"), (path.unlink, "안전하게 읽을")):
+                change()
+                code, output = self.run_cli("verify", "--name", "run", redirect=contextlib.redirect_stderr)
+                self.assertEqual(code, 1, name)
+                self.assertIn(reason, output)
+                path.write_bytes(raw)
+                path.chmod(0o600)
+        self.assertEqual(self.run_cli("verify", "--name", "run")[0], 0)
 
     def test_cli_reports_capture_and_verify(self):
         self.listing.return_value = listing("7")
-
-        def run(*argv, redirect=contextlib.redirect_stdout):
-            with (patch.object(gosi_batch, "GOSI_ROOT", self.root), patch("sys.argv", ["gosi_batch", *argv]),
-                  redirect(io.StringIO()) as output):
-                return gosi_batch.main(), output.getvalue()
+        run = self.run_cli
         code, output = run("capture", "--name", "a")
         self.assertEqual((code, json.loads(output)["parsed"]), (0, 1))
         code, output = run("verify", "--name", "a")

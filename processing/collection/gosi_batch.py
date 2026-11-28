@@ -21,6 +21,8 @@ GOSI_SECTION = "collection-gosi"
 GOSI_ROOT = CAPTURE_ROOT.with_name(GOSI_SECTION)
 BATCH_SCHEMA = "citizen-gosi-batch-v1"
 RECORD_SCHEMA = "citizen-gosi-notice-v1"
+# 파싱에 실패해도 원본은 남으므로 파일과 해시는 함께 대조한다.
+_RAW_KEPT = ("parsed", "parse_failed")
 
 
 def _remember(rows: dict[str, dict], items: list[dict]) -> list[str]:
@@ -83,13 +85,16 @@ def read_gosi_batch(private_root: Path, name: str) -> dict[str, dict]:
             raise ValueError(f"{LABEL} 수집 기록의 규격·이름이 맞지 않습니다.")
         rows: dict[str, dict] = {}
         for entry in pages:
-            if not isinstance(entry, dict) or entry.get("status") != "parsed":
+            status = entry.get("status") if isinstance(entry, dict) else None
+            if status not in _RAW_KEPT:
                 continue
             page = entry.get("page")
             if type(page) is not int or page < 1:
                 raise ValueError(f"{LABEL} 수집 기록의 목록 페이지가 맞지 않습니다.")
             raw = _checked(directory, entry, f"list-{page}.html", OFFICIAL_ORIGIN + gosi_listing_path(page),
                            LIST_MAX_BYTES)
+            if status != "parsed":
+                continue
             total, found = parse_gosi_listing(raw, page=page)
             if entry.get("reported_pages") != total or entry.get("web_ids") != _remember(rows, found):
                 raise ValueError(f"{LABEL} 목록 원본과 수집 기록의 게시물 번호가 다릅니다.")
@@ -99,11 +104,13 @@ def read_gosi_batch(private_root: Path, name: str) -> dict[str, dict]:
             if notice_id not in rows or notice_id in seen:
                 raise ValueError(f"{LABEL} 수집 기록의 게시물 번호가 목록 원본과 맞지 않습니다.")
             seen.add(notice_id)
-            if item.get("status") != "parsed":
+            if item.get("status") not in _RAW_KEPT:
                 continue
             url = gosi_detail_url(notice_id)
-            text, digest = decode_input(_checked(directory, item, f"detail-{notice_id}.html", url, DETAIL_MAX_BYTES),
-                                        f"{LABEL} 상세")
+            raw = _checked(directory, item, f"detail-{notice_id}.html", url, DETAIL_MAX_BYTES)
+            if item["status"] != "parsed":
+                continue
+            text, digest = decode_input(raw, f"{LABEL} 상세")
             parsed_file = f"parsed-{notice_id}.json"
             stored = read_receipt(directory, parsed_file) if item.get("parsed_file") == parsed_file else None
             if not isinstance(stored, dict) or stored.get("parser_version") != PARSER_VERSION:
