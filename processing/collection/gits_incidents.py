@@ -116,6 +116,9 @@ def _item(element: ElementTree.Element) -> dict:
     for child in element:
         if len(child):
             raise ValueError(f"{LABEL} 응답에 예시에 없는 하위 구조가 있습니다({_label(child.tag)}).")
+        # 명세 표의 대소문자 이름(endDate 등)은 예시와 다른 형식이다. 값이 undocumented로 빠지지 않게 거부한다.
+        if child.tag not in ITEM_FIELDS and child.tag.lower() in ITEM_FIELDS:
+            raise ValueError(f"{LABEL} 응답의 {ITEM}에 예시와 대소문자가 다른 요소가 있습니다({_label(child.tag)}).")
         target = values if child.tag in ITEM_FIELDS else undocumented
         if child.tag in target:
             raise ValueError(f"{LABEL} 응답에 같은 요소가 반복됩니다({_label(child.tag)}).")

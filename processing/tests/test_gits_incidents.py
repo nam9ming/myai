@@ -100,6 +100,9 @@ class GitsParseTest(unittest.TestCase):
             "regseq": incidents_xml(item_xml(regseq=" ")),
             "반복": incidents_xml(item_xml(extra="<regseq>2</regseq>")),
             "하위 구조": incidents_xml(item_xml(extra="<coord><x>1</x></coord>")),
+            # 명세 표의 대소문자 이름. 값이 있어도 enddate를 missing으로, endDate를 undocumented로 두지 않는다.
+            "대소문자가 다른 요소가 있습니다\\(endDate\\)": incidents_xml(item_xml(extra="<endDate>2026-11-28 11:00:00</endDate>")),
+            "대소문자가 다른 요소가 있습니다\\(REGSEQ\\)": incidents_xml(item_xml(extra="<REGSEQ>2</REGSEQ>")),
             "하위 요소 밖의 글자": incidents_xml(body="<msgbody>글자<itemlist><regseq>1</regseq></itemlist></msgbody>"),
             "예시와 다른 요소가 있습니다\\(item\\)": incidents_xml(body="<msgbody><item/></msgbody>"),
             "itemlist 요소에 예시에 없는 속성": incidents_xml(item_xml().replace("<itemlist>", '<itemlist status="cancelled">')),
