@@ -18,7 +18,7 @@ ROBOTS_URL = ORIGIN + "/robots.txt"
 ROBOTS_MAX_BYTES = 512 * 1024
 _LISTING_PATH = "/index.do?menu_id=0008"
 LISTING_URL = ORIGIN + _LISTING_PATH
-PARSER_VERSION = "sports-notice-parser-v3"
+PARSER_VERSION = "sports-notice-parser-v4"
 _DETAIL_QUERY = {"board_id": "notice", "cp": "/board/view.do", "menu_id": "0008", "pageIndex": "1"}
 _SEQ = re.compile(r"[1-9][0-9]{0,17}")
 _ROBOTS_LINE = re.compile(r"([A-Za-z-]+)[ \t]*:(.*)")
@@ -32,6 +32,9 @@ _BODY_TAGS = _BREAK_TAGS | frozenset("a b strong em i u s span font sub sup smal
                                      "colgroup".split())
 _TITLE_TAGS = frozenset("b strong em i u span font".split())
 _HIDDEN_STYLE = re.compile(r"display\s*:\s*none|visibility\s*:\s*hidden", re.I)
+_WHITE_SPACE = re.compile(r"white-space(?:-collapse)?\s*:\s*([^;]*)", re.I)
+# 소스 줄바꿈을 공백으로 보이는 값만 받는다. 안성시 누리집 실제 공지 원본에 이 값들이 붙어 온다.
+_COLLAPSE = frozenset(("normal", "nowrap", "collapse"))
 _INVALID_DETAIL = "체육시설 공지 상세 HTML 구조가 예상과 다릅니다."
 # 원문 줄을 고르는 검색어(공백 무시). 줄을 해석하지 않고 옮기는 색인이며, 고르지 못한 줄도 body_lines에 남는다.
 KEYWORD_GROUPS = {
@@ -283,7 +286,10 @@ class _DetailParser(HTMLParser):
             self._body_start(tag, names, values)
 
     def _body_start(self, tag, names, values):
-        if tag not in _BODY_TAGS or not _shown(names, values):
+        # 인라인 white-space가 줄바꿈을 살리거나(pre-wrap 등) pre 안에서 바꾸면 줄 경계를 확정할 수 없다.
+        spaces = [value.strip().lower() for value in _WHITE_SPACE.findall(values.get("style") or "")]
+        if (tag not in _BODY_TAGS or not _shown(names, values) or not _COLLAPSE.issuperset(spaces)
+                or spaces and (tag == "pre" or "pre" in self.body)):
             raise ValueError("체육시설 공지 본문에 허용하지 않는 태그·속성이 있습니다.")
         if tag in _BREAK_TAGS:
             self.text.append("\n")
@@ -326,12 +332,17 @@ class _DetailParser(HTMLParser):
     def handle_data(self, data):
         if self.body is not None:
             # 브라우저는 pre 밖의 소스 줄바꿈을 공백으로 보인다. 줄 경계는 문단·칸·br과 pre 안 줄바꿈만 만든다.
+            # 외부 CSS가 줄바꿈을 살릴 수 있어 pre 밖 줄바꿈은 `\r`로 남겨 parse_detail이 합친 사실을 표시한다.
             data = data.replace("\r\n", "\n").replace("\r", "\n")
-            self.text.append(data if "pre" in self.body else data.replace("\n", " "))
+            self.text.append(data if "pre" in self.body else data.replace("\n", "\r"))
             if self.link is not None:
                 self.link["text"].append(data)
         elif self.title is not None:
             self.title.append(data)
+
+
+def _lines(text: str) -> list[str]:
+    return [line for line in (" ".join(part.split()) for part in text.split("\n")) if line]
 
 
 def parse_detail(text: str, *, seq: str) -> dict:
@@ -347,7 +358,8 @@ def parse_detail(text: str, *, seq: str) -> dict:
         raise ValueError("체육시설 공지 상세의 제목을 하나로 확정할 수 없습니다.")
     if parser.bodies != 1:
         raise ValueError("체육시설 공지 상세의 본문 영역을 하나로 확정할 수 없습니다.")
-    lines = [line for line in (" ".join(part.split()) for part in "".join(parser.text).split("\n")) if line]
+    shown = "".join(parser.text)
+    lines = _lines(shown.replace("\r", " "))
     if not lines and not parser.images:
         raise ValueError("체육시설 공지 상세에 본문 글자와 이미지가 없습니다.")
 
@@ -361,6 +373,8 @@ def parse_detail(text: str, *, seq: str) -> dict:
             flags.add("image_only")
     if parser.links:
         flags.add("link")
+    if lines != _lines(shown.replace("\r", "\n")):
+        flags.add("source_newline_joined")  # 외부 CSS가 white-space:pre-wrap 등이면 화면에서는 줄이 나뉜다.
     return {
         "external_id": seq,
         "official_url": url,

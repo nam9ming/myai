@@ -89,6 +89,32 @@ class SportsParserTest(unittest.TestCase):
         self.assertEqual(record["body_lines"], ["예약 접수 기간: 2026. 3. 2.(월) ~ 3. 6.(금)", "가", "나", "다"])
         self.assertEqual(record["keyword_lines"]["reservation_schedule"], ["예약 접수 기간: 2026. 3. 2.(월) ~ 3. 6.(금)"])
 
+    def test_inline_white_space_that_keeps_newlines_is_rejected(self):
+        # 브라우저는 이 줄바꿈을 줄로 보이므로 공백으로 합치면 예약기간과 이용기간이 한 줄에 섞인다.
+        text = "예약기간: 3.2.~3.6.\n이용기간: 4.1.~6.30."
+        for style in ("white-space: pre", "white-space:pre-wrap", "WHITE-SPACE: PRE-LINE", "white-space: break-spaces",
+                      "white-space: normal !important", "white-space-collapse: preserve-breaks"):
+            with self.subTest(style=style), self.assertRaisesRegex(ValueError, "허용하지 않는"):
+                parse_detail(detail("96", f'<p style="color: red; {style}">{text}</p>'), seq="96")
+        wrapped = detail("96", text).replace('class="view_cont"', 'class="view_cont" style="white-space:pre-wrap"')
+        with self.assertRaisesRegex(ValueError, "허용하지 않는"):
+            parse_detail(wrapped, seq="96")
+        # pre 안에서 white-space를 바꾸면 줄바꿈이 합쳐질 수 있다.
+        with self.assertRaisesRegex(ValueError, "허용하지 않는"):
+            parse_detail(detail("96", '<pre><span style="white-space: normal">가\n나</span></pre>'), seq="96")
+        # 실제 공지 원본에 붙어 오는 접는 값은 받는다.
+        body = '<p style="white-space: normal; white-space-collapse: collapse">가</p><table><tr><td style="white-space:nowrap">나</td></tr></table>'
+        self.assertEqual(parse_detail(detail("96", body), seq="96")["body_lines"], ["가", "나"])
+
+    def test_joined_source_newlines_are_flagged_for_review(self):
+        # 외부 CSS의 white-space는 알 수 없으므로 합친 줄을 사람이 원문과 대조하게 한다.
+        record = parse_detail(detail("96", "<p>예약기간: 3.2.~3.6.\n이용기간: 4.1.~6.30.</p>"), seq="96")
+        self.assertEqual(record["body_lines"], ["예약기간: 3.2.~3.6. 이용기간: 4.1.~6.30."])
+        self.assertEqual(record["review_flags"], ["markup_unverified", "source_newline_joined"])
+        # 태그 사이의 빈 줄바꿈과 pre 안 줄바꿈은 줄을 합치지 않는다.
+        record = parse_detail(detail("96", "<p>\n가\n</p>\n<p>나</p><pre>다\n라</pre>"), seq="96")
+        self.assertEqual((record["body_lines"], record["review_flags"]), (["가", "나", "다", "라"], ["markup_unverified"]))
+
     def test_image_only_restriction_is_flagged_for_review(self):
         record = parse_detail(detail("111", '<p><img src="/upload/limit.jpg" alt="이용 제한 안내"></p>',
                                      title="체육관 이용 제한 안내"), seq="111")
@@ -180,7 +206,7 @@ class SportsBatchTest(unittest.TestCase):
         self.assertEqual(receipt["pages"][0]["source_url"], "https://reservation.anseong.go.kr/index.do?menu_id=0008")
         self.assertEqual([item["web_id"] for item in receipt["items"]], ["111", "96"])
         parsed = json.loads((directory / "parsed-96.json").read_text(encoding="utf-8"))
-        self.assertEqual((parsed["parser_version"], parsed["record"]["external_id"]), ("sports-notice-parser-v3", "96"))
+        self.assertEqual((parsed["parser_version"], parsed["record"]["external_id"]), ("sports-notice-parser-v4", "96"))
 
         assets = read_sports_batch(self.private, "run")
         self.assertEqual(list(assets), ["111", "96"])
