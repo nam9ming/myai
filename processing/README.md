@@ -293,6 +293,26 @@ python3.13 -B -m processing.collection.arthall_batch verify --name arthall-2026-
 
 확인하지 않은 것: 한 달이 2쪽 이상인 월별 목록(쪽 번호 형식은 연간 보기에서만 봤다), 표(`table`)가 든 탭 본문(지금은 거부한다), 탭 이미지 안의 글자(OCR은 별도 단계), 실제 예매 창과 잔여석, 2026-01~10월 목록과 그 상세 대부분.
 
+### 직영 공공체육시설 예약 누리집 공지 수집 (실제 페이지 미수집)
+
+예약 일정·우선 대상·중단 안내는 체육시설 예약 누리집 [공지 목록](https://reservation.anseong.go.kr/index.do?menu_id=0008)에서 받는다. **2026-11-27·28 robots.txt가 이 User-Agent(`yeogi-it/official-source-capture`)에 HTTP 400을 돌려줘 실제 목록·상세는 받지 않았고, 시험은 합성 원본뿐이다.**
+
+```sh
+python3.13 -B -m processing.collection.sports_batch --name sports-20261128 --max-items 20
+python3.13 -B -m processing.collection.sports_batch --name sports-20261128 --verify
+```
+
+- robots.txt(HTTP 200·UTF-8)가 허용하는 목록 1쪽과 상세만 받는다. RFC 9309(가장 긴 일치, `*`·`$`, 그룹 병합, 제품 토큰 `yeogi-it`, 비예약 글자 인코딩만 풀기)대로 읽고, `*`·`$` 밖을 모두 푼 주소가 막혀도 막힌 것으로 본다. 규칙 아닌 줄·값, SP·HTAB 아닌 공백, 토큰 뒤 글자, `Disalow` 같은 오타, 못 읽는 `Crawl-delay`는 판단 불가로 멈춘다(`robots_not_allowed`, 종료 2). `Crawl-delay`가 1.5초보다 길면 그 간격을 쓴다.
+- 호스트 고정, 리디렉션 미추종, 1.5초 간격, 크기 한도 robots.txt 512 KiB·목록 2 MiB·상세 8 MiB, 상세 `--max-items` 1~80건(기본 20). 상세 HTTP 400(이 수집기만)·401·403·429·503이면 남은 상세는 `not_attempted`다.
+- `complete`는 목록 1쪽(`first_page_only`)에서 고른 상세를 다 파싱했다는 뜻뿐이다. 인자 다섯 개가 실제 상세 주소(`board_id=notice&cp=%2Fboard%2Fview.do&menu_id=0008&pageIndex=1&seq=…`)와 같은 `href`만 읽는다.
+- 상세 마크업은 가정이다. `input[name=seq]` 하나가 요청과 같고 제목은 유일한 `<h4>`, 본문은 유일한 `div.view_cont`여야 한다. 허용 목록(`_BODY`·`_STYLE`·`_ANCESTORS` 등)은 `data/private`의 안성시 누리집 실제 원본(상세 234개·목록 35개)에서 본 표기만 옮겼다. 표·`pre`·`normal` 밖 `white-space`, 브라우저가 시작 태그로 닫는 표기, 어긋난 중첩, `frameset`, 강제 줄바꿈 문자와 U+001C~U+001F도 거부한다.
+
+`data/private/collection-sports-notices/<name>/`에 `robots.txt`·`list-1.html`·`detail-<seq>.html`·`parsed-<seq>.json`(`sports-notice-parser-v7`)을 쓰고 마지막에 `batch.json`을 쓴다. 종료 코드는 0 완료, 2 robots 미허용·한도·일부 실패, 1 입력·보관·재검증 오류다. `--verify`는 요청 없이 모든 원본 해시와, 원본에서 다시 낸 상태·건수·번호·파싱 결과(파서 버전 먼저)·중단 상태를 대조하고 `not_attempted`는 중단 뒤나 robots가 막은 주소만 받는다. **D03 연결은 후속이다.**
+
+파싱 결과는 표시 문구 그대로다: `title`, 문단·블록·`display` 상자·`br` 경계로 나눈 `body_lines`(화면 한 줄이 나뉠 수 있다), 본문 `images`(`src`·`alt`)·`links`(`href`·글자), `KEYWORD_GROUPS` 검색어가 든 줄 `keyword_lines`(관계없는 줄 포함), `review_flags`(늘 `markup_unverified`, `inline_image`, `image_only`, `link`, 소스 줄바꿈을 합친 `source_newline_joined`). 날짜·비용·자격은 해석하지 않고, 예약·이용 일정이 한 줄이거나 세부가 이미지뿐이면(`seq=111`) 사람이 본다.
+
+확인하지 않은 것: 실제 마크업·인코딩, 페이지·고정 글 표시, 목록·상세 차단 여부, 공공누리 표시, 영역 밖 요소·스크립트, 스타일시트 선택자·글꼴 숨김, 허용 값끼리의 조합(같은 글자·배경색 등), `img` 크기, 빈 링크 글자. 실제 수집 전에 robots.txt를 다시 보고, 원본으로 가정을 고쳐 파서 버전을 올린다.
+
 ### 지자체복지서비스 OpenAPI 목록·상세 수집
 
 지원·혜택 분야의 안성시 복지서비스는 [한국사회보장정보원_지자체복지서비스](https://www.data.go.kr/data/15108347/openapi.do)(공공데이터포털 15108347)에서 받는다. **이 수집기는 합성 XML 응답으로만 시험했고 인증 키가 필요한 실제 API는 호출하지 않았다.** 아래 요소 이름과 검증 기준은 공개 문서에서 옮긴 것이며, 실제 응답과 다르면 원본과 실패 사유를 남기고 멈춘다.
