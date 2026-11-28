@@ -37,7 +37,7 @@ class SportsParserTest(unittest.TestCase):
     def test_listing_reads_detail_links_in_order(self):
         absolute = "https://reservation.anseong.go.kr/index.do?board_id=notice&cp=/board/view.do&menu_id=0008&pageIndex=1&seq=7"
         raw = listing("111", "96", extra='<div hidden><div><a href="/index.do?menu_id=0001">메뉴</a></div></div><br hidden>'
-                      f'<a href="{absolute}">x</a>'
+                      f'<div style=""><a href="{absolute}">x</a></div>'
                       '<a href="https://example.com/index.do?seq=3">외부</a><a href="http://[x/index.do?seq=4">깨짐</a>')
         self.assertEqual(parse_listing(raw), ["111", "96", "7"])
 
@@ -54,15 +54,16 @@ class SportsParserTest(unittest.TestCase):
                 parse_listing(raw)
         with self.assertRaisesRegex(ValueError, "형식"):
             parse_listing(listing("1").replace(b"pageIndex=1", b"pageIndex=2"))
-        # 화면에 없는 공지를 요청하고 complete로 남기지 않는다. 링크·안·조상은 실제 목록에서 본 표기만 받는다.
+        # 화면에 없는 공지를 complete로 남기지 않게 링크·안·조상은 실제 목록에서 본 표기만 받는다.
         link = f'<a href="{_LINK.format(2)}">x</a>'
         for extra in (f'<div style="display: none"><div></div>{link}</div>', f'<p>{link}</p>', f"<details open>{link}</details>",
                       link.replace("<a", "<a hidden"), link.replace("<a", "<a popover"), f'<div popover>{link}</div>',
                       f'<div style="display/**/:none">{link}</div>', link.replace("x<", "<i>x</i><"),
+                      f'<div style="height: 50px">{link}</div>',
                       *(f'<{tag}>{link}</{tag}>' for tag in "details dialog object template ul".split())):
             with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, "허용 목록 밖"):
                 parse_listing(listing("1", extra=extra))
-        # 경계가 브라우저와 갈릴 수 있는 중첩(브라우저가 td 안의 </div>를 무시함 등)과 뒤에 나온 body 속성도 거부한다.
+        # 브라우저와 경계가 갈리는 중첩(td 안의 </div> 등)과 뒤에 나온 body 속성도 거부한다.
         for extra in ("<div><span></div></span>", f"<div hidden><table><tr><td></div>{link}", "<div>", "<body hidden>",
                       "<frameset></frameset>"):
             with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, "목록 HTML 구조"):
@@ -110,10 +111,10 @@ class SportsParserTest(unittest.TestCase):
                       "diſplay:block"):
             with self.subTest(style=style), self.assertRaisesRegex(ValueError, "허용하지 않는"):
                 parsed(f'<p>예약기간: 3.2.<span style="{style}">이용기간: 4.1.</span></p>')
-        # inline-block·block은 내용 길이·너비와 무관하게 앞뒤를 끊는다(README의 과분할). inline !important는 붙인다.
+        # inline-block·block은 내용·너비와 무관하게 앞뒤를 끊고(과분할) inline !important는 붙인다.
         body = ('<p>예약기간: 3.2.<span style="display: inline-block">이용기간: 4.1.~6.30. 매주 월요일 휴관</span>'
                 '<span style="DISPLAY:block">다</span><span style="display: inline !important; float: none">라</span>'
-                '<strong style="font-variant-position: inherit">마</strong></p>')
+                '<strong style="font-variant-position: inherit; mso-text-raise: 0pt">마</strong></p>')
         self.assertEqual(parsed(body)["body_lines"], ["예약기간: 3.2.", "이용기간: 4.1.~6.30. 매주 월요일 휴관", "다", "라마"])
 
     def test_joined_source_newlines_are_flagged_for_review(self):
@@ -140,29 +141,33 @@ class SportsParserTest(unittest.TestCase):
             ("제목", {"head": "<h4>메뉴</h4>"}),
             ("본문 영역", {"head": '<div class="view_cont">x</div>'}),
             ("글자와 이미지", {"body": "<p> </p>"}),
-            ("허용하지 않는", {"body": "<iframe src=x></iframe>"}),
-            ("허용하지 않는", {"body": '<p style="display: none">숨김</p>'}),
-            ("허용하지 않는", {"body": "<img src=a src=b>"}),
-            ("허용하지 않는", {"body": '<p style="display/**/:none">숨김</p>'}),
             ("상세 HTML 구조", {"head": "<!--><h4>숨김</h4>-->"}),
             *(("허용하지 않는", {"body": body}) for body in (
-                "<table><tr><td>x</td></tr></table>", "<pre>x</pre>", "<p popover>x</p>", "<object><p>x</p></object>")),
-            # 실제 제목 h4 안에는 태그가 없었다.
+                "<iframe src=x></iframe>", '<p style="display: none">숨김</p>', "<img src=a src=b>",
+                '<p style="display/**/:none">숨김</p>', '<p style="mso-a{}display:none">숨김</p>',
+                "<table><tr><td>x</td></tr></table>", "<pre>x</pre>", "<p popover>x</p>", "<object><p>x</p></object>",
+                # 브라우저는 시작 태그로 앞 요소를 닫는다.
+                "<p>가<div>나</div></p>", "<ul><li><div><li>가</li></div></li></ul>", "<h1><h2>가</h2></h1>")),
+            # 실제 제목 h4 안에는 태그가 없었다. 강제 줄바꿈 문자는 줄을 합친다.
             *(("구조", {"title": title}) for title in ("<span>2026년</span> 안내", "예약<br>안내", "<b popover>x</b>안내")),
+            ("구조", {"title": "예약\u2029안내"}),
+            *(("구조", {"body": f"<p>가{c}나</p>"})
+              for c in ("\u2028", "&#x2028;", "&#8233;", "\x85", "\x0b", "&#11;", "&#xC;")),
             ("구조", {"body": "<p><strong>x</p></strong>"}),
-            ("구조", {"head": "<div><span></div></span>"}),
-            ("구조", {"head": "<body hidden>"}),
+            *(("구조", {"head": head}) for head in ("<div><span></div></span>", "<body hidden>")),
         ):
             with self.subTest(options=options), self.assertRaisesRegex(ValueError, message):
                 parsed(**options)
         with self.assertRaisesRegex(ValueError, "일치하지"):
             parse_detail(detail("95"), seq="96")
         page = detail("96")
-        for text in (page.replace('value="96"', 'value="96" value="95"'), page.replace('type="hidden"', 'type="hidden" x')):
+        for text in (page.replace('value="96"', 'value="96" value="95"'), page.replace('type="hidden"', 'type="hidden" x'),
+                     page.replace("<h4>", '<h4 class="blind">')):
             with self.subTest(text=text), self.assertRaisesRegex(ValueError, "구조"):
                 parse_detail(text, seq="96")
         # 제목·본문의 조상도 실제 원본에서 본 표기만 받는다.
-        for wrapper in ("<div hidden>", '<div style="display:none">', "<details>", "<div popover>", "<template>"):
+        for wrapper in ("<div hidden>", '<div style="display:none">', "<details>", "<div popover>", "<template>",
+                        '<div style="height: 50px">'):
             tag = wrapper[1:].split()[0].strip(">")
             for text in (page.replace("<h4>", wrapper + "<h4>").replace("</h4>", f"</h4></{tag}>"),
                          page.replace('<div class="view_cont">', wrapper + '<div class="view_cont">').replace(

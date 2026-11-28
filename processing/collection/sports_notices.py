@@ -24,14 +24,13 @@ _PRODUCT = USER_AGENT.split("/")[0]  # RFC 9309 그룹은 제품 토큰으로 �
 # 다섯 자리를 넘는 값은 sleep 한도를 넘을 수 있어 읽지 않는다.
 _CRAWL_DELAY = re.compile(r"[0-9]{1,5}(?:\.[0-9]+)?")
 _VOID_TAGS = frozenset("area base br col embed hr img input link meta source track wbr".split())
-# 읽는 영역(목록의 상세 링크와 그 안, 상세의 h4·div.view_cont와 그 안, seq 입력)과 링크·h4·view_cont의 조상은 아래
-# 허용 목록만 받는다. 이 호스트의 실제 원본이 없어 data/private의 안성시 누리집 실제 원본에서 쓰인 태그·속성 이름·
-# 인라인 스타일 선언만 옮겼다. 상세 234개(본문 고유 66개)의 bod_view 제목 h4·view_cont와 조상, 목록 28개의 상세 링크
-# 행과 조상이다.
+# 읽는 영역(목록의 상세 링크, 상세의 h4·div.view_cont, seq 입력)과 그 안·조상은 아래 허용 목록만 받는다. 이 호스트
+# 원본이 없어 data/private의 안성시 누리집 실제 원본(상세 234개의 제목 h4 202개·view_cont, 목록 35개의 상세 링크와
+# 각 조상)에서 쓰인 태그·속성 이름·인라인 스타일 선언만 옮겼다.
 _BODY = {"a": "href style target title", "br": "style", "div": "class data-hjsonver data-jsonlen id style", "h1": "",
          "h2": "", "h3": "", "img": "alt height src style width", "li": "", "p": "class data-pm-slice style",
          "span": "lang style", "strong": "style", "u": "", "ul": ""}
-_TITLE = {"h4": "class"}  # 실제 제목 h4 안에는 태그가 없었다.
+_TITLE = {"h4": ""}  # 실제 제목 h4에는 속성도, 안의 태그도 없었다.
 _FIELD = {"input": "id name type value"}
 _LINK = {"a": "href onclick"}
 _LINK_TEXT = {"b": "", "span": "class"}
@@ -44,7 +43,7 @@ _STYLE = {name: re.compile("|".join(map(re.escape, values.split("|")))) for name
     "-ms-word-break word-break": "keep-all", "-webkit-text-stroke-width word-spacing": "0px",
     "align-items justify-content text-align": "center", "box-sizing": "border-box", "cursor": "pointer",
     "border-radius": "0 0 10px 10px|10px|10px 10px 0 0|12px|14px|16px|18px|20px|4px|6px|8px",
-    "display": "block|flex|inline !important|inline-block", "float text-autospace text-transform": "none",
+    "display": "block|flex|inline !important|inline-block", "float mso-pagination text-autospace text-transform": "none",
     "font-feature-settings font-kerning font-language-override font-optical-sizing font-size-adjust font-stretch "
     "font-variant-alternates font-variant-east-asian font-variant-emoji font-variant-numeric font-variant-position "
     "font-variation-settings": "inherit",
@@ -55,6 +54,7 @@ _STYLE = {name: re.compile("|".join(map(re.escape, values.split("|")))) for name
     "line-height": "1.3|1.35|1.4|1.5|1.6|1.8|120%|140%|21px|24.23px|25.57px", "margin": "0 6px|0 auto|0px|4px 0",
     "margin-bottom": "10px|12px|14px|16px|18px|22px|2px|4px|6px|8px", "margin-left": "29.1pt|31.4pt|31.9pt|32.8pt|auto",
     "margin-right": "6px|8px|auto", "margin-top": "10px|2.0pt|2px|4px|6px|8px", "max-width": "720px|760px|780px|800px",
+    "mso-font-width": "100%|90%", "mso-padding-alt": "0pt 0pt 0pt 0pt", "mso-text-raise": "0pt",
     "opacity": "0.95", "orphans widows": "2", "overflow": "hidden",
     "padding": "0 4px|0px|10px 12px|10px 14px|10px 16px|10px 4px|10px 4px 4px 4px|10px 6px|12px|12px 14px|12px 15px|"
                "12px 16px|14px|14px 16px|14px 18px|16px 18px|16px 20px|18px|18px 16px|18px 20px|20px 16px|22px 16px|"
@@ -65,9 +65,11 @@ _STYLE = {name: re.compile("|".join(map(re.escape, values.split("|")))) for name
     "text-indent": "-29.1pt|-31.4pt|-31.9pt|-32.8pt|0px", "vertical-align": "baseline", "width": "350px",
 }.items() for name in names.split()} | {name: re.compile(shape) for names, shape in {
     "color": f"{_HEX}|white", "background-color": rf"{_HEX}|rgba\(255, 255, 255, 0\.2\)|rgba\(0, 0, 0, 0\.15\)",
-    "font-family": r"[\w ,'-]+",
+    "font-family mso-ascii-font-family mso-fareast-font-family mso-hansi-font-family": r"[\w ,'-]+",
     "border border-bottom border-left border-top": rf"[1-5]px (?:solid|dashed) {_HEX}|0px(?: currentcolor)?|none",
 }.items() for name in names.split()}
+# 브라우저가 강제 줄바꿈으로 보이는 문자(UAX #14 BK·NL)를 str.split은 공백으로 접고 `&#11;`은 Python이 지운다.
+_UNREAD = re.compile(r"[\x00\x0b\x0c\x85\u2028\u2029]|&#(?:0*(?:1[12]|823[23])(?![0-9])|x0*(?:[bc]|202[89])(?![0-9a-f]))", re.I)
 _INVALID_DETAIL = "체육시설 공지 상세 HTML 구조가 예상과 다릅니다."
 _INVALID_LISTING = "체육시설 공지 목록 HTML 구조가 올바르지 않습니다."
 _INVALID_BODY = "체육시설 공지 본문에 허용하지 않는 태그·속성이 있습니다."
@@ -183,14 +185,12 @@ def _allowed(rules: dict, tag: str, attrs) -> list | None:
         return None
     pairs = [(name.strip().lower(), " ".join(value.lower().split()))
              for name, _, value in (part.partition(":") for part in style.split(";") if part.strip())]
-    # 브라우저는 Word가 남기는 mso-* 속성을 해석하지 않는다.
-    if all(name.startswith("mso-") or name in _STYLE and _STYLE[name].fullmatch(value) for name, value in pairs):
-        return pairs
-    return None
+    styles = _STYLE if rules is _BODY else {}  # 조상의 style은 실제 원본에서 늘 비어 있었다.
+    return pairs if all(name in styles and styles[name].fullmatch(value) for name, value in pairs) else None
 
 
 def _feed(parser: PinnedHTMLParser, text: str) -> None:
-    if "\x00" in text:
+    if _UNREAD.search(text):
         raise parser.markup_error()
     try:
         parser.feed(text)
@@ -204,7 +204,7 @@ def _feed(parser: PinnedHTMLParser, text: str) -> None:
 class _Parser(PinnedHTMLParser):
     """종료 태그는 문서 어디서든 가장 안쪽의 열린 요소를 닫아야 하고, 문서 끝에 열린 요소가 없어야 한다.
 
-    이 스택으로 읽는 영역의 끝과 조상을 정한다. 실제 원본(상세 234개·목록 28개)은 모두 이 조건을 지켰다.
+    이 스택으로 읽는 영역의 끝과 조상을 정한다. 실제 원본(상세 234개·목록 35개)은 모두 이 조건을 지켰다.
     """
     message = _INVALID_DETAIL
 
@@ -322,8 +322,10 @@ class _DetailParser(_Parser):
         if region == "title":
             raise ValueError(_INVALID_DETAIL)
         if region == "body":
-            pairs = _allowed(_BODY, tag, attrs)
-            if pairs is None or tag == "a" and any(entry[0] == "a" for entry in self.stack):
+            pairs, top, opened = _allowed(_BODY, tag, attrs), self.stack[-1][0], {entry[0] for entry in self.stack}
+            # 브라우저가 시작 태그로 열린 요소를 닫는 표기는 실제 원본에 없다.
+            if pairs is None or tag == "a" and "a" in opened or tag in _BREAK_TAGS - {"br"} and "p" in opened or (
+                    tag == "li" and top != "ul") or {tag, top} <= {"h1", "h2", "h3"}:
                 raise ValueError(_INVALID_BODY)
             return region, self._body_start(tag, values, pairs)
         if tag == "input" and values.get("name") == "seq":
@@ -340,7 +342,7 @@ class _DetailParser(_Parser):
         return None, _allowed(_ANCESTORS, tag, attrs) is not None
 
     def _body_start(self, tag, values, pairs) -> bool:
-        # inline-block·block·flex 상자는 너비·내용과 무관하게 앞뒤를 끊는다(화면 한 줄이 여러 줄이 될 수 있다).
+        # inline-block·block·flex 상자는 너비·내용과 무관하게 앞뒤를 끊는다(과분할될 수 있다).
         breaks = tag in _BREAK_TAGS or any(name == "display" and value != "inline !important" for name, value in pairs)
         if breaks:
             self.text.append("\n")
