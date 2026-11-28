@@ -259,8 +259,7 @@ def parse_library_hours(text: str) -> dict:
         raise ValueError(f"{_INVALID}.") from None
     if not parser.conts_seen or parser.stack is not None or parser.title is not None:
         raise ValueError(f"{_INVALID} (본문 영역 div#conts가 없거나 닫히지 않음).")
-    if (len(parser.titles) != 1 or not parser.titles[0].startswith(f"{_TITLE} | ")
-            or not parser.titles[0].endswith(" | 안성시 도서관")):
+    if len(parser.titles) != 1 or not re.fullmatch(rf"{_TITLE} \| .+ \| 안성시 도서관", parser.titles[0], re.S):
         raise ValueError("도서관 이용시간 및 정기휴관일 페이지가 아닌 응답입니다.")
     if not any(block["kind"] == "table" for block in parser.blocks):
         raise ValueError("도서관 이용시간 페이지에 표가 없습니다.")
