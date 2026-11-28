@@ -56,7 +56,7 @@ _SECTIONS = """<div id="tap_wrapper1" class="mT30 tap_wrapper" style="display: n
 
 def detail(concert_id="3809", *, init_id=None, goods="26014378", title="합성 공연 <테오팀 & 듀오>", fields=_FIELDS,
            buttons=True, tabs=_TABS, sections=_SECTIONS, action=_ACTION, category='<span class="category_program">기획</span>',
-           head='<div id="layer_popup1" style="display:none;"></div>'):
+           head='<div id="layer_popup1" style="display:none;"><div></div></div><img hidden>'):
     rows = "".join(f'<li><span class="title">{label}</span><span class="sub">{value}</span></li>' for label, value in fields)
     booking = ('<div class="ticket_btns"><p class="ticketbooking"><a href="javascript:void(0);" '
                'onclick="module.booking(); return false;">예매하기</a></p></div>') if buttons else ""
@@ -102,6 +102,7 @@ class ArthallListingTest(unittest.TestCase):
         cases["남는 끝 태그"] = (listing("11", "12").replace(b"</div></li>", b"</div></div></li>", 1), {})
         cases["쪽 번호 밖"] = (listing("1", pager='<span>1</span></div><a onclick="goPage(2); return false;">2</a>'), {})
         cases["중복 onclick"] = (listing("1").replace(b'onclick="go', b'onclick="x" onclick="go'), {})
+        cases["숨김"] = (listing("1").replace(b"<ul>", b"<ul hidden>", 1), {})
         for name, (raw, override) in cases.items():
             with self.subTest(name), self.assertRaises(ValueError):
                 parse_listing(raw, **{"year": 2026, "month": 12, "page": 1, **override})
@@ -176,7 +177,6 @@ class ArthallDetailTest(unittest.TestCase):
             "번호": detail(init_id="1"),
             "제목 태그": detail(title="합성 <Art Story>"),
             "숨김": detail(fields=[("장소", '<span style="display:none">숨김</span>')]),
-            "본문 숨김": _body("<p hidden>숨김</p>"),
             "본문 태그": _body('<iframe src="/x"></iframe>'),
             "중복 항목": detail(fields=[("장소", "a"), ("장소", "b")]),
             "없는 탭": detail(sections=""),
@@ -201,6 +201,9 @@ class ArthallDetailTest(unittest.TestCase):
             "중복 src": detail().replace("<img", '<img src="/b.png"'),
             "CSS 이스케이프": _body(r'<p style="disp\lay:none">숨김</p>'),
         }
+        # 끝 태그가 빠진 숨김 요소가 뒤 영역을 감싼다.
+        for head in ('<div style="display:none;">', "<div hidden><div></div>", "<template>"):
+            cases[head] = detail(head=head)
         # 공용 파서의 거부 규칙 전체는 test_html_tokens가 본다.
         for markup in ("<!-- a --!>보이는글<!-- b -->", "<!-- 끝없음", "<![CDATA[x]]>보이는글", 'a</div x=">">b',
                        # 3.13.5는 따옴표 밖 `\xa0`와 `==`를 속성 구분자로 읽어 3.14·브라우저와 속성이 달랐다.

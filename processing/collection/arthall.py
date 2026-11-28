@@ -6,7 +6,7 @@ from urllib.parse import urlencode
 
 from .html_tokens import PinnedHTMLParser
 from .official_web import OFFICIAL_ORIGIN, _fetch
-from .road_works import _BREAK_TAGS, _TEXT_TAGS, _period, _text
+from .road_works import _BREAK_TAGS, _TEXT_TAGS, _VOID_TAGS, _period, _text
 
 PARSER_VERSION = "arthall-concert-parser-v2"
 _MENU = "0202010100"
@@ -23,6 +23,7 @@ _NOT_FOUND = "존재하지 않는 공연/전시입니다."
 _SECTION_TAGS = _TEXT_TAGS | {"div", "img"}
 _INVALID_LISTING = "안성맞춤아트홀 일정 목록 HTML 구조가 올바르지 않습니다."
 _INVALID_DETAIL = "안성맞춤아트홀 공연·전시 상세 HTML 구조가 올바르지 않습니다."
+_HIDDEN = "안성맞춤아트홀 화면 표시를 확정할 수 없는 숨김 표기가 있습니다."
 _FIELDS = {
     "장르": "genre", "기간": "period", "시간": "time", "관람시간": "running_time", "장소": "venue",
     "관람연령": "age_rating", "입장권": "admission", "티켓 오픈 일시": "ticket_open", "문의처": "contact",
@@ -66,7 +67,7 @@ class _Parser(PinnedHTMLParser):
 
     def __init__(self, error: str):
         super().__init__()
-        self.error, self.region, self.depth, self.counts, self.scripts = error, None, 0, {}, []
+        self.error, self.region, self.depth, self.counts, self.scripts, self.veil = error, None, 0, {}, [], []
         self.capture = None  # [끝 태그, 깊이, 조각, 허용 태그, 완료 함수]
 
     def markup_error(self) -> ValueError:
@@ -95,6 +96,11 @@ class _Parser(PinnedHTMLParser):
         values = dict(attrs)
         if len(values) < len(attrs):  # 브라우저는 같은 이름 속성의 첫 값을 쓴다.
             self.fail()
+        # 탭을 열 때 풀리는 영역 자신의 display:none은 보지 않는다. `\`는 CSS 이스케이프(`disp\lay`)다.
+        hides = tag == "template" or "hidden" in values or re.search(
+            r"display|visibility|\\", values.get("style") or "", re.I)
+        if hides and (self.capture or self.region):
+            raise ValueError(_HIDDEN)
         classes = (values.get("class") or "").split()
         if self.capture is not None:
             end, _, parts, allowed, _ = self.capture
@@ -112,10 +118,15 @@ class _Parser(PinnedHTMLParser):
             return
         for kind, (root, match) in self.REGIONS.items():
             if tag == root and match(values, classes):
+                if self.veil:
+                    raise ValueError(_HIDDEN)
                 self.counts[kind] = self.counts.get(kind, 0) + 1
                 self.region, self.depth, self.kind = root, 1, kind
                 self.region_open(kind, values)
                 return
+        # 영역 밖 숨김 요소와 안의 같은 이름 태그를 쌓아 끝 태그가 빠졌는지 본다.
+        if self.veil[:1] == [tag] or not self.veil and hides and tag not in _VOID_TAGS:
+            self.veil.append(tag)
         self.outside_start(tag, values, classes)
 
     def handle_endtag(self, tag):
@@ -134,6 +145,8 @@ class _Parser(PinnedHTMLParser):
             self.depth -= 1
             if not self.depth:
                 self.region = None
+        elif self.veil[:1] == [tag]:
+            self.veil.pop()
 
     def handle_data(self, data):
         super().handle_data(data)
@@ -249,13 +262,6 @@ def parse_listing(raw: bytes, *, year: int, month: int, page: int) -> tuple[int,
     return len(numbers) + 1, parser.ids
 
 
-def _check_hidden(values: dict) -> None:
-    # 탭 본문 영역 자신의 display:none은 화면 스크립트가 탭을 열 때 풀리므로 영역 안쪽만 본다.
-    # `\`는 CSS 이스케이프(`disp\lay`)로 정규식을 피할 수 있어 숨김으로 본다.
-    if "hidden" in values or re.search(r"display|visibility|\\", values.get("style") or "", re.I):
-        raise ValueError("안성맞춤아트홀 상세에 화면 표시를 확정할 수 없는 숨김 표기가 있습니다.")
-
-
 class _DetailParser(_Parser):
     REGIONS = {
         "image": ("div", _has("conInfo_img")),
@@ -299,7 +305,6 @@ class _DetailParser(_Parser):
         self.section = None
 
     def region_start(self, tag, values, classes):
-        _check_hidden(values)
         if self.kind == "image":
             if tag == "img" and not self.in_buttons:
                 self.posters.append(values.get("src"))
@@ -348,7 +353,6 @@ class _DetailParser(_Parser):
             self.fail()
 
     def capture_start(self, tag, values, classes):
-        _check_hidden(values)
         if self.section is None:
             return
         # 안내 문단 안 태그는 브라우저가 p를 암묵적으로 닫아 뒤 본문이 보일 수 있다. 실제 안내는 글자뿐이었다.
