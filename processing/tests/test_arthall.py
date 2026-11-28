@@ -15,8 +15,7 @@ _ACTION = "/arthall/concert/list.do?scCategory=&amp;mId=0202010100"
 
 
 def _item(concert_id):
-    return f"""<ul><li><div class="m_title"><span class="category_program">기획</span><h4>합성 공연</h4></div>
-      <div class="con_listInfo"><h4>합성 공연</h4><ul><li><span class="title">기간</span><span class="sub">x</span></li></ul></div>
+    return f"""<ul><li><div class="con_listInfo"><h4>합성 공연</h4><ul><li><span class="title">기간</span><span class="sub">x</span></li></ul></div>
       <div class="fR"><button data-button="booking" data-idx="{concert_id}" data-goods="1">예매하기</button>
       <button class="mL10" onclick="go_view('{concert_id}'); return false;" title="상세">자세히보기</button></div></li></ul>"""
 
@@ -30,10 +29,8 @@ def listing(*ids, year=2026, month=12, page=1, total=1, action=_ACTION, pager=No
     pages = f'<div class="bod_page">{pager}</div>' if ids else ""
     return f"""<html><body><script>function go_view(idx) {{ location.href = 'x<y'; }}</script>
     <form id="listForm" name="listForm" action="{action}" method="POST">
-      <input id="idx" name="idx" type="hidden" value=""/><input id="year" name="year" type="hidden" value="{year}"/>
-      <input id="month" name="month" type="hidden" value="{month:02d}"/>
-      <input id="rangeType" name="rangeType" type="hidden" value=""/><input id="page" name="page" type="hidden" value="{page}"/>
-      <div class="con_listHead"><h4>안성맞춤아트홀 전체일정 안내</h4></div>
+      <input name="year" type="hidden" value="{year}"/><input name="month" type="hidden" value="{month:02d}"/>
+      <input name="rangeType" type="hidden" value=""/><input name="page" type="hidden" value="{page}"/>
       <div class="con_list">{items}</div>{pages}
     </form><form id="researchForm"><input type="hidden" name="page" value="9"/></form></body></html>""".encode()
 
@@ -81,10 +78,6 @@ class ArthallListingTest(unittest.TestCase):
         self.assertEqual(parse_listing(listing("5"), year=2026, month=12, page=1), (1, ["5"]))
         self.assertEqual(parse_listing(listing(month=6), year=2026, month=6, page=1), (1, []))
         self.assertEqual(listing_path(2026, 6, 2), "/arthall/concert/list.do?mId=0202010100&year=2026&month=6&page=2")
-        # `</ div>`는 브라우저처럼 영역을 닫지 않는다(3.13.5만 `</div>`로 읽었다).
-        for odd in (b"</ div>", b"</\ndiv>"):
-            self.assertEqual(parse_listing(listing("1").replace(b'"fR">', b'"fR">' + odd), year=2026, month=12, page=1),
-                             (1, ["1"]))
 
     def test_rejects_mismatch_and_format_changes(self):
         cases = {
@@ -100,10 +93,12 @@ class ArthallListingTest(unittest.TestCase):
         }
         cases["남는 끝 태그"] = (listing("11", "12").replace(b"</div></li>", b"</div></div></li>", 1), {})
         cases["쪽 번호 밖"] = (listing("1", pager='<span>1</span></div><a onclick="goPage(2); return false;">2</a>'), {})
-        # 중복·실제 원본에 없던 태그·속성, 숨김 루트, 짝이 어긋난 끝 태그, scope 경계가 열린 숨김 요소.
+        # 중복·원본에 없던 태그·속성, 숨김 루트·조상, 어긋난 끝 태그, 켈빈 기호 이름, svg.
         for old, new in (('onclick="go', 'onclick="x" onclick="go'), ("<ul>", "<ul hidden>"), ("<ul>", "<ul><details>"),
                          ('"con_list"', '"con_list" hidden'), ("</div></li>", "</span></div></li>"), ('"fR">', '"fR"></div\xa0>'),
-                         ('<div class="con_list">', "<div hidden><table></div><div class=con_list>")):
+                         ('<div class="con_list">', "<div hidden><table></div><div class=con_list>"),
+                         ('onclick="go', 'onclic\u212a="go'), ("<form", "<lin\u212a hidden><form"),
+                         ("<form", "<svg><source hidden><foreignObject><form")):
             cases[new] = (listing("1").replace(old.encode(), new.encode(), 1), {})
         cases["빈 안내"] = (listing().replace("검색된 전체일정이 없습니다.".encode(), b""), {})
         for name, (raw, override) in cases.items():
@@ -116,9 +111,8 @@ class ArthallListingTest(unittest.TestCase):
 class ArthallDetailTest(unittest.TestCase):
     def test_keeps_display_text_and_separates_schedules(self):
         record = parse_detail(detail(), concert_id="3809")
-        self.assertEqual(record["title"], "합성 공연 <테오팀 & 듀오>")
+        self.assertEqual((record["title"], record["category"]), ("합성 공연 <테오팀 & 듀오>", "기획"))
         self.assertEqual(record["official_url"], "https://www.anseong.go.kr/arthall/concert/view.do?idx=3809&mId=0202010100")
-        self.assertEqual(record["category"], "기획")
         fields = record["fields"]
         self.assertEqual(fields["admission"], "R석 30,000원, S석 20,000원 초중고등학생 전석 1만원")
         self.assertEqual((fields["venue"], fields["age_rating"], fields["time"]),
@@ -133,8 +127,8 @@ class ArthallDetailTest(unittest.TestCase):
                          ("공연 소개", None, ["/common/imgView.do?attachId=a&fileSn=b&mode=originView"]))
         self.assertEqual((second["text"], second["links"]), ("- 안성시민 15% * 인증 후 안내 증빙 필요", []))
         self.assertEqual(record["review_flags"], [])
-        # 열린 적 없는 `</p>`·`</strong>`·`</font>`는 실제 3829처럼 브라우저도 무시한다.
-        adjacent = _body("<div>안성시민 15%</div></font></p><div>경로 50%</div>")
+        # 영역 안에 열려 있지 않은 `</p>`·`</font>`는 무시한다(실제 3829).
+        adjacent = _body("<p>안성시민 15%</p></p></font><div>경로 50%</div>")
         self.assertEqual(parse_detail(adjacent, concert_id="3809")["sections"][0]["text"], "안성시민 15% 경로 50%")
 
     def test_missing_values_stay_null_with_flags(self):
@@ -157,16 +151,14 @@ class ArthallDetailTest(unittest.TestCase):
         odd = parse_detail(detail(fields=[("티켓 오픈 일시", "2026-10-08 오후 4시")]), concert_id="3809")
         self.assertIn("ticket_open_unparsed", odd["review_flags"])
 
-    def test_raw_text_elements_hide_markup_on_every_version(self):
-        # 원문 요소 안의 영역 표기는 3.13에서도 마크업으로 읽지 않는다.
+    def test_reads_tag_borders_like_browsers(self):
+        # 원문 요소 안의 영역 표기는 3.13에서도 읽지 않는다.
         base = parse_detail(detail(), concert_id="3809")
         for tag in ("xmp", "iframe", "noembed", "noframes", "noscript", "textarea", "title"):
-            text = detail(head=f'<{tag}><div class="conInfo_list"><h4>가짜</h4></div></{tag}>')
             with self.subTest(tag):
+                text = detail(head=f'<{tag}><div class="conInfo_list"></div></{tag}>')
                 self.assertEqual(parse_detail(text, concert_id="3809"), base)
-
-    def test_reads_tag_borders_like_browsers(self):
-        # 브라우저처럼 `</ div>`는 div를 닫지 않고 void가 아닌 `<div/>`는 열어 둔다(3.13.5는 달리 읽었다).
+        # `</ div>`는 div를 닫지 않고 `<div/>`는 열어 둔다(3.13.5는 달리 읽었다).
         for markup, text in (("1</ div>2", "12"), ("1</\ndiv>2", "12"), ("<div/>1</div>2", "1 2"), ("<!x>1<?x>", "1")):
             with self.subTest(markup):
                 self.assertEqual(parse_detail(_body(f"<div>{markup}</div>"), concert_id="3809")["sections"][0]["text"], text)
@@ -194,13 +186,16 @@ class ArthallDetailTest(unittest.TestCase):
             "본문 밖 글자": _body("<div>본문1</div></div>본문2"),
             "본문 밖 태그": _body('<div>본문1</div></div><img src="/x.png">'),
             "영역 사이 글자": detail().replace('<div class="cleB"></div>', '<div class="cleB"></div>보이는글'),
+            # 2번 본문을 여는 goTab이 없다.
+            "숨은 본문": detail(tabs=_TABS.replace("goTab(2)", "goTab(3)")),
             "중복 src": detail().replace("<img", '<img src="/b.png"'),
         }
-        # 끝 태그가 빠졌거나, 브라우저가 `</div>`를 무시하게 하는 scope 경계가 열린 숨김 요소가 뒤 영역을 감싼다.
+        # 숨김 요소의 끝 태그가 빠졌거나 `</div>`를 무시하게 하는 scope 경계가 열려 뒤 영역을 감싼다.
         for head in ('<div style="display:none;">', "<div hidden><div></div>", "<template>", "<div hidden><object></div>",
+                     "<lin\u212a hidden>", "<div hidden><mark></mar\u212a></div>",
                      '<div id="layer_popup1" style="display:none;"><table><tr><td>팝업</div>'):
             cases[head] = detail(head=head)
-        # 영역 루트의 숨김과 실제 원본에 없던 태그·속성·스타일·끝 태그 짝.
+        # 영역 루트의 숨김과 원본에 없던 태그·속성·스타일·끝 태그 짝.
         for old, new in (('"conInfo_list"', '"conInfo_list" hidden'), ('"conInfo_img"', '"conInfo_img" style="display:none"'),
                          ('"tab_view"', '"tab_view" hidden'), ('style="display: none;"', 'style="visibility: hidden;"'),
                          ("<h4 class", "<h4 popover class"), ("<ul><li", "<ul><dialog><li"),
@@ -208,12 +203,10 @@ class ArthallDetailTest(unittest.TestCase):
                          ("증빙 필요", '<font style="font-size: 0">숨김</font>'),
                          ('alt="소개"', 'alt="소개" onerror="this.remove()"'), ("<strong>증빙", "<strong>증빙</p>")):
             cases[new] = detail().replace(old, new, 1)
-        for markup in ("<details>숨김</details>", '<a href="/x">링크</a>', "<b>굵게</b>", "1</div\xa0>2",
-                       '<iframe src="/x"></iframe>', '<p style="display:none" style>숨김</p>', r'<p style="disp\lay:none">숨김</p>',
-                       # 공용 파서의 거부 규칙 전체는 test_html_tokens가 본다.
-                       "<!-- a --!>보이는글<!-- b -->", "<!-- 끝없음", "<![CDATA[x]]>보이는글", 'a</div x=">">b',
-                       # 3.13.5는 따옴표 밖 `\xa0`와 `==`를 속성 구분자로 읽어 3.14·브라우저와 속성이 달랐다.
-                       '<span class="a"\xa0id="b">x</span>', "<span title==x>x</span>"):
+        for markup in ("<details>숨김</details>", '<a href="/x">링크</a>', "1</div\xa0>2", '<iframe src="/x"></iframe>',
+                       r'<p style="disp\lay:none">숨김</p>',
+                       # 공용 파서 규칙은 test_html_tokens가 본다. 3.13.5만 `==`를 구분자로 읽었다.
+                       "<![CDATA[x]]>보이는글", "<span title==x>x</span>"):
             cases[markup] = _body(f"<div>{markup}</div>")
         for tag in ("script", "title"):
             # 브라우저는 `/>`를 무시하고 뒤 영역까지 원문 텍스트로 읽는다.
@@ -266,7 +259,7 @@ class ArthallBatchTest(unittest.TestCase):
         tamper(directory / "parsed-8.json", "클래식".encode(), "무용".encode())
         tamper(directory / "parsed-8.json", PARSER_VERSION.encode(), b"arthall-concert-parser-v0")
         tamper(directory / "batch.json", b'"month": 12', b'"month": 11')
-        # 목록에 있는 공연을 지우고 건수를 맞춘 완료 기록도 거부한다.
+        # 목록의 공연을 지우고 건수를 맞춘 완료 기록도 거부한다.
         dropped = {**receipt, "items": [row for row in receipt["items"] if row["web_id"] != "7"], "selected": 2, "parsed": 2}
         original = (directory / "batch.json").read_bytes()
         tamper(directory / "batch.json", original, json.dumps(dropped).encode())
@@ -304,7 +297,7 @@ class ArthallBatchTest(unittest.TestCase):
             self.assertEqual((code, out["status"]), (0, "complete"))
             code, out, _ = run("verify", "--name", "cli")
             self.assertEqual((code, out["status"], out["batch_status"]), (0, "verified", "complete"))
-            # 일부 실패 묶음은 검증을 통과해도 원래 상태와 함께 종료 코드 2를 돌려준다.
+            # 일부 실패 묶음은 검증을 통과해도 원래 상태와 종료 코드 2를 준다.
             self.detail.side_effect = ValueError("합성 수신 실패")
             self.assertEqual(run(*capture, "part")[0], 2)
             self.assertEqual(run("verify", "--name", "part")[:2], (2, {"batch_id": "part", "status": "verified",

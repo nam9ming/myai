@@ -4,7 +4,7 @@ from datetime import datetime
 import re
 from urllib.parse import urlencode
 
-from .html_tokens import PinnedHTMLParser
+from .html_tokens import FOREIGN_TAGS, PinnedHTMLParser
 from .official_web import OFFICIAL_ORIGIN, _fetch
 from .road_works import _BREAK_TAGS, _VOID_TAGS, _period, _text
 
@@ -113,8 +113,18 @@ class _Parser(PinnedHTMLParser):
     def start_capture(self, allowed, done):
         self.capture = [len(self.open), [], allowed, done]
 
+    def parse_endtag(self, i):
+        # 끝 태그도 ASCII만 받는다(이유는 handle_starttag).
+        if not self.rawdata[i:self.rawdata.find(">", i) + 1].isascii():
+            self.fail()
+        return super().parse_endtag(i)
+
     def handle_starttag(self, tag, attrs):
         super().handle_starttag(tag, attrs)
+        # Python만 이름의 켈빈 기호를 k로 바꿔 `<linK>`를 빈 요소로 읽고, svg·math 안은 빈 요소 규칙이 다르다.
+        # 실제 29건은 태그의 따옴표 밖이 ASCII였고 svg·math가 없었다.
+        if tag in FOREIGN_TAGS or not re.sub(r"\"[^\"]*\"|'[^']*'", "", self.get_starttag_text()).isascii():
+            self.fail()
         values = dict(attrs)
         if len(values) < len(attrs):  # 브라우저는 같은 이름 속성의 첫 값을 쓴다.
             self.fail()
@@ -124,7 +134,7 @@ class _Parser(PinnedHTMLParser):
                 if tag == root and match(values, classes):
                     if self.open:
                         raise ValueError(_HIDDEN)
-                    # 루트는 class만 받는다. 탭 본문 루트의 `display: none;`은 탭을 열 때 스크립트가 푼다.
+                    # 루트는 class만 받는다. 탭 본문 루트의 `display: none;`은 parse_detail이 탭과 대조한다.
                     if not values.keys() <= ({"class", "id", "style"} if kind == "section" else {"class"}) or \
                             values.get("style") not in (None, "display: none;"):
                         self.fail()
@@ -164,7 +174,7 @@ class _Parser(PinnedHTMLParser):
         if self.open[-1] == tag:
             self.open.pop()
         elif self.region != "section" or tag not in ("p", "strong", "font") or tag in self.open:
-            # 탭 본문에서 열린 적 없는 `</p>`·`</strong>`·`</font>`(실제 3829)는 브라우저도 무시한다(`</p>`는 빈 문단).
+            # 탭 본문에서 영역 안에 열려 있지 않은 `</p>`·`</strong>`·`</font>`(실제 3829)는 브라우저도 무시한다.
             self.fail()
         if self.capture is not None and len(self.open) < self.capture[0]:
             _, parts, _, done = self.capture
@@ -273,7 +283,7 @@ def parse_listing(raw: bytes, *, year: int, month: int, page: int) -> tuple[int,
     if not parser.ids and (_text(parser.text) != _EMPTY or page != 1 or parser.counts.get("pages")):
         raise ValueError(_INVALID_LISTING)
     if not parser.counts.get("pages"):
-        # 실제 원본에서 쪽 번호 영역이 없는 목록은 결과 없는 달뿐이었다. 공연이 있으면 쪽 수를 확정할 수 없다.
+        # 실제 원본에서 쪽 번호 영역이 없는 목록은 결과 없는 달뿐이었다.
         if parser.ids:
             raise ValueError(_INVALID_LISTING)
         return 1, []
@@ -297,7 +307,7 @@ class _DetailParser(_Parser):
         super().__init__(_INVALID_DETAIL)
         self.actions, self.posters, self.buttons, self.categories, self.titles, self.pairs = [], [], [], [], [], []
         self.tabs, self.sections, self.in_buttons, self.label, self.section, self.notice = [], {}, 0, None, None, False
-        self.between = False
+        self.between, self.folded = False, set()
 
     def outside_start(self, tag, values, classes):
         if tag == "form" and values.get("id") == "cancel":
@@ -319,6 +329,8 @@ class _DetailParser(_Parser):
             if match is None or match[1] in self.sections:
                 self.fail()
             self.section = self.sections[match[1]] = {"text": None, "images": [], "links": []}
+            if "style" in values:
+                self.folded.add(match[1])
             self.start_capture(_SEEN["section"], self._close_section)
 
     def _close_section(self, text):
@@ -443,6 +455,9 @@ def parse_detail(text: str, *, concert_id: str) -> dict:
     for key in sorted(parser.sections, key=int):
         section = parser.sections[key]
         if key in tabs or section["text"] or section["images"]:
+            if key not in tabs and key in parser.folded:
+                # 스크립트는 첫 탭 data-index와 goTab 번호의 본문만 연다(실제 34개 탭은 둘이 같았다).
+                raise ValueError(_HIDDEN)
             sections.append({"index": int(key), "title": tabs.get(key), **section})
             if key not in tabs:
                 flags.append(f"untitled_section:{key}")
