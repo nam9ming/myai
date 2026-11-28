@@ -126,6 +126,9 @@ class LibraryProgramParserTest(unittest.TestCase):
             # 브라우저에는 `접수중마감`으로 보이지만 HTMLParser는 `<!-->`를 빈 주석으로 끊지 않는다.
             "abrupt comment": listing(row("1").replace(status, ">접수중</span><!-->마감<!-- x -->")),
             "nul": listing(row("1")).replace(b"</html>", b"\x00</html>"),
+            # 브라우저는 template 안의 짝 없는 `</noscript>`를 무시해 표부터 문서 끝까지 template 내용으로 숨긴다.
+            "template end tag": listing(row("1")).replace(
+                b'<div class="table_responsive">', b'<template></noscript><div class="table_responsive">'),
         }
         for name, raw in cases.items():
             with self.subTest(name=name), self.assertRaises(ValueError):
@@ -193,6 +196,7 @@ class LibraryProgramParserTest(unittest.TestCase):
             "hidden row": detail("1").replace("<tr><th>재료비", '<tr style="display:none"><th>재료비'),
             "hidden cell": detail("1").replace('<td colspan="3">없음.', '<td colspan="3" hidden>없음.'),
             "hidden table": detail("1").replace('<table class="tbl">', '<table class="tbl" style="display:none">'),
+            "template end tag": detail("1").replace('<div class="tbl-box">', '<template></style><div class="tbl-box">'),
         }
         for name, text in cases.items():
             with self.subTest(name=name), self.assertRaises(ValueError):
@@ -209,6 +213,10 @@ class LibraryProgramParserTest(unittest.TestCase):
                 parse()
         # 3.13.5는 `-- >`에서 주석을 닫아 숨은 `10,000원 -->`을 재료비에 넣었다. 브라우저처럼 `-->`까지 주석이다.
         record = parse_program_detail(detail("1", *replace("재료비", "<!-- a -- >10,000원 -->없음.")), "1")
+        self.assertEqual(record["fields"]["material_cost"], "없음.")
+        # template 안의 짝 없는 `</style>`은 무시되고 `</template>`에서 닫히므로 뒤의 표는 화면에 보인다.
+        record = parse_program_detail(detail("1").replace(
+            '<div class="tbl-box">', '<template></style></template><div class="tbl-box">'), "1")
         self.assertEqual(record["fields"]["material_cost"], "없음.")
         # `</ script>`는 스크립트를 끝내지 않으므로 `자료없음`은 화면에 없고 첨부 유무를 확정하지 않는다.
         record = parse_program_detail(detail("1", *replace("첨부파일", (

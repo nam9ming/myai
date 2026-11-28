@@ -100,7 +100,7 @@ class _PageParser(PinnedHTMLParser):
     def __init__(self, table_class: str, error: str):
         super().__init__()
         self.table_class, self.error = table_class, error
-        self.ignored = 0
+        self.ignored: list[str] = []
         self.in_form = False
         self.form_actions: list[str | None] = []
         self.page_inputs: list[str | None] = []
@@ -136,7 +136,7 @@ class _PageParser(PinnedHTMLParser):
                 self.cell["tags"].append((tag, values))
             elif self.stack is not None and not self.ignored:
                 self.fail()
-            self.ignored += 1
+            self.ignored.append(tag)
             return
         if self.ignored:
             return
@@ -192,7 +192,9 @@ class _PageParser(PinnedHTMLParser):
 
     def handle_endtag(self, tag):
         if self.ignored:
-            self.ignored -= tag in _IGNORED_TAGS
+            # template 안의 짝 없는 `</style>` 등은 브라우저가 무시하므로 맨 위 이름이 같을 때만 닫는다.
+            if tag == self.ignored[-1]:
+                self.ignored.pop()
             return
         if tag == "form":
             self.in_form = False
