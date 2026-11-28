@@ -97,13 +97,16 @@ class ParseTest(unittest.TestCase):
     def test_selects_only_explicit_section_text(self):
         rows = [item(), item(section="서울TG~수원IC", name=""), item(section="", name=""),
                 item(section="안성면 부근", name="합성"), item(section="합성", name="합성", cnstnCtnt="북안성 방면 공사"),
-                item(section="", name="", mtnofKorNm="안성지사")]
+                item(section="", name="", mtnofKorNm="안성지사"), item(section="경부선", name="-"),
+                item(section="경부선", name="없음")]
         matched, review = [], []
         rc.select_items(3, rc.parse_page(page(rows), "0010", 1)[2], matched, review)
         self.assertEqual([(m["position"], m["match"]) for m in matched], [(1, {"useRotnm": "남안성IC~안성IC"})])
         self.assertEqual([(r["position"], r["reason"], r["mentions"]) for r in review],
                          [(2, "blank_section", []), (3, "blank_section", []), (4, "mention", ["useRotnm"]),
-                          (5, "other_mention", ["cnstnCtnt"]), (6, "blank_section", ["mtnofKorNm"])])
+                          (5, "other_mention", ["cnstnCtnt"]), (6, "blank_section", ["mtnofKorNm"]),
+                          (7, "blank_section", []), (8, "blank_section", [])])
+        self.assertEqual(review[5]["record"]["fields"]["icNm"], "-")
         self.assertEqual(matched[0]["page"], 3)
 
 
