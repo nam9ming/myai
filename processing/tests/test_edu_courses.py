@@ -111,6 +111,11 @@ class CourseListingTest(unittest.TestCase):
             # 선언형 shadow root를 단 요소는 원래 자식(목록 표) 대신 template 안쪽만 그린다.
             ("구조", _listing("1").replace(b"<table", b'<div><template shadowrootmode="open"></template><table')
              .replace(b"</table>", b"</table></div>")),
+            # 숨긴 행의 강좌 번호, 숨긴 숫자가 붙은 전체 페이지 수, 숨긴 페이지 표시는 받지 않는다.
+            ("목록에 화면 표시", _listing(rows=_row("1") + _row("7").replace("<tr>", '<tr style="display:none">'))),
+            ("목록에 화면 표시", _listing("1").replace(b"/ 2", b'/ <span style="display:none">9</span>2')),
+            ("목록에 화면 표시", _listing("1").replace(b'<p class="page_num">', b'<p class="page_num" hidden>')),
+            ("목록에 화면 표시", _listing(rows=_row("1").replace('class="text_left"', 'class="text_left blind"'))),
         ]
         for number, (message, raw) in enumerate(cases):
             with self.subTest(case=number), self.assertRaisesRegex(ValueError, message):

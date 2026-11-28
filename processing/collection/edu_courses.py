@@ -28,7 +28,7 @@ _MAX_ROWS = 100
 # 고른 영역 안 중첩 한도. 실제 목록·상세 28쪽은 9단이었다. 하위 트리를 재귀로 읽으므로 RecursionError 전에 거부한다.
 _MAX_DEPTH = 64
 # 공유 태그 경계 규칙(PinnedHTMLParser)이나 아래 출력·허용 규칙이 바뀌면 올린다.
-PARSER_VERSION = "edu-course-parser-v6"
+PARSER_VERSION = "edu-course-parser-v7"
 _TEXT_FIELDS = {
     "접수기간": "application_period",
     "접수현황": "enrollment_status",
@@ -55,6 +55,10 @@ _STYLES = {"vertical-align:middle"}
 _CLASSES = frozenset("bod_title bod_write bod_state_type bod_subject bod_btn em_b_black mL5 mR5 mL20 mR10 updateFileList"
                      " file_slide file_slide_list file_slide_item file_slide_anchor file_slide_control file_slide_prev"
                      " file_slide_next".split())
+# 목록도 같은 기준으로 2026-11-28 실제 목록 6쪽의 p.page_num·목록 표에 있던 속성·class·col 너비만 받는다.
+_LIST_ATTRS = frozenset({"class", "href", "scope"})
+_LIST_STYLES = {"width:6%", "width:8.5%", "width:10%", "width:16%", "width:18%"}
+_LIST_CLASSES = frozenset("page_num bod_maintain text_left btn xsmall type3 type5 mL5 mR5".split())
 
 
 def _course_id(value: object) -> str:
@@ -204,6 +208,14 @@ def _text(node: tuple, error: str = _INVALID_DETAIL) -> str | None:
     return _value(node)
 
 
+def _check_shown(nodes, attrs, styles, classes, where: str, hints=frozenset()) -> None:
+    """허용한 속성·인라인 스타일·class만 받는다. hidden·다른 style·blind 등은 화면 표시를 확정할 수 없다."""
+    for node in nodes:
+        if (any(name not in attrs and not (name == "style" and value in styles) for name, value in node[1].items())
+                or any(token not in classes and not (token == "skip" and id(node) in hints) for token in _classes(node))):
+            raise ValueError(f"{_LABEL} {where}에 화면 표시를 확정할 수 없는 속성이 있습니다.")
+
+
 def _link_id(href: str | None) -> str:
     path, _, query = (href or "").partition("?")
     pairs = [pair.partition("=") for pair in query.split("&")]
@@ -228,6 +240,9 @@ def parse_course_listing(raw: bytes, *, page: int) -> tuple[int, list[str]]:
     tables = [tree for tree in parser.trees if tree[0] == "table"]
     if len(labels) != 1 or len(tables) != 1:
         raise ValueError(_INVALID_LISTING)
+    # 숨긴 행의 강좌 번호나 숨긴 숫자가 붙은 전체 페이지 수(순회 종료 판단)를 읽지 않는다.
+    _check_shown((node for tree in parser.trees for node in (tree, *_descendants(tree))),
+                 _LIST_ATTRS, _LIST_STYLES, _LIST_CLASSES, "목록")
     captions = [child for child in _elements(tables[0]) if child[0] == "caption"]
     bodies = [child for child in _elements(tables[0]) if child[0] == "tbody"]
     if len(captions) != 1 or not (_value(captions[0]) or "").startswith("수강신청 목록") or len(bodies) != 1:
@@ -337,11 +352,8 @@ def parse_course_detail(text: str, *, course_id: str) -> dict:
             fields[_TEXT_FIELDS[label]] = _text(value, f"{_LABEL} 상세의 {label} 칸 형식이 바뀌었습니다.")
     if len(seen) != len(_TEXT_FIELDS) + len(_MEDIA_FIELDS):
         raise ValueError(f"{_LABEL} 상세에 빠진 항목이 있습니다.")
-    for node in (block for found in blocks.values() for block in (found[0], *_descendants(found[0]))):
-        if (any(name not in _ATTRS and not (name == "style" and value in _STYLES) for name, value in node[1].items())
-                or any(token not in _CLASSES and not (token == "skip" and id(node) in hints)
-                       for token in _classes(node))):
-            raise ValueError(f"{_LABEL} 상세에 화면 표시를 확정할 수 없는 속성이 있습니다.")
+    _check_shown((block for found in blocks.values() for block in (found[0], *_descendants(found[0]))),
+                 _ATTRS, _STYLES, _CLASSES, "상세", hints)
 
     flags = {f"missing:{key}" for key, value in fields.items() if value is None}
     flags.update(f"{item['kind']}:{item['field']}" for item in media)
