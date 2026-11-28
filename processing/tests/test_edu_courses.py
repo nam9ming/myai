@@ -106,6 +106,8 @@ class CourseListingTest(unittest.TestCase):
             ("구조", _listing(rows=_row("1").replace("eduLctreNo=1&amp;page", "eduLctreNo=2&amp;page", 1))),
             ("구조", _listing(rows=_row("01"))),
             ("구조", _listing(rows=_row("1", extra=_DEEP))),
+            # 브라우저는 template 안의 `</style>`를 무시하므로 목록 표 전체가 화면에 나오지 않는다.
+            ("구조", _listing("1").replace(b"<table", b"<template></style><table").replace(b"</body>", b"</template></body>")),
         ]
         for number, (message, raw) in enumerate(cases):
             with self.subTest(case=number), self.assertRaisesRegex(ValueError, message):
@@ -178,7 +180,9 @@ class CourseDetailTest(unittest.TestCase):
             ("구조", _detail().replace("<dt>수강료</dt>", "<dt>수강료</dt>(재료비 별도)")),
             ("구조", _detail().replace('<div class="bod_title">', '<div class="bod_title">[숨김접두]')),
             ("강좌명", _detail(title="")),
-            ("해석이 갈리는", _detail(강좌소개="<!--->숨김-->")),
+            ("안성배움e 강좌 페이지에 브라우저와 해석이 갈리는", _detail(강좌소개="<!--->숨김-->")),
+            ("구조", _detail().replace('<div id="learning_cont"', '<template></style><div id="learning_cont"')
+             .replace("</body>", "</template></body>")),
             ("구조", _detail().replace("<span>이전</span></button>", f'<img src="{_IMAGE}" alt="사진"></button>', 1)),
             ("구조", _detail().replace("<span>이전</span>", f'<span>이전</span><img src="{_IMAGE}" alt="사진">', 1)),
             ("구조", _detail().replace('class="learning_content"', 'class="learning_content blind"')),
@@ -240,7 +244,7 @@ class CourseBatchTest(unittest.TestCase):
 
         parsed = self.root / "run" / "parsed-5086.json"
         original = parsed.read_bytes()
-        for changed, message in ((original.replace(b"edu-course-parser-v4", b"edu-course-parser-v3"), "파서 버전"),
+        for changed, message in ((original.replace(b"edu-course-parser-v5", b"edu-course-parser-v4"), "파서 버전"),
                                  (original.replace("선착순".encode(), "추첨".encode()), "파싱 결과")):
             parsed.chmod(0o600)
             parsed.write_bytes(changed)

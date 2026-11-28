@@ -363,7 +363,7 @@ python3.13 -B -m processing.collection.d03 --input data/private/source-review-in
 python3.13 -B -m processing.collection.edu_course_batch --name edu-courses-20261128 --max-pages 2 --max-items 20
 ```
 
-`data/private/collection-edu-courses/<name>/`에 목록·상세 HTML, `parsed-<번호>.json`(`edu-course-parser-v4`, 이전 버전 기록은 파서 버전 오류로 거부), 마지막으로 `batch.json`(`citizen-edu-course-batch-v1`)을 쓴다. 한도·`--start-page`·중단 HTTP 상태·종료 코드는 도로 공사현황과 같은 공통 묶음 규칙(`web_batch.py`)이다. 요청 간격만 1.5초로 늘렸다. `read_course_batch`는 보관한 상세 원본의 해시, 파서 버전, 현재 파서로 다시 만든 파싱 결과를 대조한 뒤 강좌별 기록과 원본 경로·해시·수신 시각을 돌려준다.
+`data/private/collection-edu-courses/<name>/`에 목록·상세 HTML, `parsed-<번호>.json`(`edu-course-parser-v5`, 이전 버전 기록은 파서 버전 오류로 거부), 마지막으로 `batch.json`(`citizen-edu-course-batch-v1`)을 쓴다. 한도·`--start-page`·중단 HTTP 상태·종료 코드는 도로 공사현황과 같은 공통 묶음 규칙(`web_batch.py`)이다. 요청 간격만 1.5초로 늘렸다. `read_course_batch`는 보관한 상세 원본의 해시, 파서 버전, 현재 파서로 다시 만든 파싱 결과를 대조한 뒤 강좌별 기록과 원본 경로·해시·수신 시각을 돌려준다.
 
 목록은 `p.page_num`(`전체 N건 [ 현재 / 전체페이지 ]`)의 현재 페이지를 요청과 대조하고, `수강신청 목록` 표의 행마다 상세 링크(제목·접수상태 단추)가 한 강좌 번호만 가리켜야 받는다. 상세는 공지 게시판과 같은 브라우저 기준 태그 경계 규칙(`libraries.py`의 `_NoticeParser`)으로 읽는다. 강좌 화면에는 게시판 본문 영역이 없어 그 파서는 태그 경계 검사와 최상위 `script` 수집만 하고, 이 수집기가 `div#learning_cont` 안의 제목 줄과 `dl > dt + dd` 항목을 읽는다. 상세 HTML에는 강좌 번호를 담은 입력값이 없다. 그래서 페이지 머리의 QR 주소(요청 주소를 되돌려 주는 값)가 요청 번호와 같은지만 확인한다. 이 값은 본문이 그 강좌라는 서버 보증이 아니다. 같은 화면의 공유 도구에 있는 다른 형식의 QR 주소(모든 표본에서 `eduLctreNo=3203&eduInsttNo=7`)는 읽지 않는다. 첨부 주소는 페이지 설정의 `contextPath`로 만들므로, 선언이 정확히 한 번 `/edu`일 때만 받는다.
 

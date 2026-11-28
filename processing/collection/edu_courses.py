@@ -5,7 +5,8 @@
 
 import re
 
-from .libraries import _DOWNLOAD, _VOID_TAGS, _NoticeParser, _declared_context_paths
+from .html_tokens import PinnedHTMLParser
+from .libraries import _DOWNLOAD, _VOID_TAGS, _declared_context_paths
 from .official_web import OFFICIAL_ORIGIN, _fetch
 
 
@@ -26,8 +27,8 @@ _IMAGE = re.compile(re.escape(CONTEXT_PATH) + r"/common/imgView\.do\?attachId=[0
 _MAX_ROWS = 100
 # 고른 영역 안 중첩 한도. 실제 목록·상세 28쪽은 9단이었다. 하위 트리를 재귀로 읽으므로 RecursionError 전에 거부한다.
 _MAX_DEPTH = 64
-# 공유 태그 경계 규칙(_NoticeParser)이나 아래 출력·허용 규칙이 바뀌면 올린다.
-PARSER_VERSION = "edu-course-parser-v4"
+# 공유 태그 경계 규칙(PinnedHTMLParser)이나 아래 출력·허용 규칙이 바뀌면 올린다.
+PARSER_VERSION = "edu-course-parser-v5"
 _TEXT_FIELDS = {
     "접수기간": "application_period",
     "접수현황": "enrollment_status",
@@ -43,6 +44,8 @@ _TEXT_FIELDS = {
 }
 _MEDIA_FIELDS = {"교육장 사진": "venue_photos", "강의계획서 및 이미지": "course_materials"}
 _TEXT_TAGS = {"br", "span", "em", "a"}
+# 안쪽이 화면에 나오지 않는 요소.
+_HIDDEN_TAGS = {"script", "style", "template"}
 # 제목 줄의 span class. bod_btn은 로그인 안내·신청 단추라 읽지 않는다.
 _TITLE_PARTS = {"bod_state_type": "state", "bod_subject": "subject", "bod_btn": None}
 # 2026-11-28 실제 상세 28쪽의 제목 줄·항목 칸에 있던 속성·class만 받는다. hidden 같은 숨김 속성·다른 인라인 스타일과
@@ -82,23 +85,33 @@ def fetch_detail(course: str, *, limit: int) -> bytes:
     return _fetch("GET", _detail_path(course), None, limit, source=_LABEL)
 
 
-class _Page(_NoticeParser):
+class _Page(PinnedHTMLParser):
     """공유 태그 경계 규칙으로 문서를 읽고 `select`가 고른 요소의 하위 트리를 (태그, 속성, 자식)으로 모은다.
 
-    강좌 화면에는 게시판 본문(div.bod_view)이 없으므로 _NoticeParser는 태그 경계 검사와 최상위 script 수집만 한다.
-    script·style·template 안쪽은 화면에 나오지 않아 모으지 않는다. 브라우저는 중복 속성의 첫 값을 쓰므로 받지 않는다.
+    script·style·template 안쪽은 화면에 나오지 않아 모으지 않는다. 그 밖의 script 내용은 페이지 설정·요청 번호 대조에 쓴다.
+    브라우저는 중복 속성의 첫 값을 쓰므로 받지 않는다.
     """
 
     def __init__(self, select, error: str):
-        super().__init__(label=_LABEL)
+        super().__init__()
         self.select = select
         self.error = error
         self.trees: list[tuple] = []
         self.open: list[tuple] = []
+        # 열린 숨김 요소. script·style 안은 원문 텍스트라 태그가 없고, 브라우저처럼 맞는 종료 태그에서만 닫는다.
+        self.hidden: list[str] = []
+        self.scripts: list[str] = []
+
+    def markup_error(self) -> ValueError:
+        return ValueError(f"{_LABEL} 페이지에 브라우저와 해석이 갈리는 태그·주석·스크립트 표기가 있습니다.")
 
     def handle_starttag(self, tag, attrs):
-        hidden = self.hidden_depth
         super().handle_starttag(tag, attrs)
+        hidden = bool(self.hidden)
+        if tag in _HIDDEN_TAGS:
+            self.hidden.append(tag)
+            if self.hidden == ["script"]:
+                self.scripts.append("")
         values = dict(attrs)
         if not hidden and len(values) != len(attrs):
             raise ValueError(self.error)
@@ -112,10 +125,13 @@ class _Page(_NoticeParser):
             self.open.append(node)
 
     def handle_endtag(self, tag):
-        super().handle_endtag(tag)
-        if tag == "br" and self.open and not self.hidden_depth:
+        if self.hidden and self.hidden[-1] == tag:
+            self.hidden.pop()
+        if self.hidden:
+            return
+        if tag == "br" and self.open:
             self.open[-1][2].append(("br", {}, []))  # 브라우저는 `</br>`를 `<br>`로 읽는다.
-        if self.hidden_depth or not self.open or tag in _VOID_TAGS:
+        if not self.open or tag in _VOID_TAGS:
             return
         if self.open[-1][0] != tag:
             raise ValueError(self.error)
@@ -123,7 +139,9 @@ class _Page(_NoticeParser):
 
     def handle_data(self, data):
         super().handle_data(data)
-        if self.open and not self.hidden_depth:
+        if self.hidden == ["script"]:
+            self.scripts[-1] += data
+        elif self.open and not self.hidden:
             self.open[-1][2].append(data)
 
 
@@ -133,7 +151,7 @@ def _read(text: str, select, error: str) -> _Page:
     parser = _Page(select, error)
     parser.feed(text)
     parser.close()
-    if parser.open or parser.hidden_depth:
+    if parser.open or parser.hidden:
         raise ValueError(error)
     return parser
 
