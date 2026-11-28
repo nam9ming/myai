@@ -31,6 +31,7 @@ CASES = {
                                            ["capture_sports_batch", "read_sports_batch"]),
     "processing.collection.reference_tables": (["reference_tables", "garbage", "--name", "x"], ["capture_reference"]),
     "processing.collection.gits_incidents": (["gits_incidents", "--name"], ["collect_incidents"]),
+    "processing.collection.road_closures": (["road_closures", "--name", "x"], ["collect_road_closures"]),
 }
 
 

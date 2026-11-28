@@ -612,6 +612,37 @@ GITS_SERVICE_KEY=<발급 키> python3.13 -B -m processing.collection.gits_incide
 
 센터 소개의 [교통정보 연계](https://gits.gg.go.kr/web/center/webCenterTrafficInfo1.do) 이미지 설명에 따르면 돌발정보는 경기도소방재난본부·한국도로공사·서울도시고속도로·도로교통공단·SK telecom·도내 주요 터널에서 연계한다. 제공 대상 유관기관에는 안성시가 있다. API의 안성 시군도 포착률은 인증 호출로 확인해야 하며 미확인이다. `openapigits.gg.go.kr/robots.txt`는 모든 경로를 허용한다. `gits.gg.go.kr/robots.txt`는 Googlebot 그룹만 두고 위 경로를 막지 않는다. 문서 확인에는 robots 2회, 명세·예시·약관·API 소개·연계 페이지 각 1회로 모두 7회 요청했다. 원본은 git 제외 `data/private/`에만 두었다.
 
+### 고속도로 공사 차단 계획 API·경찰청 TCS 공사정보 CSV 보관
+
+공사·교통 분야의 보완 출처 두 곳을 원본·기록·안성 선택 결과로 보관한다. D03 연결은 후속이다. 2026-11-28에 공개 화면과 robots.txt를 확인했다. 공공데이터포털 robots.txt는 Googlebot 경로만 제한하고, 고속도로 공공데이터 포털은 `/bbs/`만 제한한다. 도시교통정보센터는 robots.txt가 404라 RFC 9309에 따라 제한 없음으로 봤다.
+
+**한국도로공사 공사 및 도로 차단 계획.** [공공데이터포털 15076650](https://www.data.go.kr/data/15076650/openapi.do)은 링크형 API다. 바로가기는 [제공처 상세](https://data.ex.co.kr/openapi/basicinfo/openApiInfoM?apiId=0613)로 연결된다. 인증 키는 공공데이터포털 키가 아니라 고속도로 공공데이터 포털의 인증키 발급(이메일 전송)으로 받는다. 그래서 `DATA_GO_KR_SERVICE_KEY`와 같은 방식이지만 다른 변수 `EX_OPENAPI_KEY`에서만 읽는다. **키가 없어 실제 API는 호출하지 않았고 합성 응답으로만 시험했다.**
+
+```sh
+EX_OPENAPI_KEY=<인증키> python3.13 -B -m processing.collection.road_closures --route-cd 0010 --name ex-0010-20261128
+```
+
+- 요청: `https://data.ex.co.kr/openapi/safeDriving/construction`에 GET으로 `key`·`type=json`·`routeCd`(필수 노선번호, ASCII 숫자 4자리)·`numOfRows=100`·`pageNo`를 보낸다. 선택 인자 `cnstnStrtDates`·`cnstnEndDates`는 값 형식이 항목표에 없어 보내지 않는다. 노선번호 표는 확인하지 못했으므로 실행자가 정한다. 제공처 샘플 코드는 `0010`을 쓴다. 응답당 2 MiB, 최대 20페이지, 요청 간격 1초이며 리디렉션은 따르지 않는다.
+- 키: 요청 주소에만 붙이고 원본·기록·오류 문구에는 쓰지 않는다. 응답에 키가 원문·URL 인코딩·JSON 이스케이프·HTML 문자 참조로 있거나 `+`가 공백으로 풀린 형태로 있으면 저장 전에 거부한다. NUL이 있거나 UTF-8이 아닌 응답은 확인하기 전에 거부한다.
+- 항목: 제공처 항목표(`openApiInfoDetail`)의 출력은 `limtPlanDates`·`limtPlanSeq`·`hqdrNm`·`mtnofKorNm`·`cnstnStrtDates`·`cnstnStrtTimes`·`cnstnEndDates`·`cnstnEndTimes`·`routeCd`·`useRotnm`(차단노선구간)·`icNm`(차단구간명)·`endBlcPntVal`·`strtBlcPntVal`·`blcCtnt`(차단내용)·`totCrgwCnt`·`blcForm`·`cnstnCtnt`·`hveqUseYn`과 봉투 `code`·`message`·`count`·`numOfRows`·`pageNo`·`pageSize`다. 설명문에는 방향·우회도로가 있지만 항목표에는 그런 이름의 항목이 없다. 그래서 방향·우회 정보를 따로 나누지 않고 구간·차단내용 원문에 둔다.
+- 검증: 중복 키 없는 UTF-8 JSON 객체여야 한다. `code`는 `SUCCESS`만 성공으로 본다. 항목표에 값이 없어 같은 포털의 다른 API 관례를 따른 것이며 미확인이다. 봉투 여섯 항목이 모두 있고 봉투 밖 키가 정확히 하나의 배열이어야 한다. 목록 키 이름은 항목표에 없어 그 이름을 `closures.json`의 `list_key`에 남긴다. `pageNo`·`numOfRows`가 요청과 같고 항목 수가 `count`로 계산한 값과 같아야 한다. 값은 문자열·정수·`null`만 받는다. 항목마다 `routeCd`가 요청과 같아야 하며, `10`과 `0010` 같은 형식 차이도 고치지 않고 실패로 남긴다.
+- 값: 원문 그대로 두고 빈 값은 `null`과 `unknown`(`missing`·`empty`)으로 남긴다. 항목표에 없는 값은 `undocumented`에 둔다. 공사 시작·종료 일자·시각은 공사·차단 일정이며 해석하지 않는다. 신청 기간이나 비용 항목은 없다.
+- 안성 판단: `rows`는 `useRotnm` 또는 `icNm`에 `안성`이 있는 항목이다. 단, 뒤에 `면`이 붙은 `안성면`은 제외한다. 근거 열의 원문은 `match`에 둔다. `needs_review`는 두 구간 열이 모두 빈 항목(`blank_section`), 구간 열에 `안성면` 같은 표기만 있는 항목(`mention`), 본부·지사·차단내용·공사내용에만 `안성`이 있는 항목(`other_mention`)이다. 본부·지사는 관할이라 위치 근거로 쓰지 않는다. 구간이 안성시를 지나도 구간 글자에 `안성`이 없으면 고르지 않는다.
+- 보관: `data/private/collection-road-closures/<name>/`에 `page-N.json`, 완료 후 `anseong.json`, 마지막으로 `closures.json`을 쓴다. 기록에는 키를 뺀 요청 주소·수신 시각·해시·실패 사유가 남는다. `read_road_closure_snapshot`은 원본 해시와 검증·선택을 다시 수행해 대조한다. 종료 0은 완료, 2는 실패 기록 보관, 1은 입력·키 설정·저장 오류다.
+
+**경찰청 도시교통정보센터 TCS 공사정보.** [TCS 레퍼런스](https://www.utic.go.kr/guide/utisRefTCS.do)는 경찰서에 신고된 공사정보를 하루 3회 갱신하는 CSV로 제공한다. 샘플 URL은 `http://www.utic.go.kr/guide/tcsOpenData.do?key=(인증키)`다. 인증키는 [개방데이터 신청](https://www.utic.go.kr/guide/newUtisDataWrite.do)에 소속·이메일·신청 IP·목적을 내고 받는다. 그래서 내려받기를 자동화하지 않고 운영자가 받은 CSV만 들여온다. 신청 화면의 준수사항은 신청 목적 외 사용 금지와 UTIC 제공 정보 표기다. 공개 전에 이 조건을 확인한다.
+
+```sh
+python3.13 -B -m processing.collection.tcs_works --csv data/private/tcs-20261128.csv --name tcs-20261128
+```
+
+- 인코딩: NUL이 있으면 거부한다. BOM이 있으면 UTF-8로만 읽는다. 그 밖에는 엄격한 UTF-8과 CP949로 읽어 보고, 둘 다 읽히는데 글자가 다르면 정할 수 없으므로 거부한다. 짧은 한글 파일에서 생길 수 있다. 둘 다 실패해도 거부한다. 판정한 인코딩은 `anseong.json`과 기록에 남긴다.
+- 열: 머리글 없는 13열인 레퍼런스 예제 배치만 읽는다. 항목표는 `seq`·`poliCode`·`revYear`·`revSeq`·`poliName`·`constFromDate`·`constToDate`·`constRoad`·`trafficControl`·`constName`·`builderName`·`anouncePol` 12개다. 예제 행에는 `constToDate` 뒤에 항목표에 없는 두 열(예: `0800`·`1700`)이 더 있고 `anouncePol`이 없다. 두 열은 이름을 붙이지 않고 행 원문 `columns`에만 둔다. `anouncePol`은 `null`과 `not_in_layout`으로 남긴다.
+- 행 검사: 13열, `poliCode`·`revYear` 숫자 4자리, `revSeq` 숫자 6자리, `seq`가 셋을 `-`로 이은 값과 같아야 한다. 일자 열은 숫자 8자리, 8·9번째 열은 숫자 4자리이거나 비어 있어야 한다. 값은 해석하지 않는다. 맞지 않거나 앞 행과 `seq`가 같은 행은 `rejected`에 줄 번호·사유·원문 열을 남긴다. 따옴표·구분자 오류는 행 경계를 믿을 수 없어 파일 전체를 실패로 남긴다.
+- 안성 판단: `rows`는 `constRoad`에 `안성시`가 있거나 `poliName`이 `안성`(안성경찰서)인 행이다. `needs_review`는 `constRoad`·`poliName`에 `안성`만 보이는 행(`mention`)과 `constName`·`trafficControl`에만 보이는 행(`other_mention`)이다. 시공사 이름은 쓰지 않는다.
+- 보관: `data/private/collection-tcs/<name>/`에 운영자 파일 그대로 `source.csv`, 선택 결과 `anseong.json`, 마지막으로 `tcs.json`을 쓴다. 내려받은 시각은 알 수 없어 들여온 시각 `imported_at`만 남긴다. `rejected`가 있거나 행이 0건이면 `partial`(종료 2)이다. 디코딩·CSV 오류는 원본과 사유를 남긴 `failed`(종료 2)다. 입력·저장 오류는 종료 1이다. `read_tcs_snapshot`은 원본 해시와 선택 결과를 다시 만들어 대조한다.
+- 실제 확인: 레퍼런스 화면의 예제 8행을 파서에 넣었다. 8행 모두 13열로 읽혔고 거부 0건, 안성 0건(전국 예시)이며 7개 행은 `trafficControl`이 비어 있었다. 인증키로 받은 실제 CSV는 확인하지 못했다. 실제 파일의 머리글·열 수·인코딩이 예제와 다르면 `rejected` 또는 `failed`로 남으므로 첫 실행 결과를 보고 이 배치를 갱신한다.
+
 ## 시민 수동 추출·보관
 
 [extract-citizen-v1](../contracts/citizen-extraction.md)은 기존 ai-input-v1·manual archive-v1을 재사용하는 별도 family입니다. title/categories와12개 원문 사실을 FieldValue로 보존하며 분류 미상은 null+ambiguous입니다. 날짜·무료·자격·모집/취소·일정 대응을 추론하지 않습니다. 작성자의 기술 계약이며 실제 팀원·Flutter 최종 합의나 새 평가 기준을 대신하지 않습니다.
