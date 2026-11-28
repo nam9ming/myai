@@ -152,6 +152,10 @@ def parse_incidents(raw: bytes) -> dict:
     attributed = next((element for element in root.iter() if element.attrib), None)
     if attributed is not None:
         raise ValueError(f"{LABEL} 응답의 {_label(attributed.tag)} 요소에 예시에 없는 속성이 있습니다.")
+    # 예시에는 네임스페이스가 없다. xmlns 선언은 속성으로 남지 않고 접두어 붙은 필드는 '{uri}이름'이 되어 undocumented로 빠지므로 거부한다.
+    namespaced = next((element for element in root.iter() if element.tag.startswith("{")), None)
+    if namespaced is not None:
+        raise ValueError(f"{LABEL} 응답에 예시에 없는 네임스페이스 요소가 있습니다({_label(namespaced.tag)}).")
     if root.tag != "serviceresult":
         raise ValueError(f"{LABEL} 응답의 최상위 요소가 예시와 다릅니다({_label(root.tag)}).")
     parts = _children(root, ENVELOPE)
