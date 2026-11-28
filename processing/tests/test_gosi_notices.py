@@ -106,10 +106,7 @@ class GosiParserTest(unittest.TestCase):
         rows = _row("1").replace('<td class="gosi_dept">', '<td class="gosi_dept"/>')
         decoy = '<body><textarea><form id="listForm" action="/x"></form></textarea>'.encode()
         self.assertEqual(parse_gosi_listing(listing(rows=rows).replace(b"<body>", decoy), page=1), (1, [row("1")]))
-        # 브라우저는 `</br>`도 `<br>`처럼 줄을 바꾸므로 주체와 번호 사이 띄어쓰기를 지우지 않는다.
-        rows = _row("1", number="안성시 고시</br>제2026-343호")
-        self.assertEqual(parse_gosi_listing(listing(rows=rows), page=1), (1, [row("1")]))
-        for markup in ("<!-->", "</b title='>'>", "<![CDATA[x]]>", '<b class="a"\xa0id="b">'):
+        for markup in ("<!-->", "</b title='>'>", "<![CDATA[x]]>", '<b class="a"\xa0id="b">', "</br>"):
             with self.subTest(markup=markup), self.assertRaisesRegex(ValueError, "고시·공고 목록 HTML에 브라우저와 해석이"):
                 parse_gosi_listing(listing("1").replace(b"<tbody>", f"<tbody>{markup}".encode()), page=1)
 
@@ -190,6 +187,7 @@ class GosiParserTest(unittest.TestCase):
             "바로 보기 정보": (detail(links=_links("75365", (_FILE,)).replace("_1.hwpx','/nt", "_9.hwpx','/nt")), row()),
             "숨김": (detail(body='<div style="display:none">숨은 마감</div>'), row()),
             "해석이 갈리는": (detail(body="<!--> 마감"), row()),
+            "해석이 갈리는 태그·주석": (detail(body="가</br>나"), row()),
             # 태그 경계 검사가 상세 폼 검사보다 먼저다.
             "해석이 갈리는 태그": (detail().replace('id="detailForm"', 'id="detailForm" action="/x" title=a`b'), row()),
             "view_cont": (detail(body="접수기간 2026.12.01~12.05").replace('"view_cont"', '"view_content"'), row()),

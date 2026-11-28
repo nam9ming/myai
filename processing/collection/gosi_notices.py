@@ -189,11 +189,6 @@ class _ListingParser(PinnedHTMLParser):
         elif tag == "div" and self.total is not None:
             self.totals.append(_text(self.total))
             self.total = None
-        elif self.table and tag == "br":
-            # 브라우저는 `</br>`을 `<br>`로 읽어 줄을 바꾼다.
-            if self.cell is not None:
-                self.cell.append(" ")
-            return
         elif self.table:
             if self.table[-1] != tag:
                 self.fail()
