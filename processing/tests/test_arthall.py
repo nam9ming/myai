@@ -177,6 +177,9 @@ class ArthallDetailTest(unittest.TestCase):
             # 원문 요소의 끝 위치가 Python 버전마다 다르다.
             "원문 끝 태그": detail().replace("</script>", "</script/>"),
             "plaintext": detail().replace('<div class="cleB"></div>', "<plaintext>"),
+            # 브라우저에서는 첫 `</script>` 뒤 본문도 script 글자라 보이지 않는다.
+            "script 주석": detail(tabs="", sections='<script><!--<script>\n</script><div id="tap_wrapper1" '
+                                  'class="tap_wrapper">가짜 본문</div></script>-->'),
         }
         for markup in ("<!-- a --!>보이는글<!-- b -->", "<!-->보이는글<!-- b -->", "<!--->보이는글<!-- b -->", "<!-- 끝없음",
                        "<![CDATA[x]]>보이는글", "<!x>", '<!DOCTYPE html PUBLIC "x>">', "<?x>", 'a</div x=">">b',

@@ -169,6 +169,9 @@ class _Parser(HTMLParser):
 
     def handle_data(self, data):
         if self.cdata_elem == "script":
+            # 브라우저는 `<!--<script>` 뒤 첫 `</script>`에서 script를 끝내지 않는다. 실제 원본 script에는 `<!--`가 없다.
+            if "<!--" in data:
+                self.fail()
             self.scripts.append(data)
         elif self.capture is not None:
             self.capture_data(data)
