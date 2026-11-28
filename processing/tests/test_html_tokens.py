@@ -28,12 +28,14 @@ class PinnedHTMLParserTest(unittest.TestCase):
         self.assertEqual(_read('<p>앞</ p><script>a</scriptx>b</script>뒤'), '앞뒤')
         # 원문 텍스트 안의 `</br>`과 이름이 다른 `</bra>`는 받는다.
         self.assertEqual(_read('<script>a</br>b</script><p>앞</bra>뒤'), '앞뒤')
+        self.assertEqual(_read('<o:p data-x="1" xml:lang=ko>앞</o:p>뒤'), '앞뒤')
 
     def test_rejects_forms_python_versions_or_browsers_read_differently(self):
         for html in ('<!--><p>x</p>-->', '<!-- a --!>', '<!-- 끝나지 않는 주석', '<![CDATA[x]]>', '<p></p title=">">',
                      '<!DOCTYPE html PUBLIC "x>', '<?x', '<p class="a"\xa0id="b">x</p>', '<plaintext>x',
                      '<script><!--<script></script>--></script>', '<svg><style><!--</style></svg>', '<svg><template>',
-                     '<svg><foreignObject><style/></foreignObject></svg>', '<p', '가</br>나', '가</BR >나', '가</br/>나', '가</br x>나'):
+                     '<svg><foreignObject><style/></foreignObject></svg>', '<p', '가</br>나', '가</BR >나', '가</br/>나', '가</br x>나',
+                     '<lin\u212a hidden>x', '<p onclic\u212a="x">x</p>', '<p>x</p\u212a>', '<p>x</p\xa0>', '<div"x="y">x</div>'):
             with self.subTest(html=html), self.assertRaisesRegex(ValueError, '해석이 갈리는'):
                 _read(html)
 
