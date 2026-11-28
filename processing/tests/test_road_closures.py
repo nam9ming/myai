@@ -117,6 +117,17 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(review[5]["record"]["fields"]["icNm"], "-")
         self.assertEqual(matched[0]["page"], 3)
 
+    def test_markup_goes_to_review_before_matching(self):
+        # 태그·문자 참조가 있으면 화면 글자를 알 수 없어 일치·불일치 모두 원문으로 정하지 않는다.
+        rows = [item(section="안성IC&lt;"), item(section="경부선", name="&#xC548;성IC"),
+                item(section="경부선", name="평택IC", cnstnCtnt="안<b></b>성 방면"), item(blcCtnt="1차로<br>차단")]
+        matched, review = [], []
+        rc.select_items(1, rc.parse_page(page(rows), "0010", 1)[2], matched, review)
+        self.assertEqual(matched, [])
+        self.assertEqual([(r["position"], r["reason"], r["mentions"]) for r in review],
+                         [(1, "markup", ["useRotnm"]), (2, "markup", []), (3, "markup", []),
+                          (4, "markup", ["useRotnm"])])
+
 
 class CollectTest(unittest.TestCase):
     def setUp(self):

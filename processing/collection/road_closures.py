@@ -37,7 +37,7 @@ CLOSURE_SECTION = "collection-road-closures"
 CLOSURE_ROOT = CAPTURE_ROOT.with_name(CLOSURE_SECTION)
 SCHEMA = "citizen-road-closure-snapshot-v1"
 SELECTION_SCHEMA = "road-closure-anseong-v1"
-PARSER_VERSION = "ex-construction-parser-v2"
+PARSER_VERSION = "ex-construction-parser-v3"
 RESPONSE_MAX_BYTES = 2 * 1024 * 1024
 PAGE_SIZE = 100
 MAX_PAGES = 20
@@ -58,6 +58,8 @@ _ASCII_ESCAPE = re.compile(r"\\u00([0-7][0-9a-fA-F])")
 # 첫가끝(U+1100–U+11FF, 채움 U+115F·U+1160 포함)·호환(U+3131–U+318E)·반각(U+FFA0–U+FFDC) 한글 자모.
 _JAMO = re.compile("[\u1100-\u11ff\u3131-\u318e\uffa0-\uffdc]")
 _LABEL = "고속도로 차단 계획 API"
+# 읽는 열의 실제 표본(TCS 레퍼런스 예제 8행, API 응답 0건)에 태그·문자 참조가 없다. 허용 목록이 비어 `<`·`&`는 모두 검토로 보낸다.
+_MARKUP = re.compile("[<&]")
 
 
 def validate_key(key: str) -> str:
@@ -185,11 +187,18 @@ def _no_location(value: object) -> bool:
             or not any(unicodedata.ucd_3_2_0.category(c)[0] in "LN" and not _JAMO.match(c) for c in value))
 
 
+def has_markup(fields: dict, names: tuple[str, ...]) -> bool:
+    """HTML로 보이면 태그·문자 참조로 화면 글자가 원문과 달라질 수 있어(`안<b></b>성`, `&#xC548;성`) 원문으로 판단하지 않는다."""
+    return any(isinstance(fields[name], str) and _MARKUP.search(fields[name]) for name in names)
+
+
 def select_items(page: int, items: list[dict], matched: list, review: list) -> None:
     """차단 구간 글자에 안성이 보이는 항목만 고른다. 판단할 수 없거나 다른 열에만 보이면 사람 검토로 넘긴다."""
     for position, item in enumerate(items, 1):
         fields, place = item["fields"], {"page": page, "position": position}
-        if found := _mentions(fields, SECTION_FIELDS, _ANSEONG):
+        if has_markup(fields, FIELDS):
+            review.append({**place, "reason": "markup", "mentions": _mentions(fields, FIELDS, "안성"), "record": item})
+        elif found := _mentions(fields, SECTION_FIELDS, _ANSEONG):
             matched.append({**place, "match": {name: fields[name] for name in found}, "record": item})
         elif _no_location(fields["icNm"]):
             # 항목표만으로는 useRotnm(차단노선구간)이 노선명인지 구간인지 알 수 없다. icNm이 비면 구간 근거가 없을 수 있다.

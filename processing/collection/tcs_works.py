@@ -21,7 +21,7 @@ from .capture import (
     validate_name, write_new, write_receipt,
 )
 from .cli import CollectionArguments
-from .road_closures import _no_location
+from .road_closures import _no_location, has_markup
 
 REFERENCE_URL = "https://www.utic.go.kr/guide/utisRefTCS.do"
 APPLY_URL = "https://www.utic.go.kr/guide/newUtisDataWrite.do"
@@ -29,7 +29,7 @@ TCS_SECTION = "collection-tcs"
 TCS_ROOT = CAPTURE_ROOT.with_name(TCS_SECTION)
 SCHEMA = "citizen-tcs-import-v1"
 SELECTION_SCHEMA = "tcs-anseong-v1"
-PARSER_VERSION = "tcs-csv-parser-v2"
+PARSER_VERSION = "tcs-csv-parser-v3"
 CSV_MAX_BYTES = PORTAL_MAX_BYTES
 # 레퍼런스 예제의 열 순서. None은 항목표에 없는 열이다.
 LAYOUT = ("seq", "poliCode", "revYear", "revSeq", "poliName", "constFromDate", "constToDate", None, None,
@@ -42,6 +42,7 @@ _SHAPES = {1: r"[0-9]{4}", 2: r"[0-9]{4}", 3: r"[0-9]{6}", 5: r"[0-9]{8}|", 6: r
 RULE = "constRoad에 '안성시' 포함 또는 poliName이 '안성'(안성경찰서)"
 # 시공사(builderName)는 업체 이름이라 판단·검토에 쓰지 않는다.
 OTHER_FIELDS = ("constName", "trafficControl")
+READ_FIELDS = ("constRoad", "poliName", *OTHER_FIELDS)
 
 
 def decode_csv(raw: bytes) -> tuple[str, str]:
@@ -119,7 +120,10 @@ def select_records(records: list[dict]) -> tuple[list, list]:
             match["constRoad"] = fields["constRoad"]
         if fields["poliName"] is not None and unicodedata.normalize("NFC", fields["poliName"]).strip() == "안성":
             match["poliName"] = fields["poliName"]
-        if match:
+        if has_markup(fields, READ_FIELDS):
+            review.append({"reason": "markup", "record": record,
+                           "mentions": [name for name in READ_FIELDS if _has(fields[name], "안성")]})
+        elif match:
             matched.append({"match": match, "record": record})
         elif _no_location(fields["constRoad"]) and _no_location(fields["poliName"]):
             # 위치 근거가 없어 버리면 안성 행이 조용히 빠질 수 있다.

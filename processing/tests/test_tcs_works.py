@@ -101,6 +101,15 @@ class ParseTest(unittest.TestCase):
         self.assertEqual([review[4]["record"]["fields"]["poliName"], review[5]["record"]["fields"]["constRoad"]],
                          ["-", " - "])
 
+    def test_markup_in_read_columns_goes_to_review(self):
+        # 읽는 네 열의 `<`·`&`만 본다. 판단에 쓰지 않는 시공사 열은 보지 않는다.
+        rows = [row(1, road="안성시 &amp; 평택시"), row(2, police="&#xC548;성"), row(3, control="안<b></b>성 방면"),
+                row(4, name="<br>"), row(5, builder="<b>합성</b>건설")]
+        matched, review = tcs.select_records(tcs.parse_tcs_csv(csv_bytes(*rows).decode())[0])
+        self.assertEqual(matched, [])
+        self.assertEqual([(r["record"]["line"], r["reason"], r["mentions"]) for r in review],
+                         [(1, "markup", ["constRoad"]), (2, "markup", []), (3, "markup", []), (4, "markup", [])])
+
 
 class ImportTest(unittest.TestCase):
     def setUp(self):
