@@ -44,7 +44,6 @@ RELATED_LISTS = {"inqplCtadrList": "010", "inqplHmpgReldList": "020", "baslawLis
 RELATED_FIELDS = ("wlfareInfoDtlCd", "wlfareInfoReldNm", "wlfareInfoReldCn")
 _DECLARED_ENCODING = re.compile(r"\s*<\?xml\b[^>]*?\bencoding\s*=\s*[\"']([^\"']*)[\"']")
 _ASCII_ESCAPE = re.compile(r"\\u00([0-7][0-9a-fA-F])")
-_KEY_ECHO = "복지 API 응답에 인증 키가 포함되어 수집을 중단했습니다."
 
 
 class WelfareResultError(ValueError):
@@ -79,29 +78,30 @@ def service_page_url(service_id: str) -> str:
     return f"{SERVICE_PAGE}?{urlencode({'wlfareInfoId': serv_id(service_id)})}"
 
 
-def reject_key_echo(raw: bytes, service_key: str) -> None:
+def reject_key_echo(raw: bytes, service_key: str, *, source: str = "복지 API",
+                    error: type[ValueError] = WelfareResultError) -> None:
     """원문·URL 인코딩·JSON 이스케이프(`\\/`·`\\u00XX`)·XML 문자 참조로 바뀐 형태까지 키가 있으면 거부한다.
 
     NUL 바이트가 있는 본문은 확인하기 전에 거부한다. 키는 ASCII라 UTF-16·UTF-32로 쓰면 원문이든 %-인코딩이든
     반드시 NUL이 끼므로 아래 UTF-8 비교를 빠져나갈 수 있다. ASCII와 NUL만 있으면 UTF-8로도 읽히므로 아래
     디코딩만으로는 막지 못한다. 본문은 `_document`처럼 UTF-8 BOM을 떼고 엄격한 UTF-8로 읽으며, 읽을 수 없으면
     (EBCDIC 등) 키를 찾을 수 없으므로 확인하기 전에 거부한다. 파서도 NUL이 있거나 UTF-8이 아닌 본문은 읽지 않아
-    잃는 응답이 없다.
+    잃는 응답이 없다. `source`·`error`는 같은 검사를 쓰는 다른 API의 오류 문구와 예외다.
     """
     if b"\x00" in raw:
-        raise WelfareResultError("복지 API 응답에 NUL 바이트가 있어 인증 키 포함 여부를 확인할 수 없으므로 수집을 중단했습니다.")
+        raise error(f"{source} 응답에 NUL 바이트가 있어 인증 키 포함 여부를 확인할 수 없으므로 수집을 중단했습니다.")
     try:
         text = raw.removeprefix(b"\xef\xbb\xbf").decode("utf-8")
     except UnicodeDecodeError:
-        raise WelfareResultError("복지 API 응답이 UTF-8이 아니어서 인증 키 포함 여부를 확인할 수 없으므로 수집을 중단했습니다.") from None
+        raise error(f"{source} 응답이 UTF-8이 아니어서 인증 키 포함 여부를 확인할 수 없으므로 수집을 중단했습니다.") from None
     # 폼 인코딩으로 `+`가 공백으로 풀린 형태도 키를 되살릴 수 있다.
     forms = (service_key, service_key.replace("+", " "))
-    _reject_forms(text, forms)
+    _reject_forms(text, forms, source, error)
     # 주석·CDATA·처리 지시로 나뉜 키는 XML 파싱 뒤에 합쳐진다. 파서가 읽을 본문이면 읽은 글자와 속성 값도 본다.
     # DTD 선언(주석·CDATA 안의 같은 글자 포함)이 있으면 `_document`도 거부하므로 저장하기 전에 여기서 거부한다.
     # 파싱할 수 없는 본문은 합쳐지는 글자가 없고 `_document`가 거부한다.
     if re.search(r"<!(?!--|\[CDATA\[)", text):
-        raise WelfareResultError("복지 API 응답에 XML 선언이 있어 인증 키 포함 여부를 확인할 수 없으므로 수집을 중단했습니다.")
+        raise error(f"{source} 응답에 XML 선언이 있어 인증 키 포함 여부를 확인할 수 없으므로 수집을 중단했습니다.")
     try:
         root = ElementTree.fromstring(text)
     except ElementTree.ParseError:
@@ -109,20 +109,20 @@ def reject_key_echo(raw: bytes, service_key: str) -> None:
     for element in root.iter():
         for value in (element.text, element.tail, *element.attrib.values()):
             if value:
-                _reject_forms(value, forms)
+                _reject_forms(value, forms, source, error)
 
 
-def _reject_forms(text: str, forms: tuple[str, ...]) -> None:
+def _reject_forms(text: str, forms: tuple[str, ...], source: str, error: type[ValueError]) -> None:
     # 겹친 인코딩은 바뀌지 않을 때까지 푼다. 5번 안에 끝나지 않으면 확인할 수 없으므로 거부한다.
     for _ in range(5):
         if any(form in text for form in forms):
-            raise WelfareResultError(_KEY_ECHO)
+            raise error(f"{source} 응답에 인증 키가 포함되어 수집을 중단했습니다.")
         escaped = _ASCII_ESCAPE.sub(lambda match: chr(int(match[1], 16)), text.replace("\\/", "/"))
         decoded = html.unescape(unquote(escaped))
         if decoded == text:
             return
         text = decoded
-    raise WelfareResultError("복지 API 응답의 인코딩이 여러 겹이라 인증 키 포함 여부를 확인할 수 없습니다.")
+    raise error(f"{source} 응답의 인코딩이 여러 겹이라 인증 키 포함 여부를 확인할 수 없습니다.")
 
 
 def _request(path: str, arguments: dict, service_key: str) -> bytes:
