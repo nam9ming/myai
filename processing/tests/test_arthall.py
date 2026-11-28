@@ -215,6 +215,12 @@ class ArthallBatchTest(unittest.TestCase):
         dropped = {**receipt, "items": [row for row in receipt["items"] if row["web_id"] != "7"], "selected": 2, "parsed": 2}
         original = (directory / "batch.json").read_bytes()
         tamper(directory / "batch.json", original, json.dumps(dropped).encode())
+        # 2쪽 목록과 그 공연을 함께 빼거나 실패로 바꾸거나, 한도 도달 묶음을 완료로 적은 기록도 거부한다.
+        first, second = receipt["pages"]
+        kept = {**receipt, "items": receipt["items"][:2], "selected": 2, "parsed": 2}
+        for changed in ({**kept, "pages": [first]}, {**kept, "pages": [first, {**second, "status": "fetch_failed"}]},
+                        {**receipt, "discovery_status": "item_limit"}):
+            tamper(directory / "batch.json", original, json.dumps(changed).encode())
         self.assertEqual(len(read_arthall_batch(self.root.parent, "run")[1]), 3)
 
     def test_failures_keep_raw_and_partial_reads(self):

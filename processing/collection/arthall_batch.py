@@ -84,6 +84,13 @@ def read_arthall_batch(private_root: Path, name: str) -> tuple[dict, dict[str, d
                                                                             entry.get("web_ids")]:
                 raise ValueError("아트홀 목록 파싱 결과가 원본과 다릅니다.")
             listed.extend(entry["web_ids"])
+        # 완료 묶음의 목록 원본은 1쪽부터 보고된 전체 쪽까지 빠짐없이 파싱되어 있어야 한다.
+        if receipt["status"] == "complete" and (
+                receipt.get("discovery_status") != "complete" or receipt.get("start_page") != 1 or not pages
+                or [entry.get("page") for entry in pages] != list(range(1, len(pages) + 1))
+                or any(entry.get("status") != "parsed" or entry.get("reported_pages") != len(pages)
+                       for entry in pages)):
+            raise ValueError("아트홀 완료 묶음의 목록 원본이 전체 쪽을 덮지 않습니다.")
         records, seen = {}, set()
         for row in items:
             key = row.get("web_id") if isinstance(row, dict) else None
