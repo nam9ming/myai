@@ -138,8 +138,9 @@ class GosiParserTest(unittest.TestCase):
                 parse_gosi_detail(text, notice_id="75365", listing=row())
 
     def test_detail_keeps_text_and_attachment_candidates(self):
+        odd = ("A&B.hwp", "A%26B.hwp", "a\\x26b.hwp", "안내%20문.hwp", "안내\t문.hwp")
         files = (_FILE, ("포스터.JPG", "포스터_1.jpg", "/p"), ("조서.xlsx", "조서_2.xlsx", "/p"),
-                 ("A&B.hwp", "A&B_3.hwp", "/p"))
+                 *((name, "s_3.hwp", "/p") for name in odd))
         record = parse_gosi_detail(detail(files=files), notice_id="75365", listing=row())
         self.assertEqual(record["official_url"],
                          "https://www.anseong.go.kr/portal/saeol/gosiView.do?notAncmtMgtNo=75365&mId=0501040000")
@@ -148,14 +149,14 @@ class GosiParserTest(unittest.TestCase):
                                             "description": "우리시 미양면 일원\n붙임 공고문 1부."})
         self.assertEqual(record["registered_on"], "2026-11-27")
         self.assertEqual(record["review_flags"], ["attachment"])
-        self.assertEqual([(item["label"], item["format"]) for item in record["attachments"]],
+        self.assertEqual([(item["label"], item["format"]) for item in record["attachments"][:4]],
                          [(_FILE[0], "hwpx"), ("포스터.JPG", "jpeg"), ("조서.xlsx", None), ("A&B.hwp", "hwp")])
         self.assertEqual(record["attachments"][0]["source_url"],
                          "https://eminwon.anseong.go.kr/emwp/jsp/ofr/FileDown.jsp?user_file_nm=%EA%B3%B5%EA%B3%A0%EB%AC%B8"
                          "%5B(%EC%A3%BC)%ED%95%A9%EC%84%B1%5D.hwpx&sys_file_nm=%EA%B3%B5%EA%B3%A0%EB%AC%B8%5B(%EC%A3%BC)"
                          "%ED%95%A9%EC%84%B1%5D_ofr_ofr_X_1.hwpx&file_path=/ntishome/file/upload/ofr/ofr/20261126")
-        # 질의 구분자가 든 인자는 서버가 읽을 주소를 확정할 수 없어 비워 둔다.
-        self.assertIsNone(record["attachments"][3]["source_url"])
+        # 표본에 없던 문자(질의 구분자, 브라우저가 실행 전에 바꾸는 퍼센트·역슬래시·탭)가 든 인자는 주소를 확정하지 않는다.
+        self.assertEqual([item["source_url"] for item in record["attachments"][3:]], [None] * 5)
         self.assertEqual(record["referenced_notice_numbers"], [])
 
     def test_detail_without_attachments_body_or_date_keeps_null_reasons(self):

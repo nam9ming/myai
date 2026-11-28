@@ -41,9 +41,10 @@ _DOWNLOAD = re.compile(r"javascript:goDownload\('([^']*)', '([^']*)', '([^']*)'\
 _DOWNLOAD_URL = "https://eminwon.anseong.go.kr/emwp/jsp/ofr/FileDown.jsp"
 _PREVIEW = re.compile(r"fn_egov_gosi_preview\('([1-9][0-9]{0,17})','([^']*)','([^']*)','([^']*)','([^']*)'\);"
                       r" return false;")
-# 페이지 스크립트는 encodeURI로 인자를 붙인다. encodeURI가 그대로 두는 문자 가운데 질의 구분자는 주소를 확정하지 않는다.
+# 페이지 스크립트는 encodeURI로 인자를 붙인다. 브라우저는 그 전에 javascript: 주소의 탭·줄바꿈을 지우고 퍼센트 디코딩을
+# 하며 JS 이스케이프도 푼다. 그래서 인자는 실제 원본 36벌(108개)에 쓰인 한글 음절·ASCII 영숫자·공백·`()./[]_~「」`만 받는다.
 _URI_SAFE = ";,/?:@&=+$!*'()#"
-_QUERY_DELIMITERS = set("&=#+")
+_ARGUMENT = re.compile(r"[가-힣A-Za-z0-9 ()./\[\]_~「」]+")
 # 번호 체계는 발행 주체(안성시·안성시 농업기술센터·안성시 공도읍 …)마다 따로라, 번호 앞 주체 문구까지 원문 그대로 담는다.
 # 주체는 `경기도`·`안성시`로 시작할 때만 읽는다(붙여 쓴 `안성시공도읍`, 괄호 `공고(제…호)` 포함). `다시 공고`처럼
 # 낱말 끝만 보고 주체를 지어내지 않도록 다른 주체는 번호만 남긴다. 여는 괄호를 담았으면 닫는 괄호도 있어야 한다.
@@ -278,12 +279,9 @@ def parse_gosi_listing(raw: bytes, *, page: int) -> tuple[int, list[dict]]:
 
 
 def _download_url(arguments: tuple[str, str, str]) -> str | None:
-    if any(_QUERY_DELIMITERS.intersection(value) for value in arguments):
+    if not all(_ARGUMENT.fullmatch(value) for value in arguments):
         return None
-    try:
-        user, system, path = (quote(value, safe=_URI_SAFE) for value in arguments)
-    except UnicodeEncodeError:
-        return None
+    user, system, path = (quote(value, safe=_URI_SAFE) for value in arguments)
     return f"{_DOWNLOAD_URL}?user_file_nm={user}&sys_file_nm={system}&file_path={path}"
 
 
