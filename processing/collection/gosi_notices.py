@@ -16,10 +16,9 @@ _SE_CODE = "01"
 _DETAIL_ACTION = f"/portal/saeol/gosiView.do?mId={_MENU}"
 _NOTICE_ID = re.compile(r"[1-9][0-9]{0,17}")
 _IGNORED_TAGS = {"script", "style", "template", "noscript"}
-# 읽는 영역의 구조는 2026-11-28 실제 원본(목록 6쪽: 1·2·658쪽, 검색 2쪽, 수집 1쪽. 상세 27쪽: 서로 다른 18쪽,
-# 곧 게시물 17건·없는 번호 1건)에 나온 그대로만 받는다. 한 칸 들여쓰기가 중첩이고, 요소는 `태그.class[그 밖 속성 이름]`,
-# 뒤의 글자는 `*`(읽는 칸)·표본의 고정 문구·빈칸(공백만) 가운데 하나다. 자리·class 값·속성 이름이 다르거나 인라인 스타일이
-# 있으면(표본에 없었다) 거부한다. 표본 구조에는 브라우저가 시작 태그에서 요소를 암묵적으로 닫는 자리도 없다.
+# 읽는 영역은 2026-11-28 실제 원본(목록 6쪽, 상세 27쪽. README 표)의 구조만 받는다. 한 칸 들여쓰기가 중첩, 요소는
+# `태그.class[그 밖 속성 이름]`, 뒤 글자는 `*`(읽는 칸)·표본 고정 문구·빈칸(공백만) 가운데 하나다. 그 밖(인라인 스타일
+# 포함)은 거부한다. 표본에는 브라우저가 시작 태그에서 요소를 암묵적으로 닫는 자리도 없다.
 _LISTING_SHAPE = """
 div.board_page *
  span.red
@@ -71,27 +70,24 @@ _CELLS = ("gosi_num", "gosi_tit", "gosi_dept", "gosi_date")
 _TOTAL = re.compile(r"Total ([0-9]{1,18}) Page ([1-9][0-9]{0,17}) / ([1-9][0-9]{0,17})")
 _CAPTION = "고시/공고게시판 목록"
 _INVALID_LISTING = f"{LABEL} 목록 HTML 구조가 올바르지 않습니다."
-# 첨부 링크는 eminwon.anseong.go.kr의 내려받기 주소로 이동하는 스크립트다. 그 호스트의 robots.txt는 2026-11-28 확인 시
-# HTTP 302를 반환해 판단할 수 없었으므로 주소는 검토 후보로만 남기고 요청하지 않는다.
+# 첨부 내려받기 호스트(eminwon)의 robots.txt는 2026-11-28 HTTP 302로 판단할 수 없어 주소는 검토 후보로만 남기고 요청하지 않는다.
 _DOWNLOAD = re.compile(r"javascript:goDownload\('([^']*)', '([^']*)', '([^']*)'\)")
 _DOWNLOAD_URL = "https://eminwon.anseong.go.kr/emwp/jsp/ofr/FileDown.jsp"
 _PREVIEW = re.compile(r"fn_egov_gosi_preview\('([1-9][0-9]{0,17})','([^']*)','([^']*)','([^']*)','([^']*)'\);"
                       r" return false;")
-# 페이지 스크립트는 encodeURI로 인자를 붙인다. 브라우저는 그 전에 javascript: 주소의 탭·줄바꿈을 지우고 퍼센트 디코딩을
-# 하며 JS 이스케이프도 푼다. 그래서 인자는 실제 원본 36벌(108개)에 쓰인 한글 음절·ASCII 영숫자·공백·`()./[]_~「」`만 받는다.
+# encodeURI 전에 브라우저가 javascript: 주소의 탭·줄바꿈 제거·퍼센트 디코딩·JS 이스케이프를 하므로
+# 인자는 실제 원본 36벌(108개)에 쓰인 한글 음절·ASCII 영숫자·공백·`()./[]_~「」`만 받는다.
 _URI_SAFE = ";,/?:@&=+$!*'()#"
 _ARGUMENT = re.compile(r"[가-힣A-Za-z0-9 ()./\[\]_~「」]+")
-# 번호 체계는 발행 주체(안성시·안성시 농업기술센터·안성시 공도읍 …)마다 따로라, 번호 앞 주체 문구까지 원문 그대로 담는다.
-# 주체는 `경기도`·`안성시`로 시작할 때만 읽는다(붙여 쓴 `안성시공도읍`, 괄호 `공고(제…호)` 포함). `다시 공고`처럼
-# 낱말 끝만 보고 주체를 지어내지 않도록 다른 주체는 번호만 남긴다. 여는 괄호를 담았으면 닫는 괄호도 있어야 한다.
+# 번호 체계가 발행 주체마다 따로라 `경기도`·`안성시`로 시작하는 주체 문구(`안성시공도읍`, `공고(제…호)` 포함)까지 담는다.
+# `다시 공고`처럼 주체를 지어내지 않도록 다른 주체는 번호만 남긴다. 여는 괄호를 담았으면 닫는 괄호도 있어야 한다.
 _NOTICE_NUMBER = re.compile(r"(?:(?:경기도|안성시)(?: ?[가-힣]{1,20}){0,3}? ?(?:고시|공고) ?(\()?)?"
                             r"제\s?[0-9]{4}\s?-\s?[0-9]{1,6}\s?호(?(1)\))")
 _MEDIA_LIMIT = 40
 
 
 def _notice_key(number: str) -> str:
-    # 공백·괄호를 지우고, `경기도 안성시 …`·`경기도 및 안성시 …`는 `안성시 …`와 같은 주체로 본다.
-    # `경기도 고시`처럼 도 자체 발행은 그대로 둔다.
+    # 공백·괄호를 지우고 `경기도 (및) 안성시 …`는 `안성시 …`로 본다. 도 자체 발행(`경기도 고시`)은 그대로 둔다.
     return re.sub(r"^경기도[가-힣]*?(?=안성시)", "", re.sub(r"[\s()]", "", number))
 
 
@@ -121,6 +117,12 @@ def _step(shape: dict, parent: tuple, tag: str, attrs: list) -> tuple | None:
     classes = next((value or "" for name, value in attrs if name == "class"), None)
     path = parent + ((tag, classes, tuple(sorted(set(names) - {"class"}))),)
     return path if path in shape and len(set(names)) == len(names) else None
+
+
+def _repeated(attrs: list) -> bool:
+    # 브라우저는 중복 속성의 첫 값을, dict(attrs)는 마지막 값을 쓴다. 영역을 고르는 class·id는 문서 어디서든 하나여야 한다.
+    names = [name for name, _ in attrs]
+    return names.count("class") > 1 or names.count("id") > 1
 
 
 def _said(rule: str | None, data: str) -> bool:
@@ -176,6 +178,8 @@ class _ListingParser(PinnedHTMLParser):
 
     def handle_starttag(self, tag, attrs):
         super().handle_starttag(tag, attrs)
+        if _repeated(attrs):
+            self.fail()
         values = dict(attrs)
         classes = (values.get("class") or "").split()
         if not self.paths:
@@ -188,8 +192,7 @@ class _ListingParser(PinnedHTMLParser):
                 if self.in_form:
                     self.fail()
                 if values.get("id") == "listForm":
-                    if (self.form_seen or names.count("id") != 1 or names.count("action") != 1
-                            or values["action"] != self.action):
+                    if self.form_seen or names.count("action") != 1 or values["action"] != self.action:
                         raise ValueError(f"{LABEL} 목록이 요청한 게시판·페이지와 일치하지 않습니다.")
                     self.in_form = self.form_seen = True
                 return
@@ -315,6 +318,8 @@ class _GosiParser(_NoticeParser):
             self.hidden.append(tag)
         # 상위 파서가 태그를 넣은 뒤의 상태로 판단한다. 최상위 form은 쌓이지 않는다.
         super().handle_starttag(tag, attrs)
+        if _repeated(attrs):
+            raise ValueError(f"{LABEL} HTML의 class·id 속성이 중복되었습니다.")
         if self.paths or self.tags:
             # 본문 영역은 상위 파서의 허용 목록보다 좁은 표본 구조만 받는다.
             path = _step(_BODY_SHAPE, self.paths[-1] if self.paths else (), tag, attrs)
@@ -325,13 +330,13 @@ class _GosiParser(_NoticeParser):
         names = [name for name, _ in attrs]
         values = dict(attrs)
         if not self.tags and not self.hidden_depth and tag == "form" and values.get("id") == "detailForm":
-            if names.count("id") != 1 or names.count("action") != 1:
+            if names.count("action") != 1:
                 raise ValueError(f"{LABEL} 상세 폼의 HTML 속성이 중복되었습니다.")
             self.detail_actions.append(values["action"])
         if self.hidden_depth or not self.tags:
             return
         if tag == "dl":
-            # 첨부가 없는 글도 템플릿은 빈 `dl.view_file`을 출력한다(없는 번호 화면에서 확인). 영역의 유무로 형식 변경을 가린다.
+            # 템플릿은 첨부가 없어도 빈 `dl.view_file`을 출력한다(없는 번호 화면). 영역의 유무로 형식 변경을 가린다.
             if self.file_section_seen:
                 raise ValueError(f"{LABEL} 첨부 영역이 중복되었습니다.")
             self.file_section_seen = True
@@ -439,8 +444,7 @@ def parse_gosi_detail(text: str, *, notice_id: str, listing: dict) -> dict:
         pass
     if registered is None and fields["registered_date"] is not None:
         flags.add("registered_date_unparsed")
-    # 정정·변경 관계는 본문·제목에 적힌 고시공고번호 문자열만 남기고, 제목의 `(정정)`만으로 원공고를 추정하지 않는다.
-    # 자기 번호 제외와 중복 제거는 같은 비교 키로, 발행 주체까지 같은 전체 번호일 때만 한다. 키만 정규화하고 값은 원문이다.
+    # 적힌 번호 문자열만 남기고 `(정정)`만으로 원공고를 추정하지 않는다. 자기 번호 제외·중복 제거는 같은 키로, 값은 원문이다.
     references, seen = [], {_notice_key(fields["notice_number"] or "")}
     for found in _NOTICE_NUMBER.finditer(f"{title}\n{fields['description'] or ''}"):
         if (key := _notice_key(found[0])) not in seen:

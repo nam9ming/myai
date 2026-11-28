@@ -109,8 +109,7 @@ class GosiParserTest(unittest.TestCase):
                 parse_gosi_listing(listing(rows=rows), page=1)
 
     def test_listing_reads_tag_borders_like_a_browser(self):
-        # 빈 요소가 아닌 태그의 `/>`는 무시되고(칸이 열린 채 글을 담는다), textarea 안의 글은 태그가 아니다.
-        # 3.13.5 표준 파서는 textarea 안의 가짜 listForm을 폼으로 읽었다.
+        # 빈 요소가 아닌 태그의 `/>`는 무시되고 textarea 안 글은 태그가 아니다(3.13.5 표준 파서는 가짜 listForm을 읽었다).
         rows = _row("1").replace('<td class="gosi_dept">', '<td class="gosi_dept"/>')
         decoy = '<body><textarea><form id="listForm" action="/x"></form></textarea>'.encode()
         self.assertEqual(parse_gosi_listing(listing(rows=rows).replace(b"<body>", decoy), page=1), (1, [row("1")]))
@@ -135,8 +134,7 @@ class GosiParserTest(unittest.TestCase):
             parse_gosi_listing(hidden.replace(b"</form></body>", b"</form></template></body>"), page=1)
 
     def test_detail_accepts_only_sampled_markup_in_body(self):
-        # 공지 게시판 허용 목록이 받는 표기라도 실제 고시·공고 상세에 없던 자리·태그·속성·class는 거부한다.
-        # 정상 중첩 목록처럼 브라우저가 암묵적으로 닫지 않는 표기도 표본에 없으면 거부한다.
+        # 공지 게시판 허용 목록이 받는 표기라도 표본에 없던 자리·태그·속성·class·중첩 목록은 거부한다.
         empty = detail(body="")
         texts = [detail(body=body) for body in (
             "<b>마감</b>", '<span style="color:red">마감</span>', '<p class="blind">마감</p>', '<div data-x="1">마감</div>',
@@ -156,6 +154,18 @@ class GosiParserTest(unittest.TestCase):
             with self.subTest(new=new), self.assertRaisesRegex(ValueError, "구조가 올바르지"):
                 parse_gosi_detail(empty.replace(old, new), notice_id="75365", listing=row())
 
+    def test_repeated_class_or_id_fails_anywhere(self):
+        # 브라우저는 중복 속성의 첫 값을 써서 미끼가 보인다(예전에는 마지막 값을 읽어 받았다).
+        url = "/portal/saeol/gosiList.do?seCode=01&amp;mId=0501040000&amp;page=1"
+        table = f'<table class="tableSt_list row_over" class="x"><tbody>{_row("2")}</tbody></table><div class="box_page">'
+        for old, new in (('<div class="box_page">', table), ("<body>", f'<body><form id="listForm" id="z" action="{url}"></form>')):
+            with self.subTest(new=new), self.assertRaisesRegex(ValueError, "구조"):
+                parse_gosi_listing(listing("1").replace(old.encode(), new.encode()), page=1)
+        body = '<div class="bod_view" class="x"><h4>가짜</h4><div class="view_cont">지원금 100만원</div></div>'
+        for new in (body, '<form id="detailForm" id="z" action="/portal/bbs/view.do?mId=0501010000"></form>'):
+            with self.subTest(new=new), self.assertRaisesRegex(ValueError, "class·id 속성이 중복"):
+                parse_gosi_detail(detail().replace("<body>", "<body>" + new), notice_id="75365", listing=row())
+
     def test_detail_keeps_text_and_attachment_candidates(self):
         odd = ("A&B.hwp", "A%26B.hwp", "a\\x26b.hwp", "안내%20문.hwp", "안내\t문.hwp")
         files = (_FILE, ("포스터.JPG", "포스터_1.jpg", "/p"), ("조서.xlsx", "조서_2.xlsx", "/p"),
@@ -174,7 +184,7 @@ class GosiParserTest(unittest.TestCase):
                          "https://eminwon.anseong.go.kr/emwp/jsp/ofr/FileDown.jsp?user_file_nm=%EA%B3%B5%EA%B3%A0%EB%AC%B8"
                          "%5B(%EC%A3%BC)%ED%95%A9%EC%84%B1%5D.hwpx&sys_file_nm=%EA%B3%B5%EA%B3%A0%EB%AC%B8%5B(%EC%A3%BC)"
                          "%ED%95%A9%EC%84%B1%5D_ofr_ofr_X_1.hwpx&file_path=/ntishome/file/upload/ofr/ofr/20261126")
-        # 표본에 없던 문자(질의 구분자, 브라우저가 실행 전에 바꾸는 퍼센트·역슬래시·탭)가 든 인자는 주소를 확정하지 않는다.
+        # 표본에 없던 문자(질의 구분자, 실행 전에 바뀌는 `%`·`\`·탭)가 든 인자는 주소를 확정하지 않는다.
         self.assertEqual([item["source_url"] for item in record["attachments"][3:]], [None] * 5)
         self.assertEqual(record["referenced_notice_numbers"], [])
 
@@ -204,8 +214,8 @@ class GosiParserTest(unittest.TestCase):
         self.assertEqual(record["referenced_notice_numbers"], [])
 
     def test_detail_keeps_issuer_of_spaced_or_bracketed_numbers(self):
-        # 경기도 발행, 붙여 쓴 주체, 괄호 표기도 주체까지 원문대로 남긴다. 괄호·공백만 다른 같은 번호는 하나로 본다.
-        # 모르는 주체(`다시`는 주체가 아니다)와 짝이 맞지 않는 괄호는 주체를 지어내지 않고 번호만 남긴다.
+        # 경기도 발행·붙여 쓴 주체·괄호 표기는 주체까지 남기고 괄호·공백만 다른 번호는 하나로 본다.
+        # 모르는 주체(`다시`)·짝 없는 괄호는 번호만 남긴다.
         body = ("경기도 고시 제2026-100호, 안성시공도읍 공고 제2026-79호, 안성시 공고(제2026-3155호)를 정정합니다."
                 " 안성시 공고 (제2026-3155호), 안성시 고시(제2026-343호), 다시 공고 제2026-5호, 안성시 공고(제2026-6호 참조")
         record = parse_gosi_detail(detail(body=body), notice_id="75365", listing=row())
@@ -308,18 +318,18 @@ class GosiBatchTest(unittest.TestCase):
 
     def test_cli_reports_capture_and_verify(self):
         self.listing.return_value = listing("7")
-        with (patch.object(gosi_batch, "GOSI_ROOT", self.root), patch("sys.argv", ["gosi_batch", "capture", "--name", "a"]),
-              contextlib.redirect_stdout(io.StringIO()) as output):
-            self.assertEqual(gosi_batch.main(), 0)
-        self.assertEqual(json.loads(output.getvalue())["parsed"], 1)
-        with (patch.object(gosi_batch, "GOSI_ROOT", self.root), patch("sys.argv", ["gosi_batch", "verify", "--name", "a"]),
-              contextlib.redirect_stdout(io.StringIO()) as output):
-            self.assertEqual(gosi_batch.main(), 0)
-        self.assertEqual(json.loads(output.getvalue()), {"batch_id": "a", "parsed": 1, "attachments": 1})
-        with (patch.object(gosi_batch, "GOSI_ROOT", self.root), patch("sys.argv", ["gosi_batch", "verify", "--name", "b"]),
-              contextlib.redirect_stderr(io.StringIO()) as error):
-            self.assertEqual(gosi_batch.main(), 1)
-        self.assertIn("수집 기록 확인 실패", error.getvalue())
+
+        def run(*argv, redirect=contextlib.redirect_stdout):
+            with (patch.object(gosi_batch, "GOSI_ROOT", self.root), patch("sys.argv", ["gosi_batch", *argv]),
+                  redirect(io.StringIO()) as output):
+                return gosi_batch.main(), output.getvalue()
+        code, output = run("capture", "--name", "a")
+        self.assertEqual((code, json.loads(output)["parsed"]), (0, 1))
+        code, output = run("verify", "--name", "a")
+        self.assertEqual((code, json.loads(output)), (0, {"batch_id": "a", "parsed": 1, "attachments": 1}))
+        code, output = run("verify", "--name", "b", redirect=contextlib.redirect_stderr)
+        self.assertEqual(code, 1)
+        self.assertIn("수집 기록 확인 실패", output)
 
 
 if __name__ == "__main__":
