@@ -24,7 +24,7 @@ from .capture import (
     validate_name, write_new, write_receipt,
 )
 from .cli import CollectionArguments
-from .odcloud_format import _blank, row_fingerprints
+from .odcloud_format import PLACEHOLDERS, row_fingerprints
 from .official_web import _fetch
 
 HOST = "data.ex.co.kr"
@@ -171,13 +171,22 @@ def _mentions(fields: dict, names: tuple[str, ...], pattern: str | re.Pattern) -
             and re.search(pattern, unicodedata.normalize("NFC", fields[name]))]
 
 
+def _no_location(value: object) -> bool:
+    """위치 판정용 빈 값. 공용 `_blank`와 같지만 글자 여부를 고정된 유니코드 3.2 DB로 본다."""
+    # isalnum·casefold는 파이썬마다 유니코드 판이 달라 같은 원본의 판정이 바뀐다. 3.2 뒤에 생긴 문자는 Cn이라 자리표시로 보고 검토로 보낸다.
+    if not isinstance(value, str):
+        return value is None
+    return ("".join(unicodedata.normalize("NFC", value).split()).casefold() in PLACEHOLDERS
+            or not any(unicodedata.ucd_3_2_0.category(c)[0] in "LN" for c in value))
+
+
 def select_items(page: int, items: list[dict], matched: list, review: list) -> None:
     """차단 구간 글자에 안성이 보이는 항목만 고른다. 판단할 수 없거나 다른 열에만 보이면 사람 검토로 넘긴다."""
     for position, item in enumerate(items, 1):
         fields, place = item["fields"], {"page": page, "position": position}
         if found := _mentions(fields, SECTION_FIELDS, _ANSEONG):
             matched.append({**place, "match": {name: fields[name] for name in found}, "record": item})
-        elif _blank(fields["icNm"]):
+        elif _no_location(fields["icNm"]):
             # 항목표만으로는 useRotnm(차단노선구간)이 노선명인지 구간인지 알 수 없다. icNm이 비면 구간 근거가 없을 수 있다.
             # '-'·'없음' 같은 자리표시도 위치를 알려 주지 않으므로 빈 값과 같이 검토로 보낸다. 저장 값은 원문 그대로 둔다.
             review.append({**place, "reason": "blank_section", "mentions": _mentions(fields, FIELDS, "안성"),

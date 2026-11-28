@@ -82,14 +82,17 @@ class ParseTest(unittest.TestCase):
         rows = [row(1, road="경기도 안성시 공도읍 합성로"), row(2, police="안성"), row(3, road="무주군 안성면 합성로"),
                 row(4, name="안성 방면 합성 공사"), row(5, builder="안성건설"), row(6),
                 row(7, police="", road="", name="안성 방면 합성 공사"), row(8, police="", road=""),
-                row(9, police="-", road="없음"), row(10, police="", road=" - ", control="안성 방면 통제")]
+                row(9, police="-", road="없음"), row(10, police="", road=" - ", control="안성 방면 통제"),
+                row(11, police="", road="\U00010D50", name="안성 방면 합성 공사")]
         matched, review = tcs.select_records(tcs.parse_tcs_csv(csv_bytes(*rows).decode())[0])
         self.assertEqual([m["match"] for m in matched],
                          [{"constRoad": "경기도 안성시 공도읍 합성로"}, {"poliName": "안성"}])
         self.assertEqual([(r["record"]["line"], r["reason"], r["mentions"]) for r in review],
                          [(3, "mention", ["constRoad"]), (4, "other_mention", ["constName"]),
                           (7, "blank_location", ["constName"]), (8, "blank_location", []),
-                          (9, "blank_location", []), (10, "blank_location", ["trafficControl"])])
+                          (9, "blank_location", []), (10, "blank_location", ["trafficControl"]),
+                          # 3.2 뒤에 생긴 문자만 있으면 파이썬 판과 관계없이 검토로 간다(3.14 isalnum으로는 other_mention).
+                          (11, "blank_location", ["constName"])])
         self.assertEqual([review[4]["record"]["fields"]["poliName"], review[5]["record"]["fields"]["constRoad"]],
                          ["-", " - "])
 
