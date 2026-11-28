@@ -297,7 +297,7 @@ class SportsBatchTest(unittest.TestCase):
     def test_detail_failures_robots_rules_and_limits(self):
         self.robots.return_value = b"User-agent: *\nDisallow: /index.do?board_id=notice&cp=%2Fboard%2Fview.do&menu_id=0008&pageIndex=1&seq=2\n"
         self.listing.return_value = listing("1", "2", "3", "4")
-        self.detail.side_effect = [detail("99").encode(), SourceHTTPError(429)]
+        self.detail.side_effect = [detail("99").encode(), SourceHTTPError(429, "체육시설 공지 상세")]
         summary, receipt, directory = self.capture(max_items=3)
         self.assertEqual((summary["status"], summary["discovery_status"], summary["parsed"]), ("partial", "item_limit", 0))
         self.assertEqual([item["status"] for item in receipt["items"]], ["parse_failed", "not_attempted", "fetch_failed"])
@@ -308,8 +308,12 @@ class SportsBatchTest(unittest.TestCase):
         self.assertEqual(read_sports_batch(self.private, "run"), {})
         for filename in ("robots.txt", "list-1.html", "detail-1.html"):
             self.rejects("run", filename)
-        receipt["items"][0]["status"] = "fetch_failed"
-        self.rejects("run", "batch.json", receipt)
+        first, denied, failed = receipt["items"]
+        # 중단 없는 건너뜀, 막힌 주소 요청, 틀린 중단 상태.
+        for change in ({"items": [{**first, "status": "fetch_failed"}, denied, failed]}, {"stop_http_status": None},
+                       {"items": [first, {**denied, "status": "fetch_failed"}, failed]},
+                       {"items": [first, denied, {**failed, "status": "not_attempted"}]}):
+            self.rejects("run", "batch.json", {**receipt, **change})
 
     def test_waf_block_and_crawl_delay(self):
         self.robots.return_value = b"User-agent: *\nCrawl-delay: 30\nDisallow: /admin/\n"
@@ -320,6 +324,9 @@ class SportsBatchTest(unittest.TestCase):
         self.assertEqual(receipt["stop_http_status"], 400)
         self.assertEqual(self.detail.call_count, 1)
         self.assertEqual([call.args for call in self.sleep.call_args_list], [(30.0,), (30.0,)])
+        failed, *rest = receipt["items"]
+        for change in ({"stop_http_status": 429}, {"items": [{**failed, "error": "x"}, *rest], "stop_http_status": None}):
+            self.rejects("run", "batch.json", {**receipt, **change})
 
     def test_listing_failure_keeps_original(self):
         self.listing.return_value = b"<html><a href='javascript:fnView(96)'>x</a></html>"
@@ -329,6 +336,9 @@ class SportsBatchTest(unittest.TestCase):
         self.rejects("run", "list-1.html")
         receipt["pages"][0]["status"] = "fetch_failed"
         self.rejects("run", "batch.json", receipt)
+        self.listing.side_effect = SourceHTTPError(429, "체육시설 공지 목록")
+        _, receipt, _ = self.capture("stopped")
+        self.rejects("stopped", "batch.json", {**receipt, "stop_http_status": None})
         self.detail.assert_not_called()
 
     def test_cli_exit_codes(self):

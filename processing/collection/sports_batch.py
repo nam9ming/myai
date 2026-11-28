@@ -7,7 +7,7 @@ import sys
 from time import sleep
 
 from .__main__ import decode_input
-from .batch import LIST_MAX_BYTES, save_web
+from .batch import LIST_MAX_BYTES, STOP_STATUSES, save_web
 from .capture import (
     CAPTURE_ROOT, bundle_directory, capture_timestamp, open_archive, read_capture_file, read_receipt, validate_name,
     write_receipt,
@@ -131,6 +131,11 @@ def _raw(directory: int, entry: dict, filename: str, url: str, limit: int) -> by
     return raw
 
 
+def _halt(entry: dict, source: str, statuses) -> int | None:
+    """기록된 오류 문구에서 중단 HTTP 상태를 다시 낸다."""
+    return next((s for s in statuses if entry.get("error") == str(SourceHTTPError(s, source))), None)
+
+
 def _attempt(parse, raw: bytes | None):
     if raw is None:
         return "fetch_failed", None
@@ -165,6 +170,7 @@ def read_sports_batch(private_root: Path, name: str) -> dict[str, dict]:
                 or (pages and (pages[0].get("status"), pages[0].get("web_ids")) != page)
                 or [row.get("web_id") for row in items] != listed[:limit]):
             raise ValueError("체육시설 공지 robots.txt·목록 기록이 원본과 다릅니다.")
+        stop = _halt(pages[0], "체육시설 공지 목록", STOP_STATUSES) if page and page[0] == "fetch_failed" else None
         assets = {}
         for row in items:
             seq = row["web_id"]
@@ -176,9 +182,12 @@ def read_sports_batch(private_root: Path, name: str) -> dict[str, dict]:
                 if stored.get("parser_version") != PARSER_VERSION:
                     raise ValueError("다른 파서 버전으로 만든 파싱 결과입니다. 현재 버전으로 다시 수집해 주세요.")
             state, record = _attempt(lambda data: parse_detail(decode_input(data, "체육시설 공지 상세")[0], seq=seq), raw)
-            if (row.get("source_url") != url or (raw is not None and not allowed(rules, url))
-                    or row.get("status") not in (state, "not_attempted" if raw is None else state)):
+            skipped = stop is not None or not allowed(rules, url)
+            if (row.get("source_url") != url or row.get("status") != ("not_attempted" if skipped else state)
+                    or skipped and (raw is not None or row.get("error") != (None if stop else _ROBOTS_BLOCKED))):
                 raise ValueError("체육시설 공지 상세 기록이 원본과 다릅니다.")
+            if not skipped and state == "fetch_failed":
+                stop = _halt(row, "체육시설 공지 상세", STOP_STATUSES | {400})
             if record is None:
                 continue
             if stored != {"schema_version": RECORD_SCHEMA, "parser_version": PARSER_VERSION,
@@ -187,8 +196,8 @@ def read_sports_batch(private_root: Path, name: str) -> dict[str, dict]:
             assets[seq] = {"raw_asset_path": (relative / filename).as_posix(), "raw_sha256": row["sha256"],
                            "official_url": url, "collected_at": row["fetched_at"], "record": record}
         status = "complete" if discovery == "first_page_only" and len(assets) == len(items) else "partial"
-        if ((receipt.get("status"), receipt.get("discovery_status"), receipt.get("selected"), receipt.get("parsed"))
-                != (status, discovery, len(items), len(assets))):
+        if ((receipt.get("status"), receipt.get("discovery_status"), receipt.get("selected"), receipt.get("parsed"),
+             receipt.get("stop_http_status")) != (status, discovery, len(items), len(assets), stop)):
             raise ValueError("체육시설 공지 수집 기록의 상태·건수가 원본과 다릅니다.")
         return assets
 
