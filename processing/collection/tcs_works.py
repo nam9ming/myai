@@ -29,7 +29,7 @@ TCS_SECTION = "collection-tcs"
 TCS_ROOT = CAPTURE_ROOT.with_name(TCS_SECTION)
 SCHEMA = "citizen-tcs-import-v1"
 SELECTION_SCHEMA = "tcs-anseong-v1"
-PARSER_VERSION = "tcs-csv-parser-v1"
+PARSER_VERSION = "tcs-csv-parser-v2"
 CSV_MAX_BYTES = PORTAL_MAX_BYTES
 # 레퍼런스 예제의 열 순서. None은 항목표에 없는 열이다.
 LAYOUT = ("seq", "poliCode", "revYear", "revSeq", "poliName", "constFromDate", "constToDate", None, None,

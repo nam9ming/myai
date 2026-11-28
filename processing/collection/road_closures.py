@@ -37,7 +37,7 @@ CLOSURE_SECTION = "collection-road-closures"
 CLOSURE_ROOT = CAPTURE_ROOT.with_name(CLOSURE_SECTION)
 SCHEMA = "citizen-road-closure-snapshot-v1"
 SELECTION_SCHEMA = "road-closure-anseong-v1"
-PARSER_VERSION = "ex-construction-parser-v1"
+PARSER_VERSION = "ex-construction-parser-v2"
 RESPONSE_MAX_BYTES = 2 * 1024 * 1024
 PAGE_SIZE = 100
 MAX_PAGES = 20
@@ -55,6 +55,8 @@ _ANSEONG = re.compile("안성(?!면)")
 _KEY = re.compile(r"[A-Za-z0-9_+/=-]{8,256}", re.ASCII)
 _ROUTE = re.compile(r"[0-9]{4}", re.ASCII)
 _ASCII_ESCAPE = re.compile(r"\\u00([0-7][0-9a-fA-F])")
+# 첫가끝(U+1100–U+11FF, 채움 U+115F·U+1160 포함)·호환(U+3131–U+318E)·반각(U+FFA0–U+FFDC) 한글 자모.
+_JAMO = re.compile("[\u1100-\u11ff\u3131-\u318e\uffa0-\uffdc]")
 _LABEL = "고속도로 차단 계획 API"
 
 
@@ -174,11 +176,12 @@ def _mentions(fields: dict, names: tuple[str, ...], pattern: str | re.Pattern) -
 def _no_location(value: object) -> bool:
     """위치 판정용 빈 값. 공용 `_blank`와 같지만 글자 여부를 고정된 유니코드 3.2 DB로 본다."""
     # isalnum·casefold는 파이썬마다 유니코드 판이 달라 같은 원본의 판정이 바뀐다. 3.2 뒤에 생긴 문자는 Cn이라 자리표시로 보고 검토로 보낸다.
-    # 줄표 대신 흔히 치는 'ㅡ' 같은 한글 호환 자모(U+3131–U+318E)도 자리표시로 본다. 자모만으로 된 지명은 없다.
+    # 줄표 대신 치는 'ㅡ'·채움 문자처럼 글자가 한글 자모뿐이면 자리표시로 본다. 자모만으로 쓴 지명은 없다.
+    # 원문을 NFC로 묶지 않고 보므로 첫가끝으로 풀어 쓴(NFD) 한글 값도 검토로 간다.
     if not isinstance(value, str):
         return value is None
     return ("".join(unicodedata.normalize("NFC", value).split()).casefold() in PLACEHOLDERS
-            or not any(unicodedata.ucd_3_2_0.category(c)[0] in "LN" and not "\u3131" <= c <= "\u318e" for c in value))
+            or not any(unicodedata.ucd_3_2_0.category(c)[0] in "LN" and not _JAMO.match(c) for c in value))
 
 
 def select_items(page: int, items: list[dict], matched: list, review: list) -> None:
