@@ -167,6 +167,8 @@ class LibraryHoursParserTest(unittest.TestCase):
         })
         fixtures.update({
             "second_conts": (page(outside='<div id="conts" class="conts"></div>'), r"\(본문 영역 div#conts\)"),
+            # 브라우저는 앞의 id를 쓰므로 이 요소도 div#conts다.
+            "duplicate_conts_id": (page(outside='<div id="conts" id="x" class="conts"></div>'), r"\(본문 영역 div#conts\)"),
             "no_conts": (page().replace('id="conts"', 'id="other"'), "없거나 닫히지 않음"),
             "unterminated": (page().rsplit("</div></div>", 1)[0], "없거나 닫히지 않음"),
         })

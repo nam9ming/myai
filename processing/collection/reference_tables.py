@@ -106,7 +106,8 @@ class _PageParser(PinnedHTMLParser):
                 if attrs:
                     self.fail("title 속성")
                 self.title = []
-            elif tag == "div" and values.get("id") == "conts":
+            elif tag == "div" and ("id", "conts") in attrs:
+                # 브라우저는 중복 속성 중 앞의 값을 쓴다. 어느 쪽이든 conts면 본문 영역 후보로 보고 중복 속성을 거부한다.
                 if self.conts_seen or sorted(name for name, _ in attrs) != ["class", "id"] or values["class"] != "conts":
                     self.fail("본문 영역 div#conts")
                 self.conts_seen = True
