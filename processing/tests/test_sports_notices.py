@@ -12,7 +12,7 @@ from processing.collection.official_web import SourceHTTPError
 from processing.collection.sports_batch import capture_sports_batch, read_sports_batch
 from processing.collection.sports_notices import LISTING_URL, allowed, detail_url, parse_detail, parse_listing, robots_rules
 
-# 합성 원본. 구조·링크·표기는 2026-11-29 실제 원본(목록 1쪽·상세 5건)을 따른다. 메뉴의 닫히지 않은 li, 남는 `</li>`,
+# 합성 원본. 구조·표기는 2026-11-29 실제 원본(목록 1쪽·상세 5건)을 따른다. 메뉴의 닫히지 않은 li, 남는 `</li>`,
 # `</nav>`가 닫는 숨긴 li, `</br>`, 상세의 겹친 댓글 form도 실제와 같은 꼴이다.
 _LINK = "/index.do?menu_id=0008&cp=/board/view.do&pageIndex=1&seq={}&board_id=notice&searchCondition=&searchKeyword="
 ROBOTS = b"User-agent: *\nDisallow: /admin/\n"
@@ -66,6 +66,9 @@ class SportsParserTest(unittest.TestCase):
         for message, raw in cases.items():
             with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
                 parse_listing(raw)
+        for a in ('<a class="subject" href="/board/view.do?seq=2">x</a>', "<a>x</a>"):  # 공지 자리의 다른 링크
+            with self.subTest(a=a), self.assertRaisesRegex(ValueError, "목록 HTML 구조"):
+                parse_listing(listing("1").replace(b'<ul class="bbsList">', f'<ul class="bbsList"><li>{a}</li>'.encode()))
         link = f'<a href="{_LINK.format(2)}">x</a>'
         for extra in (f'<div style="display: none"><div></div>{link}</div>', f'<p>{link}</p>', f"<details open>{link}</details>",
                       link.replace("<a", "<a hidden"), link.replace("<a", "<a popover"), f'<div popover>{link}</div>',
@@ -84,7 +87,7 @@ class SportsParserTest(unittest.TestCase):
                       f"<lin\u212a hidden>{link}", f"<ak hidden>x</a\u212a>{link}"):
             with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, "목록 HTML 구조"):
                 parse_listing(listing("1", extra=extra))
-        # `form#gnBoardVOL > ul.bbsList > li > a.subject` 밖 링크(팝업 등)도 거부한다.
+        # 목록 자리 밖 링크(팝업 등)도 거부한다.
         for message, old, new in (("허용 목록 밖", b"</em>", b"</em><i>x</i>"), ("구조", b"</a>", b"</br></a>"),
                                   *(("구조", old, b"x") for old in (b"subject", b"bbsList", b"gnBoardVOL", b"<li>")),
                                   ("구조", b"</form>", f'</form><div id="popup">{link}</div>'.encode())):
@@ -323,7 +326,6 @@ class SportsBatchTest(unittest.TestCase):
         self.detail.assert_not_called()
 
     def test_robots_4xx_is_unavailable_and_allows_all(self):
-        # RFC 9309 2.3.1.3. 실제 robots.txt는 HTTP 400 "Request Blocked"였다.
         self.listing.return_value = listing("111", "96")
         for code in (400, 404):
             with self.subTest(code=code):

@@ -60,7 +60,7 @@ _INVALID_DETAIL = "체육시설 공지 상세 HTML 구조가 예상과 다릅니
 _INVALID_LISTING = "체육시설 공지 목록 HTML 구조가 올바르지 않습니다."
 _INVALID_BODY = "체육시설 공지 본문에 허용하지 않는 태그·속성이 있습니다."
 _CONCEALED = "체육시설 공지 목록의 상세 링크나 그 조상에 허용 목록 밖 태그·속성이 있습니다."
-# 원문 줄을 고르는 검색어(공백 무시). `예약:`은 실제 seq=96의 `일반(누구나) 예약: 11.30일(09:00부터) ~` 꼴이다.
+# 원문 줄을 고르는 검색어(공백 무시). `예약:`은 실제 seq=96의 꼴이다.
 KEYWORD_GROUPS = {
     "reservation_schedule": ("예약일정", "예약기간", "예약일시", "예약접수", "예약개시", "예약오픈", "예약시작",
                              "접수기간", "신청기간", "예약:"),
@@ -177,7 +177,7 @@ def _allowed(rules: dict, tag: str, attrs) -> list | None:
     """태그·속성·인라인 스타일이 모두 허용 목록 안이면 선언 (이름, 값) 목록을, 아니면 None을 돌려준다."""
     names = [name for name, _ in attrs]
     # 속성이 중복되면 브라우저는 첫 값을, 이 파서는 마지막 값을 쓴다. CSS 주석·이스케이프는 선언 경계와 이름을 바꾼다.
-    # font의 face·color 속성은 같은 뜻의 선언으로 바꿔 함께 확인한다. style 속성은 본문 요소에만 허용한다.
+    # font의 face·color는 같은 뜻의 선언으로 확인한다. style은 본문 요소에만 허용한다.
     style = (dict(attrs).get("style") or "") + "".join(
         f";{'font-family' if name == 'face' else name}:{value}" for name, value in attrs if tag == "font")
     if tag not in rules or len(set(names)) < len(names) or not set(names) <= set(rules[tag].split()) or (
@@ -325,6 +325,8 @@ class _LinkParser(_Parser):
             raise ValueError("체육시설 공지 목록 링크의 href가 중복되었습니다.")
         seq = _listed_seq(values["href"]) if tag == "a" and values.get("href") else None
         if not seq:
+            if tag == "a" and self._under("form#gnBoardVOL", "ul.bbsList", "li"):  # 공지 자리 링크가 빠지면 안 된다.
+                raise self.markup_error()
             return None, _marks(tag, attrs)
         self.enter(_LINK, tag, attrs, _CONCEALED)
         # 팝업·배너 등 이 목록 밖 링크는 1쪽 공지인지 모른다.

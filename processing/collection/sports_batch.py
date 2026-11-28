@@ -167,7 +167,6 @@ def read_sports_batch(private_root: Path, name: str) -> dict[str, dict]:
         state, rules = _attempt(robots_rules, _raw(directory, robots, "robots.txt", ROBOTS_URL, ROBOTS_MAX_BYTES))
         if state == "parsed":
             state = "allowed" if allowed(rules, LISTING_URL) else "disallowed"
-        # unavailable은 원본 없이 기록한 4xx(429 제외)이고 오류 문구가 그 상태의 문구와 같을 때뿐이다.
         code = _halt(robots, "체육시설 robots.txt", _UNAVAILABLE) if state == "fetch_failed" else None
         if code is not None:
             state, rules = "unavailable", _NO_RULES
