@@ -152,6 +152,9 @@ class LibraryHoursParserTest(unittest.TestCase):
         fixtures.update({
             "title": (page(title="공지사항 | 안성시 도서관"), "페이지가 아닌 응답"),
             "title_without_menu": (page(title="이용시간 및 정기휴관일 | 안성시 도서관"), "페이지가 아닌 응답"),
+            "title_blank_menu": (page(title="이용시간 및 정기휴관일 | 　 | 안성시 도서관"), "페이지가 아닌 응답"),
+            **{f"title_newline_{index}": (page(title=f"이용시간 및 정기휴관일 | 이용{text}안내 | 안성시 도서관"), "아닌 응답")
+               for index, text in enumerate(("\n", "\r", "&#10;", "&#13;"))},
             "dropped_title_reference": (page(title="이용시간 및 정기휴관일 | 이용&#xFFFE;안내 | 안성시 도서관"), "지워지는"),
             "title_attribute": (page().replace("<title>", '<title lang="ko">'), "title 속성"),
             "outside_comment": (page(outside="<!-- a --!> -->"), markup),
