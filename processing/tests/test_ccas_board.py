@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from processing.collection import media
 from processing.collection.board_batch import BOARD_SECTION, capture_board_batch
+from processing.collection.d03 import _board_notice
 from processing.collection.libraries import board_parser_version, parse_board_media, parse_board_notice
 from processing.collection.library_listing import parse_board_listing
 from processing.collection.official_web import (
@@ -60,6 +61,12 @@ class CcasRegistryTest(unittest.TestCase):
         self.assertEqual((listing.args, listing.kwargs["body"]),
                          (("POST", "/ccas/bbs/list.do?ptIdx=1363&mId=0501000000"), b"page=2"))
         self.assertEqual(detail.args, ("GET", "/ccas/bbs/view.do?bIdx=202581&mId=0501000000&ptIdx=1363"))
+
+    def test_known_gap_city_and_ccas_keys_differ(self):
+        # 알려진 제약: 시청 상세 경로도 문화도시 글 202581을 열어 주지만 D03 번호 공간 키가 ptIdx별로 갈려 교차 중복을 못 잡는다.
+        # 후속 D03 PR이 키를 bIdx 하나로 합치면 이 시험이 실패하므로 그때 교차 중복 거부 시험으로 바꾼다(README 참고).
+        self.assertEqual(_board_notice(board_detail_url("ccas", "202581")), ("1363", "202581"))
+        self.assertEqual(_board_notice(board_detail_url("city", "202581")), ("16", "202581"))
 
 
 class CcasListingTest(unittest.TestCase):

@@ -39,7 +39,7 @@ Java의 `citizen-human-handoff-import-v1` 요청은 전체 이미지·등록 출
 | 교육·지원·교통 통제 | 시청 공지사항 | `board_batch city`, `media inspect --board city` | `board`, `media` | 상세 19건 형식 확인, 묶음 23건 D03 재검증(PR #70~#72) |
 | 교육 | 안성배움e 프로그램 안내 | `board_batch edu`, `media inspect --board edu` | `board`, `media` | 20건 파싱·D03 재검증(PR #74) |
 | 교육·지원 | 읍면동 15곳 공지사항 | `board_batch town-<경로>`, `media inspect --board town-<경로> --batch <묶음>` | `board`, `media` | 15곳 1페이지 목록·상세 97쪽 파싱, 시청과 같은 공지 번호 중복 거부(PR #81) |
-| 행사·문화 | 문화도시 안성 공지사항 | `board_batch ccas`, `media inspect --board ccas --batch <묶음>` | `board`, `media` | 2026-11-28 목록 3페이지 26건, 1페이지 상세 10건 중 3건 파싱(7건은 `img onerror`로 거부). D03 번호 공간이 시청과 달라 교차 중복 미대조, 축제포털 미등록 |
+| 행사·문화 | 문화도시 안성 공지사항 | `board_batch ccas`, `media inspect --board ccas --batch <묶음>` | `board`, `media` | 2026-11-28 목록 3페이지 26건, 1페이지 상세 10건 중 3건 파싱(7건은 `img onerror`로 거부). D03 번호 공간이 시청과 달라 교차 중복 미대조(후속 D03 PR에서 `bIdx`로 합칠 때까지 다른 게시판 주소로 준비하지 않음), 축제포털 미등록 |
 | 교육 / 공사·교통 | 디지털배움터 교육장 현황, 국토부 CALS 도로 공사정보(파일데이터 API) | `odcloud digital-learning`, `odcloud road-construction` | `odcloud` | 키 없이 합성 응답만 시험(PR #76·#79) |
 | 지원·혜택 | 지자체복지서비스 OpenAPI(안성시 목록·상세) | `welfare_batch` | `welfare` | 키 없이 합성 XML만 시험(PR #77·#83) |
 | 지원·혜택 | 안성청년포털 청년정책 목록·상세 | `youth_batch capture`, `youth_batch verify` | 없음(후속) | 2026-11-28 1·12페이지 18건 파싱·verify(v1), v3는 따로 받은 5쪽 포함 23쪽 재파싱 |
