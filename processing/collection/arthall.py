@@ -117,12 +117,11 @@ class _Parser(HTMLParser):
         self.capture = [tag, 1, [], allowed, done]
 
     def handle_startendtag(self, tag, attrs):
-        self.handle_starttag(tag, attrs)
+        # 브라우저는 void가 아닌 `<div/>`·`<title/>`의 `/`를 무시해 열어 둔다(원문 요소면 다음 끝 태그까지 글자).
+        # 영역 밖이어도 뒤 영역이 화면에서 사라질 수 있다. 실제 원본에는 void가 아닌 self-closing 태그가 없다.
         if tag not in _VOID_TAGS:
-            # 브라우저는 void가 아닌 `<div/>`를 열린 채로 둬 뒤 글이 그 안에 들어가므로 영역 안에서는 거부한다.
-            if self.region is not None or self.capture is not None:
-                self.fail()
-            self.handle_endtag(tag)
+            self.fail()
+        self.handle_starttag(tag, attrs)
 
     def handle_starttag(self, tag, attrs):
         if tag == "plaintext":  # 3.14만 문서 끝까지 원문으로 읽는다.

@@ -182,6 +182,9 @@ class ArthallDetailTest(unittest.TestCase):
                        "<![CDATA[x]]>보이는글", "<!x>", '<!DOCTYPE html PUBLIC "x>">', "<?x>", 'a</div x=">">b',
                        "본문1</ div>본문2", "본문1</\ndiv>본문2"):
             cases[markup] = detail(tabs="", sections=f'<div id="tap_wrapper1" class="tap_wrapper"><div>{markup}</div></div>')
+        # 영역 밖이라도 `<title/>` 같은 태그는 브라우저가 열어 둬 뒤 공연명·항목·본문이 보이지 않는다.
+        for tag in ("script", "style", "xmp", "iframe", "noembed", "noframes", "textarea", "title", "span"):
+            cases[f"<{tag}/>"] = detail().replace('<div id="layer_popup1" style="display:none;"></div>', f"<{tag}/>")
         for name, text in cases.items():
             with self.subTest(name), self.assertRaises(ValueError):
                 parse_detail(text, concert_id="3809")
