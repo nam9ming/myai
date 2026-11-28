@@ -116,6 +116,14 @@ class CourseListingTest(unittest.TestCase):
             ("목록에 화면 표시", _listing("1").replace(b"/ 2", b'/ <span style="display:none">9</span>2')),
             ("목록에 화면 표시", _listing("1").replace(b'<p class="page_num">', b'<p class="page_num" hidden>')),
             ("목록에 화면 표시", _listing(rows=_row("1").replace('class="text_left"', 'class="text_left blind"'))),
+            # 속성 없이 태그로 숨긴 숫자·페이지 표시·행, 실제 원본에 없던 위치의 행과 빈 요소 종료 태그도 받지 않는다.
+            ("목록에 화면 표시", _listing("1").replace(b"/ 2", b"/ <noscript>9</noscript>2")),
+            ("목록에 화면 표시", _listing("1").replace("전체 <b>12</b>건 [ <b>1</b> / 2페이지 ]".encode(),
+                                                      "<noscript>전체 12건 [ 1 / 1페이지 ]</noscript>".encode())),
+            ("목록에 화면 표시", _listing(rows=_row("1") + _row("7").replace('<td class="text_left">', "<td><dialog>")
+                                       .replace("</td><td>무료", "</dialog></td><td>무료"))),
+            ("목록에 화면 표시", _listing("1").replace(b"</tbody>", b"</tbody>" + _row("7").encode())),
+            ("구조", _listing("1").replace(b"<b>12</b>", b"<b>12</b></img>")),
         ]
         for number, (message, raw) in enumerate(cases):
             with self.subTest(case=number), self.assertRaisesRegex(ValueError, message):
@@ -155,10 +163,6 @@ class CourseDetailTest(unittest.TestCase):
         self.assertEqual((free["fields"]["fee"], blank["fields"]["fee"]), ("무료", None))
         self.assertNotIn("missing:fee", free["review_flags"])
         self.assertIn("missing:fee", blank["review_flags"])
-
-    def test_end_br_breaks_line_like_browser(self):
-        record = parse_course_detail(_detail(교육시간="화/14:00 ~ 16:00</br>목/14:00 ~ 16:00"), course_id="5086")
-        self.assertEqual(record["fields"]["course_schedule"], "화/14:00 ~ 16:00\n목/14:00 ~ 16:00")
 
     def test_sessions_with_the_same_title_stay_distinct(self):
         first = parse_course_detail(_detail("5085", 교육기간="2026-12-12 ~ 2026-12-12"), course_id="5085")
@@ -200,6 +204,10 @@ class CourseDetailTest(unittest.TestCase):
             ("구조", _detail().replace('class="learning_content"', 'class="learning_content blind"')),
             ("구조", _detail().replace('<div id="learning_cont"', '<div hidden id="learning_cont"')),
             ("구조", _detail(수강료=_DEEP)),
+            ("안성배움e 강좌 페이지에 브라우저와 해석이 갈리는", _detail(교육시간="화</br>목")),
+            ("화면 표시", _detail().replace('<div class="bod_write">', '<dialog class="bod_write">')
+             .replace('</div><div class="btn_wrap', '</dialog><div class="btn_wrap')),
+            ("화면 표시", _detail(교육장='<span id="x">시험교육장</span>')),
         ]
         # 화면에 나오지 않을 수 있는 글자가 제목·접수상태·항목명·첨부 이름에 섞이면 거부한다.
         for wrap in ("<noscript>{}</noscript>", "<details>{}</details>"):

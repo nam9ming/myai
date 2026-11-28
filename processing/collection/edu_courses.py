@@ -25,10 +25,10 @@ _ECHO = re.compile(r'qrcode\("' + re.escape(OFFICIAL_ORIGIN + _VIEW_PATH)
 _IMAGE = re.compile(re.escape(CONTEXT_PATH) + r"/common/imgView\.do\?attachId=[0-9a-f]{64}&fileSn=[0-9a-f]{32}"
                     r"&mode=ratioView")
 _MAX_ROWS = 100
-# 고른 영역 안 중첩 한도. 실제 목록·상세 28쪽은 9단이었다. 하위 트리를 재귀로 읽으므로 RecursionError 전에 거부한다.
+# 고른 영역 안 중첩 한도. 실제 목록 6쪽·상세 28쪽은 최대 9단이었다. 하위 트리를 재귀로 읽으므로 RecursionError 전에 거부한다.
 _MAX_DEPTH = 64
 # 공유 태그 경계 규칙(PinnedHTMLParser)이나 아래 출력·허용 규칙이 바뀌면 올린다.
-PARSER_VERSION = "edu-course-parser-v7"
+PARSER_VERSION = "edu-course-parser-v8"
 _TEXT_FIELDS = {
     "접수기간": "application_period",
     "접수현황": "enrollment_status",
@@ -48,15 +48,28 @@ _TEXT_TAGS = {"br", "span", "em", "a"}
 _HIDDEN_TAGS = {"script", "style", "template"}
 # 제목 줄의 span class. bod_btn은 로그인 안내·신청 단추라 읽지 않는다.
 _TITLE_PARTS = {"bod_state_type": "state", "bod_subject": "subject", "bod_btn": None}
-# 2026-11-28 실제 상세 28쪽의 제목 줄·항목 칸에 있던 속성·class만 받는다. hidden 같은 숨김 속성·다른 인라인 스타일과
-# 이 사이트의 화면 숨김 class(blind 등)는 거부한다. skip은 첨부 링크의 `파일 다운로드` 안내에서만 받고 읽지 않는다.
-_ATTRS = frozenset("alt class href id onclick src target title type".split())
+# 읽는 영역(상세는 제목 줄·항목 묶음, 목록은 p.page_num·목록 표) 안은 2026-11-28 실제 원본(상세 28쪽, 목록 6쪽)에 있던
+# 태그 경로(영역 루트부터 태그 이름을 /로 이은 것)와 그 경로의 속성 이름, 인라인 스타일 값, class 값만 받는다. 그 밖의 태그
+# (noscript·dialog·details 등)·속성(hidden 등)·스타일과 이 사이트의 화면 숨김 class(blind 등)는 거부한다.
+# skip은 첨부 링크의 `파일 다운로드` 안내에서만 받고 읽지 않는다. 영역 밖 조상의 숨김·스타일시트 숨김은 확인하지 않는다.
+_TAGS = {
+    "div": "class", "div/span": "class", "div/dl": "", "div/dl/dt": "", "div/dl/dd": "", "div/dl/dd/br": "",
+    "div/dl/dd/a": "class href", "div/dl/dd/span": "class style", "div/dl/dd/span/em": "class",
+    "div/dl/dd/div": "class id", "div/dl/dd/div/a": "href onclick", "div/dl/dd/div/a/span": "class",
+    "div/dl/dd/div/div": "class", "div/dl/dd/div/div/div": "class", "div/dl/dd/div/div/div/button": "class type",
+    "div/dl/dd/div/div/div/button/span": "", "div/dl/dd/div/div/div/div": "class",
+    "div/dl/dd/div/div/div/div/a": "class href target title", "div/dl/dd/div/div/div/div/a/img": "alt src",
+}
 _STYLES = {"vertical-align:middle"}
 _CLASSES = frozenset("bod_title bod_write bod_state_type bod_subject bod_btn em_b_black mL5 mR5 mL20 mR10 updateFileList"
                      " file_slide file_slide_list file_slide_item file_slide_anchor file_slide_control file_slide_prev"
                      " file_slide_next".split())
-# 목록도 같은 기준으로 2026-11-28 실제 목록 6쪽의 p.page_num·목록 표에 있던 속성·class·col 너비만 받는다.
-_LIST_ATTRS = frozenset({"class", "href", "scope"})
+_LIST_TAGS = {
+    "p": "class", "p/b": "", "table": "class", "table/caption": "", "table/colgroup": "", "table/colgroup/col": "style",
+    "table/thead": "", "table/thead/tr": "", "table/thead/tr/th": "scope", "table/thead/tr/th/br": "",
+    "table/tbody": "", "table/tbody/tr": "", "table/tbody/tr/td": "class", "table/tbody/tr/td/a": "class href",
+    "table/tbody/tr/td/br": "", "table/tbody/tr/td/span": "class",
+}
 _LIST_STYLES = {"width:6%", "width:8.5%", "width:10%", "width:16%", "width:18%"}
 _LIST_CLASSES = frozenset("page_num bod_maintain text_left btn xsmall type3 type5 mL5 mR5".split())
 
@@ -134,12 +147,9 @@ class _Page(PinnedHTMLParser):
     def handle_endtag(self, tag):
         if self.hidden and self.hidden[-1] == tag:
             self.hidden.pop()
-        if self.hidden:
+        if self.hidden or not self.open:
             return
-        if tag == "br" and self.open:
-            self.open[-1][2].append(("br", {}, []))  # 브라우저는 `</br>`를 `<br>`로 읽는다.
-        if not self.open or tag in _VOID_TAGS:
-            return
+        # 영역 안의 종료 태그는 가장 안쪽 열린 요소를 닫아야 한다. 실제 원본에 없던 `</img>` 같은 종료 태그도 거부한다.
         if self.open[-1][0] != tag:
             raise ValueError(self.error)
         self.open.pop()
@@ -208,12 +218,17 @@ def _text(node: tuple, error: str = _INVALID_DETAIL) -> str | None:
     return _value(node)
 
 
-def _check_shown(nodes, attrs, styles, classes, where: str, hints=frozenset()) -> None:
-    """허용한 속성·인라인 스타일·class만 받는다. hidden·다른 style·blind 등은 화면 표시를 확정할 수 없다."""
-    for node in nodes:
-        if (any(name not in attrs and not (name == "style" and value in styles) for name, value in node[1].items())
+def _check_shown(roots, tags, styles, classes, where: str, hints=frozenset()) -> None:
+    """허용한 태그 경로·속성·인라인 스타일·class만 받는다. 그 밖의 것은 화면 표시를 확정할 수 없다."""
+    stack = [(root, root[0]) for root in roots]
+    while stack:
+        node, path = stack.pop()
+        names = tags.get(path)
+        if (names is None or any(name not in names.split() or (name == "style" and value not in styles)
+                                 for name, value in node[1].items())
                 or any(token not in classes and not (token == "skip" and id(node) in hints) for token in _classes(node))):
-            raise ValueError(f"{_LABEL} {where}에 화면 표시를 확정할 수 없는 속성이 있습니다.")
+            raise ValueError(f"{_LABEL} {where}에 화면 표시를 확정할 수 없는 태그·속성이 있습니다.")
+        stack.extend((child, f"{path}/{child[0]}") for child in _elements(node))
 
 
 def _link_id(href: str | None) -> str:
@@ -240,9 +255,8 @@ def parse_course_listing(raw: bytes, *, page: int) -> tuple[int, list[str]]:
     tables = [tree for tree in parser.trees if tree[0] == "table"]
     if len(labels) != 1 or len(tables) != 1:
         raise ValueError(_INVALID_LISTING)
-    # 숨긴 행의 강좌 번호나 숨긴 숫자가 붙은 전체 페이지 수(순회 종료 판단)를 읽지 않는다.
-    _check_shown((node for tree in parser.trees for node in (tree, *_descendants(tree))),
-                 _LIST_ATTRS, _LIST_STYLES, _LIST_CLASSES, "목록")
+    # 영역 안에서 숨긴 행의 강좌 번호나 숨긴 숫자가 붙은 전체 페이지 수(순회 종료 판단)를 읽지 않는다.
+    _check_shown(parser.trees, _LIST_TAGS, _LIST_STYLES, _LIST_CLASSES, "목록")
     captions = [child for child in _elements(tables[0]) if child[0] == "caption"]
     bodies = [child for child in _elements(tables[0]) if child[0] == "tbody"]
     if len(captions) != 1 or not (_value(captions[0]) or "").startswith("수강신청 목록") or len(bodies) != 1:
@@ -352,8 +366,7 @@ def parse_course_detail(text: str, *, course_id: str) -> dict:
             fields[_TEXT_FIELDS[label]] = _text(value, f"{_LABEL} 상세의 {label} 칸 형식이 바뀌었습니다.")
     if len(seen) != len(_TEXT_FIELDS) + len(_MEDIA_FIELDS):
         raise ValueError(f"{_LABEL} 상세에 빠진 항목이 있습니다.")
-    _check_shown((block for found in blocks.values() for block in (found[0], *_descendants(found[0]))),
-                 _ATTRS, _STYLES, _CLASSES, "상세", hints)
+    _check_shown((found[0] for found in blocks.values()), _TAGS, _STYLES, _CLASSES, "상세", hints)
 
     flags = {f"missing:{key}" for key, value in fields.items() if value is None}
     flags.update(f"{item['kind']}:{item['field']}" for item in media)
