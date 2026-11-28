@@ -170,15 +170,17 @@ def read_sports_batch(private_root: Path, name: str) -> dict[str, dict]:
             seq = row["web_id"]
             url, filename = detail_url(seq), f"detail-{seq}.html"
             raw = _raw(directory, row, filename, url, DETAIL_MAX_BYTES)
+            stored = {}
+            if row.get("status") == "parsed":  # 바뀐 파서가 원본을 거부해도 변조가 아닌 버전 오류로 알린다.
+                stored = read_receipt(directory, row["parsed_file"]) if row.get("parsed_file") == f"parsed-{seq}.json" else {}
+                if stored.get("parser_version") != PARSER_VERSION:
+                    raise ValueError("다른 파서 버전으로 만든 파싱 결과입니다. 현재 버전으로 다시 수집해 주세요.")
             state, record = _attempt(lambda data: parse_detail(decode_input(data, "체육시설 공지 상세")[0], seq=seq), raw)
             if (row.get("source_url") != url or (raw is not None and not allowed(rules, url))
                     or row.get("status") not in (state, "not_attempted" if raw is None else state)):
                 raise ValueError("체육시설 공지 상세 기록이 원본과 다릅니다.")
             if record is None:
                 continue
-            stored = read_receipt(directory, row["parsed_file"]) if row.get("parsed_file") == f"parsed-{seq}.json" else {}
-            if stored.get("parser_version") != PARSER_VERSION:
-                raise ValueError("다른 파서 버전으로 만든 파싱 결과입니다. 현재 버전으로 다시 수집해 주세요.")
             if stored != {"schema_version": RECORD_SCHEMA, "parser_version": PARSER_VERSION,
                           "sha256": row["sha256"], "record": record}:
                 raise ValueError("체육시설 공지 파싱 결과가 원본과 다릅니다.")

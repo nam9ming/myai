@@ -24,7 +24,7 @@ _PRODUCT = USER_AGENT.split("/")[0]  # RFC 9309 그룹은 제품 토큰으로 �
 # 다섯 자리를 넘는 값은 sleep 한도를 넘을 수 있어 읽지 않는다.
 _CRAWL_DELAY = re.compile(r"[0-9]{1,5}(?:\.[0-9]+)?")
 _VOID_TAGS = frozenset("area base br col embed hr img input link meta source track wbr".split())
-# 읽는 영역(상세 링크, h4·div.view_cont, seq 입력)과 그 안·조상은 실제 원본(README)에서 본 표기만 받는다.
+# 읽는 영역과 그 안·조상은 실제 원본에서 본 표기만 받는다(README).
 _BODY = {"a": "href style target title", "br": "style", "div": "class data-hjsonver data-jsonlen id style", "h1": "",
          "h2": "", "h3": "", "img": "alt height src style width", "li": "", "p": "class data-pm-slice style",
          "span": "lang style", "strong": "style", "u": "", "ul": ""}
@@ -36,7 +36,7 @@ _ANCESTORS = {"html": "lang", "body": "class", "div": "class id style", "section
               "table": "class", "tbody": "", "tr": "", "td": "class"}
 _BREAK_TAGS = frozenset("br div h1 h2 h3 li p ul".split())
 _HEX = "#[0-9a-f]{6}"
-# 선언 값은 본 값만 받는다. 글자색·배경색·글꼴·테두리만 본 값의 형태(16진수 색 등)로 넓혔다.
+# 선언 값은 본 값만 받고 색·글꼴·테두리만 본 값의 형태로 넓혔다.
 _STYLE = {name: re.compile("|".join(map(re.escape, values.split("|")))) for names, values in {
     "-ms-word-break word-break": "keep-all", "-webkit-text-stroke-width word-spacing": "0px",
     "align-items justify-content text-align": "center", "box-sizing": "border-box", "cursor": "pointer",
@@ -66,8 +66,7 @@ _STYLE = {name: re.compile("|".join(map(re.escape, values.split("|")))) for name
     "font-family mso-ascii-font-family mso-fareast-font-family mso-hansi-font-family": r"[\w ,'-]+",
     "border border-bottom border-left border-top": rf"[1-5]px (?:solid|dashed) {_HEX}|0px(?: currentcolor)?|none",
 }.items() for name in names.split()}
-# 브라우저가 강제 줄바꿈으로 보이거나(UAX #14 BK·NL) 공백으로 보지 않는 문자(U+001C~U+001F)를 str.split은 공백으로 접고,
-# 그 숫자 참조(`&#11;`·`&#28;` 등)는 Python이 지운다.
+# 강제 줄바꿈(UAX #14 BK·NL)과 U+001C~U+001F를 str.split은 공백으로 접고 그 숫자 참조는 Python이 지운다.
 _UNREAD = re.compile(r"[\x00\x0b\x0c\x1c-\x1f\x85\u2028\u2029]|&#(?:0*(?:1[12]|2[89]|3[01]|823[23])(?![0-9])|"
                      r"x0*(?:[bc]|1[c-f]|202[89])(?![0-9a-f]))", re.I)
 _INVALID_DETAIL = "체육시설 공지 상세 HTML 구조가 예상과 다릅니다."
@@ -116,7 +115,7 @@ def robots_rules(raw: bytes) -> dict:
         text = raw.decode("utf-8-sig")
     except UnicodeDecodeError:
         raise ValueError("체육시설 robots.txt를 UTF-8로 읽을 수 없습니다.") from None
-    # RFC 9309의 줄 끝은 CR·LF, 공백은 SP·HTAB뿐이다. 주석 밖 다른 공백 문자는 규칙 줄로 받지 않는다.
+    # RFC 9309의 줄 끝은 CR·LF, 공백은 SP·HTAB뿐이다.
     lines = [line.split("#", 1)[0].strip(" \t") for line in re.split(r"\r\n?|\n", text)]
     groups: list[tuple[set[str], list[tuple[str, str]]]] = []
     for line in filter(None, lines):
@@ -209,7 +208,7 @@ def _feed(parser: PinnedHTMLParser, text: str) -> None:
 
 
 class _Parser(PinnedHTMLParser):
-    """종료 태그는 문서 어디서든 가장 안쪽의 열린 요소를 닫고 문서 끝에 열린 요소가 없어야 한다. 이 스택으로 영역 끝과 조상을 정한다."""
+    """종료 태그는 가장 안쪽의 열린 요소를 닫고 문서 끝에 열린 요소가 없어야 한다. 이 스택으로 영역 끝과 조상을 정한다."""
     message = _INVALID_DETAIL
 
     def __init__(self):

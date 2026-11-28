@@ -261,6 +261,12 @@ class SportsBatchTest(unittest.TestCase):
         (directory / "parsed-96.json").write_text(json.dumps(changed, ensure_ascii=False), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "파싱 결과가 원본과 다릅니다"):
             read_sports_batch(self.private, "run")
+        first = directory / "parsed-111.json"
+        kept = first.read_bytes()  # 예전 버전 기록의 원본을 지금 파서가 거부해도 버전 오류다.
+        first.write_text(json.dumps(dict(json.loads(kept), parser_version="v6")), encoding="utf-8")
+        with patch.object(sports_batch, "parse_detail", side_effect=ValueError), self.assertRaisesRegex(ValueError, "다른 파서"):
+            read_sports_batch(self.private, "run")
+        first.write_bytes(kept)
         (directory / "detail-96.html").write_bytes(detail("96", title="다른 제목").encode())
         with self.assertRaisesRegex(ValueError, "해시"):
             read_sports_batch(self.private, "run")
