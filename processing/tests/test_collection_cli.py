@@ -20,6 +20,8 @@ CASES = {
     "processing.collection.welfare_batch": (["welfare_batch", "--name", "x", "--max-pages", "x"], ["collect_welfare"]),
     "processing.collection.edu_course_batch": (["edu_course_batch", "--name", "x", "--max-items", "x"],
                                                ["capture_course_batch"]),
+    "processing.collection.library_program_batch": (["library_program_batch", "--name", "x", "--start-page", "x"],
+                                                    ["capture_program_batch"]),
 }
 
 
